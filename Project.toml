@@ -3,11 +3,21 @@ uuid = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"
 authors = ["Eric Martin Feltham"]
 version = "0.1.0"
 
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+[deps]
+Effects = "8f03c58b-bd97-4933-a826-f71b64d2cca2"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+StandardizedPredictors = "5064a6a7-f8c2-40e2-8bdc-797ec6f1ae18"
+StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
 
 [compat]
+Effects = "1.4.0"
+LinearAlgebra = "1.11.0"
+StandardizedPredictors = "1.0.1"
+StatsModels = "0.7.4"
 julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
