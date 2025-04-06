@@ -1,5 +1,14 @@
 # modelcols.jl
 
+# this is from Effects.jl
+# function StatsModels.modelcols(t::TypicalTerm, d::NamedTuple)
+#     cols = ones(length(first(d)), width(t))
+#     for (idx, v) in enumerate(t.values)
+#         cols[:, idx] .*= v
+#     end
+#     return cols
+# end
+
 # existing version of modelcols as defined in StatsBase for a CategoricalTerm
 _modelcols(t::CategoricalTerm, d::NamedTuple) = t.contrasts[d[t.sym], :]
 
