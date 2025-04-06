@@ -1,12 +1,17 @@
 module Margins
 
-using StatsModels
-import StatsModels:modelcols
+using DataFrames
+using StatsBase, StatsModels
 using StatsModels: formula, termvars
+
+using Effects: TypicalTerm  # Import the type only
+using StatsModels: AbstractTerm, width, termvars
+# export MarginsTypicalTerm, margins_typical
 
 # needed from Effects.jl to compute effects!:
 import Effects:diag,vcov,_difference_method!,_responsename,something
 import Effects:_invlink_and_deriv
+import Effects:expand_grid
 
 include("reference grid.jl")
 include("modelcols.jl")
