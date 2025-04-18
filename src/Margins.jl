@@ -1,5 +1,6 @@
 module Margins
 
+using CategoricalArrays
 using DataFrames
 using StatsBase, StatsModels
 using StatsModels: formula, termvars
