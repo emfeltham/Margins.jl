@@ -92,10 +92,14 @@ function effectsΔyΔx(
     reference_grid::AbstractDataFrame, model::RegressionModel;
     eff_col=nothing, err_col=:err,
     typical=mean, invlink=identity, vcov=StatsBase.vcov,
+    typicals = false,
     digits = 3
 )
     
-    typicals!(reference_grid, model, typical)
+    if !typicals
+        typicals!(reference_grid, model, typical)
+    end
+
     form = formula(model)
     X = modelcols(form.rhs, columntable(reference_grid))
     

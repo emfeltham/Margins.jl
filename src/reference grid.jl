@@ -10,10 +10,10 @@ Use typicals to define the reference grid.
 
 """
 function setup_refgrid(design, typs)
-    rg = Effects.expand_grid(design);
+    rg = expand_grid(design);
     for (k, v) in typs
         if string(k) ∉ names(rg)
-            rg[!, k] .= v
+            rg[!, k] = [v for i in 1:nrow(rg)]
         end
     end
     return rg

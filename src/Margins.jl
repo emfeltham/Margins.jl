@@ -3,6 +3,7 @@ module Margins
 using DataFrames
 using StatsBase, StatsModels
 using StatsModels: formula, termvars
+# import StatsModels.modelcols
 
 using Effects: TypicalTerm  # Import the type only
 using StatsModels: AbstractTerm, width, termvars
@@ -13,7 +14,12 @@ import Effects:diag,vcov,_difference_method!,_responsename,something
 import Effects:_invlink_and_deriv
 import Effects:expand_grid
 
+import DataFrames.Tables.columntable
+
+import StatsModels:TupleTerm,ColumnTable
+
 include("reference grid.jl")
+include("modelcols_alt.jl") # new function based on modelcols
 include("modelcols.jl")
 include("typicals.jl")
 include("effects2.jl")

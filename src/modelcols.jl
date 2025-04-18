@@ -1,4 +1,4 @@
-# modelcols.jl
+# modelcols_alt_extension.jl
 
 # this is from Effects.jl
 # function StatsModels.modelcols(t::TypicalTerm, d::NamedTuple)
@@ -25,7 +25,7 @@ function _modelcols_vec(t::CategoricalTerm, d::NamedTuple)
 end
 
 # choose the relevant version based on the input data (reference grid) structure
-function modelcols(t::CategoricalTerm, d::NamedTuple)
+function modelcols_alt(t::CategoricalTerm, d::NamedTuple)
     return if typeof(d[t.sym]) <: Vector{Vector{T}} where T <: Real
         _modelcols_vec(t::CategoricalTerm, d::NamedTuple)
     elseif typeof(d[t.sym]) <: CategoricalVector
