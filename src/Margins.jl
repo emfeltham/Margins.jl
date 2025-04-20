@@ -19,11 +19,14 @@ import DataFrames.Tables.columntable
 
 import StatsModels:TupleTerm,ColumnTable
 
+using StandardizedPredictors
+
 include("reference grid.jl")
 include("modelcols_alt.jl") # new function based on modelcols
 include("modelcols.jl")
 include("typicals.jl")
 include("effects2.jl")
+include("standardized.jl")
 
 export modelvariables
 export effects2!, effectsΔyΔx
