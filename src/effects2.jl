@@ -14,7 +14,7 @@ function effects2!(
     # special case of categorical variables.
     typicals!(reference_grid, model, typical)
     form = formula(model)
-    X = modelcols(form.rhs, columntable(reference_grid))
+    X = modelcols_alt(form.rhs, columntable(reference_grid))
 
     eff = X * coef(model)
     err = sqrt.(diag(X * vcov(model) * X'))
