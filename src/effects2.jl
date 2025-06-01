@@ -1,7 +1,67 @@
 # effects2.jl
 
-# N.B., one way to make this more general would be allowing
-# the specification of different typical functions for each variable
+"""
+    effects2!(
+        reference_grid::DataFrame,
+        model::RegressionModel;
+        eff_col = nothing,
+        err_col = :err,
+        typical = mean,
+        invlink = identity,
+        vcov = StatsBase.vcov
+    )
+
+Compute adjusted ("effects at the mean") predictions for each row of a reference grid, 
+using a fitted GLM (or other RegressionModel).
+
+# Arguments
+- `reference_grid::DataFrame`
+  A DataFrame whose columns specify the focal predictor values at which you want predictions.
+- `model::RegressionModel`
+  A fitted model returned by GLM.jl (e.g. `lm` or `glm`), or any object supporting
+  `coef`, `formula`, and `StatsBase.vcov`.
+
+# Keyword Arguments
+- `eff_col::Union{Symbol,Nothing}`  
+  Name of the column to store the predicted (transformed) responses.  
+  If `nothing`, a default name based on the model’s response variable is used.
+- `err_col::Symbol`  
+  Name of the column to store the standard error of each prediction. Default `:err`.
+- `typical::Function`  
+  Function to compute “typical” values (e.g. `mean`, `median`) for covariates *not* present
+  in `reference_grid`. For categorical variables, level-proportions are computed when `typical==mean`.
+- `invlink::Function`  
+  Inverse link function for back-transforming the linear predictor (e.g. `identity`, `logistic`).  
+  Default is `identity` (no transformation).
+- `vcov::Function`  
+  Function to extract the coefficient variance-covariance matrix. Default is `StatsBase.vcov`.
+
+# Returns
+A mutated copy of `reference_grid` with two new columns:
+1. The adjusted predictions on the response scale (column named by `eff_col` or a default).  
+2. Their standard errors (column named by `err_col`).
+
+# Example
+```julia
+using DataFrames, CategoricalArrays, GLM
+
+# Simulate data
+df = DataFrame(
+    y = randn(100) .+ 2 .* (rand(100) .> 0.5),
+    x = rand(100),
+    g = categorical(rand(["A","B"], 100))
+)
+
+# Fit a linear model
+m = lm(@formula(y ~ x + g), df)
+
+# Build a reference grid over x
+grid = DataFrame(x = range(extrema(df.x)..., length=5))
+
+# Compute effects at the mean of g
+effects2!(grid, m; eff_col=:pred, err_col=:se_pred)
+# grid now contains :pred and :se_pred columns
+"""
 function effects2!(
     reference_grid::DataFrame, model::RegressionModel;
     eff_col=nothing, err_col=:err, typical=mean, invlink=identity,
