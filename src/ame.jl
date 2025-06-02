@@ -28,10 +28,10 @@ end
 """
     ame_numeric(
       df::DataFrame,
-      model::GeneralizedLinearMixedModel;
+      model,
       x::Symbol,
       z::Symbol,
-      z_val::Real,
+      z_val::Real;
       δ::Real = 1e-6,
       typical = mean,
       invlink = (η -> 1/(1 + exp(-η))), # not totally general below
@@ -46,7 +46,7 @@ for an arbitrary formula, by numerically approximating ∂η/∂x via a small fi
 # Arguments
 - `df::DataFrame`
   The original data frame used to fit `model`.
-- `model::GeneralizedLinearMixedModel`
+- `model`
   A fitted MixedModels.jl GLMM (family can be Bernoulli, Poisson, etc.).
 - `x::Symbol`
   The name of the continuous focal variable.
@@ -78,10 +78,10 @@ A `NamedTuple` with fields:
 """
 function ame_numeric(
     df::DataFrame,
-    model::GeneralizedLinearMixedModel;
+    model,
     x::Symbol,
     z::Symbol,
-    z_val::Real,
+    z_val::Real;
     δ::Real = 1e-6,
     invlink = (η -> 1/(1 + exp(-η))),
     dinvlink = nothing,
@@ -177,11 +177,11 @@ function ame_numeric(
     se_AME  = sqrt(var_AME)
 
     return AME(
-        ame    = ame_val,
-        se     = se_AME,
-        grad   = grad_AME,
-        n      = n,
-        η_base = η_base,
-        μ_base = μ_base
+        ame_val,
+        se_AME,
+        grad_AME,
+        n,
+        η_base,
+        μ_base
     )
 end
