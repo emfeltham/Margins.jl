@@ -34,8 +34,8 @@ end
       z_val::Real,
       δ::Real = 1e-6,
       typical = mean,
-      invlink = (η -> 1/(1 + exp(-η))),
-      dinvlink = nothing,
+      invlink = (η -> 1/(1 + exp(-η))), # not totally general below
+      dinvlink = nothing, # again, not totally general
       d2invlink = nothing,
       vcov = StatsBase.vcov
     ) -> NamedTuple
@@ -58,8 +58,6 @@ for an arbitrary formula, by numerically approximating ∂η/∂x via a small fi
   Finite‐difference step to approximate ∂η/∂x. Adjust if `x` is on a different scale.
 
 # Keyword Arguments
-- `typical::Function = mean`
-  Function to compute a typical value of any *other* numeric covariate. Categorical covariates go to their reference level.
 - `invlink::Function`
   Inverse‐link μ = g⁻¹(η), e.g. `η -> 1/(1 + exp(-η))` for logit.
 - `dinvlink::Union{Function,Nothing}`
@@ -85,16 +83,16 @@ function ame_numeric(
     z::Symbol,
     z_val::Real,
     δ::Real = 1e-6,
-    typical = mean,
     invlink = (η -> 1/(1 + exp(-η))),
     dinvlink = nothing,
     d2invlink = nothing,
     vcov = StatsBase.vcov
 )
-    # 1) Build df_fixed with z -> z_val, other covariates (except x) at typical
+    # 1) Build df_fixed with z -> z_val
     n = nrow(df)
     df_fixed = deepcopy(df)
     df_fixed[!, z] .= z_val
+    # Note: we do NOT modify any other column (x or any other covariate remains as in df)
 
     # 2) Base design matrix X0 (n×p), β, Σβ
     form = formula(model)
@@ -114,6 +112,7 @@ function ame_numeric(
     end
 
     # 4) Build df_plus, df_minus to perturb x by ±δ
+    # approximate derivative calculation
     df_plus  = deepcopy(df_fixed)
     df_minus = deepcopy(df_fixed)
     df_plus[!, x]  .= df_fixed[!, x] .+ δ
