@@ -33,12 +33,18 @@ export effects2!, effectsΔyΔx
 
 export get_typicals, typicals!
 
-# methods for stan model
+# methods for stan/bayes model
 import LinearAlgebra.mul!
 
 include("hpdi.jl")
 include("bayes.jl")
 
 export setup_refgrid, setup_contrast_grid
+
+# average marginal effects
+include("ame.jl")
+include("ame_contrast.jl")
+
+export AME, ame_numeric, ame_contrast_numeric
 
 end
