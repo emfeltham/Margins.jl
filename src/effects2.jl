@@ -161,6 +161,9 @@ function effectsΔyΔx(
     end
 
     form = formula(model)
+
+    # probably should sub this in
+    # X = modelcols_alt(form.rhs, columntable(reference_grid))
     X = modelcols(form.rhs, columntable(reference_grid))
     
     η = X * coef(model)  # Linear predictor (η)
