@@ -108,7 +108,7 @@ function ame_numeric(
     dpdη = if dinvlink !== nothing
         dinvlink.(η_base)
     else
-        μ_base .* (1 .- μ_base)    # logistic fallback
+        μ_base .* (1 .- μ_base)    # logistic fallback (make this general)
     end
 
     # 4) Build df_plus, df_minus to perturb x by ±δ
