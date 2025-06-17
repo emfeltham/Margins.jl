@@ -4,7 +4,7 @@ using CategoricalArrays
 using DataFrames
 using StatsBase, StatsModels
 using StatsModels: formula, termvars
-# import StatsModels.modelcols
+import StatsBase.confint
 
 using Effects: TypicalTerm  # Import the type only
 using StatsModels: AbstractTerm, width, termvars
@@ -27,6 +27,7 @@ include("modelcols.jl")
 include("typicals.jl")
 include("effects2.jl")
 include("standardized.jl")
+include("typicals get.jl")
 
 export modelvariables
 export effects2!, effectsΔyΔx
@@ -43,29 +44,35 @@ export setup_refgrid, setup_contrast_grid
 
 # average marginal effects
 import LinearAlgebra.dot
+using GLM: linkinv, mueta
+using MixedModels: RandomEffectsTerm
 
-include("ame.jl")
-include("ame_contrast.jl")
+import Base: show
+using Statistics, Printf, Distributions
+
+# Core type definitions
+include("fixed_helpers.jl")
+include("mueta2.jl")
+include("linkhandling.jl")
+include("AME.jl")
+include("ame_continuous.jl")           # defines struct AME and ame_continuous
+include("ame_interaction_continuous.jl")      # defines ame_interaction_continuous
+include("ame_discrete_contrast.jl")# defines struct AMEContrast and ame_discrete_contrast
+include("marginal_effect_curve_z.jl")
 include("marginal_effect_curve_x.jl")
+include("marginal_effect_curve_discrete_x.jl")
+include("ame_factor_contrasts.jl")
 
-export AME, ame_numeric
-export AMEContrast, ame_contrast_numeric
-export marginal_effect_curve_x
-
-import StatsBase.confint
-
-function confint(c::AMEContrast)
-    ame_diff = c.ame_diff
-    se_diff = c.se_diff
-    return tuple(sort([ame_diff + 1.96 * se_diff, ame_diff - 1.96 * se_diff])...)
-end
-
-function confint(a::AME)
-    ame = a.ame
-    se = a.se
-    return tuple(sort([ame + 1.96 * se, ame - 1.96 * se])...)
-end
-
+# Exported types and functions
+export AME,
+       AMEContrast,
+       ame_continuous,
+       ame_interaction_continuous,
+       ame_discrete_contrast,
+       marginal_effect_curve_z,
+       marginal_effect_curve_x,
+       discrete_effect_curve,
+       ame_factor_contrasts
 export confint
 
 function zvalues(df::AbstractDataFrame, z; type = "10-90")

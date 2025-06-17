@@ -1,37 +1,8 @@
-
+# NOT UPDATED
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Define an immutable struct to hold the AME‐contrast result
 # ─────────────────────────────────────────────────────────────────────────────
-"""
-    AMEContrast
-
-Immutable struct to store the result of contrasting two Average Marginal Effects.
-
-Fields:
-- `ame_low::Float64`      — AME of x at z_low
-- `se_low::Float64`       — standard error of AME at z_low
-- `ame_high::Float64`     — AME of x at z_high
-- `se_high::Float64`      — standard error of AME at z_high
-- `ame_diff::Float64`     — difference (AME_high − AME_low)
-- `se_diff::Float64`      — standard error of the difference
-- `grad_low::Vector{Float64}`  — gradient vector ∇₍β₎[AME @ z_low]
-- `grad_high::Vector{Float64}` — gradient vector ∇₍β₎[AME @ z_high]
-- `n::Int`                — sample size
-- `names::Vector{String}` — coefficient names from the model
-"""
-struct AMEContrast
-    ame_low   :: Float64
-    se_low    :: Float64
-    ame_high  :: Float64
-    se_high   :: Float64
-    ame_diff  :: Float64
-    se_diff   :: Float64
-    grad_low  :: Vector{Float64}
-    grad_high :: Vector{Float64}
-    n         :: Int
-    names     :: Vector{String}
-end
 
 """
     ame_contrast_numeric(
