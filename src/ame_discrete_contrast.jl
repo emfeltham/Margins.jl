@@ -67,7 +67,12 @@ function ame_discrete_contrast(
     se_high  = sqrt(dot(grad_high, Σβ * grad_high))
     se_diff  = sqrt(dot(grad_diff, Σβ * grad_diff))
 
+    # Report model information
+    family = string(model.resp.d)  # e.g. "GLM.GlmResp{…}" implies Bernoulli, Poisson, etc.
+    link = string(model.resp.link)       # e.g. "LogitLink()"
+
     return AMEContrast(
+      x,
       ame_low,
       se_low,
       ame_high,
@@ -77,6 +82,7 @@ function ame_discrete_contrast(
       grad_low,
       grad_high,
       n,
-      coefnames(model)
+      family,
+      link
     )
 end

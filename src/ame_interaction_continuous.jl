@@ -144,12 +144,18 @@ function ame_interaction_continuous(
     var_AME = dot(grad_AME, Σβ * grad_AME)
     se_AME  = sqrt(var_AME)
 
+    family = string(model.resp.d)  # e.g. "GLM.GlmResp{…}" implies Bernoulli, Poisson, etc.
+    link = string(model.resp.link)       # e.g. "LogitLink()"
+
     return AME(
+        Symbol(x, Symbol(" × "), z), # interaction
         ame_val,
         se_AME,
         grad_AME,
         n,
         η_base,
-        μ_base
+        μ_base,
+        family,
+        link
     )
 end

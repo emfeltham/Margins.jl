@@ -2,9 +2,9 @@
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 
-This Julia package provides a suite of functions to
-1. Calculated **Adjusted predictions at the mean** and **marginal effects at the mean**
-2. compute **Average Marginal Effects** (AMEs) and related contrasts for continuous and categorical predictors in GLM/GLMM models.
+This Julia package provides a suite of functions to compute
+1. **Adjusted predictions at the mean** and **marginal effects at the mean**
+2. **Average Marginal Effects** (AMEs) and related contrasts for continuous and categorical predictors in GLM/GLMM models.
 
 ## Core Functions
 
