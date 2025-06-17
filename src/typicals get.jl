@@ -17,6 +17,7 @@ function get_typicals(df, variables; typical = mean)
             lv = levels(x)
             ([sum(x .== l) * inv(length(x)) for l in lv], convert(Vector{String}, lv))
         else
+            @show v
             error("what type?")
         end
     end
