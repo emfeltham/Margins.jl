@@ -1,4 +1,4 @@
-# ame_numeric.jl
+# ame_continuous.jl
 
 """
     ame_continuous(
@@ -31,66 +31,51 @@ function ame_continuous(
     model,
     x::Symbol;
     δ::Real = 1e-6,
-    vcov = StatsBase.vcov
+    vcov = vcov
 )
-
-    # Link functions
+    # 1) analytic link‐derivs
     invlink, dinvlink, d2invlink = link_functions(model)
 
-    # 1) Base data & design
-    n = nrow(df)
-    X0   = fixed_X(model, df)               # n×p
-    β  = coef(model)                        # p
-    Σβ = vcov(model)                        # p×p
+    # 2) base design, β, Σβ
+    n      = nrow(df)
+    X0     = fixed_X(model, df)        # n×p
+    β      = coef(model)               # p-vector
+    Σβ     = vcov(model)               # p×p
 
-    η_base = X0 * β
-    μ_base = invlink.(η_base)
+    # 3) base η, μ, dμ, d²μ
+    η0     = X0 * β                    # n-vector
+    μ0     = invlink.(η0)
+    dμ     = dinvlink.(η0)             # μ′(η)
+    d2μ    = d2invlink.(η0)            # μ″(η)
 
-    # 2) dμ/dη
-    dpdη = dinvlink.(η_base)
+    # 4) shallow‐copy + safe perturb of single column
+    df_plus  = copy(df)
+    df_plus[!, x] = df[!, x] .+ δ
+    df_minus = copy(df)
+    df_minus[!, x] = df[!, x] .- δ
 
-    # 3) Build perturbed design matrices
-    df_plus  = deepcopy(df); df_plus[!, x]  .+= δ
-    df_minus = deepcopy(df); df_minus[!, x] .-= δ
-
+    # 5) only two extra design matrices
     X_plus  = fixed_X(model, df_plus)
     X_minus = fixed_X(model, df_minus)
 
-    η_plus  = X_plus  * β
-    η_minus = X_minus * β
+    # 6) per-obs ∂η/∂x via centered‐difference on the *design*
+    Xdiff   = (X_plus .- X_minus) ./ (2δ)  # n×p
+    δη_δx   = Xdiff * β                   # n-vector
 
-    # 4) Finite‐difference for ∂η/∂x
-    δη_δx = (η_plus .- η_minus) ./ (2δ)
+    # 7) point estimate: average of dμ·∂η/∂x
+    ame_val = mean(dμ .* δη_δx)
 
-    # 5) Marginal effects per observation
-    me_vec = dpdη .* δη_δx
-    ame_val = mean(me_vec)
+    # 8) vectorized gradient:
+    #    ∇AME = 1/n [ X0' * (d²μ .* δη_δx)  +  Xdiff' * dμ ]
+    grad    = (X0' * (d2μ .* δη_δx) .+ Xdiff' * dμ) ./ n
 
-    # 6) Second derivative d²μ/dη²
-    d2dη2 = d2invlink.(η_base)
+    # 9) delta‐method SE
+    varAME  = dot(grad, Σβ * grad)
+    seAME   = sqrt(varAME)
 
-    # 7) Gradient ∇AME (p-vector)
-    p = length(β)
-    grads = zeros(p, n)
-    for i in 1:n
-        Xi0      = vec(X0[i, :])
-        Xi_plus  = vec(X_plus[i, :])
-        Xi_minus = vec(X_minus[i, :])
-
-        dηdx_dβ = (Xi_plus .- Xi_minus) ./ (2δ)
-        Ai = dpdη[i]; Bi = d2dη2[i]; Di = δη_δx[i]
-
-        grads[:, i] = Bi .* Xi0 .* Di .+ Ai .* dηdx_dβ
-    end
-    grad_AME = sum(grads, dims=2)[:,1] ./ n
-
-    # 8) Delta‐method SE
-    var_AME = dot(grad_AME, Σβ * grad_AME)
-    se_AME  = sqrt(var_AME)
-
-    # Report model information
-    family = string(model.resp.d)  # e.g. "GLM.GlmResp{…}" implies Bernoulli, Poisson, etc.
-    link = string(model.resp.link)       # e.g. "LogitLink()"
-
-    return AME(x, ame_val, se_AME, grad_AME, n, η_base, μ_base, family, link)
+    # 10) return the same AME struct
+    return AME(
+        x, ame_val, seAME, grad, n, η0, μ0,
+        string(model.resp.d), string(model.resp.link)
+    )
 end
