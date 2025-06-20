@@ -2,22 +2,26 @@ module Margins
 
 using CategoricalArrays
 using DataFrames
-using StatsBase, StatsModels
-using StatsModels: formula, termvars
-import StatsBase.confint
+import DataFrames.Tables.columntable
 
-using Effects: TypicalTerm  # Import the type only
+using StatsBase, StatsModels
+
+using StatsModels: formula, termvars
+import StatsModels: TupleTerm,ColumnTable
+import StatsBase.confint
+using StatsBase: vcov
 using StatsModels: AbstractTerm, width, termvars
+
 # export MarginsTypicalTerm, margins_typical
 
 # needed from Effects.jl to compute effects!:
-import Effects:diag,vcov,_difference_method!,_responsename,something
-import Effects:_invlink_and_deriv
-import Effects:expand_grid
+using Effects: TypicalTerm  # Import the type only
+import Effects: diag,vcov, _difference_method!, _responsename, something
+import Effects: _invlink_and_deriv, AutoInvLink
+import Effects: expand_grid
 
-import DataFrames.Tables.columntable
-
-import StatsModels:TupleTerm,ColumnTable
+using MixedModels: MixedModel, fnames, RandomEffectsTerm
+using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
 
@@ -26,11 +30,13 @@ include("modelcols_alt.jl") # new function based on modelcols
 include("modelcols.jl")
 include("typicals.jl")
 include("effects2.jl")
+include("deltaeffects2.jl")
 include("standardized.jl")
 include("typicals get.jl")
 
 export modelvariables
-export effects2!, effectsΔyΔx
+export effects2!
+export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
 export get_typicals, typicals!
 
@@ -55,9 +61,9 @@ include("fixed_helpers.jl")
 include("mueta2.jl")
 include("linkhandling.jl")
 include("AME.jl")
-include("ame_continuous.jl")           # defines struct AME and ame_continuous
-include("ame_interaction_continuous.jl")      # defines ame_interaction_continuous
-include("ame_discrete_contrast.jl")# defines struct AMEContrast and ame_discrete_contrast
+include("ame_continuous.jl")             # defines struct AME and ame_continuous
+include("ame_interaction_continuous.jl") # defines ame_interaction_continuous
+include("ame_discrete_contrast.jl")      # defines struct AMEContrast and ame_discrete_contrast
 include("marginal_effect_curve_z.jl")
 include("marginal_effect_curve_x.jl")
 include("marginal_effect_curve_discrete_x.jl")
