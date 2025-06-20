@@ -12,9 +12,7 @@ import StatsBase.confint
 using StatsBase: vcov
 using StatsModels: AbstractTerm, width, termvars
 
-# export MarginsTypicalTerm, margins_typical
-
-# needed from Effects.jl to compute effects!:
+# Needed from Effects.jl to compute effects!:
 using Effects: TypicalTerm  # Import the type only
 import Effects: diag,vcov, _difference_method!, _responsename, something
 import Effects: _invlink_and_deriv, AutoInvLink
@@ -25,6 +23,7 @@ using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
 
+# APMs and MEMs
 include("reference grid.jl")
 include("modelcols_alt.jl") # new function based on modelcols
 include("modelcols.jl")
@@ -34,21 +33,14 @@ include("deltaeffects2.jl")
 include("standardized.jl")
 include("typicals get.jl")
 
+export setup_refgrid, setup_contrast_grid
+export get_typicals, typicals!
 export modelvariables
+
 export effects2!
 export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
-export get_typicals, typicals!
-
-# methods for stan/bayes model
-import LinearAlgebra.mul!
-
-include("hpdi.jl")
-include("bayes.jl")
-
-export setup_refgrid, setup_contrast_grid
-
-# average marginal effects
+# AMEs
 import LinearAlgebra.dot
 using GLM: linkinv, mueta
 using MixedModels: RandomEffectsTerm
@@ -81,6 +73,7 @@ export AME,
        ame_factor_contrasts
 export confint
 
+# interval for interactions
 function zvalues(df::AbstractDataFrame, z; type = "10-90")
     v = df[!, z]
     return if type == "1SD"
@@ -90,7 +83,12 @@ function zvalues(df::AbstractDataFrame, z; type = "10-90")
     else "error"
     end
 end
-
 export zvalues
+
+# Methods for Bayesian models (very rough)
+import LinearAlgebra.mul!
+
+include("hpdi.jl")
+include("bayes.jl")
 
 end
