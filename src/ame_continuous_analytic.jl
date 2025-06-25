@@ -36,10 +36,12 @@ a particular observation.
 `AME` with fields  
 `ame, se, grad, n, η_base, μ_base, dist, link`.
 """
-function ame_continuous_analytic(df::DataFrame,
-                                 model,
-                                 x::Symbol;
-                                 vcov = StatsBase.vcov)
+function ame_continuous_analytic(
+    df::DataFrame,
+    model,
+    x::Symbol;
+    vcov = StatsBase.vcov
+)
 
     # --- link functions (μ, μ′, μ″) -------------------------------------------------
     invlink, dinvlink, d2invlink = link_functions(model)
@@ -58,31 +60,31 @@ function ame_continuous_analytic(df::DataFrame,
     δη_δx  = similar(η0)                    # per-obs derivative of η wrt x
     XdxTdμ = zeros(eltype(β), p)            # Σ_i (∂X_i/∂x)' dμ_i      (p-vector)
 
-    # convenient closure: turn DataFrame row into NamedTuple (faster for AD)
-    row_as_nt = Tables.row  # Tables.row(df, i) gives a NamedTuple view
-
-    # --- loop over observations -----------------------------------------------------
+    # --- loop over observations --------------------------------------------------
     for i in 1:n
-        row_nt = row_as_nt(df, i)
-        x_val  = row_nt[x]
+        # grab a 1×p DataFrame containing only row i
+        df_row = df[i:i, :]
+        x_val  = df_row[1, x]   # the current value of x
 
-        # —— η_i(x) as a scalar function of x_i ————————————————
+        # — analytic ∂η/∂x via AD on a one‐row DataFrame ——
         fη(v) = begin
-            # replace x in the NamedTuple with v (Dual or real)
-            row2 = Base.merge(row_nt, (; x => v))
-            (modelmatrix(fe_form, row2) * β)[1]
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            # modelmatrix on a 1‐row DF returns a 1×p matrix
+            (modelmatrix(fe_form, tmp) * β)[1]
         end
-        # analytic derivative ∂η/∂x  (ForwardDiff Dual, so fast & exact)
         δη_δx[i] = ForwardDiff.derivative(fη, x_val)
 
-        # —— Jacobian of design row wrt x  (needed for Δ-method gradient) ——
+        # — Jacobian of the design row wrt x (for Δ‐method) ——
         fX(v) = begin
-            row2 = Base.merge(row_nt, (; x => v))
-            vec(modelmatrix(fe_form, row2))  # p-vector
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            # vec(...) turns the 1×p matrix into a p‐vector
+            vec(modelmatrix(fe_form, tmp))
         end
-        ∂X_∂x_row = ForwardDiff.derivative(fX, x_val)  # p-vector
+        ∂X_∂x_row = ForwardDiff.derivative(fX, x_val)
 
-        # accumulate Σ_i (∂X/∂x)' · dμ_i
+        # accumulate the second term of the gradient
         @inbounds XdxTdμ .+= ∂X_∂x_row .* dμ[i]
     end
 
@@ -98,6 +100,7 @@ function ame_continuous_analytic(df::DataFrame,
     se   = sqrt(dot(grad, Σβ * grad))       # √(g' Σ g)
 
     # --- bundle result --------------------------------------------------------------
-    return AME(x, ame_val, se, grad, n, η0, μ0,
-               string(model.resp.d), string(model.resp.link))
+    fam = family(model)
+    
+    return AME(x, ame_val, se, grad, n, η0, μ0, string(fam.dist), string(fam.link))
 end
