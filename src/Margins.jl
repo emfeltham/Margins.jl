@@ -4,6 +4,7 @@ using CategoricalArrays
 using DataFrames
 import DataFrames.Tables.columntable
 
+using Statistics
 using StatsBase, StatsModels
 
 using StatsModels
@@ -29,7 +30,6 @@ using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
-using ForwardDiff, LinearAlgebra
 
 include("family.jl")
 export Family, family
@@ -52,12 +52,13 @@ export effects2!
 export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
 # AMEs
+using ForwardDiff, LinearAlgebra
 import LinearAlgebra.dot
 using GLM: linkinv, mueta
 using MixedModels: RandomEffectsTerm
 
 import Base: show
-using Statistics, Printf, Distributions
+using Printf, Distributions
 
 # Core type definitions
 include("fixed_helpers.jl")
