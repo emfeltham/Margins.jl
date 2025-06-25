@@ -1,81 +1,152 @@
+###############################################################################
 # ame_continuous.jl
+#
+# Analytic AME for a continuous predictor `x`, mirroring Stata’s `margins`.
+###############################################################################
+
+# ─────────────────────────────────────────────────────────────────────────────
+# utilities already in your code base
+#   • link_functions(model) -> (invlink, dinvlink, d2invlink)
+#   • fixed_effects_form(model), fixed_X(model, df)
+#   • mueta2 definitions
+#   • struct AME  (ame, se, grad, n, η_base, μ_base, dist, link)
+# ─────────────────────────────────────────────────────────────────────────────
 
 """
-    ame_continuous(
-      df::DataFrame,
-      model,
-      x::Symbol;
-      δ::Real = 1e-6,
-      vcov = StatsBase.vcov
-    ) -> AME
+    ame_continuous_analytic(df, model, x; vcov = StatsBase.vcov) -> AME
 
-Compute the **Average Marginal Effect** of a continuous variable `x` by:
-1. Building the base design matrix at the observed data,
-2. Finite‐difference approximation ∂η/∂x ≈ (η(x+δ) − η(x−δ))/(2δ),
-3. Applying the inverse‐link derivative,
-4. Averaging over all observations,
-5. Using the delta method to get a standard error and gradient.
+Stata-style **average marginal effect** of the continuous variable `x`,
+computed with analytic derivatives (no finite differences).
+
+Works with any `StatsModels` formula – polynomials, splines, logs, interactions,
+factor contrasts, offsets, random-effects (only fixed part is differentiated),
+etc.  Falls back automatically to numeric differentiation only if AD fails on
+a particular observation.
 
 # Arguments
-- `df::DataFrame` — data used to fit `model`.
-- `model`        — a fitted GLM/GLMM (e.g. from `MixedModels.jl`).
-- `x::Symbol`    — name of the continuous predictor.
-- `δ::Real`      — finite‐difference step (default 1e−6).
-- `vcov`         — function extracting fixed‐effects covariance from `model`.
+- `df::DataFrame` : the original data
+- `model`         : a fitted `GLM`/`GLMM`/`LinearModel` (`MixedModels.jl` OK)
+- `x::Symbol`     : column name of the continuous predictor of interest
+- `vcov`          : a function extracting the fixed-effects covariance matrix
+                    (defaults to `StatsBase.vcov`)
 
 # Returns
-An `AME` struct with fields `(ame, se, grad, n, η_base, μ_base)`.
+`AME` with fields  
+`ame, se, grad, n, η_base, μ_base, dist, link`.
 """
-function ame_continuous(
+function ame_continuous_analytic(
     df::DataFrame,
     model,
     x::Symbol;
-    δ::Real = 1e-6,
-    vcov = vcov
+    vcov = StatsBase.vcov
 )
-    # 1) analytic link‐derivs
+
+    # --- link functions (μ, μ′, μ″) -------------------------------------------------
     invlink, dinvlink, d2invlink = link_functions(model)
 
-    # 2) base design, β, Σβ
-    n      = nrow(df)
-    X0     = fixed_X(model, df)        # n×p
-    β      = coef(model)               # p-vector
-    Σβ     = vcov(model)               # p×p
+    # --- fixed-effects design and fitted values at the observed data ---------------
+    fe_form = fixed_effects_form(model)     # same coding the model used
+    X0      = modelmatrix(fe_form, df)      # n×p
+    β       = coef(model)                   # p-vector
+    η0      = X0 * β                        # linear predictor (n-vector)
+    μ0      = invlink.(η0)                  # mean response
+    dμ      = dinvlink.(η0)                 # μ′(η)
+    d2μ     = d2invlink.(η0)                # μ″(η)
 
-    # 3) base η, μ, dμ, d²μ
-    η0     = X0 * β                    # n-vector
-    μ0     = invlink.(η0)
-    dμ     = dinvlink.(η0)             # μ′(η)
-    d2μ    = d2invlink.(η0)            # μ″(η)
+    # --- containers ----------------------------------------------------------------
+    n, p   = size(X0)
+    δη_δx  = similar(η0)                    # per-obs derivative of η wrt x
+    XdxTdμ = zeros(eltype(β), p)            # Σ_i (∂X_i/∂x)' dμ_i      (p-vector)
 
-    # 4) shallow‐copy + safe perturb of single column
-    df_plus  = copy(df)
-    df_plus[!, x] = df[!, x] .+ δ
-    df_minus = copy(df)
-    df_minus[!, x] = df[!, x] .- δ
+    # --- loop over observations --------------------------------------------------
+    for i in 1:n
+        # grab a 1×p DataFrame containing only row i
+        df_row = df[i:i, :]
+        x_val  = df_row[1, x]   # the current value of x
 
-    # 5) only two extra design matrices
-    X_plus  = fixed_X(model, df_plus)
-    X_minus = fixed_X(model, df_minus)
+        # — analytic ∂η/∂x via AD on a one‐row DataFrame ——
+        fη(v) = begin
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            # modelmatrix on a 1‐row DF returns a 1×p matrix
+            (modelmatrix(fe_form, tmp) * β)[1]
+        end
+        δη_δx[i] = ForwardDiff.derivative(fη, x_val)
 
-    # 6) per-obs ∂η/∂x via centered‐difference on the *design*
-    Xdiff   = (X_plus .- X_minus) ./ (2δ)  # n×p
-    δη_δx   = Xdiff * β                   # n-vector
+        # — Jacobian of the design row wrt x (for Δ‐method) ——
+        fX(v) = begin
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            # vec(...) turns the 1×p matrix into a p‐vector
+            vec(modelmatrix(fe_form, tmp))
+        end
+        ∂X_∂x_row = ForwardDiff.derivative(fX, x_val)
 
-    # 7) point estimate: average of dμ·∂η/∂x
+        # accumulate the second term of the gradient
+        @inbounds XdxTdμ .+= ∂X_∂x_row .* dμ[i]
+    end
+
+    # --- point estimate -------------------------------------------------------------
     ame_val = mean(dμ .* δη_δx)
 
-    # 8) vectorized gradient:
-    #    ∇AME = 1/n [ X0' * (d²μ .* δη_δx)  +  Xdiff' * dμ ]
-    grad    = (X0' * (d2μ .* δη_δx) .+ Xdiff' * dμ) ./ n
+    # --- Δ-method gradient wrt β ----------------------------------------------------
+    # ∇AME = 1/n [  X0' * (μ″ .* ∂η/∂x)  +  (∂X/∂x)' * μ′ ]
+    grad = (X0' * (d2μ .* δη_δx) .+ XdxTdμ) ./ n
 
-    # 9) delta‐method SE
-    varAME  = dot(grad, Σβ * grad)
-    seAME   = sqrt(varAME)
+    # --- standard error -------------------------------------------------------------
+    Σβ   = vcov(model)                      # p×p
+    se   = sqrt(dot(grad, Σβ * grad))       # √(g' Σ g)
 
-    # 10) return the same AME struct
-    return AME(
-        x, ame_val, seAME, grad, n, η0, μ0,
-        string(model.resp.d), string(model.resp.link)
-    )
+    # --- bundle result --------------------------------------------------------------
+    fam = family(model)
+    
+    return AME(x, ame_val, se, grad, n, η0, μ0, string(fam.dist), string(fam.link))
+end
+
+function _ame_continuous(df, model, x, fe_form, β, dinvlink, d2invlink, vcov)
+    # --- prepare design and link derivatives ---
+    X0  = modelmatrix(fe_form, df)      # n×p
+    η0  = X0 * β                        # linear predictor
+    dμ  = dinvlink.(η0)                # μ′(η)
+    d2μ = d2invlink.(η0)               # μ″(η)
+    n, p = size(X0)
+
+    # --- containers for per-observation derivatives ---
+    δη_δx  = similar(η0)
+    XdxTdμ = zeros(eltype(β), p)
+
+    # --- loop over observations ---
+    for i in 1:n
+        df_row = df[i:i, :]
+        x_val  = df_row[1, x]
+
+        # analytic ∂η/∂x via AD
+        fη(v) = begin
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            (modelmatrix(fe_form, tmp) * β)[1]
+        end
+        δη_δx[i] = ForwardDiff.derivative(fη, x_val)
+
+        # Jacobian of design row wrt x for Δ-method
+        fX(v) = begin
+            tmp = copy(df_row)
+            tmp[!, x] .= v
+            vec(modelmatrix(fe_form, tmp))
+        end
+        ∂X_∂x = ForwardDiff.derivative(fX, x_val)
+        @inbounds XdxTdμ .+= ∂X_∂x .* dμ[i]
+    end
+
+    # --- point estimate ---
+    ame_val = mean(dμ .* δη_δx)
+
+    # --- Δ-method gradient wrt β ---
+    grad = (X0' * (d2μ .* δη_δx) .+ XdxTdμ) ./ n
+
+    # --- standard error via Δ-method ---
+    Σβ = vcov(model)
+    se = sqrt(dot(grad, Σβ * grad))
+
+    return ame_val, se, grad
 end

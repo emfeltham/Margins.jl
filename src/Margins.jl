@@ -1,4 +1,4 @@
-module Margins
+module Margins # begin module
 
 using CategoricalArrays
 using DataFrames
@@ -6,6 +6,7 @@ import DataFrames.Tables.columntable
 
 using Statistics
 using StatsBase, StatsModels
+using Distributions
 
 using StatsModels
 using StatsModels: formula, termvars
@@ -61,32 +62,26 @@ import Base: show
 using Printf, Distributions
 
 # Core type definitions
+using Printf
+include("AMER.jl")
+include("confint.jl")
+export AME, AMEResult
+export confint
+
+# Helper functions for AMEs
 include("fixed_helpers.jl")
 include("mueta2.jl")
 include("link.jl")
-include("AME.jl")
-include("ame_continuous.jl")             # defines struct AME and ame_continuous
-include("ame_interaction_continuous.jl") # defines ame_interaction_continuous
-include("ame_discrete_contrast.jl")      # defines struct AMEContrast and ame_discrete_contrast
-include("marginal_effect_curve_z.jl")
-include("marginal_effect_curve_x.jl")
-include("marginal_effect_curve_discrete_x.jl")
-include("ame_factor_contrasts.jl")
+
+# Core AME functions
+include("ame.jl")
+include("ame_continuous.jl")
+include("ame_factor.jl")
+include("ame_representation.jl")
 
 # Exported types and functions
-export AME,
-       AMEContrast,
-       ame_continuous,
-       ame_interaction_continuous,
-       ame_discrete_contrast,
-       marginal_effect_curve_z,
-       marginal_effect_curve_x,
-       discrete_effect_curve,
-       ame_factor_contrasts
-export confint
-
-include("ame_continuous_analytic.jl")
-export ame_continuous_analytic
+export
+    ame, _ame_continuous
 
 # interval for interactions
 function zvalues(df::AbstractDataFrame, z; type = "10-90")
@@ -106,4 +101,4 @@ import LinearAlgebra.mul!
 include("hpdi.jl")
 include("bayes.jl")
 
-end
+end # end module
