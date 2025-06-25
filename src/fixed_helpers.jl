@@ -11,37 +11,63 @@
 
 using StatsModels
 
+###############################################################################
+# fixed_effects_utils.jl
+#
+# Dispatch on model type so GLM/OLS do nothing, MixedModels get stripped.
+###############################################################################
+
+using StatsModels
+
+# bring in the relevant model types
+import GLM: LinearModel, GeneralizedLinearModel
+import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
+
+# also need these to manipulate the formula
+const RET = MixedModels.RandomEffectsTerm
+const FT  = StatsModels.FunctionTerm{typeof(|)}
+const CT  = StatsModels.ConstantTerm
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1) GLM/OLS methods: identity
+# ─────────────────────────────────────────────────────────────────────────────
+
+fixed_effects_form(model::StatsModels.TableRegressionModel) = formula(model)
+
 """
-    fixed_effects_form(model) -> FormulaTerm
+    fixed_effects_form(model::LinearModel)
+    fixed_effects_form(model::GeneralizedLinearModel)
 
-Return a formula that contains **only the fixed-effects terms** of `model`.
-
-* If `model` is a plain GLM/OLS fit, the original formula is already fixed-
-  effects only and is returned unchanged.
-* If `model` is a `LinearMixedModel` or `GeneralizedLinearMixedModel`, every
-  `RandomEffectsTerm` (and the syntactic sugar `(… | …)`) is stripped out.
-
-The function works entirely at the level of `StatsModels.FormulaTerm`s, so it
-is independent of how the model was fitted.
+For plain OLS (`lm`) or GLM (`glm`) fits, there are no random‐effects terms, 
+so we just return the original formula unchanged.
 """
-function fixed_effects_form(model)
-    full = formula(model)                  # StatsModels.FormulaTerm
-    rhs  = full.rhs                        # vector of top-level RHS terms
+fixed_effects_form(model::Union{LinearModel, GeneralizedLinearModel}) = formula(model)
 
-    # keep everything that is *not* a random-effect or |() call
-    fe_terms = filter(t ->
-                !(t isa RandomEffectsTerm) &&
-                !(t isa FunctionTerm{typeof(|)}), rhs)
+# ─────────────────────────────────────────────────────────────────────────────
+# 2) MixedModels methods: strip out `(…|…)`
+# ─────────────────────────────────────────────────────────────────────────────
 
-    # if nothing was removed we can just return the original formula
-    fe_terms === rhs && return full
+"""
+    fixed_effects_form(model::LinearMixedModel)
+    fixed_effects_form(model::GeneralizedLinearMixedModel)
 
-    # rebuild RHS; if we removed *every* term, fall back to an intercept only
-    fe_rhs = isempty(fe_terms) ?
-             ConstantTerm() :
-             reduce((a,b)->a + b, fe_terms)
+Remove any random‐effects terms `( … | … )` from the RHS and return the
+pure fixed‐effects formula.
+"""
+function fixed_effects_form(model::Union{LinearMixedModel,
+                                          GeneralizedLinearMixedModel})
+    full = formula(model)      # e.g. y ~ x + z + x&z + (1|g)
+    rhs  = full.rhs            # vector of top‐level terms
 
-    return full.lhs ~ fe_rhs
+    # drop any RandomEffectsTerm or the FunctionTerm for `|`
+    fe = filter(t -> !(t isa RET) && !(t isa FT), rhs)
+
+    # if nothing was removed, just hand back the original
+    fe === rhs && return full
+
+    # otherwise rebuild: if you stripped *all* terms, leave only the intercept
+    new_rhs = isempty(fe) ? CT() : reduce(+, fe)
+    return full.lhs ~ new_rhs
 end
 
 """
