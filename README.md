@@ -15,10 +15,8 @@ This Julia package provides a suite of functions to compute
 ## Example Usage
 
 ```julia
-using Revise
 using RDatasets # work with iris dataset
 using DataFrames, CategoricalArrays
-using Statistics, GLM
 using Margins # development
 
 
