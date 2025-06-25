@@ -85,17 +85,7 @@ include("ame_representation.jl")
 export
     ame, _ame_continuous
 
-# interval for interactions
-function zvalues(df::AbstractDataFrame, z; type = "10-90")
-    v = df[!, z]
-    return if type == "1SD"
-        (low = mean(v) - std(v), high = mean(v) + std(v))
-    elseif type == "10-90"
-        (high = quantile(v, 0.9), low = quantile(v, 0.1))
-    else "error"
-    end
-end
-export zvalues
+# Bayesian methods
 
 # Methods for Bayesian models (very rough)
 import LinearAlgebra.mul!
