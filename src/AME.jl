@@ -70,5 +70,7 @@ function ame(
 
     fam     = string(family(model).dist)
     linkstr = string(family(model).link)
-    return AMEResult(varlist, repvals, ame_map, se_map, g_map, n, fam, linkstr)
+    
+    dofr = dof_residual(model) # get residual degrees of freedom
+    return AMEResult(varlist, repvals, ame_map, se_map, g_map, n, dofr, fam, linkstr)
 end
