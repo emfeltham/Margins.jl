@@ -56,14 +56,22 @@ function _ame_factor_pair(
 
     for i in 1:n
         df_row = df[i:i, :]
-        # level j
+        
+        # level j: only use the integer-code constructor
         tmpj = copy(df_row)
-        tmpj[!, f] .= CategoricalValue(j, pool)
+        j_idx = findfirst(==(j), levels(pool))
+        @assert j_idx !== nothing "level $j not found in pool"
+        tmpj[!, f] .= CategoricalValue(j_idx, pool)
+        
         Xj = vec(modelmatrix(fe_form, tmpj)); ηj = dot(Xj, β)
         μj = invlink(ηj); dμj = dinvlink(ηj)
-        # level k
+        
+        # level k: only use the integer-code constructor
         tmpk = copy(df_row)
-        tmpk[!, f] .= CategoricalValue(k, pool)
+        k_idx = findfirst(==(k), levels(pool))
+        @assert k_idx !== nothing "level $k not found in pool"
+        tmpk[!, f] .= CategoricalValue(k_idx, pool)
+
         Xk = vec(modelmatrix(fe_form, tmpk)); ηk = dot(Xk, β)
         μk = invlink(ηk); dμk = dinvlink(ηk)
 
