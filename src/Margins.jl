@@ -18,12 +18,16 @@ import Effects: diag,vcov, _difference_method!, _responsename, something
 import Effects: _invlink_and_deriv, AutoInvLink
 import Effects: expand_grid
 
+import MixedModels
 using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
 using GLM
 
 using StandardizedPredictors
+
+include("family.jl")
+export Family, family
 
 # APMs and MEMs
 include("reference grid.jl")
@@ -53,7 +57,7 @@ using Statistics, Printf, Distributions
 # Core type definitions
 include("fixed_helpers.jl")
 include("mueta2.jl")
-include("linkhandling.jl")
+include("link.jl")
 include("AME.jl")
 include("ame_continuous.jl")             # defines struct AME and ame_continuous
 include("ame_interaction_continuous.jl") # defines ame_interaction_continuous
