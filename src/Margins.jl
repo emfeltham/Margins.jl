@@ -21,6 +21,8 @@ import Effects: expand_grid
 using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
+using GLM
+
 using StandardizedPredictors
 
 # APMs and MEMs
@@ -72,6 +74,9 @@ export AME,
        discrete_effect_curve,
        ame_factor_contrasts
 export confint
+
+include("ame_continuous_analytic.jl")
+export ame_continuous_analytic
 
 # interval for interactions
 function zvalues(df::AbstractDataFrame, z; type = "10-90")
