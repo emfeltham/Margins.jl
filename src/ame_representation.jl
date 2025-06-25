@@ -53,11 +53,26 @@ function _ame_representation(
     for combo in combos
         # Create a copy and override representative vars
         df_tmp = copy(df)
+
         for (rv, val) in zip(repvars, combo)
             col = df_tmp[!, rv]
             if col isa CategoricalArray
                 p = pool(col)
-                df_tmp[!, rv] .= CategoricalValue(val, p)
+                if val isa CategoricalValue
+                    # already the right type & pool
+                    df_tmp[!, rv] .= val
+                elseif val isa Integer
+                    # integer code → CategoricalValue
+                    df_tmp[!, rv] .= CategoricalValue(val, p)
+                elseif val isa String
+                    # look up code for this string level
+                    lvl_idx = findfirst(==(val), levels(p))
+                    @assert lvl_idx !== nothing "level $val not in pool"
+                    df_tmp[!, rv] .= CategoricalValue(lvl_idx, p)
+                else
+                    # fallback (e.g. Number)
+                    df_tmp[!, rv] .= val
+                end
             else
                 df_tmp[!, rv] .= val
             end
