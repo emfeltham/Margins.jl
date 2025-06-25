@@ -2,6 +2,12 @@ name: CI
 on:
   - push
   - pull_request
+
+# Add this permissions block to allow the cache action to work
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
@@ -10,28 +16,21 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.0'
-          - '1.11'
+          - '1.10' # Current Long-Term Support (LTS) version
+          - '1'    # This will use the latest stable 1.x release (currently 1.11)
           - 'nightly'
         os:
           - ubuntu-latest
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: actions/cache@v1
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      # Replaces the old actions/cache@v1 block.
+      # This is the idiomatic way to cache for Julia projects.
+      - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
