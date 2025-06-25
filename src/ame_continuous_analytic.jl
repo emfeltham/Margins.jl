@@ -4,8 +4,6 @@
 # Analytic AME for a continuous predictor `x`, mirroring Stata’s `margins`.
 ###############################################################################
 
-using ForwardDiff, StatsModels, DataFrames, LinearAlgebra, StatsBase
-
 # ─────────────────────────────────────────────────────────────────────────────
 # utilities already in your code base
 #   • link_functions(model) -> (invlink, dinvlink, d2invlink)

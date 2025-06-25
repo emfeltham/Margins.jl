@@ -6,8 +6,11 @@ import DataFrames.Tables.columntable
 
 using StatsBase, StatsModels
 
+using StatsModels
 using StatsModels: formula, termvars
 import StatsModels: TupleTerm,ColumnTable
+
+using StatsBase
 import StatsBase.confint
 using StatsBase: vcov
 using StatsModels: AbstractTerm, width, termvars
@@ -18,13 +21,15 @@ import Effects: diag,vcov, _difference_method!, _responsename, something
 import Effects: _invlink_and_deriv, AutoInvLink
 import Effects: expand_grid
 
+using GLM
+import GLM: LinearModel, GeneralizedLinearModel
 import MixedModels
+import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
 using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
-using GLM
-
 using StandardizedPredictors
+using ForwardDiff, LinearAlgebra
 
 include("family.jl")
 export Family, family

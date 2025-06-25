@@ -9,19 +9,11 @@
 # intercept handling that the fitted model stored in its schema.
 ###############################################################################
 
-using StatsModels
-
 ###############################################################################
 # fixed_effects_utils.jl
 #
 # Dispatch on model type so GLM/OLS do nothing, MixedModels get stripped.
 ###############################################################################
-
-using StatsModels
-
-# bring in the relevant model types
-import GLM: LinearModel, GeneralizedLinearModel
-import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
 
 # also need these to manipulate the formula
 const RET = MixedModels.RandomEffectsTerm
