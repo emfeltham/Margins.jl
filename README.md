@@ -43,10 +43,6 @@ $$
 f: \mathbb{R} \;\to\; \mathbb{R}\quad(\text{or}\;\mathbb{R}\to\mathbb{R}^p)
 $$
 
-with respect to **one scalar input** at a time:
+with respect to **one scalar input** at a time.
 
-1. **Cost scales with num. of inputs**. Forward mode computes all needed partials in one “dual‐number” pass at essentially **O(cost of f)** work when there’s only one AD input.  Reverse mode would record an entire computation graph (“tape”) and then backpropagate through it—even though you only care about one input—incurring both a larger memory footprint and extra traversal time.
-
-2. **Simplicity & stability**.  With ForwardDiff you just wrap your scalar in a `Dual` and call `derivative`.  ReverseDiff (or Zygote) requires building and managing a tape or source‐to‐source transforms, which tend to be heavier weight, can be brittle if your code mutates or uses unsupported language features, and often have longer compile times.
-
-3. **StatsModels with dual numbers**.  Because we’re injecting a single dual into the design‐matrix machinery for each observation, **every** transform (`log`, `^2`, interactions, splines, etc.) automatically propagates that dual.  A reverse‐mode API would need to trace the *entire* modelmatrix construction—overkill when you only need ∂η/∂x, not ∂η/∂all inputs.
+Forward mode computes all needed partials in one “dual‐number” pass at essentially _O(cost of f)_ work when there’s only one AD input. With ForwardDiff we wrap scalars in a `Dual` and call `derivative`. Because we inject a single dual into the design‐matrix machinery for each observation, _every_ transform (`log`, `^2`, interactions, splines, etc.) automatically propagates that dual. Furthermore, this strategy integrates easily with the [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) framework, automatically propagating derivatives through data transformations (_e.g._, log(x), x^2, interactions with other variables) without requiring complex tracing of the entire model matrix construction.
