@@ -1,6 +1,8 @@
 module Margins # begin module
 
 using CategoricalArrays
+import CategoricalArrays.pool
+
 using DataFrames
 import DataFrames.Tables.columntable
 
