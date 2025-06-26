@@ -47,12 +47,6 @@ ame2  = ame(m, [:SepalWidth, :PetalLength, :PetalWidth], iris)
 
 ## Automatic Differentiation
 
-Margins.jl relies on **Forward‐mode AD** ([ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)) to differentiate functions
-
-$$
-f: \mathbb{R} \;\to\; \mathbb{R}\quad(\text{or}\;\mathbb{R}\to\mathbb{R}^p)
-$$
-
-with respect to **one scalar input** at a time.
+Margins.jl relies on **Forward‐mode AD** ([ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)) to differentiate functions with respect to one scalar input at a time.
 
 Forward mode computes all needed partials in one “dual‐number” pass at essentially _O(cost of f)_ work when there’s only one AD input. With ForwardDiff we wrap scalars in a `Dual` and call `derivative`. Because we inject a single dual into the design‐matrix machinery for each observation, _every_ transform (`log`, `^2`, interactions, splines, etc.) automatically propagates that dual. Furthermore, this strategy integrates easily with the [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) framework, automatically propagating derivatives through data transformations (_e.g._, log(x), x^2, interactions with other variables) without requiring complex tracing of the entire model matrix construction.
