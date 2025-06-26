@@ -46,10 +46,12 @@ the t-statistic, and two-sided p-value.
 # Returns
 A 4-tuple `(Δ, seΔ, tstat, pval)`.
 """
-function _compute_contrast(θ1::Real, θ2::Real,
-                           σ1::Real, σ2::Real,
-                           g1::AbstractVector, g2::AbstractVector,
-                           vcov::Union{AbstractMatrix,Nothing}, ν::Real)
+function _compute_contrast(
+    θ1::Real, θ2::Real,
+    σ1::Real, σ2::Real,
+    g1::AbstractVector, g2::AbstractVector,
+    vcov::Union{AbstractMatrix,Nothing}, ν::Real
+)
     cov12 = vcov === nothing ? zero(σ1) : dot(g1, vcov * g2)
     Δ     = θ1 - θ2
     seΔ   = sqrt(abs(σ1^2 + σ2^2 - 2cov12))
