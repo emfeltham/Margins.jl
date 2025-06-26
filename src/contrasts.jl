@@ -1,33 +1,6 @@
 # contrasts.jl
 
 # -----------------------------------------------------------------------------
-# ContrastResult holds one or more contrasts
-# -----------------------------------------------------------------------------
-"""
-    ContrastResult
-
-Container for results of one or more contrasts between average marginal effects (AMEs).
-
-# Fields
-- `vars::Vector{Symbol}`: Variables involved in each contrast (e.g. a single predictor or two predictors).
-- `comps::Vector{Tuple}`: Keys or index pairs for each comparison (e.g. `(:a,:b)`, level tuples).
-- `estimate::Vector{Float64}`: Difference in AME for each comparison (θ₁−θ₂).
-- `se::Vector{Float64}`: Standard error of each difference, via the Δ-method.
-- `t::Vector{Float64}`: t-statistics (estimate ÷ se).
-- `p::Vector{Float64}`: Two-sided p-values from Student’s t-distribution.
-- `df_residual::Real`: Degrees of freedom used for all tests.
-"""
-struct ContrastResult
-    vars        :: Vector{Symbol}
-    comps       :: Vector{Tuple}
-    estimate    :: Vector{Float64}
-    se          :: Vector{Float64}
-    t           :: Vector{Float64}
-    p           :: Vector{Float64}
-    df_residual :: Real
-end
-
-# -----------------------------------------------------------------------------
 # Internal Δ-method helper
 # -----------------------------------------------------------------------------
 """

@@ -86,6 +86,7 @@ include("ame_representation.jl")
 export ame
 
 # AME contrasts
+include("contrastresult.jl")
 include("contrasts.jl")
 
 # Export type; functions
