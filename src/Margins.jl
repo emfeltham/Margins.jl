@@ -66,6 +66,8 @@ using Printf, Distributions
 
 include("AMER.jl")
 include("confint.jl")
+
+# Exported types
 export AME, AMEResult
 export confint
 
@@ -81,16 +83,17 @@ include("ame_factor.jl")
 include("ame_representation.jl")
 
 # Exported types and functions
-export
-    ame, _ame_continuous
+export ame
 
 # AME contrasts
 include("contrasts.jl")
+
+# Export type; functions
 export ContrastResult, contrast, contrast_levels
 
-# Bayesian methods
+# Bayesian methods (very early stage; may be removed)
 
-# Methods for Bayesian models (very rough)
+# Methods for Bayesian models
 import LinearAlgebra.mul!
 
 include("hpdi.jl")
