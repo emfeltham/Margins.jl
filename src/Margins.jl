@@ -60,11 +60,10 @@ import LinearAlgebra.dot
 using GLM: linkinv, mueta
 using MixedModels: RandomEffectsTerm
 
+# Core type definitions
 import Base: show
 using Printf, Distributions
 
-# Core type definitions
-using Printf
 include("AMER.jl")
 include("confint.jl")
 export AME, AMEResult
@@ -84,6 +83,10 @@ include("ame_representation.jl")
 # Exported types and functions
 export
     ame, _ame_continuous
+
+# AME contrasts
+include("contrasts.jl")
+export ContrastResult, contrast, contrast_levels
 
 # Bayesian methods
 
