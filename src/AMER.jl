@@ -23,8 +23,6 @@ struct AMEResult
     link        :: String
 end
 
-using Printf, Distributions
-
 function Base.show(io::IO, ::MIME"text/plain", res::AMEResult)
     # Header
     println(io, "Average Marginal Effects (Family: $(res.family); Link: $(res.link))")
