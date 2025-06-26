@@ -64,12 +64,9 @@ using MixedModels: RandomEffectsTerm
 import Base: show
 using Printf, Distributions
 
-include("AMER.jl")
-include("confint.jl")
-
 # Exported types
+include("amer.jl")
 export AME, AMEResult
-export confint
 
 # Helper functions for AMEs
 include("fixed_helpers.jl")
@@ -81,6 +78,9 @@ include("ame.jl")
 include("ame_continuous.jl")
 include("ame_factor.jl")
 include("ame_representation.jl")
+
+include("confint.jl")
+export confint
 
 # Exported types and functions
 export ame
