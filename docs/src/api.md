@@ -3,7 +3,7 @@
 ## Average marginal effects (AME)
 
 ```@docs
-ame
+margins
 ```
 
 ```@docs
