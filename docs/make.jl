@@ -3,7 +3,7 @@ using Documenter, Margins
 makedocs(
   sitename = "Margins.jl",
   modules  = [Margins],
-  formats  = Documenter.HTML(),
+  format  = Documenter.HTML(),
 )
 
 deploydocs(
