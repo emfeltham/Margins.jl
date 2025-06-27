@@ -15,7 +15,7 @@
 using RDatasets            # loads the classic R datasets
 using DataFrames, CategoricalArrays
 using Statistics, GLM
-using Margins # development
+using Margins
 
 # ---------------------------------------------------------------------------
 # Load data

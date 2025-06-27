@@ -2,6 +2,11 @@
 # demo_ame_tests_2.jl
 # (second set of tests)
 
+using Revise
+using RDatasets, DataFrames, CategoricalArrays
+using Statistics, Random
+using MixedModels, Margins
+
 ###############################################################################
 # 6.   Logistic regression – no interactions (fixed)
 ###############################################################################

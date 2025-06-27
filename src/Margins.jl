@@ -29,6 +29,7 @@ using GLM
 import GLM: LinearModel, GeneralizedLinearModel
 import MixedModels
 import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
+import MixedModels: sdest
 using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
