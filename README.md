@@ -3,18 +3,18 @@
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 [![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://emfeltham.github.io/Margins.jl/)
 
-This Julia package provides a suite of functions to compute:
-1. **Adjusted predictions at the mean** and **marginal effects at the mean**
-2. **Average Marginal Effects** (AMEs) and related contrasts for predictors in GLM/GLMM models.
+This Julia package provides a suite of functions to compute marginal effects and related contrasts for predictors in GLM/GLMM models:
+1. **Adjusted predictions at the mean** (APM) and **marginal effects at the mean** (MEM)
+2. **Average Marginal Effects** (AMEs)
 
-As it stands, marginal effect calculations, and AME calculations in particular, are a huge gap in statistical modeling in Julia that really limits the ways researchers can take advantage of packages like [MixedModels.jl](https://github.com/JuliaStats/MixedModels.jl). Furthermore, other packages that seek to convert models estimated in Julia into R objects (which can then be used with the mature modeling ecosystem) ultimately feed into another two-language problem (though this strategy may be the best current option in many situations).
+As it stands, marginal effect calculations, and AME calculations in particular, are a huge gap in statistical modeling in Julia that really limits the ways researchers can take advantage of packages like [MixedModels.jl](https://github.com/JuliaStats/MixedModels.jl).[^Furthermore, other packages that seek to convert models estimated in Julia into R objects (which can then be used with the mature modeling ecosystem) ultimately feed into another two-language problem (though this strategy may be the best current option in many situations).]
 
 Also, note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations.
 
 ## Development
 
 - This package is in early stages of development.
-- See the "demo_ame_tests.jl" file for the complete set of cases that I have tested.
+- See the "demo_ame_tests_1.jl" and "demo_ame_tests_2.jl" files for the complete set of cases that I have tested (so far).
 - So far, I have only tested a limited set of GLM models.
 
 ## Core functions

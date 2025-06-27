@@ -99,7 +99,6 @@ function typicals_from_dict(typs)
 end
 
 """
-
 effects_pairwise(
     contrast_dsn::Dict{Symbol,<:Any}, form::FormulaTerm, typ::Dict, θ::Matrix;
     invlink = identity, alpha=0.05, specifiedvals = nothing
