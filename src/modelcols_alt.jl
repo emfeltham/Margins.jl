@@ -29,7 +29,7 @@ terms.  To create a single matrix, wrap the tuple in a [`MatrixTerm`](@ref).
 # Example
 
 ```jldoctest
-julia> using StableRNGs; rng = StableRNG(1);
+julia> using StableRNGs; rng = StableRNG(1); using Margins;
 
 julia> d = (a = [1:9;], b = rand(rng, 9), c = repeat(["d","e","f"], 3));
 
