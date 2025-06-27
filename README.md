@@ -22,7 +22,7 @@ Note that this package is similar in spirit to [Effects.jl](https://github.com/b
 
 ## Core functions
 
-- `effects2()`
+- `effects2!()`
 - `effectsΔyΔx()`
 - `margins()`
 
