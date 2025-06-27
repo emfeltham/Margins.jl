@@ -16,7 +16,6 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.11' 
           - '1'    # This will use the latest stable 1.x release (currently 1.11)
           - 'nightly'
         os:
