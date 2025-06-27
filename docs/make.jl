@@ -3,7 +3,7 @@ using Documenter, Margins
 makedocs(;
   modules = [Margins],
   authors = "Eric Feltham",
-  repo = "https://github.com/emfeltham/Margins.jl/blob/{commit}{path}#{line}",
+  repo = "https://github.com/emfeltham/Margins.jl/",
   sitename = "Margins.jl",
   format = Documenter.HTML(;
     prettyurls = get(ENV, "CI", "false") == "true",
