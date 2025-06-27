@@ -55,7 +55,7 @@ function margins(
         elseif eltype(df[!, v]) <: Number
             ame_val, se_val, grad_v = _ame_continuous(
                 df, model, v,
-                fe_form, β, dinvlink, d2invlink, vcov
+                fe_form, β, vcov
             )
         else
             ame_val, se_val, grad_v = _ame_factor_allpairs(
