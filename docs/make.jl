@@ -8,7 +8,7 @@ makedocs(;
   format = Documenter.HTML(
     ; prettyurls = get(ENV, "CI", "false") == "true",
     repolink = "https://github.com/emfeltham/Margins.jl",
-    # canonical="https://beacon-biosignals.github.io/Effects.jl/stable",
+    # canonical="https://github.com/emfeltham/Margins.jl/stable",
     assets = String[]),
   pages = ["Home" => "index.md"],
   doctest    = false, # do not test docs
