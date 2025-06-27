@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 
-![][docs-stable-img][docs-stable-url]
+[![][docs-stable-img]](docs-stable-url)
 
 This Julia package provides a suite of functions to compute:
 1. **Adjusted predictions at the mean** and **marginal effects at the mean**
