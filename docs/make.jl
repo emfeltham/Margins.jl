@@ -5,10 +5,10 @@ makedocs(;
   authors = "Eric Feltham",
   repo = "https://github.com/emfeltham/Margins.jl/blob/{commit}{path}#{line}",
   sitename = "Margins.jl",
-  format = Documenter.HTML(
-    ; prettyurls = get(ENV, "CI", "false") == "true",
+  format = Documenter.HTML(;
+    prettyurls = get(ENV, "CI", "false") == "true",
     repolink = "https://github.com/emfeltham/Margins.jl",
-    # canonical="https://github.com/emfeltham/Margins.jl/stable",
+    # canonical = "https://github.com/emfeltham/Margins.jl/stable",
     assets = String[]),
   pages = ["Home" => "index.md"],
   doctest    = false, # do not test docs
