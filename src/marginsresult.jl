@@ -53,7 +53,7 @@ function Base.show(io::IO, ::MIME"text/plain", res::MarginsResult)
 
     # body
     for v in res.vars
-        ame_entry = reseffects[v]
+        ame_entry = res.effects[v]
         se_entry  = res.ses[v]
         ci_entry  = cis[v]
 

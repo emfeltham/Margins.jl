@@ -3,7 +3,7 @@ using Printf, Distributions
 # — unified confint, using Student’s t —
 function confint(res::MarginsResult, var::Symbol; level::Real=0.95)
     @assert var in res.vars
-    ame = reseffects[var]
+    ame = res.effects[var]
     se  = res.ses[var]
     α   = 1 - level
     crit = quantile(TDist(res.df_residual), 1 - α/2)
