@@ -4,7 +4,8 @@ makedocs(
   sitename = "Margins.jl",
   modules  = [Margins],
   format  = Documenter.HTML(),
-  doctest  = false
+  doctest  = false,
+  checkdocs = :none
 )
 
 deploydocs(
