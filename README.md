@@ -2,6 +2,8 @@
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 
+![][docs-stable-img][docs-stable-url]
+
 This Julia package provides a suite of functions to compute:
 1. **Adjusted predictions at the mean** and **marginal effects at the mean**
 2. **Average Marginal Effects** (AMEs) and related contrasts for predictors in GLM/GLMM models.
@@ -100,3 +102,8 @@ Possibly planned.
 - [ ] efficiency for larger data
 - [ ] DataFrame construction (from `AMEResult`, `ContrastResult`)
 - [ ] plotting integration
+
+##
+
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
+[docs-stable-url]: https://emfeltham.github.io/Margins.jl/
