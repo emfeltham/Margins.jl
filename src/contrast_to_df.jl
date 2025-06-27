@@ -55,7 +55,7 @@ function Tables.schema(cr::ContrastResult)
     Tables.schema(contrast_to_df(cr))
 end
 
-Tables.rowiterator(cr::ContrastResult) = Tables.rowiterator(contrast_to_df(cr))
+Tables.rows(cr::ContrastResult) = Tables.rows(contrast_to_df(cr))
 
 # These should work:
 #    CSV.write("contrasts.csv", my_contrast_result)

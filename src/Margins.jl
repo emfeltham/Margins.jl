@@ -69,7 +69,7 @@ using Printf, Distributions
 # Exported types
 include("marginsresult.jl")
 export MarginsResult
-include("contrast_to_df.jl")
+include("margins_to_df.jl")
 
 # Helper functions for AMEs
 include("fixed_helpers.jl")

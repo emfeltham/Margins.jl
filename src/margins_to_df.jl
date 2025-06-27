@@ -93,7 +93,7 @@ function Tables.schema(res::MarginsResult)
     Tables.schema(margins_to_df(res))
 end
 
-Tables.rowiterator(res::MarginsResult) = Tables.rowiterator(margins_to_df(res))
+Tables.rows(res::MarginsResult) = Tables.rows(margins_to_df(res))
 
 # Now ANY Tables.jl consumer should work:
 #    CSV.write("out.csv", my_margins_result)
