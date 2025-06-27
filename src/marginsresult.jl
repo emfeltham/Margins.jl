@@ -1,21 +1,21 @@
-# AMER.jl
+# Marginsresult.jl
 
 """
-AMEResult holds average marginal effects (AME) output for one or more predictors.
+MarginsResult holds average marginal effects (AME) of marginal effects at representative values (MER) output for one or more predictors.
 
 # Fields
 - `vars::Vector{Symbol}`: focal predictors
-- `ame::Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}`: AME estimates (scalar or per-combo)
+- `effects::Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}`: AME or MER estimates (scalar or per-combo)
 - `se::Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}`: standard errors (scalar or per-combo)
 - `grad::Dict{Symbol, Union{Vector{Float64},Dict{Tuple,Vector{Float64}}}}`: Δ-method gradients (vector or per-combo)
 - `n::Int`: sample size
 - `family::String`, `link::String`: model family/link info
 """
-struct AMEResult
+struct MarginsResult
     vars        :: Vector{Symbol}
     repvals     :: Dict{Symbol,AbstractVector}
-    ame         :: Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}
-    se          :: Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}
+    effects     :: Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}
+    ses         :: Dict{Symbol, Union{Float64,Dict{Tuple,Float64}}}
     grad        :: Dict{Symbol, Union{Vector{Float64},Dict{Tuple,Vector{Float64}}}}
     n           :: Int
     df_residual :: Real
@@ -23,7 +23,7 @@ struct AMEResult
     link        :: String
 end
 
-function Base.show(io::IO, ::MIME"text/plain", res::AMEResult)
+function Base.show(io::IO, ::MIME"text/plain", res::MarginsResult)
     # Header
     println(io, "Average Marginal Effects (Family: $(res.family); Link: $(res.link))")
     println(io, "-"^80)
@@ -53,8 +53,8 @@ function Base.show(io::IO, ::MIME"text/plain", res::AMEResult)
 
     # body
     for v in res.vars
-        ame_entry = res.ame[v]
-        se_entry  = res.se[v]
+        ame_entry = reseffects[v]
+        se_entry  = res.ses[v]
         ci_entry  = cis[v]
 
         if isa(ame_entry, Number)

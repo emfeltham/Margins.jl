@@ -66,8 +66,8 @@ import Base: show
 using Printf, Distributions
 
 # Exported types
-include("amer.jl")
-export AME, AMEResult
+include("marginsresult.jl")
+export MarginsResult
 
 # Helper functions for AMEs
 include("fixed_helpers.jl")
@@ -84,7 +84,7 @@ include("confint.jl")
 export confint
 
 # Exported types and functions
-export ame
+export margins
 
 # AME contrasts
 include("contrastresult.jl")

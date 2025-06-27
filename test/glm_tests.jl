@@ -15,7 +15,7 @@ df = DataFrame(x=x, z=z, y=y)
 @testset "Scenario 6: Logistic regression – no interactions (fixed)" begin
     form6 = @formula(AM ~ MPG + WT)
     m6 = glm(form6, mt, Binomial(), LogitLink())
-    ame6 = ame(m6, :MPG, mt)
+    ame6 = margins(m6, :MPG, mt)
 
     # Closed-form delta-method
     β = coef(m6)
@@ -35,14 +35,14 @@ df = DataFrame(x=x, z=z, y=y)
     var_closed = g' * V * g
     se_closed = sqrt(var_closed)
 
-    @test isapprox(ame6.ame[:MPG], ame_closed; atol=1e-8)
-    @test isapprox(ame6.se[:MPG], se_closed; atol=1e-8)
+    @test isapprox(ame6.effects[:MPG], ame_closed; atol=1e-8)
+    @test isapprox(ame6.ses[:MPG], se_closed; atol=1e-8)
 end
 
 @testset "Scenario 7: Logistic regression – with interaction (fixed)" begin
     form7 = @formula(AM ~ MPG * WT)
     m7 = glm(form7, mt, Binomial(), LogitLink())
-    ame7 = ame(m7, :MPG, mt)
+    ame7 = margins(m7, :MPG, mt)
 
     β = coef(m7)
     V = vcov(m7)
@@ -63,14 +63,14 @@ end
     var_closed = g' * V * g
     se_closed = sqrt(var_closed)
 
-    @test isapprox(ame7.ame[:MPG], ame_closed; atol=1e-8)
-    @test isapprox(ame7.se[:MPG], se_closed; atol=1e-8)
+    @test isapprox(ame7.effects[:MPG], ame_closed; atol=1e-8)
+    @test isapprox(ame7.ses[:MPG], se_closed; atol=1e-8)
 end
 
 @testset "Scenario 8: Probit regression – no interactions (fixed, manual η)" begin
     form6 = @formula(AM ~ MPG + WT)
     m8 = glm(form6, mt, Binomial(), ProbitLink())
-    ame8 = ame(m8, :WT, mt)
+    ame8 = margins(m8, :WT, mt)
 
     β = coef(m8)
     V = vcov(m8)
@@ -91,14 +91,14 @@ end
     var_closed = g' * V * g
     se_closed = sqrt(var_closed)
 
-    @test isapprox(ame8.ame[:WT], ame_closed; atol=1e-8)
-    @test isapprox(ame8.se[:WT], se_closed; atol=1e-8)
+    @test isapprox(ame8.effects[:WT], ame_closed; atol=1e-8)
+    @test isapprox(ame8.ses[:WT], se_closed; atol=1e-8)
 end
 
 @testset "Scenario 9: Poisson regression – no interactions (fixed)" begin
     form9 = @formula(y ~ x + z)
     m9 = glm(form9, df, Poisson(), LogLink())
-    ame9 = ame(m9, :x, df)
+    ame9 = margins(m9, :x, df)
 
     β = coef(m9)
     V = vcov(m9)
@@ -119,14 +119,14 @@ end
     var_closed = g' * V * g
     se_closed = sqrt(var_closed)
 
-    @test isapprox(ame9.ame[:x], ame_closed; atol=1e-8)
-    @test isapprox(ame9.se[:x], se_closed; atol=1e-8)
+    @test isapprox(ame9.effects[:x], ame_closed; atol=1e-8)
+    @test isapprox(ame9.ses[:x], se_closed; atol=1e-8)
 end
 
 @testset "Scenario 10: Poisson regression – with interaction (fixed)" begin
     form10 = @formula(y ~ x * z)
     m10 = glm(form10, df, Poisson(), LogLink())
-    ame10 = ame(m10, :x, df)
+    ame10 = margins(m10, :x, df)
 
     β = coef(m10)
     V = vcov(m10)
@@ -149,7 +149,7 @@ end
     var_closed = g' * V * g
     se_closed = sqrt(var_closed)
 
-    @test isapprox(ame10.ame[:x], ame_closed; atol=1e-8)
-    @test isapprox(ame10.se[:x], se_closed; atol=1e-8)
+    @test isapprox(ame10.effects[:x], ame_closed; atol=1e-8)
+    @test isapprox(ame10.ses[:x], se_closed; atol=1e-8)
 end
 

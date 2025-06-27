@@ -1,31 +1,30 @@
 # Margins.jl
 
-**Note**: This package is in active development. The public API may not yet stable and may change in future versions. Hence, the package is still pre-registration.
+**Note**: This package is in active development. The public API may not yet stable and may change in future versions. Hence, the package is still pre-registration. See below for verified cases.
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 [![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://emfeltham.github.io/Margins.jl/)
 
 This Julia package provides a suite of functions to compute marginal effects and related contrasts for predictors in GLM/GLMM models:
 1. **Adjusted predictions at the mean** (APM) and **marginal effects at the mean** (MEM)
-2. **Average Marginal Effects** (AMEs)
+2. **Average Marginal Effects** (AMEs) and **marginal effects at representative values** (MERS)
 
 As it stands, marginal effect calculations, and AME calculations in particular, are a huge gap in statistical modeling in Julia that really limits the ways researchers can take advantage of packages like [MixedModels.jl](https://github.com/JuliaStats/MixedModels.jl).[^1]
 
 [^1]: Furthermore, other packages that seek to convert models estimated in Julia into R objects (which can then be used with the mature modeling ecosystem) ultimately feed into another two-language problem (though this strategy may be the best current option in many situations).
 
-Note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations. Furthermore, the design of this package refers to Stata's ["margins"](https://www.stata.com/manuals/cmmargins.pdf) commands.
+Note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations. Ultimately, the design of this package refers heavily to Stata's ["margins"](https://www.stata.com/manuals/cmmargins.pdf) commands.
 
 ## Development
 
-- This package is in early stages of development.
-- See the "demo_ame_tests_1.jl" and "demo_ame_tests_2.jl" files for the complete set of cases that I have tested (so far).
-- So far, I have only tested a limited set of GLM models.
+- This package is in under development (as noted above).
+- See "test/" for scenarios that have been verified against manual calculation (this currently includes various cases with LMs, GLMs, and LMM/GLMMs).
 
 ## Core functions
 
 - `effects2()`
 - `effectsΔyΔx()`
-- `ame()`
+- `margins()`
 
 ## Example usage for AMEs
 
@@ -34,11 +33,9 @@ using RDatasets # work with iris dataset
 using DataFrames, CategoricalArrays
 using Margins # development
 
-
 # Load data (150 × 5)
 iris = dataset("datasets", "iris") |> DataFrame
 iris.Species = categorical(iris.Species);
-
 
 # 1. No interactions – several covariates
 
@@ -46,13 +43,13 @@ form1 = @formula(SepalLength ~ SepalWidth + PetalLength + PetalWidth)
 
 m = lm(form1, iris) # linear regression
 
-ame1  = ame(m, :SepalWidth, iris)
-ame2  = ame(m, [:SepalWidth, :PetalLength, :PetalWidth], iris)
+ame1  = margins(m, :SepalWidth, iris)
+ame2  = margins(m, [:SepalWidth, :PetalLength, :PetalWidth], iris)
 ```
 
 **More cases to come...**
 
-(cf. "demo_ame_tests.jl")
+See "tests/" for a detailed set of scenarios.
 
 ## Example usage for APMs
 
@@ -103,5 +100,5 @@ Possibly planned.
 - [ ] inspect APM workflow, possibly change UI
 - [ ] elasticities
 - [ ] efficiency for larger data
-- [ ] DataFrame construction (from `AMEResult`, `ContrastResult`)
+- [ ] DataFrame construction (from `MarginsResult`, `ContrastResult`)
 - [ ] plotting integration

@@ -25,7 +25,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
     @testset "Scenario 11: LMM random intercept only" begin
         form11 = @formula(Reaction ~ Days + (1|Subject))
         m11 = fit(MixedModel, form11, sleep)
-        ame11 = ame(m11, :Days, sleep)
+        ame11 = margins(m11, :Days, sleep)
 
         fe = fixef(m11)
         cn = coefnames(m11)
@@ -34,14 +34,14 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        @test isapprox(ame11.ame[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame11.se[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame11.effects[:Days], ame_closed; atol=1e-8)
+        @test isapprox(ame11.ses[:Days], se_closed; atol=1e-8)
     end
 
     @testset "Scenario 12: LMM random slope on Days" begin
         form12 = @formula(Reaction ~ Days + (Days|Subject))
         m12 = fit(MixedModel, form12, sleep)
-        ame12 = ame(m12, :Days, sleep)
+        ame12 = margins(m12, :Days, sleep)
 
         fe = fixef(m12)
         cn = coefnames(m12)
@@ -50,14 +50,14 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        @test isapprox(ame12.ame[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame12.se[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame12.effects[:Days], ame_closed; atol=1e-8)
+        @test isapprox(ame12.ses[:Days], se_closed; atol=1e-8)
     end
 
     @testset "Scenario 13: LMM with transformation + random intercept" begin
         form13 = @formula(Reaction ~ log1p(Days) + (1|Subject))
         m13 = fit(MixedModel, form13, sleep)
-        ame13 = ame(m13, :Days, sleep)
+        ame13 = margins(m13, :Days, sleep)
 
         fe = fixef(m13)
         cn = coefnames(m13)
@@ -67,15 +67,15 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[idx] * mean_inv
         se_closed = sqrt(vc[idx, idx] * mean_inv^2)
 
-        @test isapprox(ame13.ame[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame13.se[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame13.effects[:Days], ame_closed; atol=1e-8)
+        @test isapprox(ame13.ses[:Days], se_closed; atol=1e-8)
     end
 
     @testset "Scenario 14: GLMM logistic random intercept on cbpp" begin
         form14 = @formula(Prop ~ Period + (1|Herd))
         m14 = fit(GeneralizedLinearMixedModel, form14, cbpp,
                  Binomial(), LogitLink(), wts = cbpp.Size)
-        ame14 = ame(m14, :Period, cbpp)
+        ame14 = margins(m14, :Period, cbpp)
 
         fe = fixef(m14)
         V = vcov(m14)
@@ -93,14 +93,14 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         var_closed = g' * V * g
         se_closed = sqrt(var_closed)
 
-        @test isapprox(ame14.ame[:Period][("1","2")], ame_closed; atol=1e-8)
-        @test isapprox(ame14.se[:Period][("1","2")], se_closed; atol=1e-8)
+        @test isapprox(ame14.effects[:Period][("1","2")], ame_closed; atol=1e-8)
+        @test isapprox(ame14.ses[:Period][("1","2")], se_closed; atol=1e-8)
     end
 
     @testset "Scenario 15: GLMM logistic synthetic random intercept" begin
         form15 = @formula(y ~ x + (1|group))
         m15 = fit(GeneralizedLinearMixedModel, form15, df2, Bernoulli())
-        ame15 = ame(m15, :x, df2)
+        ame15 = margins(m15, :x, df2)
 
         fe = fixef(m15)
         cn = coefnames(m15)
@@ -122,7 +122,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         var_closed = g' * vc * g
         se_closed = sqrt(var_closed)
 
-        @test isapprox(ame15.ame[:x], ame_closed; atol=1e-8)
-        @test isapprox(ame15.se[:x], se_closed; atol=1e-8)
+        @test isapprox(ame15.effects[:x], ame_closed; atol=1e-8)
+        @test isapprox(ame15.ses[:x], se_closed; atol=1e-8)
     end
 end

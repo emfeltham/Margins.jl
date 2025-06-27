@@ -1,11 +1,11 @@
 """
-    ame(
+    margins(
       model,
       vars::Union{Symbol, AbstractVector{Symbol}},
       df::AbstractDataFrame;
       vcov::Function = StatsBase.vcov,
       repvals::Dict{Symbol, Vector} = Dict{Symbol, Vector}()
-    ) -> AMEResult
+    ) -> MarginsResult
 
 Compute average marginal effects (AME) for one or more predictors.
 
@@ -18,9 +18,9 @@ Compute average marginal effects (AME) for one or more predictors.
 - `repvals`: a `Dict{Symbol, Vector}` of representative values for MERs
 
 # Returns
-An `AMEResult` containing AMEs, standard errors, and gradients for each var.
+An `MarginsResult` containing AMEs, standard errors, and gradients for each var.
 """
-function ame(
+function margins(
     model,
     vars::Union{Symbol, AbstractVector{Symbol}},
     df::AbstractDataFrame;
@@ -72,5 +72,5 @@ function ame(
     linkstr = string(family(model).link)
     
     dofr = dof_residual(model) # get residual degrees of freedom
-    return AMEResult(varlist, repvals, ame_map, se_map, g_map, n, dofr, fam, linkstr)
+    return MarginsResult(varlist, repvals, ame_map, se_map, g_map, n, dofr, fam, linkstr)
 end

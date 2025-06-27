@@ -48,7 +48,7 @@ function Base.show(io::IO, ::MIME"text/plain", cr::ContrastResult)
         label = join(string.(cmp), "–")   # separate components
 
         est = cr.estimate[i]
-        se  = cr.se[i]
+        se  = cr.ses[i]
         t   = cr.t[i]
         p   = cr.p[i]
         lo  = est - crit*se
