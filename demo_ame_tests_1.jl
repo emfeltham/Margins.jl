@@ -1,5 +1,6 @@
 ###############################################################################
-# demo_ame_tests.jl
+# demo_ame_tests_1.jl
+# (first set of tests)
 #
 # Quick-start scenarios to check `ame()`:
 #   1.  No interactions, several covariates
