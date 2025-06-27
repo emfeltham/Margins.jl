@@ -1,8 +1,8 @@
 ###############################################################################
 # demo_ame_tests_1.jl
 # (first set of tests)
-#
-# Quick-start scenarios to check `ame()`:
+
+# Three quick-start scenarios to sanity-check `ame_continuous_analytic`:
 #   1.  No interactions, several covariates
 #   2.  One interaction term involving x
 #   3.  x appears inside a transformation
@@ -12,7 +12,6 @@
 # Outcome:   :SepalLength
 ###############################################################################
 
-using Revise
 using RDatasets            # loads the classic R datasets
 using DataFrames, CategoricalArrays
 using Statistics, GLM
@@ -44,7 +43,7 @@ ame123  = ame(m, [:SepalWidth, :PetalLength, :PetalWidth], iris)
 
 println("\n=== Scenario 1: No interactions ===")
 println("Formula : ", form1)
-println("AME dSepalLength/dSepalWidth = $(round(ame1.ame; digits = 4))  (se = $(round(ame1.se; digits = 4)))")
+println("AME dSepalLength/dSepalWidth = $(round(ame1.ame[:SepalWidth]; digits = 4))  (se = $(round(ame1.se[:SepalWidth]; digits = 4)))")
 
 #=
 Calculation and verification
@@ -74,7 +73,7 @@ ame2  = ame(m2, :SepalWidth, iris)
 
 println("\n=== Scenario 2: Interaction ===")
 println("Formula : ", form2)
-println("AME dSepalLength/dSepalWidth = $(round(ame2.ame, digits = 4))  (se = $(round(ame2.se, digits = 4)))")
+println("AME dSepalLength/dSepalWidth = $(round(ame2.ame[:SepalWidth], digits = 4))  (se = $(round(ame2.se[:SepalWidth], digits = 4)))")
 
 # verify the result against manual calculation
 let
@@ -144,7 +143,7 @@ ame3  = ame(m3, :SepalWidth, iris)
 
 println("\n=== Scenario 3: Transformation ===")
 println("Formula : ", form3)
-println("AME dSepalLength/dSepalWidth = $(round(ame3.ame, 4))  (se = $(round(ame3.se, 4)))")
+println("AME dSepalLength/dSepalWidth = $(round(ame3.ame[:SepalWidth], digits=4))  (se = $(round(ame3.se[:SepalWidth], digits=4)))")
 
 # verify
 let 
@@ -265,11 +264,11 @@ ame4 = ame(m4, :SepalWidth, iris; repvals=repvals)
 
 println("\n=== Scenario 4: Representative values of PetalWidth ===")
 println("Formula : ", form4)
-println("PetalWidth rep values: ", round.(repvals[:PetalWidth], digits=2))
+println("PetalWidth rep values: ", round.(repvals[:PetalLength], digits=2))
 println("AME of SepalWidth at rep values:")
 for (pw,), ame_val in ame4.ame[:SepalWidth]
     se_val = ame4.se[:SepalWidth][(pw,)]
-    println("  PetalWidth=$(round(pw, digits=2)) → AME=$(round(ame_val, digits=4))  (se=$(round(se_val, digits=4)))")
+    println("  PetalWidth=$(round(pw, digits=2)) → AME=$(round(ame_val[:SepalWidth], digits=4))  (se=$(round(se_val, digits=4)))")
 
     # closed-form check
     coefs = coef(m4)
