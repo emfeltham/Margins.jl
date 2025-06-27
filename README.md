@@ -11,7 +11,7 @@ As it stands, marginal effect calculations, and AME calculations in particular, 
 
 [^1]: Furthermore, other packages that seek to convert models estimated in Julia into R objects (which can then be used with the mature modeling ecosystem) ultimately feed into another two-language problem (though this strategy may be the best current option in many situations).
 
-Also, note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations.
+Note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations. Furthermore, the design of this package refers to Stata's ["margins"](https://www.stata.com/manuals/cmmargins.pdf) commands.
 
 ## Development
 
