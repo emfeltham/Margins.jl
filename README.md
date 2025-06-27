@@ -1,6 +1,6 @@
 # Margins.jl
 
-**Note**: This package is in active development. The public API may not yet stable and may change in future versions. Hence, the package is still pre-registration. See below for verified cases.
+**Note**: This package is in active development. The public API may change in future versions. Hence, the package is still in a pre-registration state. See below for verified cases.
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 [![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://emfeltham.github.io/Margins.jl/)
