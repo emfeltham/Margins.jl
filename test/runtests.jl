@@ -1,13 +1,15 @@
 using Margins
 using Test
+
+using Random
 using DataFrames, CategoricalArrays
-using Statistics, GLM, MixedModels
+using Distributions, Statistics, GLM, MixedModels
 using RDatasets
 import LinearAlgebra.dot
 import LinearAlgebra.diag
 
 @testset "Margins.jl" begin
-    # Write your tests here.
-    include("lm_tests.jl")
+    include("lm_tests.jl") # linear models
+    include("glm_tests.jl") # general linear models
+    include("mm_tests.jl") # general mixed models
 end
-
