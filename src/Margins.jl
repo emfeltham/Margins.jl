@@ -3,8 +3,9 @@ module Margins # begin module
 using CategoricalArrays
 import CategoricalArrays.pool
 
-using DataFrames
-import DataFrames.Tables.columntable
+using DataFrames, Tables
+import DataFrames.DataFrame
+import Tables.columntable
 
 using Statistics
 using StatsBase, StatsModels
@@ -68,6 +69,7 @@ using Printf, Distributions
 # Exported types
 include("marginsresult.jl")
 export MarginsResult
+include("contrast_to_df.jl")
 
 # Helper functions for AMEs
 include("fixed_helpers.jl")
@@ -89,6 +91,9 @@ export margins
 # AME contrasts
 include("contrastresult.jl")
 include("contrasts.jl")
+include("contrast_to_df.jl")
+
+export DataFrame
 
 # Export type; functions
 export ContrastResult, contrast, contrast_levels

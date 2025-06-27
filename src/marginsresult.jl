@@ -94,4 +94,3 @@ function Base.show(io::IO, ::MIME"text/plain", res::MarginsResult)
     println(io)
     println(io, "Observations: ", res.n)
 end
-
