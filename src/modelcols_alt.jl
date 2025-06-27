@@ -30,15 +30,20 @@ terms.  To create a single matrix, wrap the tuple in a [`MatrixTerm`](@ref).
 
 ```jldoctest
 julia> using StableRNGs; rng = StableRNG(1); using Margins;
+julia> import Margins.term
+julia> import Margins.apply_schema
+julia> import Margins.schema
+julia> import Margins.modelcols_alt
+julia> import Margins.StatsModels.MatrixTerm
 
 julia> d = (a = [1:9;], b = rand(rng, 9), c = repeat(["d","e","f"], 3));
 
-julia> ts = Margins.apply_schema(term.((:a, :b, :c)), schema(d))
+julia> ts = apply_schema(term.((:a, :b, :c)), schema(d))
 a(continuous)
 b(continuous)
 c(DummyCoding:3→2)
 
-julia> cols = Margins.modelcols_alt(ts, d)
+julia> cols = modelcols_alt(ts, d)
 ([1, 2, 3, 4, 5, 6, 7, 8, 9], [0.5851946422124186, 0.07733793456911231, 0.7166282400543453, 0.3203570514066232, 0.6530930076222579, 0.2366391513734556, 0.7096838914472361, 0.5577872440804086, 0.05079002172175784], [0.0 0.0; 1.0 0.0; … ; 1.0 0.0; 0.0 1.0])
 
 julia> reduce(hcat, cols)
@@ -53,7 +58,7 @@ julia> reduce(hcat, cols)
  8.0  0.557787   1.0  0.0
  9.0  0.05079    0.0  1.0
 
-julia> Margins.modelcols_alt(MatrixTerm(ts), d)
+julia> modelcols_alt(MatrixTerm(ts), d)
 9×4 Matrix{Float64}:
  1.0  0.585195   0.0  0.0
  2.0  0.0773379  1.0  0.0
