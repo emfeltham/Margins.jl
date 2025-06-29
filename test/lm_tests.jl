@@ -32,6 +32,7 @@ end
 @testset "Scenario 1a: Categorical predictor" begin
     form_cat = @formula(SepalLength ~ SepalWidth + PetalWidth + Species)
     m_cat = lm(form_cat, iris)
+    
     ame_species = margins(m_cat, :Species, iris)
     levels_list = levels(iris.Species)
     expected_pairs = sort([(i, j) for i in levels_list for j in levels_list if i < j])

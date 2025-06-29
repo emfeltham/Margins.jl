@@ -1,3 +1,6 @@
+###############################################################################
+# 5. Top-level margins wrapper
+###############################################################################
 """
     margins(
       model,
@@ -20,57 +23,56 @@ Compute average marginal effects (AME) for one or more predictors.
 # Returns
 An `MarginsResult` containing AMEs, standard errors, and gradients for each var.
 """
-function margins(
-    model,
-    vars::Union{Symbol, AbstractVector{Symbol}},
-    df::AbstractDataFrame;
-    vcov::Function = StatsBase.vcov,
-    repvals = Dict()
-)
-    @assert df isa AbstractDataFrame "You must provide a DataFrame as `df`"
-    # normalize vars to a Vector{Symbol}
-    varlist = isa(vars, Symbol) ? [vars] : collect(vars)
-    for v in string.(varlist)
-        @assert v in names(df) "Variable $(v) not found in DataFrame"
-    end
-
-    # set up link, design, and parameters
+function margins(model, vars, df::AbstractDataFrame;
+                 vcov=StatsBase.vcov, repvals=Dict(), pairs::Symbol=:allpairs)
+    varlist = isa(vars,Symbol) ? [vars] : collect(vars)
     invlink, dinvlink, d2invlink = link_functions(model)
-    fe_form  = fixed_effects_form(model)
-    X        = modelmatrix(fe_form, df)
-    β        = coef(model)
-    n        = size(X, 1)
+    fe_form = fixed_effects_form(model)
+    β, Σβ   = coef(model), vcov(model)
+    n       = nrow(df)
+    tbl0    = Tables.columntable(df)
 
-    # result containers
-    ame_map = Dict{Symbol, Any}()
-    se_map  = Dict{Symbol, Any}()
-    g_map   = Dict{Symbol, Any}()
+    cts_vars = [v for v in varlist if eltype(df[!,v])<:Real && eltype(df[!,v])!=Bool]
+    cat_vars = setdiff(varlist, cts_vars)
+    ame_map, se_map, grad_map = Dict{Symbol,Any}(), Dict{Symbol,Any}(), Dict{Symbol,Any}()
 
-    for v in varlist
-        if !isempty(repvals)
-            ame_val, se_val, grad_v = _ame_representation(
-                df, model, v, repvals,
-                fe_form, β, invlink, dinvlink, d2invlink, vcov
-            )
-        elseif eltype(df[!, v]) <: Number
-            ame_val, se_val, grad_v = _ame_continuous(
-                df, model, v,
-                fe_form, β, vcov
-            )
-        else
-            ame_val, se_val, grad_v = _ame_factor_allpairs(
-                df, model, v,
-                fe_form, β, invlink, dinvlink, vcov
-            )
+    # continuous
+    X, Xdx = build_continuous_design(df, fe_form, cts_vars)
+    for (j,v) in enumerate(cts_vars)
+        ame,se,grad = _ame_continuous(β, Σβ, X, Xdx[j], dinvlink, d2invlink)
+        ame_map[v], se_map[v], grad_map[v] = ame, se, grad
+    end
+    # MERs
+    if !isempty(repvals)
+        for v in varlist
+            ame, se, grad = _ame_representation(df, model, v, repvals,
+                                              fe_form, β, Σβ,
+                                              invlink, dinvlink, d2invlink)
+            ame_map[v], se_map[v], grad_map[v] = ame, se, grad
         end
-        ame_map[v] = ame_val
-        se_map[v]  = se_val
-        g_map[v]   = grad_v
+    end
+        # categorical
+    for v in cat_vars
+        if pairs == :baseline
+            ame_d,se_d,g_d = _ame_factor_baseline(tbl0, fe_form, β, Σβ,
+                                                  v, invlink, dinvlink)
+        else
+            ame_d,se_d,g_d = _ame_factor_allpairs(tbl0, fe_form, β, Σβ,
+                                                  v, invlink, dinvlink)
+        end
+        # enforce correct dict types for MarginsResult
+        effects_d = Dict{Tuple,Float64}(ame_d)
+        ses_d     = Dict{Tuple,Float64}(se_d)
+        grads_d   = Dict{Tuple,Vector{Float64}}(g_d)
+
+        ame_map[v]   = effects_d
+        se_map[v]    = ses_d
+        grad_map[v]  = grads_d
     end
 
-    fam     = string(family(model).dist)
-    linkstr = string(family(model).link)
-    
-    dofr = dof_residual(model) # get residual degrees of freedom
-    return MarginsResult(varlist, repvals, ame_map, se_map, g_map, n, dofr, fam, linkstr)
+    return MarginsResult(varlist, repvals,
+                         ame_map, se_map, grad_map,
+                         n, dof_residual(model),
+                         string(family(model).dist),
+                         string(family(model).link))
 end
