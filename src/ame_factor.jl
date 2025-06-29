@@ -6,10 +6,19 @@
 # one modelmatrix per level, shallow merge, no row loops
 
 function _factor_design(tbl0, fe_form, f::Symbol, lvl)
-    col = tbl0[f]
-    cat0 = col isa CategoricalVector ? col : categorical(col)
-    newcol = categorical(fill(lvl, length(cat0)), levels=levels(cat0))
-    tbl2 = merge(tbl0, (f=>newcol,))
+    col_raw = tbl0[f]
+
+    newcol = if col_raw isa AbstractVector{Bool}
+        # preserve Bool type (0/1 dummy) exactly as fit time
+        fill(lvl, length(col_raw))              # Vector{Bool}
+    elseif col_raw isa CategoricalVector
+        categorical(fill(lvl, length(col_raw)), levels = levels(col_raw))
+    else
+        cat0 = categorical(col_raw)
+        categorical(fill(lvl, length(cat0)), levels = levels(cat0))
+    end
+
+    tbl2 = merge(tbl0, (f => newcol,))
     return modelmatrix(fe_form, tbl2)
 end
 

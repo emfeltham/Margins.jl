@@ -25,6 +25,7 @@ An `MarginsResult` containing AMEs, standard errors, and gradients for each var.
 """
 function margins(model, vars, df::AbstractDataFrame;
                  vcov=StatsBase.vcov, repvals=Dict(), pairs::Symbol=:allpairs)
+
     varlist = isa(vars,Symbol) ? [vars] : collect(vars)
     invlink, dinvlink, d2invlink = link_functions(model)
     fe_form = fixed_effects_form(model)
@@ -32,47 +33,45 @@ function margins(model, vars, df::AbstractDataFrame;
     n       = nrow(df)
     tbl0    = Tables.columntable(df)
 
-    cts_vars = [v for v in varlist if eltype(df[!,v])<:Real && eltype(df[!,v])!=Bool]
+    # Changed here: Bool now treated as categorical
+    # continuous = Real but not Bool, categorical = rest
+    cts_vars = filter(v -> eltype(df[!,v]) <: Real && eltype(df[!,v]) != Bool, varlist)
     cat_vars = setdiff(varlist, cts_vars)
-    ame_map, se_map, grad_map = Dict{Symbol,Any}(), Dict{Symbol,Any}(), Dict{Symbol,Any}()
 
+    ame_map, se_map, grad_map = Dict(), Dict(), Dict()
+    
     # continuous
     X, Xdx = build_continuous_design(df, fe_form, cts_vars)
     for (j,v) in enumerate(cts_vars)
         ame,se,grad = _ame_continuous(β, Σβ, X, Xdx[j], dinvlink, d2invlink)
-        ame_map[v], se_map[v], grad_map[v] = ame, se, grad
+        ame_map[v], se_map[v], grad_map[v] = ame,se,grad
     end
+
     # MERs
     if !isempty(repvals)
         for v in varlist
-            ame, se, grad = _ame_representation(df, model, v, repvals,
+            ame,se,grad = _ame_representation(df, model, v, repvals,
                                               fe_form, β, Σβ,
                                               invlink, dinvlink, d2invlink)
-            ame_map[v], se_map[v], grad_map[v] = ame, se, grad
+            ame_map[v], se_map[v], grad_map[v] = ame,se,grad
         end
     end
-        # categorical
+
+    # categorical (including Bool-as-categorical if manually converted)
     for v in cat_vars
         if pairs == :baseline
-            ame_d,se_d,g_d = _ame_factor_baseline(tbl0, fe_form, β, Σβ,
-                                                  v, invlink, dinvlink)
+            ame_d, se_d, g_d = _ame_factor_baseline(tbl0, fe_form, β, Σβ,
+                                                    v, invlink, dinvlink)
         else
-            ame_d,se_d,g_d = _ame_factor_allpairs(tbl0, fe_form, β, Σβ,
-                                                  v, invlink, dinvlink)
+            ame_d, se_d, g_d = _ame_factor_allpairs(tbl0, fe_form, β, Σβ,
+                                                    v, invlink, dinvlink)
         end
-        # enforce correct dict types for MarginsResult
-        effects_d = Dict{Tuple,Float64}(ame_d)
-        ses_d     = Dict{Tuple,Float64}(se_d)
-        grads_d   = Dict{Tuple,Vector{Float64}}(g_d)
-
-        ame_map[v]   = effects_d
-        se_map[v]    = ses_d
-        grad_map[v]  = grads_d
+        ame_map[v]  = ame_d
+        se_map[v]   = se_d
+        grad_map[v] = g_d
     end
 
-    return MarginsResult(varlist, repvals,
-                         ame_map, se_map, grad_map,
+    return MarginsResult(varlist, repvals, ame_map, se_map, grad_map,
                          n, dof_residual(model),
-                         string(family(model).dist),
-                         string(family(model).link))
+                         string(family(model).dist), string(family(model).link))
 end

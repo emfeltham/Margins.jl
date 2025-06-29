@@ -32,11 +32,39 @@ end
 @testset "Scenario 1a: Categorical predictor" begin
     form_cat = @formula(SepalLength ~ SepalWidth + PetalWidth + Species)
     m_cat = lm(form_cat, iris)
-    
+
     ame_species = margins(m_cat, :Species, iris)
     levels_list = levels(iris.Species)
     expected_pairs = sort([(i, j) for i in levels_list for j in levels_list if i < j])
     @test sort(collect(keys(ame_species.effects[:Species]))) == expected_pairs
+end
+
+@testset "Scenario 1b: Boolean predictor" begin
+    # 1) add a Bool column
+    df_bool = copy(iris)
+    df_bool.is_large = df_bool.SepalLength .> 5.0  # Bool
+
+    # 2) fit a simple model with that Bool as the sole predictor
+    form_bool = @formula(PetalWidth ~ is_large)
+    m_bool   = lm(form_bool, df_bool)
+
+    # 3) run margins()
+    ame_bool = margins(m_bool, :is_large, df_bool)
+
+    # 4) extract the “true vs false” coefficient and SE
+    names  = coefnames(m_bool)
+    coefs  = coef(m_bool)
+    vc_mat = vcov(m_bool)
+    idx    = findfirst(isequal("is_large"), names)
+
+    # 5) margins should produce one pair: (false,true)
+    keys_bool = sort(collect(keys(ame_bool.effects[:is_large])))
+    @test keys_bool == [(false, true)]
+
+    # 6) the AME is exactly the slope, and its SE matches the vcov diagonal
+    pair = keys_bool[1]
+    @test isapprox(ame_bool.effects[:is_large][pair], coefs[idx]; atol=1e-8)
+    @test isapprox(ame_bool.ses[:is_large][pair], sqrt(vc_mat[idx,idx]); atol=1e-8)
 end
 
 @testset "Scenario 2: Interaction" begin
