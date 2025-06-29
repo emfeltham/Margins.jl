@@ -97,9 +97,10 @@ Forward mode computes all needed partials in one “dual‐number” pass at ess
 
 Possibly planned.
 
-- [ ] DataFrame construction (from `MarginsResult`, `ContrastResult`)
+- [X] DataFrame construction (from `MarginsResult`, `ContrastResult`)
+- [ ] Missing data handling (just match the model's strategy)
 - [ ] Check on integration with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl)
 - [ ] Elasticities
-- [ ] Efficiency for larger data
+- [ ] Efficiency for larger data (see branch "efficient")
 - [ ] Inspect APM workflow, possibly change UI
 - [ ] Plotting integration

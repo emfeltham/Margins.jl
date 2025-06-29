@@ -1,61 +1,46 @@
-###############################################################################
 # ame_continuous.jl
-#
-# Analytic AME for a continuous predictor `x`, mirroring Stata’s `margins`.
+
+###############################################################################
+# 2. Continuous AME helper (analytic Δ-method on cached X, Xdx)
 ###############################################################################
 
-# ─────────────────────────────────────────────────────────────────────────────
-# utilities already in your code base
-#   • link_functions(model) -> (invlink, dinvlink, d2invlink)
-#   • fixed_effects_form(model), fixed_X(model, df)
-#   • mueta2 definitions
-#   • struct AME  (ame, se, grad, n, η_base, μ_base, dist, link)
-# ─────────────────────────────────────────────────────────────────────────────
+"""
+    _ame_continuous(
+        df::AbstractDataFrame,
+        model,
+        x::Symbol,
+        fe_form,
+        β::AbstractVector,
+        vcov::Function = StatsBase.vcov,
+    ) -> (Float64, Float64, Vector{Float64})
 
-function _ame_continuous(df, model, x, fe_form, β, dinvlink, d2invlink, vcov)
-    # --- prepare design and link derivatives ---
-    X0  = modelmatrix(fe_form, df)      # n×p
-    η0  = X0 * β                        # linear predictor
-    dμ  = dinvlink.(η0)                # μ′(η)
-    d2μ = d2invlink.(η0)               # μ″(η)
-    n, p = size(X0)
+Compute the average marginal effect (AME) of a continuous predictor `x`, its
+standard error, and Δ-method gradient.  Inject a single Dual seed into `x`
+so ForwardDiff propagates through every interaction **once**, avoiding the
+original per-row AD loop.
 
-    # --- containers for per-observation derivatives ---
-    δη_δx  = similar(η0)
-    XdxTdμ = zeros(eltype(β), p)
+    _ame_continuous(β, Σβ, X, Xdx, dinvlink, d2invlink)
+Return (AME, SE, gradient) for **one** continuous variable, given
 
-    # --- loop over observations ---
-    for i in 1:n
-        df_row = df[i:i, :]
-        x_val  = df_row[1, x]
+* `X`      – n×p design matrix  (Float64)
+* `Xdx`    – n×p derivative-design for this variable
+* `β`      – coefficient vector
+* `Σβ`     – covariance of β
+* `dinvlink`, `d2invlink` – link derivatives
 
-        # analytic ∂η/∂x via AD
-        fη(v) = begin
-            tmp = copy(df_row)
-            tmp[!, x] .= v
-            (modelmatrix(fe_form, tmp) * β)[1]
-        end
-        δη_δx[i] = ForwardDiff.derivative(fη, x_val)
+    _ame_continuous(β, Σβ, X, Xdx, dinvlink, d2invlink)
+"""
+function _ame_continuous(β::Vector{Float64}, Σβ::AbstractMatrix{Float64},
+                         X::Matrix{Float64}, Xdx::Matrix{Float64},
+                         dinvlink::Function, d2invlink::Function)
+    n   = size(X,1)
+    η   = X * β
+    dη  = Xdx * β
+    μp  = dinvlink.(η)
+    μpp = d2invlink.(η)
 
-        # Jacobian of design row wrt x for Δ-method
-        fX(v) = begin
-            tmp = copy(df_row)
-            tmp[!, x] .= v
-            vec(modelmatrix(fe_form, tmp))
-        end
-        ∂X_∂x = ForwardDiff.derivative(fX, x_val)
-        @inbounds XdxTdμ .+= ∂X_∂x .* dμ[i]
-    end
-
-    # --- point estimate ---
-    ame_val = mean(dμ .* δη_δx)
-
-    # --- Δ-method gradient wrt β ---
-    grad = (X0' * (d2μ .* δη_δx) .+ XdxTdμ) ./ n
-
-    # --- standard error via Δ-method ---
-    Σβ = vcov(model)
-    se = sqrt(dot(grad, Σβ * grad))
-
-    return ame_val, se, grad
+    ame  = mean(μp .* dη)
+    grad = (X'*(μpp .* dη) + Xdx'*(μp)) ./ n
+    se   = sqrt(dot(grad, Σβ * grad))
+    return ame, se, grad
 end

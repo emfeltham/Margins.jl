@@ -36,6 +36,21 @@ using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
 
+
+## formula helpers
+# Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
+not(x::Bool) = !x
+
+# Numeric negation on any Real (Float64, Dual, etc.) → one(x) - x
+# Calculates complement
+not(x::T) where {T<:Real} = one(x) - x
+import StatsModels: term
+# whenever you write !term, turn it into function‐term not(term)
+Base.:!(t::StatsModels.Term) = term(not, t)
+
+export not
+##
+
 include("family.jl")
 export Family, family
 
@@ -78,6 +93,7 @@ include("link.jl")
 
 # Core AME functions
 include("ame.jl")
+include("build_continuous_design.jl")
 include("ame_continuous.jl")
 include("ame_factor.jl")
 include("ame_representation.jl")

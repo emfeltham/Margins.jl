@@ -1,5 +1,9 @@
 # ame_representation.jl
 
+###############################################################################
+# 3. MER helper: marginal effects at representative values
+###############################################################################
+
 """
 _ame_representation(
     df::DataFrame,
@@ -21,82 +25,36 @@ Returns three dicts mapping each combo (as a tuple of repvals in key order) to:
 - `Std.Err`
 - `Δ-method gradient`
 """
-function _ame_representation(
-    df::DataFrame,
-    model,
-    focal::Symbol,
-    repvals,
-    fe_form,
-    β::AbstractVector,
-    invlink,
-    dinvlink,
-    d2invlink,
-    vcov::Function
-)
-    # Validate representative variables
+function _ame_representation(df::DataFrame, model, focal::Symbol, repvals::AbstractDict,
+ fe_form, β, Σβ,
+                             invlink, dinvlink, d2invlink)
     repvars = collect(keys(repvals))
-    for rv in string.(repvars)
-        @assert rv in names(df) "Representative var $(rv) not found in DataFrame"
-    end
-
-    # Build Cartesian product of repvals
-    lists  = [repvals[rv] for rv in repvars]
-    combos = collect(Iterators.product(lists...))
-
-    # Prepare storage
-    ame_dict  = Dict{Tuple,Float64}()
-    se_dict   = Dict{Tuple,Float64}()
-    grad_dict = Dict{Tuple,Vector{Float64}}()
-    # Σβ = vcov(model)
-
-    # Loop over each setting
+    combos  = collect(Iterators.product((repvals[r] for r in repvars)...))
+    ame_d, se_d, g_d = Dict{Tuple,Float64}(), Dict{Tuple,Float64}(), Dict{Tuple,Vector{Float64}}()
+    tbl0 = Tables.columntable(df)
     for combo in combos
-        # Create a copy and override representative vars
-        df_tmp = copy(df)
-
-        for (rv, val) in zip(repvars, combo)
-            col = df_tmp[!, rv]
-            if col isa CategoricalArray
-                p = pool(col)
-                if val isa CategoricalValue
-                    # already the right type & pool
-                    df_tmp[!, rv] .= val
-                elseif val isa Integer
-                    # integer code → CategoricalValue
-                    df_tmp[!, rv] .= CategoricalValue(val, p)
-                elseif val isa String
-                    # look up code for this string level
-                    lvl_idx = findfirst(==(val), levels(p))
-                    @assert lvl_idx !== nothing "level $val not in pool"
-                    df_tmp[!, rv] .= CategoricalValue(lvl_idx, p)
-                else
-                    # fallback (e.g. Number)
-                    df_tmp[!, rv] .= val
-                end
-            else
+        tbl2 = tbl0
+        for (rv,val) in zip(repvars, combo)
+            tbl2 = merge(tbl2, (rv => fill(val, nrow(df)),))
+        end
+        X = modelmatrix(fe_form, tbl2)
+        if eltype(df[!,focal]) <: Number
+            # continuous focal: use dual-injection on this focal at rep settings
+            df_tmp = copy(df)
+            for (rv,val) in zip(repvars, combo)
                 df_tmp[!, rv] .= val
             end
-        end
-
-        # Delegate to continuous or factor AME
-        if eltype(df_tmp[!, focal]) <: Number
-            ame_val, se_val, grad_v = _ame_continuous(
-                df_tmp, model, focal, fe_form,
-                β, dinvlink, d2invlink, vcov
+            # build design+derivatives for the single focal var
+            X_rep, Xdx_rep = build_continuous_design(df_tmp, fe_form, [focal])
+            ame, se, grad = _ame_continuous(
+                β, Σβ,
+                X_rep, Xdx_rep[1],
+                dinvlink, d2invlink
             )
         else
-            # single contrast: baseline = first factor level
-            lvl0 = levels(df_tmp[!, focal])[1]
-            ame_val, se_val, grad_v = _ame_factor_pair(
-                df_tmp, model, focal, lvl0, levels(df_tmp[!,focal])[2],
-                fe_form, β, invlink, dinvlink, vcov
-            )
+            ame,se,grad = _ame_factor_baseline(tbl0, fe_form, β, Σβ, focal, invlink, dinvlink)
         end
-
-        ame_dict[combo]  = ame_val
-        se_dict[combo]   = se_val
-        grad_dict[combo] = grad_v
+        ame_d[combo], se_d[combo], g_d[combo] = ame, se, grad
     end
-
-    return ame_dict, se_dict, grad_dict
+    return ame_d, se_d, g_d
 end
