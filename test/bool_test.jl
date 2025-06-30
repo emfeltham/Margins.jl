@@ -103,6 +103,6 @@ end
 
     for q in quant_sw
         @test isapprox(ame_rep.effects[:is_large][(q,)], slope; atol=1e-8)
-        @test isapprox(ame_rep.ses[:is_large][(q,)],      se_h;  atol=1e-8)
+        @test isapprox(ame_rep.ses[:is_large][(q,)], se_h;  atol=1e-8)
     end
 end
