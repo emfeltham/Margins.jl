@@ -1,3 +1,6 @@
+# workspace.jl
+# hold allocations during estimation
+
 struct AMEWorkspace
     η::Vector{Float64}
     dη::Vector{Float64}
