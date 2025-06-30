@@ -1,10 +1,6 @@
 # lm_tests.jl
 # tests for linear models
 
-# Load data
-iris = dataset("datasets", "iris") |> DataFrame
-iris.Species = categorical(iris.Species)
-
 @testset "Scenario 1: No interactions - continuous predictors" begin
     form = @formula(SepalLength ~ SepalWidth + PetalLength + PetalWidth)
     m = lm(form, iris)

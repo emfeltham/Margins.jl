@@ -92,7 +92,7 @@ include("mueta2.jl")
 include("link.jl")
 
 # Core AME functions
-include("ame.jl")
+include("core.jl")
 include("build_continuous_design.jl")
 include("ame_continuous.jl")
 include("ame_factor.jl")
