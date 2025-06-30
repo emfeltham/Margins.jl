@@ -50,6 +50,8 @@ Base.:!(t::StatsModels.Term) = term(not, t)
 export not
 ##
 
+include("modelmatrix!.jl")
+
 include("family.jl")
 export Family, family
 

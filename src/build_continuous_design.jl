@@ -83,11 +83,11 @@ function build_continuous_design_single!(
     X::AbstractMatrix{Float64},
     Xdx::AbstractMatrix{Float64},
 )
-    Xfull, Xdx_list = build_continuous_design(df, fe_form, [focal])
-    mat = Xdx_list[1]
-    @inbounds for idx in eachindex(X)
-        X[idx]   = Xfull[idx]
-        Xdx[idx] = mat[idx]
-    end
+    # build the dualised design only once …
+    Xfull, Xdx_list = build_continuous_design(df, fe_form, [focal],)
+
+    # … and copy it directly into the caller’s buffers
+    copyto!(X,    Xfull)
+    copyto!(Xdx,  Xdx_list[1])
     return nothing
 end

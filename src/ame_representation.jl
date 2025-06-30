@@ -41,7 +41,7 @@ function _ame_representation(
     n       = nrow(df)
 
     # 2️⃣  per-thread scratch objects
-    p          = size(modelmatrix(fe_form, df), 2)          # # columns of X
+    p          = length(β)
     nthreads   = Threads.nthreads()
     workdfs    = [DataFrame(df, copycols = true) for _ in 1:nthreads]
     workspaces = [AMEWorkspace(n, p)           for _ in 1:nthreads]

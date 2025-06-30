@@ -1,123 +1,114 @@
 # core.jl
 
 ###############################################################################
-# 5. Top-level margins wrapper
+# 5. Top-level margins wrapper – *zero* design-matrix allocations on hot path
 ###############################################################################
+
 """
-    margins(
-      model,
-      vars::Union{Symbol, AbstractVector{Symbol}},
-      df::AbstractDataFrame;
-      vcov::Function = StatsBase.vcov,
-      repvals::Dict{Symbol,AbstractVector} = Dict{Symbol,AbstractVector}(),
-      pairs::Symbol = :allpairs,
-      type::Symbol = :dydx    # :dydx for AMEs, :predict for average predictions
-    ) -> MarginsResult{type}
+    margins(model, vars, df; kwargs...)  ->  MarginsResult
 
-Compute either average marginal effects (AME) or average predicted responses
-for one or more predictors.
+Compute either average marginal effects (AMEs, `type = :dydx`) or average
+predicted responses (`type = :predict`) for one or more predictors.
 
-# Arguments
-- `model`  : a fitted GLM/GLMM/LinearModel/MixedModel
-- `vars`   : either a single `Symbol` or a `Vector{Symbol}` of predictors
-- `df`     : the DataFrame used to fit the model
-- `vcov`   : function to extract the fixed-effects covariance matrix
-              (defaults to `StatsBase.vcov`)
-- `repvals`: a `Dict{Symbol, AbstractVector}` of representative values
-- `pairs`  : for categorical AMEs, either `:allpairs` or `:baseline`
-- `type`   : `:dydx` (default) for AMEs or `:predict` for predictions
+Internally we now
 
-# Returns
-A `MarginsResult{type}` containing estimates, standard errors, and Δ-method gradients.
+1.  Build the model *schema* **once**  
+2.  Allocate a single `X_base` (and a work-buffer `X_buf`) **once**  
+3.  Re-fill `X_buf` in-place with [`modelmatrix!`](@ref) whenever the
+    DataFrame changes.
+
+This removes every `modelmatrix` heap-allocation inside the main loops.
 """
 function margins(
-    model, vars, df::AbstractDataFrame;
+    model,
+    vars,
+    df::AbstractDataFrame;
     vcov::Function                       = StatsBase.vcov,
     repvals::AbstractDict{Symbol,<:AbstractVector} = Dict{Symbol,Vector{Float64}}(),
     pairs::Symbol                        = :allpairs,
-    type::Symbol                         = :dydx
+    type::Symbol                         = :dydx,
 )
-    type ∈ (:dydx, :predict) || throw(ArgumentError("`type` must be :dydx or :predict, got `$type`"))
 
-    # ------------------------------------------------ shared setup ------------------------------------------------
-    varlist = isa(vars,Symbol) ? [vars] : collect(vars)
-    invlink, dinvlink, d2invlink = link_functions(model)
-    fe_form = fixed_effects_form(model)
-    β, Σβ   = coef(model), vcov(model)
-    X_base = modelmatrix(fe_form, df)
-    n, p    = size(X_base)
-    cholΣβ = cholesky(Σβ)
-    tbl0    = Tables.columntable(df)
+    type ∈ (:dydx, :predict) ||
+        throw(ArgumentError("`type` must be :dydx or :predict, got `$type`"))
 
-    # result containers (scalar OR dict per predictor)
+    # ───────────── one-time setup ───────────────────────────────────────────
+    varlist   = isa(vars,Symbol) ? [vars] : collect(vars)
+    invlink,
+    dinvlink,
+    d2invlink = link_functions(model)
+
+    fe_form   = fixed_effects_form(model)
+
+    # -- build *once*: base design + ALL ∂X/∂x for continuous vars ----------
+    cts_vars  = filter(v->eltype(df[!,v]) <: Real && eltype(df[!,v]) != Bool,
+                       varlist)
+    X_base, Xdx_list = build_continuous_design(df, fe_form, cts_vars) # <── NEW
+    X_buf     = similar(X_base)          # work buffer for predictions
+
+    n, p      = size(X_base)
+    β, Σβ     = coef(model), vcov(model)
+    cholΣβ    = cholesky(Σβ)
+
+    # rhs term baked-in (for modelmatrix!)
+    mf        = StatsModels.ModelFrame(fe_form, df)
+    frhs      = mf.f.rhs
+
+    tbl0      = Tables.columntable(df)
+
+    # result containers -----------------------------------------------------
     result_map = Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}()
     se_map     = Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}()
     grad_map   = Dict{Symbol,Union{Vector{Float64},Dict{Tuple,Vector{Float64}}}}()
 
-    # helper: ensure dict containers when repvals present ------------------------------------------
-    function ensure_dict!(v)
+    ensure_dict!(v) = begin
         result_map[v] isa Dict || (result_map[v] = Dict{Tuple,Float64}())
-        se_map[v] isa Dict || (se_map[v] = Dict{Tuple,Float64}())
-        grad_map[v] isa Dict || (grad_map[v] = Dict{Tuple,Vector{Float64}}())
+        se_map[v]     isa Dict || (se_map[v]     = Dict{Tuple,Float64}())
+        grad_map[v]   isa Dict || (grad_map[v]   = Dict{Tuple,Vector{Float64}}())
     end
 
-    # ------------------------------------------------ :predict branch ------------------------------------------------
+    # ─────────────────────────── :predict branch ───────────────────────────
     if type == :predict
+        # (unchanged except for X_buf reuse)
         if isempty(repvals)
-            # overall prediction – scalar per var (unchanged)
-            X   = modelmatrix(fe_form, df)
-            η   = X * β;  μ = invlink.(η)
+            η   = X_base * β
+            μ   = invlink.(η)
             pred = mean(μ)
-            μp   = dinvlink.(η)
-            grad = (X' * μp) ./ n
+            μp  = dinvlink.(η)
+            grad = (X_base' * μp) ./ n
             se   = sqrt(dot(grad, Σβ * grad))
             for v in varlist
-                result_map[v] = pred
-                se_map[v] = se
-                grad_map[v] = grad
+                result_map[v] = pred;  se_map[v] = se;  grad_map[v] = grad
             end
+
         else
-            # prediction at rep-value combinations (optimized in-place + buffer reuse)
             repvars = collect(keys(repvals))
             combos  = collect(Iterators.product((repvals[r] for r in repvars)...))
 
-            # prepare a mutable copy of df with rewritable repvar columns
             workdf = DataFrame(df)
-            for rv in repvars
-                workdf[!, rv] = copy(df[!, rv])
-            end
+            for rv in repvars; workdf[!,rv] = copy(df[!,rv]); end
 
-            # pre-allocate buffers using initial design matrix to get dimensions
-            X0 = modelmatrix(fe_form, workdf)
-            n, p = size(X0)
-            η    = Vector{Float64}(undef, n)
-            μ    = Vector{Float64}(undef, n)
-            μp   = Vector{Float64}(undef, n)
-            grad = Vector{Float64}(undef, p)
+            η  = Vector{Float64}(undef,n)
+            μ  = Vector{Float64}(undef,n)
+            μp = Vector{Float64}(undef,n)
+            grad = Vector{Float64}(undef,p)
 
             for combo in combos
-                # overwrite repvar columns in-place
-                for (rv, val) in zip(repvars, combo)
-                    fill!(workdf[!, rv], val)
+                for (rv,val) in zip(repvars, combo)
+                    fill!(workdf[!,rv], val)
                 end
 
-                # rebuild design matrix
-                X = modelmatrix(fe_form, workdf)
-                mul!(η, X, β)  # η = X*β
+                modelmatrix!(X_buf, frhs, Tables.columntable(workdf))  # <── fast rebuild
 
-                # compute μ and μ' in one @simd loop
+                mul!(η, X_buf, β)
                 @inbounds @simd for i in 1:n
                     μ[i]  = invlink(η[i])
                     μp[i] = dinvlink(η[i])
                 end
-                pred = sum(μ) / n
-
-                # gradient = (X' * μp) / n
-                mul!(grad, X', μp)
-                grad ./= n
+                pred = sum(μ)/n
+                mul!(grad, X_buf', μp);  grad ./= n
                 se = sqrt(dot(grad, Σβ * grad))
 
-                # store results
                 for v in varlist
                     ensure_dict!(v)
                     result_map[v][combo] = pred
@@ -127,56 +118,44 @@ function margins(
             end
         end
 
-    # ------------------------------------------------ :dydx branch --------------------------------------------------
-    else  # :dydx
-        cts_vars = filter(v->eltype(df[!,v])<:Real && eltype(df[!,v])!=Bool, varlist)
+    # ─────────────────────────── :dydx branch ──────────────────────────────
+    else
         cat_vars = setdiff(varlist, cts_vars)
+        ws       = AMEWorkspace(n,p)   # one Δ-method workspace
 
-        if isempty(repvals)        
-            # continuous AMEs (reuse the one-time cached X_base)
-            X   = copy(X_base)                     # Float64 copy of base design
-            Xdx = similar(X)                       # one-derivative buffer
-    
-            # allocate one workspace for Δ‐method
-            ws = AMEWorkspace(n, p)
-            
-            for v in cts_vars
-                # fill X back to its original values (in-place overwrite)
-                copy!(X, X_base)
-                # compute only the one derivative‐column for v:
-                build_continuous_design_single!(df, fe_form, v, X, Xdx)
-        
+        if isempty(repvals)
+            # —— continuous AMEs (now zero ForwardDiff inside loop) ————
+            for (j,v) in enumerate(cts_vars)
+                copy!(X_buf, X_base)          # restore main design
+                Xdx = Xdx_list[j]             # ∂X/∂v computed once
+
                 ame, se, grad = _ame_continuous!(
-                    β, cholΣβ,
-                    X, Xdx,
-                    dinvlink, d2invlink,
-                    ws
-                )
-                result_map[v] = ame
-                se_map[v]     = se
-                grad_map[v]   = grad
+                    β, cholΣβ, X_buf, Xdx,
+                    dinvlink, d2invlink, ws)
+
+                result_map[v] = ame;  se_map[v] = se;  grad_map[v] = grad
             end
 
-            # categorical AMEs
+            # —— categorical AMEs (unchanged) ————————————————
             for v in cat_vars
                 ame_d, se_d, g_d = pairs == :baseline ?
-                    _ame_factor_baseline(tbl0, fe_form, β, Σβ, v, invlink, dinvlink) :
-                    _ame_factor_allpairs(tbl0, fe_form, β, Σβ, v, invlink, dinvlink)
-                result_map[v] = ame_d
-                se_map[v] = se_d
-                grad_map[v] = g_d
+                    _ame_factor_baseline(tbl0, fe_form, β, Σβ, v,
+                                         invlink, dinvlink) :
+                    _ame_factor_allpairs(tbl0, fe_form, β, Σβ, v,
+                                         invlink, dinvlink)
+
+                result_map[v] = ame_d;  se_map[v] = se_d;  grad_map[v] = g_d
             end
+
         else
-            # AMEs at rep‑values (all dicts)
+            # —— AMEs at representative values (unchanged) ———————
             for v in varlist
                 ame_d, se_d, g_d = _ame_representation(
                     df, model, v, repvals,
                     fe_form, β, cholΣβ,
-                    invlink, dinvlink, d2invlink
-                )
-                result_map[v] = ame_d
-                se_map[v]    = se_d
-                grad_map[v]  = g_d
+                    invlink, dinvlink, d2invlink)
+
+                result_map[v] = ame_d;  se_map[v] = se_d;  grad_map[v] = g_d
             end
         end
     end
@@ -185,6 +164,6 @@ function margins(
         varlist, repvals, result_map, se_map, grad_map,
         n, dof_residual(model),
         string(family(model).dist),
-        string(family(model).link)
+        string(family(model).link),
     )
 end
