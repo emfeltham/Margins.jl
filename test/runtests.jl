@@ -20,5 +20,6 @@ iris.Species = categorical(iris.Species);
     include("glm_tests.jl") # general linear models
     include("mm_tests.jl") # general mixed models
     include("additional_tests.jl")
-    include("df_tests.jl") # test DataFrame conversion
+    include("df_tests.jl") # DataFrame conversion
+    include("contrast_tests.jl") # contrasts
 end

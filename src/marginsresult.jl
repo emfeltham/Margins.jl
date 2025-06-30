@@ -14,14 +14,15 @@ to standard errors and Δ‑method gradients.
 """
 struct MarginsResult{Kind} <: AbstractMarginsResult
     vars        :: Vector{Symbol}
-    repvals     :: AbstractDict{Symbol,<:AbstractVector}
-    effects     :: Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}
-    ses         :: Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}
-    grad        :: Dict{Symbol,Union{Vector{Float64},Dict{Tuple,Vector{Float64}}}}
+    repvals     :: AbstractDict
+    effects     :: AbstractDict # values may be Float64 or Dict{Tuple,Float64}
+    ses         :: AbstractDict
+    grad        :: AbstractDict
     n           :: Int
     df_residual :: Real
     family      :: String
     link        :: String
+
 end
 
 # pull the Kind tag (:dydx or :predict) out of the type
