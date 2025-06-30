@@ -34,13 +34,13 @@ function _ame_representation(
     d2invlink::Function,
 )
 
-    # 1️⃣  enumerate representative-value combinations
+    # 1  enumerate representative-value combinations
     repvars = collect(keys(repvals))
     combos  = collect(Iterators.product((repvals[r] for r in repvars)...))
     m       = length(combos)
     n       = nrow(df)
 
-    # 2️⃣  per-thread scratch objects
+    # 2  per-thread scratch objects
     p          = length(β)
     nthreads   = Threads.nthreads()
     workdfs    = [DataFrame(df, copycols = true) for _ in 1:nthreads]
@@ -48,12 +48,12 @@ function _ame_representation(
     Xs         = [Matrix{Float64}(undef, n, p) for _ in 1:nthreads]
     Xdxs       = [Matrix{Float64}(undef, n, p) for _ in 1:nthreads]
 
-    # 3️⃣  outputs
+    # 2  outputs
     ames  = Vector{Float64}(undef, m)
     ses   = Vector{Float64}(undef, m)
     grads = Vector{Vector{Float64}}(undef, m)
 
-    # 4️⃣  main loop (parallel over combos)
+    # 3  main loop (parallel over combos)
     Threads.@threads for idx in 1:m
         tid   = Threads.threadid()
         combo = combos[idx]
@@ -80,7 +80,7 @@ function _ame_representation(
         grads[idx] = grad_i
     end
 
-    # 5️⃣  pack dictionaries
+    # 4  pack dictionaries
     ame_dict  = Dict{Tuple,Float64}()
     se_dict   = Dict{Tuple,Float64}()
     grad_dict = Dict{Tuple,Vector{Float64}}()
