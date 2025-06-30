@@ -62,7 +62,7 @@ function margins(
     # ------------------------------------------------ :predict branch ------------------------------------------------
     if type == :predict
         if isempty(repvals)
-            # overall prediction – scalar per var
+            # overall prediction – scalar per var (unchanged)
             X   = modelmatrix(fe_form, df)
             η   = X * β;  μ = invlink.(η)
             pred = mean(μ)
@@ -75,25 +75,52 @@ function margins(
                 grad_map[v] = grad
             end
         else
-            # prediction at rep‑value combinations
+            # prediction at rep-value combinations (optimized in-place + buffer reuse)
             repvars = collect(keys(repvals))
             combos  = collect(Iterators.product((repvals[r] for r in repvars)...))
+
+            # prepare a mutable copy of df with rewritable repvar columns
+            workdf = DataFrame(df)
+            for rv in repvars
+                workdf[!, rv] = copy(df[!, rv])
+            end
+
+            # pre-allocate buffers using initial design matrix to get dimensions
+            X0 = modelmatrix(fe_form, workdf)
+            n, p = size(X0)
+            η    = Vector{Float64}(undef, n)
+            μ    = Vector{Float64}(undef, n)
+            μp   = Vector{Float64}(undef, n)
+            grad = Vector{Float64}(undef, p)
+
             for combo in combos
-                tbl2 = tbl0
-                for (rv,val) in zip(repvars, combo)
-                    tbl2 = merge(tbl2, (rv => fill(val, n),))
+                # overwrite repvar columns in-place
+                for (rv, val) in zip(repvars, combo)
+                    fill!(workdf[!, rv], val)
                 end
-                X   = modelmatrix(fe_form, tbl2)
-                η   = X * β;  μ = invlink.(η)
-                pred = mean(μ)
-                μp   = dinvlink.(η)
-                grad = (X' * μp) ./ n
-                se   = sqrt(dot(grad, Σβ * grad))
+
+                # rebuild design matrix
+                X = modelmatrix(fe_form, workdf)
+                mul!(η, X, β)  # η = X*β
+
+                # compute μ and μ' in one @simd loop
+                @inbounds @simd for i in 1:n
+                    μ[i]  = invlink(η[i])
+                    μp[i] = dinvlink(η[i])
+                end
+                pred = sum(μ) / n
+
+                # gradient = (X' * μp) / n
+                mul!(grad, X', μp)
+                grad ./= n
+                se = sqrt(dot(grad, Σβ * grad))
+
+                # store results
                 for v in varlist
                     ensure_dict!(v)
                     result_map[v][combo] = pred
-                    se_map[v][combo] = se
-                    grad_map[v][combo] = grad
+                    se_map[v][combo]     = se
+                    grad_map[v][combo]   = grad
                 end
             end
         end
@@ -104,15 +131,15 @@ function margins(
         cat_vars = setdiff(varlist, cts_vars)
 
         if isempty(repvals)
-            # ---------- continuous AMEs (scalars) ----------
+            # continuous AMEs
             X, Xdx = build_continuous_design(df, fe_form, cts_vars)
-            for (j,v) in enumerate(cts_vars)
+            for (j, v) in enumerate(cts_vars)
                 ame, se, grad = _ame_continuous(β, Σβ, X, Xdx[j], dinvlink, d2invlink)
                 result_map[v] = ame
                 se_map[v] = se
                 grad_map[v] = grad
             end
-            # ---------- categorical AMEs (dicts) -----------
+            # categorical AMEs
             for v in cat_vars
                 ame_d, se_d, g_d = pairs == :baseline ?
                     _ame_factor_baseline(tbl0, fe_form, β, Σβ, v, invlink, dinvlink) :
@@ -121,7 +148,6 @@ function margins(
                 se_map[v] = se_d
                 grad_map[v] = g_d
             end
-
         else
             # AMEs at rep‑values (all dicts)
             for v in varlist
@@ -131,8 +157,8 @@ function margins(
                     invlink, dinvlink, d2invlink
                 )
                 result_map[v] = ame_d
-                se_map[v] = se_d
-                grad_map[v] = g_d
+                se_map[v]    = se_d
+                grad_map[v]  = g_d
             end
         end
     end

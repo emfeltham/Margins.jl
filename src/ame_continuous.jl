@@ -33,14 +33,37 @@ Return (AME, SE, gradient) for **one** continuous variable, given
 function _ame_continuous(β::Vector{Float64}, Σβ::AbstractMatrix{Float64},
                          X::Matrix{Float64}, Xdx::Matrix{Float64},
                          dinvlink::Function, d2invlink::Function)
-    n   = size(X,1)
-    η   = X * β
-    dη  = Xdx * β
-    μp  = dinvlink.(η)
-    μpp = d2invlink.(η)
+    n, p = size(X)
 
-    ame  = mean(μp .* dη)
-    grad = (X'*(μpp .* dη) + Xdx'*(μp)) ./ n
-    se   = sqrt(dot(grad, Σβ * grad))
+    # allocate working vectors
+    η         = Vector{Float64}(undef, n)
+    dη        = Vector{Float64}(undef, n)
+    arr_grad1 = Vector{Float64}(undef, n)  # μpp * dη
+    arr_grad2 = Vector{Float64}(undef, n)  # μp
+
+    # compute η and dη
+    mul!(η,  X,  β)
+    mul!(dη, Xdx, β)
+
+    # one-pass: build AME sum and gradient components
+    sum_ame = 0.0
+    @inbounds @simd for i in 1:n
+        mp           = dinvlink(η[i])
+        mpp          = d2invlink(η[i])
+        arr_grad1[i] = mpp * dη[i]
+        arr_grad2[i] = mp
+        sum_ame     += mp * dη[i]
+    end
+
+    ame = sum_ame / n
+
+    # gradient = (X' * (μpp .* dη) + Xdx' * (μp)) / n
+    buf1 = Vector{Float64}(undef, p)
+    buf2 = Vector{Float64}(undef, p)
+    mul!(buf1, X',    arr_grad1)
+    mul!(buf2, Xdx',  arr_grad2)
+    grad = (buf1 .+ buf2) ./ n
+
+    se = sqrt(dot(grad, Σβ * grad))
     return ame, se, grad
 end
