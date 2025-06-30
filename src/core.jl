@@ -44,6 +44,7 @@ function margins(
     invlink, dinvlink, d2invlink = link_functions(model)
     fe_form = fixed_effects_form(model)
     β, Σβ   = coef(model), vcov(model)
+    cholΣβ = cholesky(Σβ)
     n       = nrow(df)
     tbl0    = Tables.columntable(df)
 
@@ -130,15 +131,25 @@ function margins(
         cts_vars = filter(v->eltype(df[!,v])<:Real && eltype(df[!,v])!=Bool, varlist)
         cat_vars = setdiff(varlist, cts_vars)
 
-        if isempty(repvals)
-            # continuous AMEs
-            X, Xdx = build_continuous_design(df, fe_form, cts_vars)
-            for (j, v) in enumerate(cts_vars)
-                ame, se, grad = _ame_continuous(β, Σβ, X, Xdx[j], dinvlink, d2invlink)
+        if isempty(repvals)        
+            # continuous AMEs (one focal at a time, single‐Dual pass)
+            # pre‐allocate one big design + one derivative matrix
+            # note: `p` = number of columns in your fe_form
+            p = size(modelmatrix(fe_form, df), 2)
+            X   = Matrix{Float64}(undef, n, p)
+            Xdx = Matrix{Float64}(undef, n, p)
+        
+           # allocate one workspace for Δ‐method
+            ws = AMEWorkspace(n, p)
+
+            for v in cts_vars
+                build_continuous_design_single!(df, fe_form, v, X, Xdx)
+                ame, se, grad = _ame_continuous!(β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws)
                 result_map[v] = ame
-                se_map[v] = se
-                grad_map[v] = grad
+                se_map[v]     = se
+                grad_map[v]   = grad
             end
+
             # categorical AMEs
             for v in cat_vars
                 ame_d, se_d, g_d = pairs == :baseline ?
@@ -153,7 +164,7 @@ function margins(
             for v in varlist
                 ame_d, se_d, g_d = _ame_representation(
                     df, model, v, repvals,
-                    fe_form, β, Σβ,
+                    fe_form, β, cholΣβ,
                     invlink, dinvlink, d2invlink
                 )
                 result_map[v] = ame_d

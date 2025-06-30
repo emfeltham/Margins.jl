@@ -80,6 +80,8 @@ using MixedModels: RandomEffectsTerm
 import Base: show
 using Printf, Distributions
 
+include("workspace.jl")
+
 # Exported types
 include("marginsresult.jl")
 export MarginsResult

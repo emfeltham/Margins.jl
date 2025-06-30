@@ -30,40 +30,44 @@ Return (AME, SE, gradient) for **one** continuous variable, given
 
     _ame_continuous(β, Σβ, X, Xdx, dinvlink, d2invlink)
 """
-function _ame_continuous(β::Vector{Float64}, Σβ::AbstractMatrix{Float64},
-                         X::Matrix{Float64}, Xdx::Matrix{Float64},
-                         dinvlink::Function, d2invlink::Function)
-    n, p = size(X)
+function _ame_continuous!(
+    β::Vector{Float64},
+    cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
+    X::AbstractMatrix{Float64},
+    Xdx::AbstractMatrix{Float64},
+    dinvlink::Function,
+    d2invlink::Function,
+    ws::AMEWorkspace,
+)
+    η, dη, arr1, arr2, buf1, buf2 = ws.η, ws.dη, ws.arr1, ws.arr2, ws.buf1, ws.buf2
+    n, _ = size(X)
 
-    # allocate working vectors
-    η         = Vector{Float64}(undef, n)
-    dη        = Vector{Float64}(undef, n)
-    arr_grad1 = Vector{Float64}(undef, n)  # μpp * dη
-    arr_grad2 = Vector{Float64}(undef, n)  # μp
-
-    # compute η and dη
-    mul!(η,  X,  β)
+    # 2 BLAS calls to get η and dη
+    mul!(η,  X,   β)
     mul!(dη, Xdx, β)
 
-    # one-pass: build AME sum and gradient components
+    # one pass for sum_ame and to fill arr1, arr2
     sum_ame = 0.0
     @inbounds @simd for i in 1:n
-        mp           = dinvlink(η[i])
-        mpp          = d2invlink(η[i])
-        arr_grad1[i] = mpp * dη[i]
-        arr_grad2[i] = mp
-        sum_ame     += mp * dη[i]
+        let ηi = η[i], dηi = dη[i]
+            mp  = dinvlink(ηi)
+            mpp = d2invlink(ηi)
+            sum_ame   += mp * dηi
+            arr1[i]    = mpp * dηi     # for X' * arr1
+            arr2[i]    = mp            # for Xdx' * arr2
+        end
     end
-
     ame = sum_ame / n
 
-    # gradient = (X' * (μpp .* dη) + Xdx' * (μp)) / n
-    buf1 = Vector{Float64}(undef, p)
-    buf2 = Vector{Float64}(undef, p)
-    mul!(buf1, X',    arr_grad1)
-    mul!(buf2, Xdx',  arr_grad2)
-    grad = (buf1 .+ buf2) ./ n
+    # assemble gradient via 2 more BLAS calls
+    mul!(buf1,  X',  arr1)
+    mul!(buf2, Xdx', arr2)
+    grad = (buf1 .+= buf2) ./ n
 
-    se = sqrt(dot(grad, Σβ * grad))
+    # use Cholesky factor for the Δ‐method SE
+    # cholΣβ = cholesky(Σβ)  # done once up‐front
+    # U is the upper factor so Σβ = U'U
+    se = norm(cholΣβ.U * grad)
+
     return ame, se, grad
 end

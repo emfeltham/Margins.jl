@@ -57,3 +57,31 @@ function build_continuous_design(df, fe_form, cts_vars::Vector{Symbol})
 
     return X, Xdx
 end
+
+"""
+    build_continuous_design_single!(
+      df::DataFrame,
+      fe_form,
+      focal::Symbol,
+      X::AbstractMatrix{Float64},
+      Xdx::AbstractMatrix{Float64}
+    )
+
+Mutate `X` and `Xdx` in place for the single continuous `focal` variable,
+re-using your full dual-based builder under the hood.
+"""
+function build_continuous_design_single!(
+    df::DataFrame,
+    fe_form,
+    focal::Symbol,
+    X::AbstractMatrix{Float64},
+    Xdx::AbstractMatrix{Float64},
+)
+    Xfull, Xdx_list = build_continuous_design(df, fe_form, [focal])
+    mat = Xdx_list[1]
+    @inbounds for idx in eachindex(X)
+        X[idx]   = Xfull[idx]
+        Xdx[idx] = mat[idx]
+    end
+    return nothing
+end
