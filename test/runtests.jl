@@ -24,9 +24,7 @@ iris.Species = categorical(iris.Species);
     include("contrast_tests.jl") # contrasts
 end
 
-###
-
-@testset "modelmatrix!" begin
+@testset "check modelmatrix!" begin
     using DataFrames, StatsModels, Random
 
     # ------------------------------------------------ toy data
