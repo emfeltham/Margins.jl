@@ -36,7 +36,6 @@ using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
 
-
 ## formula helpers
 # Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
 not(x::Bool) = !x
