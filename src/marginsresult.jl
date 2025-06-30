@@ -24,6 +24,9 @@ struct MarginsResult{Kind} <: AbstractMarginsResult
     link        :: String
 end
 
+# pull the Kind tag (:dydx or :predict) out of the type
+Kind(::MarginsResult{K}) where {K} = K
+
 ############################
 # Pretty printing          #
 ############################

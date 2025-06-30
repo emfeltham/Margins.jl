@@ -1,101 +1,66 @@
-# margins_to_df.jl
+# margins_to_df.jl — updated without merge! calls
+using DataFrames, Statistics, Distributions, Tables
 
 """
     margins_to_df(res::MarginsResult; level=0.95)
 
-Convert a MarginsResult into a `DataFrame` with one row per effect (and per
-rep‐value combination, if any). Columns are:
-
-  • each key of `res.repvals`  
-  • `:Effect`   — symbol like `:Δx1`  
-  • `:AME`      — marginal‐effect estimate  
-  • `:StdErr`   — its standard error  
-  • `:z`        — score = AME/StdErr  
-  • `:p`        — two‐sided p‐value  
-  • `:lower,:upper` — CI bounds at the given level  
+Convert a `MarginsResult` into a tidy `DataFrame`: one row per effect or
+rep-value combination.
 """
 function margins_to_df(res::MarginsResult; level=0.95)
-    # pull CIs
-    cis = confint(res; level=level)
-    repvars = collect(keys(res.repvals))
-    rows = Vector{Dict{Symbol,Any}}()
+    kind     = typeof(res).parameters[1]         # :dydx or :predict
+    prefix   = kind === :dydx ? "Δ" : "ŷ"
+    cis      = confint(res; level=level)
+    repvars  = collect(keys(res.repvals))
+    rows     = Vector{Dict{Symbol,Any}}()
 
     for v in res.vars
-        ame_e = res.effects[v]
-        se_e  = res.ses[v]
-        ci_e  = cis[v]
+        est_map = res.effects[v]
+        se_map  = res.ses[v]
+        ci_map  = cis[v]
+        effect_sym = Symbol(prefix, v)
 
-        if isa(ame_e, Number)
-            # one row, no combos
+        if est_map isa Number
+            # scalar case
             d = Dict{Symbol,Any}(rv => missing for rv in repvars)
-            ame, se = ame_e, se_e
-            z = ame/se
-            p = 2 * (1 - cdf(Normal(), abs(z)))
-            lo, hi = ci_e
-
-            merge!(d,
-                :Effect => Symbol("Δ", v),
-                :AME    => ame,
-                :StdErr => se,
-                :z      => z,
-                :p      => p,
-                :lower  => lo,
-                :upper  => hi,
-            )
+            d[:Effect]   = effect_sym
+            d[:Estimate] = est_map
+            d[:StdErr]   = se_map
+            d[:z]        = est_map / se_map
+            d[:p]        = 2*(1 - cdf(Normal(), abs(d[:z])))
+            lo,hi        = ci_map
+            d[:lower]    = lo
+            d[:upper]    = hi
             push!(rows, d)
-
         else
-            # one row per combo tuple
-            for combo in sort(collect(keys(ame_e)))
+            # dict case
+            for combo in sort(collect(keys(est_map)))
                 d = Dict{Symbol,Any}()
                 for (i, rv) in enumerate(repvars)
                     d[rv] = combo[i]
                 end
-
-                ame = ame_e[combo]
-                se  = se_e[combo]
-                z   = ame/se
-                p   = 2 * (1 - cdf(Normal(), abs(z)))
-                lo, hi = ci_e[combo]
-
-                merge!(d,
-                    :Effect => Symbol("Δ", v),
-                    :AME    => ame,
-                    :StdErr => se,
-                    :z      => z,
-                    :p      => p,
-                    :lower  => lo,
-                    :upper  => hi,
-                )
+                est = est_map[combo]
+                se  = se_map[combo]
+                d[:Effect]   = effect_sym
+                d[:Estimate] = est
+                d[:StdErr]   = se
+                d[:z]        = est / se
+                d[:p]        = 2*(1 - cdf(Normal(), abs(d[:z])))
+                lo,hi        = ci_map[combo]
+                d[:lower]    = lo
+                d[:upper]    = hi
                 push!(rows, d)
             end
         end
     end
 
     df = DataFrame(rows)
-    select!(df, vcat(repvars, [:Effect, :AME, :StdErr, :z, :p, :lower, :upper]))
+    select!(df, vcat(repvars, [:Effect, :Estimate, :StdErr, :z, :p, :lower, :upper]))
     return df
 end
 
-# ——————————————————————————————
-# 1. DataFrame constructor extension
+# extend DataFrame constructor and Tables integration
 DataFrame(res::MarginsResult; kwargs...) = margins_to_df(res; kwargs...)
-
-# Now you can do:
-#    df = DataFrame(my_margins_result)
-#    df2 = DataFrame(my_margins_result; level=0.90)
-
-# ——————————————————————————————
-# 2. Full Tables.jl integration
 Tables.istable(::Type{MarginsResult}) = true
-
-function Tables.schema(res::MarginsResult)
-    Tables.schema(margins_to_df(res))
-end
-
-Tables.rows(res::MarginsResult) = Tables.rows(margins_to_df(res))
-
-# Now ANY Tables.jl consumer should work:
-#    CSV.write("out.csv", my_margins_result)
-#    Arrow.write("out.arrow", my_margins_result)
-#    Query(@from r in my_margins_result begin ... end)
+Tables.schema(res::MarginsResult)     = Tables.schema(margins_to_df(res))
+Tables.rows(res::MarginsResult)       = Tables.rows(margins_to_df(res))

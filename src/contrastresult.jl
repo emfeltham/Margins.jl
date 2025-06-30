@@ -1,4 +1,4 @@
-# contrastresult.jl
+# contrastresult.jl — container and printer
 
 # -----------------------------------------------------------------------------
 # ContrastResult holds one or more contrasts
@@ -27,38 +27,22 @@ struct ContrastResult
     df_residual :: Real
 end
 
-function Base.show(io::IO, ::MIME"text/plain", cr::ContrastResult)
-    # Title
-    println(io, "Contrasts of Average Marginal Effects (df = $(cr.df_residual))")
-    println(io)
+format_p(p) = p < 1e-24 ? "<1e-24" : p < 1e-16 ? "<1e-16" :
+              p < 1e-4  ? "<1e-04" : @sprintf("%9.3f", p)
 
-    # Frame & header
+function Base.show(io::IO, ::MIME"text/plain", cr::ContrastResult)
+    println(io, "Contrasts (df = $(cr.df_residual))\n")
     println(io, "─────────────────────────────────────────────────────────────────────────")
     @printf(io, "%-20s %9s %11s %6s %9s %9s %9s\n",
-        "Comparison", "Estimate", "Std.Error", "t", "Pr(>|t|)", "Lower 95%", "Upper 95%")
+            "Comparison", "Estimate", "Std.Error", "t", "Pr(>|t|)", "Lower 95%", "Upper 95%")
     println(io, "─────────────────────────────────────────────────────────────────────────")
-
-    # critical t for 95% CI
     crit = quantile(TDist(cr.df_residual), 0.975)
-
-    # Body rows
     for i in eachindex(cr.estimate)
-        # label: e.g. (:a,:b) → "a–b"
-        cmp = cr.comps[i]
-        label = join(string.(cmp), "–")   # separate components
-
-        est = cr.estimate[i]
-        se  = cr.ses[i]
-        t   = cr.t[i]
-        p   = cr.p[i]
-        lo  = est - crit*se
-        hi  = est + crit*se
-
+        label = join(string.(cr.comps[i]), "–")
+        est, se, t, p = cr.estimate[i], cr.se[i], cr.t[i], cr.p[i]
+        lo, hi = est - crit*se, est + crit*se
         @printf(io, "%-20s %9.6f %11.6f %6.2f %9s %9.6f %9.6f\n",
-            label, est, se, t, format_p(p), lo, hi)
+                label, est, se, t, format_p(p), lo, hi)
     end
-
-    # Footer
-    println(io, "─────────────────────────────────────────────────────────────────────────")
-    println(io)
+    println(io, "─────────────────────────────────────────────────────────────────────────\n")
 end
