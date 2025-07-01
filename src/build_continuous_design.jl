@@ -18,7 +18,7 @@ function build_continuous_design(df, fe_form, cts_vars::Vector{Symbol})
 
     # 1) Pull out the raw columns once into a Dict keyed by the *same* names
     tbl0    = Tables.columntable(df)
-    coldict = Dict{Any, AbstractVector}()     # ← allow Symbol, String, InlineString, etc.
+    coldict = Dict{Any, AbstractVector}() # ← allow Symbol, String, InlineString, etc.
     for (nm, col) in pairs(tbl0)
         coldict[nm] = col
     end
@@ -37,7 +37,7 @@ function build_continuous_design(df, fe_form, cts_vars::Vector{Symbol})
         coldict[v] = dualcol
     end
 
-    # 4) Build the “dualized” design matrix in one shot
+    # 4) Build the "dualized" design matrix in one shot
     tempdf = DataFrame(coldict)
     Xdual  = modelmatrix(fe_form, tempdf)
 

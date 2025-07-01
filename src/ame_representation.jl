@@ -1,26 +1,6 @@
-# ame_representation.jl
-
 ###############################################################################
-# 3. MER helper: marginal effects at representative values
+# 3.  AME at representative values  (safe, serial, race-free)
 ###############################################################################
-
-"""
-    _ame_representation(
-      df::DataFrame,
-      model,
-      focal::Symbol,
-      repvals::Dict{Symbol, Vector},
-      fe_form,
-      β::Vector{Float64},
-      cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
-      invlink::Function,
-      dinvlink::Function,
-      d2invlink::Function
-    ) -> (Dict{Tuple,Float64}, Dict{Tuple,Float64}, Dict{Tuple,Vector{Float64}})
-
-Compute the marginal effect of `focal` at all rep-value combos, in place,
-without ever stacking a giant DataFrame—and safely under Threads.
-"""
 function _ame_representation(
     df::DataFrame,
     model,
@@ -28,66 +8,77 @@ function _ame_representation(
     repvals::AbstractDict{Symbol,<:AbstractVector},
     fe_form,
     β::Vector{Float64},
-    cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
+    cholΣβ::LinearAlgebra.Cholesky,
     invlink::Function,
     dinvlink::Function,
     d2invlink::Function,
 )
 
-    # 1  enumerate representative-value combinations
+    # ---------------------------------------------------------------- rep grid
     repvars = collect(keys(repvals))
     combos  = collect(Iterators.product((repvals[r] for r in repvars)...))
-    m       = length(combos)
-    n       = nrow(df)
 
-    # 2  per-thread scratch objects
-    p          = length(β)
-    nthreads   = Threads.nthreads()
-    workdfs    = [DataFrame(df, copycols = true) for _ in 1:nthreads]
-    workspaces = [AMEWorkspace(n, p)           for _ in 1:nthreads]
-    Xs         = [Matrix{Float64}(undef, n, p) for _ in 1:nthreads]
-    Xdxs       = [Matrix{Float64}(undef, n, p) for _ in 1:nthreads]
+    nr, p = nrow(df), length(β)
 
-    # 2  outputs
-    ames  = Vector{Float64}(undef, m)
-    ses   = Vector{Float64}(undef, m)
-    grads = Vector{Vector{Float64}}(undef, m)
+    # scratch objects reused each iteration (serial → no races)
+    workdf   = DataFrame(df, copycols = true)
+    ws       = AMEWorkspace(nr, p)
+    X        = Matrix{Float64}(undef, nr, p)
+    Xdx      = similar(X)
 
-    # 3  main loop (parallel over combos)
-    Threads.@threads for idx in 1:m
-        tid   = Threads.threadid()
-        combo = combos[idx]
-        dfl   = workdfs[tid]
-
-        # overwrite rep-value columns *in this thread’s private copy*
-        @inbounds for (rv, val) in zip(repvars, combo)
-            fill!(dfl[!, rv], val)
-        end
-
-        # rebuild design for the *single* focal variable
-        X    = Xs[tid]
-        Xdx  = Xdxs[tid]
-        build_continuous_design_single!(dfl, fe_form, focal, X, Xdx)
-
-        ame_i, se_i, grad_i = _ame_continuous!(
-            β, cholΣβ, X, Xdx,
-            dinvlink, d2invlink,
-            workspaces[tid]
-        )
-
-        ames[idx]  = ame_i
-        ses[idx]   = se_i
-        grads[idx] = grad_i
-    end
-
-    # 4  pack dictionaries
     ame_dict  = Dict{Tuple,Float64}()
     se_dict   = Dict{Tuple,Float64}()
     grad_dict = Dict{Tuple,Vector{Float64}}()
-    for (i, combo) in enumerate(combos)
-        ame_dict[combo]  = ames[i]
-        se_dict[combo]   = ses[i]
-        grad_dict[combo] = grads[i]
+
+    for combo in combos
+        @inbounds for (rv,val) in zip(repvars, combo)
+            fill!(workdf[!, rv], val)
+        end
+
+        colT = eltype(workdf[!, focal])
+
+        if colT <: Real && colT != Bool
+            # ------------------ continuous focal -----------------------------
+            build_continuous_design_single!(workdf, fe_form, focal, X, Xdx)
+
+            ame, se, grad = _ame_continuous!(
+                β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws)
+
+            key = Tuple(combo)                    # (rep1,rep2,…)
+            ame_dict[key]  = ame
+            se_dict[key]   = se
+            grad_dict[key] = grad
+
+        elseif colT <: Bool
+            # ------------------ Boolean focal → single (false→true) ----------
+            tbl = Tables.columntable(workdf)
+
+            ame_b, se_b, grad_b = _ame_factor_baseline(
+                tbl, fe_form, β, cholΣβ, focal, invlink, dinvlink)
+
+            pair_key = first(keys(ame_b))         # (false,true) or (true,)
+            key      = Tuple(combo)               # rep-values only
+
+            ame_dict[key]  = ame_b[pair_key]
+            se_dict[key]   = se_b[pair_key]
+            grad_dict[key] = grad_b[pair_key]
+
+        else
+            # ------------------ ≥ 3-level categorical focal ------------------
+            tbl = Tables.columntable(workdf)
+
+            ame_sub, se_sub, grad_sub = _ame_factor_allpairs(
+                tbl, fe_form, β, cholΣβ, focal, invlink, dinvlink)
+
+            repkey = Tuple(combo)
+            for pair in keys(ame_sub)             # (lvlᵢ,lvlⱼ)
+                fullkey        = (repkey..., pair...)
+                ame_dict[fullkey]  = ame_sub[pair]
+                se_dict[fullkey]   = se_sub[pair]
+                grad_dict[fullkey] = grad_sub[pair]
+            end
+        end
     end
+
     return ame_dict, se_dict, grad_dict
 end

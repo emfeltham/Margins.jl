@@ -1,62 +1,104 @@
-# margins_to_df.jl — updated without merge! calls
-using DataFrames, Statistics, Distributions, Tables
+using DataFrames, Distributions
 
-"""
-    margins_to_df(res::MarginsResult; level=0.95)
-
-Convert a `MarginsResult` into a tidy `DataFrame`: one row per effect or
-rep-value combination.
-"""
 function margins_to_df(res::MarginsResult; level=0.95)
-    kind     = typeof(res).parameters[1]         # :dydx or :predict
-    prefix   = kind === :dydx ? "Δ" : "ŷ"
-    cis      = confint(res; level=level)
-    repvars  = collect(keys(res.repvals))
-    rows     = Vector{Dict{Symbol,Any}}()
+    # 1) Setup
+    kind    = Kind(res)             # :dydx or :predict
+    prefix  = kind === :dydx ? "Δ" : "ŷ"
+    cis     = confint(res; level=level)
+    repvars = collect(keys(res.repvals))
+    Nrep    = length(repvars)
 
+    # 2) Figure out how many "level*" columns we need
+    max_extra = 0
     for v in res.vars
-        est_map = res.effects[v]
+        eff = res.effects[v]
+        if eff isa Dict
+            # each key is a Tuple; extra = length(key) - Nrep
+            max_extra = max(max_extra,
+                            maximum(length, keys(eff)) - Nrep)
+        end
+    end
+
+    # 3) Build the full column order
+    level_cols = Symbol.(["level$i" for i in 1:max_extra])
+    stat_cols  = [:Effect, :Estimate, :StdErr, :z, :p, :lower, :upper]
+    colorder   = vcat(repvars, [:Variable], level_cols, stat_cols)
+
+    # 4) Iterate focal variables, collect rows
+    rows = Vector{Dict{Symbol,Any}}()
+    for v in res.vars
+        eff_map = res.effects[v]
         se_map  = res.ses[v]
         ci_map  = cis[v]
-        effect_sym = Symbol(prefix, v)
+        eff_sym = Symbol(prefix, v)
 
-        if est_map isa Number
-            # scalar case
-            d = Dict{Symbol,Any}(rv => missing for rv in repvars)
-            d[:Effect]   = effect_sym
-            d[:Estimate] = est_map
+        if eff_map isa Number
+            # Scalar AME (no repvals)
+            d = Dict{Symbol,Any}()
+            for rv in repvars
+                d[rv] = missing
+            end
+            d[:Variable] = v
+            for lc in level_cols
+                d[lc] = missing
+            end
+            d[:Effect]   = eff_sym
+            d[:Estimate] = eff_map
             d[:StdErr]   = se_map
-            d[:z]        = est_map / se_map
+            d[:z]        = eff_map / se_map
             d[:p]        = 2*(1 - cdf(Normal(), abs(d[:z])))
             lo,hi        = ci_map
             d[:lower]    = lo
             d[:upper]    = hi
             push!(rows, d)
+
         else
-            # dict case
-            for combo in sort(collect(keys(est_map)))
+            # Dict AMEs: keys are Tuples
+            for key in sort(collect(keys(eff_map)))
                 d = Dict{Symbol,Any}()
-                for (i, rv) in enumerate(repvars)
-                    d[rv] = combo[i]
+                # repvals
+                for (i,rv) in enumerate(repvars)
+                    d[rv] = key[i]
                 end
-                est = est_map[combo]
-                se  = se_map[combo]
-                d[:Effect]   = effect_sym
+                d[:Variable] = v
+
+                # categorical level fields
+                extra = length(key) - Nrep
+                for j in 1:max_extra
+                    col = level_cols[j]
+                    if j <= extra
+                        d[col] = key[Nrep + j]
+                    else
+                        d[col] = missing
+                    end
+                end
+
+                # stats
+                est = eff_map[key]
+                se  = se_map[key]
+                lo,hi = ci_map[key]
+                d[:Effect]   = eff_sym
                 d[:Estimate] = est
                 d[:StdErr]   = se
                 d[:z]        = est / se
                 d[:p]        = 2*(1 - cdf(Normal(), abs(d[:z])))
-                lo,hi        = ci_map[combo]
                 d[:lower]    = lo
                 d[:upper]    = hi
+
                 push!(rows, d)
             end
         end
     end
 
+    # 5) Build the DataFrame
     df = DataFrame(rows)
-    select!(df, vcat(repvars, [:Effect, :Estimate, :StdErr, :z, :p, :lower, :upper]))
-    return df
+    # ensure all columns exist
+    for c in colorder
+        if c ∉ Symbol.(names(df))
+            df[!, c] = fill(missing, nrow(df))
+        end
+    end
+    select!(df, colorder)
 end
 
 # extend DataFrame constructor and Tables integration

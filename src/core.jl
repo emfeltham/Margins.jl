@@ -41,8 +41,8 @@ function margins(
     fe_form   = fixed_effects_form(model)
 
     # -- build *once*: base design + ALL ∂X/∂x for continuous vars ----------
-    cts_vars  = filter(v->eltype(df[!,v]) <: Real && eltype(df[!,v]) != Bool,
-                       varlist)
+    iscts(v) = eltype(df[!,v]) <: Real && eltype(df[!,v]) != Bool
+    cts_vars = filter(iscts, union(varlist, keys(repvals)))
     X_base, Xdx_list = build_continuous_design(df, fe_form, cts_vars) # <── NEW
     X_buf     = similar(X_base)          # work buffer for predictions
 
