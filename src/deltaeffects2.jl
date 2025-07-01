@@ -181,7 +181,7 @@ function group_effectsΔyΔx(
 )
     gdf = groupby(reference_grid, group_var);
     outdf = DataFrame();
-    for (_, a) in pairs(gdf)
+    for (k, a) in pairs(gdf)
         u = effectsΔyΔx(
             x,
             DataFrame(a), model, df;
@@ -191,8 +191,11 @@ function group_effectsΔyΔx(
             vcov_func=vcov_func,
             digits = digits
         )
-        u[!, group_var] .= unique(a[!, group_var])[1]
+        for (k1, k2) in zip(names(k), k)
+            u[!, k1] .= k2
+        end
         append!(outdf, u)
     end
+    outdf.variable .= x
     return outdf
 end
