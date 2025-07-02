@@ -66,7 +66,8 @@ mutable struct OptimizedNumericalWorkspace
     step_sizes::Dict{Symbol, Float64}
     
     function OptimizedNumericalWorkspace(n::Int, p::Int)
-        sample_size = min(15, n)  # Very small sample
+        # Use larger sample size for better accuracy with complex interactions
+        sample_size = min(100, max(50, div(n, 100)))  # More conservative
         
         new(
             DataFrame(),  # Will reference original
@@ -90,10 +91,11 @@ function batch_analyze_affected_columns(
     n, p = size(X_base)
     all_affected = Vector{Vector{Int}}(undef, length(cts_vars))
     
-    # Create very small systematic sample
-    step_size = max(1, div(n, workspace.sample_size))
+    # Use larger sample for complex interactions (more conservative)
+    target_sample_size = min(100, max(50, div(n, 100)))  # At least 50, up to 100
+    step_size = max(1, div(n, target_sample_size))
     sample_idx = 1:step_size:n
-    actual_sample_size = min(workspace.sample_size, length(sample_idx))
+    actual_sample_size = min(target_sample_size, length(sample_idx))
     sample_idx = sample_idx[1:actual_sample_size]
     
     # Sample data and base matrix
@@ -120,9 +122,10 @@ function find_affected_columns_fast(
     sample_df = workspace.sample_df
     original_col = sample_df[!, var]
     
-    # Convert to Float64 and compute step size
+    # Convert to Float64 and compute step size (more robust for interactions)
     original_float = Float64.(original_col)
-    h = sqrt(eps(Float64)) * max(1.0, std(original_float))
+    # More conservative step size for complex interactions
+    h = sqrt(eps(Float64)) * max(1.0, maximum(abs, original_float) * 0.01)
     workspace.step_sizes[var] = h
     
     # Temporary perturbation
@@ -135,9 +138,9 @@ function find_affected_columns_fast(
     # Restore original immediately
     sample_df[!, var] = original_col
     
-    # Find affected columns with SIMD
+    # Find affected columns with more conservative tolerance for interactions
     affected_cols = Int[]
-    tolerance = 1e-10
+    tolerance = 1e-12  # Tighter tolerance for complex interactions
     p = size(workspace.sample_X_base, 2)
     
     @inbounds for col in 1:p
