@@ -265,12 +265,14 @@ end
 
 @testset "Very Complex Formula" begin
     # Kitchen sink formula with everything
-    f = @formula(y ~ x1 + x2 + x3 + cat1 + cat2 + 
-                    inv(x1) + (x2^2) + 
-                    x1&x2 + x1&cat1 + cat1&cat2 +
-                    inv(x1)&(x2^2) + 
-                    x1&x2&x3 +
-                    inv(x1)&cat1&x2)
+    f = @formula(
+        y ~ x1 + x2 + x3 + cat1 + cat2 + 
+        inv(x1) + (x2^2) + 
+        x1&x2 + x1&cat1 + cat1&cat2 +
+        inv(x1)&(x2^2) + 
+        x1&x2&x3 +
+        inv(x1)&cat1&x2
+    )
     
     model = lm(f, df)
     
