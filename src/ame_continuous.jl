@@ -6,12 +6,13 @@
 
 """
     _ame_continuous(
-        df::AbstractDataFrame,
-        model,
-        x::Symbol,
-        fe_form,
-        β::AbstractVector,
-        vcov::Function = StatsBase.vcov,
+        β::Vector{Float64},
+        cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
+        X::AbstractMatrix{Float64},
+        Xdx::AbstractMatrix{Float64},
+        dinvlink::Function,
+        d2invlink::Function,
+        ws::AMEWorkspace,
     ) -> (Float64, Float64, Vector{Float64})
 
 Compute the average marginal effect (AME) of a continuous predictor `x`, its

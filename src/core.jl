@@ -38,21 +38,19 @@ function margins(
     dinvlink,
     d2invlink = link_functions(model)
 
-    fe_form   = fixed_effects_form(model)
+    # rhs term baked-in (for modelmatrix!)
+    fe_form = fixed_effects_form(model) # Assuming this gets the FormulaTerm
+    fe_rhs = fe_form.rhs # formula(model).rhs
 
     # -- build *once*: base design + ALL ∂X/∂x for continuous vars ----------
     iscts(v) = eltype(df[!,v]) <: Real && eltype(df[!,v]) != Bool
     cts_vars = filter(iscts, union(varlist, keys(repvals)))
-    X_base, Xdx_list = build_continuous_design(df, fe_form, cts_vars) # <── NEW
-    X_buf     = similar(X_base)          # work buffer for predictions
+    X_base, Xdx_list = build_continuous_design(df, fe_form, cts_vars)
+    X_buf     = similar(X_base) # work buffer for predictions
 
     n, p      = size(X_base)
     β, Σβ     = coef(model), vcov(model)
     cholΣβ    = cholesky(Σβ)
-
-    # rhs term baked-in (for modelmatrix!)
-    mf        = StatsModels.ModelFrame(fe_form, df)
-    frhs      = mf.f.rhs
 
     tbl0      = Tables.columntable(df)
 
@@ -98,7 +96,7 @@ function margins(
                     fill!(workdf[!,rv], val)
                 end
 
-                modelmatrix!(X_buf, frhs, Tables.columntable(workdf))  # <── fast rebuild
+                modelmatrix!(X_buf, fe_rhs, Tables.columntable(workdf))  # <── fast rebuild
 
                 mul!(η, X_buf, β)
                 @inbounds @simd for i in 1:n
@@ -138,22 +136,32 @@ function margins(
 
             # —— categorical AMEs (unchanged) ————————————————
             for v in cat_vars
-                ame_d, se_d, g_d = pairs == :baseline ?
-                    _ame_factor_baseline(tbl0, fe_form, β, Σβ, v,
-                                         invlink, dinvlink) :
-                    _ame_factor_allpairs(tbl0, fe_form, β, Σβ, v,
-                                         invlink, dinvlink)
-
-                result_map[v] = ame_d;  se_map[v] = se_d;  grad_map[v] = g_d
+                ame_d  = Dict{Tuple,Float64}()
+                se_d   = Dict{Tuple,Float64}()
+                grad_d = Dict{Tuple,Vector{Float64}}()
+                if pairs == :baseline
+                    _ame_factor_baseline!(
+                        ame_d, se_d, grad_d,
+                        tbl0, fe_rhs, β, Σβ, v,
+                        invlink, dinvlink
+                    ) else
+                    _ame_factor_allpairs!(
+                        ame_d, se_d, grad_d,
+                        tbl0, fe_rhs, β, Σβ, v,
+                        invlink, dinvlink
+                    )
+                end
+                result_map[v] = ame_d;  se_map[v] = se_d;  grad_map[v] = grad_d
             end
 
         else
             # —— AMEs at representative values (unchanged) ———————
             for v in varlist
                 ame_d, se_d, g_d = _ame_representation(
-                    df, model, v, repvals,
-                    fe_form, β, cholΣβ,
-                    invlink, dinvlink, d2invlink)
+                    df, v, repvals,
+                    fe_rhs, β, cholΣβ,
+                    invlink, dinvlink, d2invlink
+                )
 
                 result_map[v] = ame_d;  se_map[v] = se_d;  grad_map[v] = g_d
             end

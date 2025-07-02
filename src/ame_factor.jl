@@ -6,30 +6,22 @@
 _cov_mul(Σ::AbstractMatrix, g) = Σ * g
 _cov_mul(C::LinearAlgebra.Cholesky, g) = Matrix(C) * g   # safe, still cheap
 
-function _factor_design(tbl0, fe_form, f::Symbol, lvl)
-    col_raw = tbl0[f]
-    newcol  = if col_raw isa AbstractVector{Bool}
-        fill(lvl, length(col_raw))                    # Vector{Bool}
-    elseif col_raw isa CategoricalVector
-        categorical(fill(lvl, length(col_raw)),
-                    levels = levels(col_raw))
-    else
-        cat0 = categorical(col_raw)
-        categorical(fill(lvl, length(cat0)),
-                    levels = levels(cat0))
-    end
-    tbl2 = merge(tbl0, (f => newcol,))
-    return modelmatrix(fe_form, tbl2)
-end
-
-function _ame_factor_pair_matrix(
-    tbl0, fe_form, β, Σβ_or_chol,
-    f::Symbol, lvl_j, lvl_k,
+# A new, fast version of the pairwise calculator
+function _ame_factor_pair_matrix_fast!(
+    Xj::Matrix, Xk::Matrix, workdf::DataFrame, # Pre-allocated buffers
+    fe_rhs, β, Σβ_or_chol,
+    f::Symbol, lvl_i, lvl_j,
     invlink, dinvlink,
 )
-    Xj = _factor_design(tbl0, fe_form, f, lvl_j)
-    Xk = _factor_design(tbl0, fe_form, f, lvl_k)
+    # Build Xj in-place
+    fill!(workdf[!, f], lvl_i)
+    modelmatrix!(Xj, fe_rhs, workdf)
 
+    # Build Xk in-place
+    fill!(workdf[!, f], lvl_j)
+    modelmatrix!(Xk, fe_rhs, workdf)
+
+    # --- Calculations are the same as before ---
     ηj, ηk   = Xj*β, Xk*β
     μj, μk   = invlink.(ηj), invlink.(ηk)
     μpj, μpk = dinvlink.(ηj), dinvlink.(ηk)
@@ -41,42 +33,64 @@ function _ame_factor_pair_matrix(
     return ame, se, grad
 end
 
-function _ame_factor_baseline(
-    tbl0, fe_form, β, Σβ_or_chol,
+function _ame_factor_baseline!(
+    ame_d, se_d, grad_d,
+    tbl0, fe_rhs, β, Σβ_or_chol,
     f::Symbol, invlink, dinvlink,
 )
     lvls = levels(categorical(tbl0[f]))
     base = lvls[1]
 
-    ame_d  = Dict{Tuple,Float64}()
-    se_d   = Dict{Tuple,Float64}()
-    grad_d = Dict{Tuple,Vector{Float64}}()
+    # --- Set up reusable work objects ---
+    workdf = DataFrame(Tables.columntable(tbl0), copycols=true)
+    n, p = nrow(workdf), length(β)
+    Xj = Matrix{Float64}(undef, n, p) # Buffer for first level's design
+    Xk = Matrix{Float64}(undef, n, p) # Buffer for second level's design
+    original_col = copy(workdf[!, f]) # Save original column
 
+    # Loop over pairs, reusing workdf and buffers
+    # contrast `lvl` with `base`
     for lvl in lvls[2:end]
-        ame,se,grad = _ame_factor_pair_matrix(
-            tbl0, fe_form, β, Σβ_or_chol,
-            f, base, lvl, invlink, dinvlink)
-        ame_d[(lvl,)], se_d[(lvl,)], grad_d[(lvl,)] = ame, se, grad
+        # Re-use buffers Xj and Xk by passing them to the pair-wise function
+        ame, se, grad = _ame_factor_pair_matrix_fast!(
+            Xj, Xk, workdf, fe_rhs, β, Σβ_or_chol,
+            f, base, lvl, invlink, dinvlink
+        )
+        key = (base, lvl)
+        ame_d[key], se_d[key], grad_d[key] = ame, se, grad
     end
-    return ame_d, se_d, grad_d
+
+    # Restore the original column in the work dataframe
+    workdf[!, f] = original_col
 end
 
-function _ame_factor_allpairs(
-    tbl0, fe_form, β, Σβ_or_chol,
+function _ame_factor_allpairs!(
+    ame_d, se_d, grad_d,
+    tbl0, fe_rhs, β, Σβ_or_chol,
     f::Symbol, invlink, dinvlink,
 )
     lvls = levels(categorical(tbl0[f]))
 
-    ame_d  = Dict{Tuple,Float64}()
-    se_d   = Dict{Tuple,Float64}()
-    grad_d = Dict{Tuple,Vector{Float64}}()
+    # --- Set up reusable work objects ---
+    workdf = DataFrame(Tables.columntable(tbl0), copycols=true)
+    n, p = nrow(workdf), length(β)
+    Xj = Matrix{Float64}(undef, n, p) # Buffer for first level's design
+    Xk = Matrix{Float64}(undef, n, p) # Buffer for second level's design
+    original_col = copy(workdf[!, f]) # Save original column
 
+    # Loop over pairs, reusing workdf and buffers
     for i in 1:length(lvls)-1, j in i+1:length(lvls)
-        ame,se,grad = _ame_factor_pair_matrix(
-            tbl0, fe_form, β, Σβ_or_chol,
-            f, lvls[i], lvls[j], invlink, dinvlink)
-        key = (lvls[i], lvls[j])
+        lvl_i, lvl_j = lvls[i], lvls[j]
+
+        # Re-use buffers Xj and Xk by passing them to the pair-wise function
+        ame, se, grad = _ame_factor_pair_matrix_fast!(
+            Xj, Xk, workdf, fe_rhs, β, Σβ_or_chol,
+            f, lvl_i, lvl_j, invlink, dinvlink
+        )
+        key = (lvl_i, lvl_j)
         ame_d[key], se_d[key], grad_d[key] = ame, se, grad
     end
-    return ame_d, se_d, grad_d
+
+    # Restore the original column in the work dataframe
+    workdf[!, f] = original_col
 end

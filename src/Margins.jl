@@ -51,6 +51,7 @@ export not
 ##
 
 include("modelmatrix!.jl")
+export modelmatrix!, getrhs
 
 include("family.jl")
 export Family, family
