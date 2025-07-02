@@ -3,7 +3,7 @@
 # for an input variable.
 # (potential: work towards a faster version of Margins.jl that parses the 
 #  model matrix)
-# next step: pass tests
+# the functions pass a bunch of tests
 
 using StatsModels, DataFrames
 
