@@ -46,72 +46,6 @@ function build_design_matrices_optimized(model, df, fe_rhs, cts_vars::Vector{Sym
 end
 
 """
-Analyze which terms are affected by which continuous variables WITHOUT calling modelcols
-"""
-function analyze_variable_dependencies_fast(fe_rhs, cts_vars::Vector{Symbol}, tbl0::NamedTuple)
-    if isa(fe_rhs, StatsModels.MatrixTerm)
-        terms = collect(fe_rhs.terms)
-    else
-        terms = [fe_rhs]
-    end
-    
-    var_to_term_info = Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}()
-    
-    # OPTIMIZATION: Determine column ranges from term structure, not by evaluation
-    col_offset = 1
-    for (i, term) in enumerate(terms)
-        # Get column count without calling modelcols
-        ncols = estimate_term_width_fast(term, tbl0)
-        col_range = col_offset:(col_offset + ncols - 1)
-        
-        # Find which variables affect this term using lightweight analysis
-        affected_vars = find_variables_in_term_fast(term, cts_vars)
-        for var in affected_vars
-            if !haskey(var_to_term_info, var)
-                var_to_term_info[var] = Tuple{Int, UnitRange{Int}}[]
-            end
-            push!(var_to_term_info[var], (i, col_range))
-        end
-        
-        col_offset += ncols
-    end
-    
-    return var_to_term_info
-end
-
-"""
-Estimate term width without expensive modelcols evaluation
-"""
-function estimate_term_width_fast(term, tbl0::NamedTuple)
-    if isa(term, StatsModels.InterceptTerm)
-        return 1
-    elseif isa(term, StatsModels.ContinuousTerm)
-        return 1
-    elseif isa(term, StatsModels.CategoricalTerm)
-        # Get number of levels - 1 for contrast coding
-        col_data = tbl0[term.sym]
-        if isa(col_data, CategoricalArray)
-            return length(levels(col_data)) - 1
-        else
-            return length(unique(col_data)) - 1
-        end
-    elseif isa(term, StatsModels.InteractionTerm)
-        # Product of component widths
-        width = 1
-        for subterm in term.terms
-            width *= estimate_term_width_fast(subterm, tbl0)
-        end
-        return width
-    elseif hasfield(typeof(term), :sym) && isa(term.sym, Symbol)
-        # For terms with a symbol field (like ZScoredTerm), treat as continuous
-        return 1
-    else
-        # For completely unknown term types, assume 1 column
-        return 1
-    end
-end
-
-"""
 Avoid DataFrame modification entirely - use NamedTuple approach
 """
 function compute_derivatives_no_df_modification!(
@@ -216,64 +150,35 @@ function update_derivatives_fast!(Xdx, col_range, base_result, perturbed_result,
 end
 
 """
-Smart variable dependency analysis
+Optimized single-variable design matrix builder for representation analysis
 """
-function find_variables_in_term_fast(term, cts_vars::Vector{Symbol})
-    # Use a more efficient approach for common term types
-    if isa(term, StatsModels.ContinuousTerm)
-        return term.sym in cts_vars ? [term.sym] : Symbol[]
-    elseif isa(term, StatsModels.InterceptTerm)
-        return Symbol[]
-    elseif isa(term, StatsModels.InteractionTerm)
-        result = Symbol[]
-        for subterm in term.terms
-            append!(result, find_variables_in_term_fast(subterm, cts_vars))
-        end
-        return unique!(result)
-    else
-        # Conservative fallback
-        return intersect(cts_vars, StatsModels.termvars(term))
-    end
-end
-
-###############################################################################
-# KEEP ORIGINAL FUNCTIONS UNCHANGED for backward compatibility
-###############################################################################
-
-"""
-Original function signature maintained for backward compatibility
-"""
-function build_continuous_design(df, fe_rhs, cts_vars::Vector{Symbol})
-    n, k = nrow(df), length(cts_vars)
-    if k == 0
-        X_base = modelmatrix(fe_rhs, Tables.columntable(df))
-        return X_base, [Matrix{Float64}(undef, n, 0) for _ in 1:k]
-    end
-
-    # Fallback to original behavior but with some optimizations
+function build_continuous_design_single_fast!(
+    df::DataFrame,
+    fe_rhs,
+    focal::Symbol,
+    X::AbstractMatrix{Float64},
+    Xdx::AbstractMatrix{Float64},
+    active_terms::Union{Nothing, Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}}
+)
     tbl0 = Tables.columntable(df)
-    X_base = modelmatrix(fe_rhs, tbl0)
-    p = size(X_base, 2)
     
-    # Use fast analysis
-    active_var_to_terms = analyze_variable_dependencies_fast(fe_rhs, cts_vars, tbl0)
+    # Build base matrix efficiently
+    modelmatrix!(X, fe_rhs, tbl0)
     
-    if isempty(active_var_to_terms)
-        return X_base, [zeros(Float64, n, p) for _ in 1:k]
+    # Smart derivative computation
+    fill!(Xdx, 0.0)
+    
+    if isnothing(active_terms) || focal ∉ keys(tbl0) || !haskey(active_terms, focal)
+        return nothing
     end
     
-    # Pre-allocate derivative matrices
-    Xdx = [Matrix{Float64}(undef, n, p) for _ in 1:k]
-    
-    # Process variables
-    for (j, var) in enumerate(cts_vars)
-        if haskey(active_var_to_terms, var) && !isempty(active_var_to_terms[var])
-            compute_derivatives_no_df_modification!(Xdx[j], X_base, df, fe_rhs, var, 
-                                                  active_var_to_terms[var], tbl0)
-        else
-            fill!(Xdx[j], 0.0)
-        end
+    term_info = active_terms[focal]
+    if isempty(term_info)
+        return nothing
     end
-
-    return X_base, Xdx
+    
+    # Use the optimized derivative computation with no DataFrame modification
+    compute_derivatives_no_df_modification!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
+    
+    return nothing
 end

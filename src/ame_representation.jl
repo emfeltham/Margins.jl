@@ -113,36 +113,3 @@ function _ame_representation(
     return ame_dict, se_dict, grad_dict
 end
 
-"""
-Optimized single-variable design matrix builder for representation analysis
-"""
-function build_continuous_design_single_fast!(
-    df::DataFrame,
-    fe_rhs,
-    focal::Symbol,
-    X::AbstractMatrix{Float64},
-    Xdx::AbstractMatrix{Float64},
-    active_terms::Union{Nothing, Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}}
-)
-    tbl0 = Tables.columntable(df)
-    
-    # Build base matrix efficiently
-    modelmatrix!(X, fe_rhs, tbl0)
-    
-    # Smart derivative computation
-    fill!(Xdx, 0.0)
-    
-    if isnothing(active_terms) || focal ∉ keys(tbl0) || !haskey(active_terms, focal)
-        return nothing
-    end
-    
-    term_info = active_terms[focal]
-    if isempty(term_info)
-        return nothing
-    end
-    
-    # Use the optimized derivative computation with no DataFrame modification
-    compute_derivatives_no_df_modification!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
-    
-    return nothing
-end

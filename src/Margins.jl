@@ -83,8 +83,6 @@ using MixedModels: RandomEffectsTerm
 import Base: show
 using Printf, Distributions
 
-include("modelcols_mutating.jl")
-include("optimization_helpers.jl")
 include("matrix_reuse_helpers.jl")
 include("workspace.jl")
 
