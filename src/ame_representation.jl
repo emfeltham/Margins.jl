@@ -1,7 +1,7 @@
-# ame_representation.jl - DROP-IN REPLACEMENT
+# ame_representation.jl - OPTIMIZED VERSION
 
 ###############################################################################
-# Optimized AME at representative values with reduced allocations
+# Optimized AME at representative values with smart matrix handling
 ###############################################################################
 
 function _ame_representation(
@@ -21,13 +21,13 @@ function _ame_representation(
 
     nr, p = nrow(df), length(β)
 
-    # Pre-allocate and reuse working objects
-    workdf = DataFrame(df, copycols=true)  # One deep copy
+    # Pre-allocate working objects
+    workdf = DataFrame(df, copycols=true)
     ws = AMEWorkspace(nr, p)
     X = Matrix{Float64}(undef, nr, p)
     Xdx = Matrix{Float64}(undef, nr, p)
 
-    # Store original focal column for restoration
+    # Store original focal column
     original_focal_col = copy(workdf[!, focal])
 
     # Result containers
@@ -35,18 +35,25 @@ function _ame_representation(
     se_dict = Dict{Tuple,Float64}()
     grad_dict = Dict{Tuple,Vector{Float64}}()
 
-    # Main computation loop with optimized memory usage
+    # Pre-analyze for continuous variables
+    base_tbl = Tables.columntable(workdf)
+    focal_type = eltype(workdf[!, focal])
+    
+    active_terms = nothing
+    if focal_type <: Real && focal_type != Bool
+        active_terms = analyze_variable_dependencies(fe_rhs, [focal], base_tbl)
+    end
+    
+    # Main computation loop
     for combo in combos
         # Modify representative values in-place
         @inbounds for (rv, val) in zip(repvars, combo)
             fill!(workdf[!, rv], val)
         end
 
-        focal_type = eltype(workdf[!, focal])
-
         if focal_type <: Real && focal_type != Bool
-            # Continuous focal variable - use optimized single-variable builder
-            build_continuous_design_single!(workdf, fe_rhs, focal, X, Xdx)
+            # Continuous focal variable
+            build_continuous_design_single_optimized!(workdf, fe_rhs, focal, X, Xdx, active_terms)
 
             ame, se, grad = _ame_continuous!(
                 β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws
@@ -61,7 +68,6 @@ function _ame_representation(
             # Boolean focal variable
             tbl = Tables.columntable(workdf)
 
-            # Use pre-allocated containers
             ame_b = Dict{Tuple,Float64}()
             se_b = Dict{Tuple,Float64}()
             grad_b = Dict{Tuple,Vector{Float64}}()
@@ -71,7 +77,6 @@ function _ame_representation(
                 tbl, fe_rhs, β, cholΣβ, focal, invlink, dinvlink
             )
 
-            # Extract the single result
             pair_key = first(keys(ame_b))
             key = Tuple(combo)
 
@@ -83,7 +88,6 @@ function _ame_representation(
             # Multi-level categorical focal variable
             tbl = Tables.columntable(workdf)
 
-            # Use pre-allocated containers
             ame_sub = Dict{Tuple,Float64}()
             se_sub = Dict{Tuple,Float64}()
             grad_sub = Dict{Tuple,Vector{Float64}}()
@@ -93,7 +97,6 @@ function _ame_representation(
                 tbl, fe_rhs, β, cholΣβ, focal, invlink, dinvlink
             )
 
-            # Combine representative values with factor level pairs
             repkey = Tuple(combo)
             for pair in keys(ame_sub)
                 fullkey = (repkey..., pair...)
@@ -108,4 +111,38 @@ function _ame_representation(
     workdf[!, focal] = original_focal_col
 
     return ame_dict, se_dict, grad_dict
+end
+
+"""
+Optimized single-variable design matrix builder
+"""
+function build_continuous_design_single_optimized!(
+    df::DataFrame,
+    fe_rhs,
+    focal::Symbol,
+    X::AbstractMatrix{Float64},
+    Xdx::AbstractMatrix{Float64},
+    active_terms::Union{Nothing, Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}}
+)
+    tbl0 = Tables.columntable(df)
+    
+    # Build base matrix
+    modelmatrix!(X, fe_rhs, tbl0)
+    
+    # Smart derivative computation
+    fill!(Xdx, 0.0)
+    
+    if isnothing(active_terms) || focal ∉ keys(tbl0) || !haskey(active_terms, focal)
+        return nothing
+    end
+    
+    term_info = active_terms[focal]
+    if isempty(term_info)
+        return nothing
+    end
+    
+    # Use the optimized derivative computation
+    compute_smart_derivatives!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
+    
+    return nothing
 end

@@ -1,17 +1,13 @@
-# core.jl - DROP-IN REPLACEMENT
+# core.jl - OPTIMIZED VERSION
 
 ###############################################################################
-# Ultra-optimized margins wrapper with batch processing
+# Ultra-optimized margins wrapper with matrix reuse
 ###############################################################################
 
 """
     margins(model, vars, df; kwargs...)  ->  MarginsResult
 
-Drop-in replacement with major performance optimizations:
-- Eliminates redundant matrix operations
-- Uses batch processing for multiple variables
-- Reduces memory allocations by 80-90%
-- Maintains identical API and output format
+Optimized version with matrix reuse and smart derivative computation.
 """
 function margins(
     model,
@@ -26,19 +22,19 @@ function margins(
     type ∈ (:dydx, :predict) ||
         throw(ArgumentError("`type` must be :dydx or :predict, got `$type`"))
 
-    # ───────────── Setup (optimized) ────────────────────────────────────────
+    # Setup
     varlist = isa(vars, Symbol) ? [vars] : collect(vars)
     invlink, dinvlink, d2invlink = link_functions(model)
 
     fe_form = fixed_effects_form(model)
     fe_rhs = fe_form.rhs
 
-    # Optimized variable classification
+    # Variable classification
     iscts(v) = eltype(df[!, v]) <: Real && eltype(df[!, v]) != Bool
     cts_vars = filter(iscts, union(varlist, keys(repvals)))
     
-    # MAJOR OPTIMIZATION: Use ultra-optimized design matrix builder
-    X_base, Xdx_list = build_continuous_design(df, fe_rhs, cts_vars)
+    # MAJOR OPTIMIZATION: Use matrix reuse
+    X_base, Xdx_list = build_design_matrices_optimized(model, df, fe_rhs, cts_vars)
 
     n, p = size(X_base)
     β, Σβ = coef(model), vcov(model)
@@ -81,7 +77,7 @@ function margins(
             end
 
         else
-            # Optimized representative values prediction (existing implementation)
+            # Representative values prediction
             repvars = collect(keys(repvals))
             combos = collect(Iterators.product((repvals[r] for r in repvars)...))
 
@@ -119,14 +115,12 @@ function margins(
             end
         end
     
-    # ─────────────────────────── :dydx branch ──────────────────────────────
-    else
+    else # :dydx branch
         cat_vars = setdiff(varlist, cts_vars)
 
         if isempty(repvals)
-            # ── MAJOR OPTIMIZATION: Batch continuous AMEs ──
+            # Batch continuous AMEs
             if !isempty(cts_vars)
-                # Find which continuous variables are requested
                 requested_cts_indices = Int[]
                 requested_cts_vars = Symbol[]
                 
@@ -138,14 +132,12 @@ function margins(
                 end
                 
                 if !isempty(requested_cts_indices)
-                    # Batch compute AMEs for efficiency
                     ames, ses, grads = compute_ames_batch(
                         β, cholΣβ, X_base, 
                         Xdx_list[requested_cts_indices],
                         dinvlink, d2invlink, n, p
                     )
                     
-                    # Store results
                     for (i, var) in enumerate(requested_cts_vars)
                         result_map[var] = ames[i]
                         se_map[var] = ses[i]
@@ -154,7 +146,7 @@ function margins(
                 end
             end
 
-            # ── Optimized categorical AMEs ──
+            # Categorical AMEs
             for v in cat_vars
                 ame_d = Dict{Tuple,Float64}()
                 se_d = Dict{Tuple,Float64}()
@@ -180,7 +172,7 @@ function margins(
             end
 
         else
-            # ── AMEs at representative values ──
+            # AMEs at representative values
             for v in varlist
                 ame_d, se_d, g_d = _ame_representation(
                     df, v, repvals,
@@ -204,7 +196,7 @@ function margins(
 end
 
 """
-Batch AME computation for multiple continuous variables (major optimization)
+Batch AME computation for multiple continuous variables
 """
 function compute_ames_batch(
     β::Vector{Float64},
@@ -223,41 +215,40 @@ function compute_ames_batch(
     ses = Vector{Float64}(undef, k)
     grads = Vector{Vector{Float64}}(undef, k)
     
-    # Shared workspace (reused across variables)
+    # Shared workspace
     ws = AMEWorkspace(n, p)
     
-    # Pre-compute base linear predictor (shared across all variables)
+    # Pre-compute base linear predictor
     mul!(ws.η, X_base, β)
     
-    # Pre-compute link function values (major optimization)
+    # Pre-compute link function values
     @inbounds @simd ivdep for i in 1:n
         ηi = ws.η[i]
-        ws.arr2[i] = dinvlink(ηi)     # Store for reuse
-        ws.arr1[i] = d2invlink(ηi)    # Temporary storage
+        ws.arr2[i] = dinvlink(ηi)
+        ws.arr1[i] = d2invlink(ηi)
     end
     
-    # Process each variable with shared computations
+    # Process each variable
     for j in 1:k
         Xdx = Xdx_list[j]
         
-        # Compute derivative linear predictor
         mul!(ws.dη, Xdx, β)
         
-        # AME computation with pre-computed link functions
+        # AME computation
         sum_ame = 0.0
         @inbounds @simd ivdep for i in 1:n
             dηi = ws.dη[i]
-            mp = ws.arr2[i]         # Pre-computed dinvlink
-            mpp = ws.arr1[i]        # Pre-computed d2invlink
+            mp = ws.arr2[i]
+            mpp = ws.arr1[i]
             
             sum_ame += mp * dηi
-            ws.arr1[i] = mpp * dηi  # Overwrite for gradient
+            ws.arr1[i] = mpp * dηi
         end
         ames[j] = sum_ame / n
         
         # Gradient computation
-        mul!(ws.buf1, X_base', ws.arr1)     # X' * arr1
-        mul!(ws.buf2, Xdx', ws.arr2)        # Xdx' * arr2
+        mul!(ws.buf1, X_base', ws.arr1)
+        mul!(ws.buf2, Xdx', ws.arr2)
         
         inv_n = 1.0 / n
         @inbounds @simd ivdep for i in 1:p
@@ -270,7 +261,7 @@ function compute_ames_batch(
         
         grads[j] = copy(ws.buf1)
         
-        # Restore d2invlink values for next iteration
+        # Restore for next iteration
         if j < k
             @inbounds @simd ivdep for i in 1:n
                 ws.arr1[i] = d2invlink(ws.η[i])
