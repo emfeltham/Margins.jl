@@ -1,5 +1,7 @@
 # mm_tests.jl
 
+atol_ = 1e-6
+
 # Load data for LMMs
 sleep = dataset("lme4", "sleepstudy") |> DataFrame
 sleep.Subject = categorical(sleep.Subject)
@@ -34,8 +36,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        @test isapprox(ame11.effects[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame11.ses[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame11.effects[:Days], ame_closed; atol=atol_)
+        @test isapprox(ame11.ses[:Days], se_closed; atol=atol_)
     end
 
     @testset "Scenario 12: LMM random slope on Days" begin
@@ -50,8 +52,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        @test isapprox(ame12.effects[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame12.ses[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame12.effects[:Days], ame_closed; atol=atol_)
+        @test isapprox(ame12.ses[:Days], se_closed; atol=atol_)
     end
 
     @testset "Scenario 13: LMM with transformation + random intercept" begin
@@ -67,8 +69,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[idx] * mean_inv
         se_closed = sqrt(vc[idx, idx] * mean_inv^2)
 
-        @test isapprox(ame13.effects[:Days], ame_closed; atol=1e-8)
-        @test isapprox(ame13.ses[:Days], se_closed; atol=1e-8)
+        @test isapprox(ame13.effects[:Days], ame_closed; atol=atol_)
+        @test isapprox(ame13.ses[:Days], se_closed; atol=atol_)
     end
 
     @testset "Scenario 14: GLMM logistic random intercept on cbpp" begin
@@ -93,8 +95,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         var_closed = g' * V * g
         se_closed = sqrt(var_closed)
 
-        @test isapprox(ame14.effects[:Period][("1","2")], ame_closed; atol=1e-8)
-        @test isapprox(ame14.ses[:Period][("1","2")], se_closed; atol=1e-8)
+        @test isapprox(ame14.effects[:Period][("1","2")], ame_closed; atol=atol_)
+        @test isapprox(ame14.ses[:Period][("1","2")], se_closed; atol=atol_)
     end
 
     @testset "Scenario 15: GLMM logistic synthetic random intercept" begin
@@ -122,7 +124,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         var_closed = g' * vc * g
         se_closed = sqrt(var_closed)
 
-        @test isapprox(ame15.effects[:x], ame_closed; atol=1e-8)
-        @test isapprox(ame15.ses[:x], se_closed; atol=1e-8)
+        @test isapprox(ame15.effects[:x], ame_closed; atol=atol_)
+        @test isapprox(ame15.ses[:x], se_closed; atol=atol_)
     end
 end

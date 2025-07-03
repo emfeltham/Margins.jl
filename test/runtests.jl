@@ -2,13 +2,16 @@
 
 using Revise
 using Margins
-using Test
-using Random
-using DataFrames, CategoricalArrays
-using Distributions, Statistics, GLM, MixedModels
-using RDatasets
-import LinearAlgebra.dot
-import LinearAlgebra.diag
+
+begin
+    using Test
+    using Random
+    using DataFrames, CategoricalArrays
+    using Distributions, Statistics, GLM, MixedModels
+    using RDatasets
+    import LinearAlgebra.dot
+    import LinearAlgebra.diag
+end
 
 # Load data
 iris = dataset("datasets", "iris") |> DataFrame;
