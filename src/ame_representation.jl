@@ -1,7 +1,7 @@
-# ame_representation.jl - OPTIMIZED VERSION
+# ame_representation.jl - CLEAN REPLACEMENT
 
 ###############################################################################
-# Optimized AME at representative values with smart matrix handling
+# Optimized AME at representative values with minimal allocations
 ###############################################################################
 
 function _ame_representation(
@@ -41,7 +41,7 @@ function _ame_representation(
     
     active_terms = nothing
     if focal_type <: Real && focal_type != Bool
-        active_terms = analyze_variable_dependencies(fe_rhs, [focal], base_tbl)
+        active_terms = analyze_variable_dependencies_fast(fe_rhs, [focal], base_tbl)
     end
     
     # Main computation loop
@@ -53,7 +53,7 @@ function _ame_representation(
 
         if focal_type <: Real && focal_type != Bool
             # Continuous focal variable
-            build_continuous_design_single_optimized!(workdf, fe_rhs, focal, X, Xdx, active_terms)
+            build_continuous_design_single_fast!(workdf, fe_rhs, focal, X, Xdx, active_terms)
 
             ame, se, grad = _ame_continuous!(
                 β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws
@@ -114,9 +114,9 @@ function _ame_representation(
 end
 
 """
-Optimized single-variable design matrix builder
+Optimized single-variable design matrix builder for representation analysis
 """
-function build_continuous_design_single_optimized!(
+function build_continuous_design_single_fast!(
     df::DataFrame,
     fe_rhs,
     focal::Symbol,
@@ -126,7 +126,7 @@ function build_continuous_design_single_optimized!(
 )
     tbl0 = Tables.columntable(df)
     
-    # Build base matrix
+    # Build base matrix efficiently
     modelmatrix!(X, fe_rhs, tbl0)
     
     # Smart derivative computation
@@ -141,8 +141,8 @@ function build_continuous_design_single_optimized!(
         return nothing
     end
     
-    # Use the optimized derivative computation
-    compute_smart_derivatives!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
+    # Use the optimized derivative computation with no DataFrame modification
+    compute_derivatives_no_df_modification!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
     
     return nothing
 end

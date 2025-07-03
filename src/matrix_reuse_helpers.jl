@@ -1,4 +1,4 @@
-# matrix_reuse_helpers.jl - NEW FILE - Matrix reuse utilities
+# matrix_reuse_helpers.jl - CLEAN REPLACEMENT
 
 """
 Extract design matrix from fitted model using standard interface
@@ -10,39 +10,7 @@ function extract_model_matrix(model, df)
 end
 
 """
-Smart variable dependency analysis for terms
-"""
-function find_variables_in_term_fast(term, cts_vars::Vector{Symbol})
-    if isa(term, StatsModels.ContinuousTerm)
-        return term.sym in cts_vars ? [term.sym] : Symbol[]
-    elseif isa(term, StatsModels.InterceptTerm)
-        return Symbol[]
-    elseif isa(term, StatsModels.InteractionTerm)
-        result = Symbol[]
-        for subterm in term.terms
-            append!(result, find_variables_in_term_fast(subterm, cts_vars))
-        end
-        return unique!(result)
-    else
-        return intersect(cts_vars, StatsModels.termvars(term))
-    end
-end
-
-"""
-Fast column width calculation
-"""
-function get_term_width(result)
-    if isa(result, AbstractMatrix)
-        return size(result, 2)
-    elseif isa(result, AbstractVector)
-        return 1
-    else
-        return 1
-    end
-end
-
-"""
-Update derivative matrix efficiently
+Update derivative matrix efficiently with comprehensive type handling
 """
 function update_derivatives!(Xdx, col_range, base_result, perturbed_result, inv_h)
     # Handle all combinations of base_result and perturbed_result shapes
