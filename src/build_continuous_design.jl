@@ -4,9 +4,8 @@
 # Matrix reuse with no DataFrame modification approach
 ###############################################################################
 
-"""
-Ultra-fast approach that reuses the model's existing design matrix and avoids DataFrame modifications
-"""
+# Fixed build_continuous_design.jl
+
 function build_design_matrices_optimized(model, df, fe_rhs, cts_vars::Vector{Symbol})
     n, k = nrow(df), length(cts_vars)
     
@@ -22,9 +21,10 @@ function build_design_matrices_optimized(model, df, fe_rhs, cts_vars::Vector{Sym
     tbl0 = Tables.columntable(df)
     
     # OPTIMIZATION: Pre-analyze which terms actually need derivatives
-    active_var_to_terms = analyze_variable_dependencies_fast(fe_rhs, cts_vars, tbl0)
+    plan = analyze_dependencies(fe_rhs, cts_vars, tbl0)
     
-    if isempty(active_var_to_terms)
+    # Check if any variables actually affect any terms
+    if isempty(plan.var_to_terms)
         # No continuous variables affect the model - all derivatives are zero
         return X_base, [zeros(Float64, n, p) for _ in 1:k]
     end
@@ -34,15 +34,47 @@ function build_design_matrices_optimized(model, df, fe_rhs, cts_vars::Vector{Sym
     
     # Only compute derivatives for variables that affect terms  
     for (j, var) in enumerate(cts_vars)
-        if haskey(active_var_to_terms, var) && !isempty(active_var_to_terms[var])
+        if haskey(plan.var_to_terms, var) && !isempty(plan.var_to_terms[var])
             compute_derivatives_no_df_modification!(Xdx_list[j], X_base, df, fe_rhs, var, 
-                                                  active_var_to_terms[var], tbl0)
+                                                  plan.var_to_terms[var], tbl0)
         else
             fill!(Xdx_list[j], 0.0)
         end
     end
     
     return X_base, Xdx_list
+end
+
+# Also update this function:
+function build_continuous_design_single_fast!(
+    df::DataFrame,
+    fe_rhs,
+    focal::Symbol,
+    X::AbstractMatrix{Float64},
+    Xdx::AbstractMatrix{Float64},
+    active_terms::Union{Nothing, Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}}
+)
+    tbl0 = Tables.columntable(df)
+    
+    # Build base matrix efficiently
+    modelmatrix!(X, fe_rhs, tbl0)
+    
+    # Smart derivative computation
+    fill!(Xdx, 0.0)
+    
+    if isnothing(active_terms) || focal ∉ keys(tbl0) || !haskey(active_terms, focal)
+        return nothing
+    end
+    
+    term_info = active_terms[focal]
+    if isempty(term_info)
+        return nothing
+    end
+    
+    # Use the optimized derivative computation with no DataFrame modification
+    compute_derivatives_no_df_modification!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
+    
+    return nothing
 end
 
 """
@@ -147,38 +179,4 @@ function update_derivatives_fast!(Xdx, col_range, base_result, perturbed_result,
             end
         end
     end
-end
-
-"""
-Optimized single-variable design matrix builder for representation analysis
-"""
-function build_continuous_design_single_fast!(
-    df::DataFrame,
-    fe_rhs,
-    focal::Symbol,
-    X::AbstractMatrix{Float64},
-    Xdx::AbstractMatrix{Float64},
-    active_terms::Union{Nothing, Dict{Symbol, Vector{Tuple{Int, UnitRange{Int}}}}}
-)
-    tbl0 = Tables.columntable(df)
-    
-    # Build base matrix efficiently
-    modelmatrix!(X, fe_rhs, tbl0)
-    
-    # Smart derivative computation
-    fill!(Xdx, 0.0)
-    
-    if isnothing(active_terms) || focal ∉ keys(tbl0) || !haskey(active_terms, focal)
-        return nothing
-    end
-    
-    term_info = active_terms[focal]
-    if isempty(term_info)
-        return nothing
-    end
-    
-    # Use the optimized derivative computation with no DataFrame modification
-    compute_derivatives_no_df_modification!(Xdx, X, df, fe_rhs, focal, term_info, tbl0)
-    
-    return nothing
 end

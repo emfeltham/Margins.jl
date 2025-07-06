@@ -41,7 +41,8 @@ function _ame_representation(
     
     active_terms = nothing
     if focal_type <: Real && focal_type != Bool
-        active_terms = analyze_variable_dependencies_fast(fe_rhs, [focal], base_tbl)
+        plan = analyze_dependencies(fe_rhs, [focal], base_tbl)
+        active_terms = plan.var_to_terms
     end
     
     # Main computation loop

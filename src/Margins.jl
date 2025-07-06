@@ -50,8 +50,8 @@ Base.:!(t::StatsModels.Term) = term(not, t)
 export not
 ##
 
-include("modelmatrix!.jl")
-export modelmatrix!, getrhs
+using EfficientModelMatrices: modelmatrix!, extract_model_matrix, analyze_dependencies
+# Remove local implementations, keep everything else identical
 
 include("family.jl")
 export Family, family
@@ -83,7 +83,6 @@ using MixedModels: RandomEffectsTerm
 import Base: show
 using Printf, Distributions
 
-include("matrix_reuse_helpers.jl")
 include("workspace.jl")
 
 # Exported types
