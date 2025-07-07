@@ -1,15 +1,11 @@
-# ame_factor.jl - DROP-IN REPLACEMENT WITH MATRIX REUSE OPTIMIZATIONS
+# ame_factor.jl - OPTIMIZED WITH EfficientModelMatrices.jl
 
 ###############################################################################
-# Optimized categorical AMEs with pre-allocated buffers and matrix reuse
+# Zero-allocation categorical AMEs using InplaceModeler
 ###############################################################################
-
-# Helper for covariance multiplication (maintains compatibility)
-_cov_mul(Σ::AbstractMatrix, g) = Σ * g
-_cov_mul(C::LinearAlgebra.Cholesky, g) = Matrix(C) * g
 
 """
-Enhanced workspace for factor AME computations with matrix reuse
+Enhanced workspace for factor AME computations with EfficientModelMatrices
 """
 struct FactorAMEWorkspace
     # Pre-allocated design matrices
@@ -49,11 +45,12 @@ struct FactorAMEWorkspace
 end
 
 """
-Ultra-optimized pairwise AME with workspace reuse
+Ultra-optimized pairwise AME with InplaceModeler (zero allocations)
 """
-function _ame_factor_pair_workspace!(
+function _ame_factor_pair!(
     ws::FactorAMEWorkspace,
-    fe_rhs, β, Σβ_or_chol,
+    imp::InplaceModeler,
+    β, Σβ,
     f::Symbol, lvl_i, lvl_j,
     invlink, dinvlink,
 )
@@ -66,14 +63,14 @@ function _ame_factor_pair_workspace!(
     grad = ws.grad
     workdf = ws.workdf
     
-    # Build design matrices in-place
+    # Build design matrices using zero-allocation InplaceModeler
     fill!(workdf[!, f], lvl_i)
     tbl_i = Tables.columntable(workdf)
-    modelmatrix!(Xj, fe_rhs, tbl_i)
+    modelmatrix!(imp, tbl_i, Xj)
 
     fill!(workdf[!, f], lvl_j)
     tbl_j = Tables.columntable(workdf)
-    modelmatrix!(Xk, fe_rhs, tbl_j)
+    modelmatrix!(imp, tbl_j, Xk)
 
     # Vectorized computations
     n = size(Xj, 1)
@@ -102,17 +99,19 @@ function _ame_factor_pair_workspace!(
     end
 
     # Standard error
-    se = sqrt(dot(grad, _cov_mul(Σβ_or_chol, grad)))
+    se = sqrt(dot(grad, Σβ * grad))
     
     return ame, se, copy(grad)  # Copy grad since it's reused
 end
 
 """
-Optimized baseline AME computation with workspace reuse.
+Optimized baseline AME computation with EfficientModelMatrices (zero allocations).
 """
 function _ame_factor_baseline!(
     ame_d, se_d, grad_d,
-    tbl0, fe_rhs, β, Σβ_or_chol,
+    imp::InplaceModeler,
+    tbl0::NamedTuple, df::DataFrame,
+    β, Σβ,
     f::Symbol, invlink, dinvlink,
 )
     lvls = levels(categorical(tbl0[f]))
@@ -121,17 +120,15 @@ function _ame_factor_baseline!(
     # Set up workspace (reused across all level pairs)
     n = length(tbl0[f])
     p = length(β)
-    df_temp = DataFrame(Tables.columntable(tbl0), copycols=true)
-    ws = FactorAMEWorkspace(n, p, df_temp)
+    ws = FactorAMEWorkspace(n, p, df)
     
     # Store original column for restoration
     original_col = copy(ws.workdf[!, f])
 
     # Process each level against baseline
     for lvl in lvls[2:end]
-        ame, se, grad = _ame_factor_pair_workspace!(
-            ws, fe_rhs, β, Σβ_or_chol,
-            f, base, lvl, invlink, dinvlink
+        ame, se, grad = _ame_factor_pair!(
+            ws, imp, β, Σβ, f, base, lvl, invlink, dinvlink
         )
         
         key = (base, lvl)
@@ -145,11 +142,13 @@ function _ame_factor_baseline!(
 end
 
 """
-Optimized all-pairs AME computation with workspace reuse.
+Optimized all-pairs AME computation with EfficientModelMatrices (zero allocations).
 """
 function _ame_factor_allpairs!(
     ame_d, se_d, grad_d,
-    tbl0, fe_rhs, β, Σβ_or_chol,
+    imp::InplaceModeler,
+    tbl0::NamedTuple, df::DataFrame,
+    β, Σβ,
     f::Symbol, invlink, dinvlink,
 )
     lvls = levels(categorical(tbl0[f]))
@@ -157,8 +156,7 @@ function _ame_factor_allpairs!(
     # Set up workspace (reused across all level pairs)
     n = length(tbl0[f])
     p = length(β)
-    df_temp = DataFrame(Tables.columntable(tbl0), copycols=true)
-    ws = FactorAMEWorkspace(n, p, df_temp)
+    ws = FactorAMEWorkspace(n, p, df)
     
     # Store original column for restoration
     original_col = copy(ws.workdf[!, f])
@@ -167,9 +165,8 @@ function _ame_factor_allpairs!(
     for i in 1:length(lvls)-1, j in i+1:length(lvls)
         lvl_i, lvl_j = lvls[i], lvls[j]
 
-        ame, se, grad = _ame_factor_pair_workspace!(
-            ws, fe_rhs, β, Σβ_or_chol,
-            f, lvl_i, lvl_j, invlink, dinvlink
+        ame, se, grad = _ame_factor_pair!(
+            ws, imp, β, Σβ, f, lvl_i, lvl_j, invlink, dinvlink
         )
         
         key = (lvl_i, lvl_j)

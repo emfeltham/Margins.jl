@@ -1,14 +1,14 @@
-# ame_representation.jl - CLEAN REPLACEMENT
+# ame_representation.jl - OPTIMIZED WITH EfficientModelMatrices.jl
 
 ###############################################################################
-# Optimized AME at representative values with minimal allocations
+# Zero-allocation AME at representative values using InplaceModeler
 ###############################################################################
 
 function _ame_representation(
+    imp::InplaceModeler,
     df::DataFrame,
     focal::Symbol,
     repvals::AbstractDict{Symbol,<:AbstractVector},
-    fe_rhs,
     β::Vector{Float64},
     cholΣβ::LinearAlgebra.Cholesky,
     invlink::Function,
@@ -35,15 +35,8 @@ function _ame_representation(
     se_dict = Dict{Tuple,Float64}()
     grad_dict = Dict{Tuple,Vector{Float64}}()
 
-    # Pre-analyze for continuous variables
-    base_tbl = Tables.columntable(workdf)
+    # Pre-analyze focal variable type
     focal_type = eltype(workdf[!, focal])
-    
-    active_terms = nothing
-    if focal_type <: Real && focal_type != Bool
-        plan = analyze_dependencies(fe_rhs, [focal], base_tbl)
-        active_terms = plan.var_to_terms
-    end
     
     # Main computation loop
     for combo in combos
@@ -53,8 +46,26 @@ function _ame_representation(
         end
 
         if focal_type <: Real && focal_type != Bool
-            # Continuous focal variable
-            build_continuous_design_single_fast!(workdf, fe_rhs, focal, X, Xdx, active_terms)
+            # Continuous focal variable - use finite differences with InplaceModeler
+            base_tbl = Tables.columntable(workdf)
+            modelmatrix!(imp, base_tbl, X)
+            
+            # Create perturbed data
+            original_vals = Float64.(workdf[!, focal])
+            h = sqrt(eps(Float64)) * max(1.0, maximum(abs, original_vals) * 0.01)
+            perturbed_vals = original_vals .+ h
+            
+            # Zero-allocation matrix construction for perturbed data
+            perturbed_tbl = merge(base_tbl, (focal => perturbed_vals,))
+            modelmatrix!(imp, perturbed_tbl, Xdx)
+            
+            # Compute derivative matrix efficiently
+            inv_h = 1.0 / h
+            for row in 1:nr
+                @inbounds @simd for col in 1:p
+                    Xdx[row, col] = (Xdx[row, col] - X[row, col]) * inv_h
+                end
+            end
 
             ame, se, grad = _ame_continuous!(
                 β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws
@@ -74,8 +85,7 @@ function _ame_representation(
             grad_b = Dict{Tuple,Vector{Float64}}()
 
             _ame_factor_baseline!(
-                ame_b, se_b, grad_b,
-                tbl, fe_rhs, β, cholΣβ, focal, invlink, dinvlink
+                ame_b, se_b, grad_b, imp, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
             )
 
             pair_key = first(keys(ame_b))
@@ -94,8 +104,7 @@ function _ame_representation(
             grad_sub = Dict{Tuple,Vector{Float64}}()
 
             _ame_factor_allpairs!(
-                ame_sub, se_sub, grad_sub,
-                tbl, fe_rhs, β, cholΣβ, focal, invlink, dinvlink
+                ame_sub, se_sub, grad_sub, imp, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
             )
 
             repkey = Tuple(combo)
@@ -113,4 +122,3 @@ function _ame_representation(
 
     return ame_dict, se_dict, grad_dict
 end
-

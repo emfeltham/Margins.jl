@@ -1,4 +1,4 @@
-module Margins # begin module
+module Margins
 
 using CategoricalArrays
 import CategoricalArrays.pool
@@ -36,6 +36,10 @@ using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
 
+# INTEGRATION WITH EfficientModelMatrices.jl
+using EfficientModelMatrices
+using EfficientModelMatrices: InplaceModeler, modelmatrix!, fixed_effects_form
+
 ## formula helpers
 # Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
 not(x::Bool) = !x
@@ -49,9 +53,6 @@ Base.:!(t::StatsModels.Term) = term(not, t)
 
 export not
 ##
-
-using EfficientModelMatrices: modelmatrix!, extract_model_matrix, analyze_dependencies
-# Remove local implementations, keep everything else identical
 
 include("family.jl")
 export Family, family
@@ -73,7 +74,7 @@ export modelvariables
 export effects2!
 export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
-# AMEs
+# AMEs with EfficientModelMatrices integration
 using ForwardDiff, LinearAlgebra
 import LinearAlgebra.dot
 using GLM: linkinv, mueta
@@ -91,13 +92,11 @@ export MarginsResult
 include("margins_to_df.jl")
 
 # Helper functions for AMEs
-include("fixed_helpers.jl")
 include("mueta2.jl")
 include("link.jl")
 
-# Core AME functions
+# Core AME functions with EfficientModelMatrices integration
 include("core.jl")
-include("build_continuous_design.jl")
 include("ame_continuous.jl")
 include("ame_factor.jl")
 include("ame_representation.jl")

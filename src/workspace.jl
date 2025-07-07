@@ -1,9 +1,8 @@
-# workspace.jl - DROP-IN REPLACEMENT
-# Optimized workspace with better memory layout and cache efficiency
+# workspace.jl - OPTIMIZED FOR EfficientModelMatrices.jl
 
 """
 Enhanced workspace with optimized memory layout for better cache performance
-and reduced allocations.
+and reduced allocations with EfficientModelMatrices.jl integration.
 """
 struct AMEWorkspace
     η::Vector{Float64}
@@ -25,11 +24,4 @@ struct AMEWorkspace
         
         new(η, dη, arr1, arr2, buf1, buf2)
     end
-end
-
-"""
-Constructor function (maintains existing API while adding optimizations).
-"""
-function AMEWorkspace(n, p)
-    AMEWorkspace(Int(n), Int(p))
 end

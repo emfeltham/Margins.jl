@@ -1,13 +1,13 @@
-# core.jl - OPTIMIZED VERSION
+# core.jl - OPTIMIZED VERSION WITH EfficientModelMatrices.jl
 
 ###############################################################################
-# Ultra-optimized margins wrapper with matrix reuse
+# Ultra-optimized margins wrapper with EfficientModelMatrices integration
 ###############################################################################
 
 """
     margins(model, vars, df; kwargs...)  ->  MarginsResult
 
-Optimized version with matrix reuse and smart derivative computation.
+Optimized version using EfficientModelMatrices.jl for zero-allocation model matrix construction.
 """
 function margins(
     model,
@@ -26,21 +26,25 @@ function margins(
     varlist = isa(vars, Symbol) ? [vars] : collect(vars)
     invlink, dinvlink, d2invlink = link_functions(model)
 
-    fe_form = fixed_effects_form(model)
-    fe_rhs = fe_form.rhs
+    # MAJOR OPTIMIZATION: Create InplaceModeler for zero-allocation matrix construction
+    n, p = nrow(df), width(fixed_effects_form(model).rhs)
+    ipm = InplaceModeler(model, n)
+    
+    # Pre-allocate matrices that will be reused
+    X_base = Matrix{Float64}(undef, n, p)
+    X_work = Matrix{Float64}(undef, n, p)
+    
+    # Build base design matrix once
+    tbl0 = Tables.columntable(df)
+    modelmatrix!(ipm, tbl0, X_base)
+
+    β, Σβ = coef(model), vcov(model)
+    cholΣβ = cholesky(Σβ)
 
     # Variable classification
     iscts(v) = eltype(df[!, v]) <: Real && eltype(df[!, v]) != Bool
     cts_vars = filter(iscts, union(varlist, keys(repvals)))
-    
-    # MAJOR OPTIMIZATION: Use matrix reuse
-    X_base, Xdx_list = build_design_matrices_optimized(model, df, fe_rhs, cts_vars)
-
-    n, p = size(X_base)
-    β, Σβ = coef(model), vcov(model)
-    cholΣβ = cholesky(Σβ)
-
-    tbl0 = Tables.columntable(df)
+    cat_vars = setdiff(varlist, cts_vars)
 
     # Pre-allocate result containers
     result_map = Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}()
@@ -86,23 +90,24 @@ function margins(
             μ_work = Vector{Float64}(undef, n)
             μp_work = Vector{Float64}(undef, n)
             grad_work = Vector{Float64}(undef, p)
-            X_buf = similar(X_base)
 
             for combo in combos
                 for (rv, val) in zip(repvars, combo)
                     fill!(workdf[!, rv], val)
                 end
 
-                modelmatrix!(X_buf, fe_rhs, Tables.columntable(workdf))
+                # Zero-allocation matrix construction
+                work_tbl = Tables.columntable(workdf)
+                modelmatrix!(ipm, work_tbl, X_work)
 
-                mul!(η_work, X_buf, β)
+                mul!(η_work, X_work, β)
                 @inbounds @simd ivdep for i in 1:n
                     μ_work[i] = invlink(η_work[i])
                     μp_work[i] = dinvlink(η_work[i])
                 end
 
                 pred = sum(μ_work) / n
-                mul!(grad_work, X_buf', μp_work)
+                mul!(grad_work, X_work', μp_work)
                 grad_work ./= n
                 se = sqrt(dot(grad_work, Σβ * grad_work))
 
@@ -116,26 +121,14 @@ function margins(
         end
     
     else # :dydx branch
-        cat_vars = setdiff(varlist, cts_vars)
-
         if isempty(repvals)
             # Batch continuous AMEs
             if !isempty(cts_vars)
-                requested_cts_indices = Int[]
-                requested_cts_vars = Symbol[]
+                requested_cts_vars = filter(var -> var in varlist, cts_vars)
                 
-                for (i, var) in enumerate(cts_vars)
-                    if var in varlist
-                        push!(requested_cts_indices, i)
-                        push!(requested_cts_vars, var)
-                    end
-                end
-                
-                if !isempty(requested_cts_indices)
-                    ames, ses, grads = compute_ames_batch(
-                        β, cholΣβ, X_base, 
-                        Xdx_list[requested_cts_indices],
-                        dinvlink, d2invlink, n, p
+                if !isempty(requested_cts_vars)
+                    ames, ses, grads = compute_continuous_ames_batch!(
+                        ipm, df, requested_cts_vars, β, cholΣβ, dinvlink, d2invlink
                     )
                     
                     for (i, var) in enumerate(requested_cts_vars)
@@ -154,15 +147,11 @@ function margins(
                 
                 if pairs == :baseline
                     _ame_factor_baseline!(
-                        ame_d, se_d, grad_d,
-                        tbl0, fe_rhs, β, Σβ, v,
-                        invlink, dinvlink
+                        ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
                     )
                 else
                     _ame_factor_allpairs!(
-                        ame_d, se_d, grad_d,
-                        tbl0, fe_rhs, β, Σβ, v,
-                        invlink, dinvlink
+                        ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
                     )
                 end
                 
@@ -175,9 +164,7 @@ function margins(
             # AMEs at representative values
             for v in varlist
                 ame_d, se_d, g_d = _ame_representation(
-                    df, v, repvals,
-                    fe_rhs, β, cholΣβ,
-                    invlink, dinvlink, d2invlink
+                    ipm, df, v, repvals, β, cholΣβ, invlink, dinvlink, d2invlink
                 )
 
                 result_map[v] = ame_d
@@ -193,81 +180,4 @@ function margins(
         string(family(model).dist),
         string(family(model).link),
     )
-end
-
-"""
-Batch AME computation for multiple continuous variables
-"""
-function compute_ames_batch(
-    β::Vector{Float64},
-    cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
-    X_base::Matrix{Float64},
-    Xdx_list::Vector{Matrix{Float64}},
-    dinvlink::Function,
-    d2invlink::Function,
-    n::Int,
-    p::Int
-)
-    k = length(Xdx_list)
-    
-    # Pre-allocate results
-    ames = Vector{Float64}(undef, k)
-    ses = Vector{Float64}(undef, k)
-    grads = Vector{Vector{Float64}}(undef, k)
-    
-    # Shared workspace
-    ws = AMEWorkspace(n, p)
-    
-    # Pre-compute base linear predictor
-    mul!(ws.η, X_base, β)
-    
-    # Pre-compute link function values
-    @inbounds @simd ivdep for i in 1:n
-        ηi = ws.η[i]
-        ws.arr2[i] = dinvlink(ηi)
-        ws.arr1[i] = d2invlink(ηi)
-    end
-    
-    # Process each variable
-    for j in 1:k
-        Xdx = Xdx_list[j]
-        
-        mul!(ws.dη, Xdx, β)
-        
-        # AME computation
-        sum_ame = 0.0
-        @inbounds @simd ivdep for i in 1:n
-            dηi = ws.dη[i]
-            mp = ws.arr2[i]
-            mpp = ws.arr1[i]
-            
-            sum_ame += mp * dηi
-            ws.arr1[i] = mpp * dηi
-        end
-        ames[j] = sum_ame / n
-        
-        # Gradient computation
-        mul!(ws.buf1, X_base', ws.arr1)
-        mul!(ws.buf2, Xdx', ws.arr2)
-        
-        inv_n = 1.0 / n
-        @inbounds @simd ivdep for i in 1:p
-            ws.buf1[i] = (ws.buf1[i] + ws.buf2[i]) * inv_n
-        end
-        
-        # Standard error
-        mul!(ws.buf2, cholΣβ.U, ws.buf1)
-        ses[j] = norm(ws.buf2)
-        
-        grads[j] = copy(ws.buf1)
-        
-        # Restore for next iteration
-        if j < k
-            @inbounds @simd ivdep for i in 1:n
-                ws.arr1[i] = d2invlink(ws.η[i])
-            end
-        end
-    end
-    
-    return ames, ses, grads
 end
