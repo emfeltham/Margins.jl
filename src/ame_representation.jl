@@ -1,11 +1,11 @@
-# ame_representation.jl - OPTIMIZED WITH EfficientModelMatrices.jl
+# ame_representation.jl - COMPLETE DROP-IN REPLACEMENT
 
 ###############################################################################
 # Zero-allocation AME at representative values using InplaceModeler
 ###############################################################################
 
 function _ame_representation(
-    imp::InplaceModeler,
+    ipm::InplaceModeler,
     df::DataFrame,
     focal::Symbol,
     repvals::AbstractDict{Symbol,<:AbstractVector},
@@ -21,12 +21,12 @@ function _ame_representation(
 
     nr, p = nrow(df), length(β)
 
-    # Pre-allocate working objects
+    # Pre-allocate working objects - OPTIMIZED VERSION
     workdf = DataFrame(df, copycols=true)
-    ws = AMEWorkspace(nr, p)
-    X = Matrix{Float64}(undef, nr, p)
-    Xdx = Matrix{Float64}(undef, nr, p)
-
+    
+    # Create single AMEWorkspace for all computations
+    ws = AMEWorkspace(nr, p, workdf)
+    
     # Store original focal column
     original_focal_col = copy(workdf[!, focal])
 
@@ -38,6 +38,11 @@ function _ame_representation(
     # Pre-analyze focal variable type
     focal_type = eltype(workdf[!, focal])
     
+    # Pre-allocate perturbation array for continuous variables
+    if focal_type <: Real && focal_type != Bool
+        ws.pert_data[focal] = Vector{Float64}(undef, nr)
+    end
+    
     # Main computation loop
     for combo in combos
         # Modify representative values in-place
@@ -46,29 +51,43 @@ function _ame_representation(
         end
 
         if focal_type <: Real && focal_type != Bool
-            # Continuous focal variable - use finite differences with InplaceModeler
-            base_tbl = Tables.columntable(workdf)
-            modelmatrix!(imp, base_tbl, X)
+            # OPTIMIZED: Continuous focal variable using zero-allocation approach
+            # Update cached table in workspace
+            ws.base_tbl = Tables.columntable(workdf)
             
-            # Create perturbed data
-            original_vals = Float64.(workdf[!, focal])
-            h = sqrt(eps(Float64)) * max(1.0, maximum(abs, original_vals) * 0.01)
-            perturbed_vals = original_vals .+ h
+            # Build base matrix for this representative combination
+            modelmatrix!(ipm, ws.base_tbl, ws.X_base)
             
-            # Zero-allocation matrix construction for perturbed data
-            perturbed_tbl = merge(base_tbl, (focal => perturbed_vals,))
-            modelmatrix!(imp, perturbed_tbl, Xdx)
-            
-            # Compute derivative matrix efficiently
-            inv_h = 1.0 / h
-            for row in 1:nr
-                @inbounds @simd for col in 1:p
-                    Xdx[row, col] = (Xdx[row, col] - X[row, col]) * inv_h
-                end
+            # Get original values and compute perturbation - OPTIMIZED
+            original_vals = ws.base_tbl[focal]
+            max_abs = 0.0
+            @inbounds @simd for i in 1:nr
+                val = abs(original_vals[i])
+                max_abs = val > max_abs ? val : max_abs
             end
-
+            
+            h = sqrt(eps(Float64)) * max(1.0, max_abs * 0.01)
+            h = max(h, 1e-8)
+            h = min(h, max_abs * 0.1)
+            inv_h = 1.0 / h
+            
+            # Create perturbed values
+            pert_vals = ws.pert_data[focal]
+            @inbounds @simd for i in 1:nr
+                pert_vals[i] = original_vals[i] + h
+            end
+            
+            # Create perturbed table and compute derivatives
+            pert_tbl = merge(ws.base_tbl, (focal => pert_vals,))
+            modelmatrix!(ipm, pert_tbl, ws.Xdx)
+            
+            # Compute derivatives in-place
+            @inbounds @simd for i in 1:(nr*p)
+                ws.Xdx[i] = (ws.Xdx[i] - ws.X_base[i]) * inv_h
+            end
+            
             ame, se, grad = _ame_continuous!(
-                β, cholΣβ, X, Xdx, dinvlink, d2invlink, ws
+                β, cholΣβ, ws.X_base, ws.Xdx, dinvlink, d2invlink, ws
             )
 
             key = Tuple(combo)
@@ -85,7 +104,7 @@ function _ame_representation(
             grad_b = Dict{Tuple,Vector{Float64}}()
 
             _ame_factor_baseline!(
-                ame_b, se_b, grad_b, imp, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
+                ame_b, se_b, grad_b, ipm, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
             )
 
             pair_key = first(keys(ame_b))
@@ -104,7 +123,7 @@ function _ame_representation(
             grad_sub = Dict{Tuple,Vector{Float64}}()
 
             _ame_factor_allpairs!(
-                ame_sub, se_sub, grad_sub, imp, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
+                ame_sub, se_sub, grad_sub, ipm, tbl, workdf, β, Matrix(cholΣβ), focal, invlink, dinvlink
             )
 
             repkey = Tuple(combo)

@@ -122,7 +122,7 @@ function margins(
     
     else # :dydx branch
         if isempty(repvals)
-            # Batch continuous AMEs
+            # OPTIMIZED: Batch continuous AMEs using new workspace approach
             if !isempty(cts_vars)
                 requested_cts_vars = filter(var -> var in varlist, cts_vars)
                 

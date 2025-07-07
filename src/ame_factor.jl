@@ -1,11 +1,11 @@
-# ame_factor.jl - OPTIMIZED WITH EfficientModelMatrices.jl
+# ame_factor.jl - ULTRA OPTIMIZED
 
 ###############################################################################
 # Zero-allocation categorical AMEs using InplaceModeler
 ###############################################################################
 
 """
-Enhanced workspace for factor AME computations with EfficientModelMatrices
+Enhanced workspace for factor AME computations
 """
 struct FactorAMEWorkspace
     # Pre-allocated design matrices
@@ -49,7 +49,7 @@ Ultra-optimized pairwise AME with InplaceModeler (zero allocations)
 """
 function _ame_factor_pair!(
     ws::FactorAMEWorkspace,
-    imp::InplaceModeler,
+    ipm::InplaceModeler,
     β, Σβ,
     f::Symbol, lvl_i, lvl_j,
     invlink, dinvlink,
@@ -66,11 +66,11 @@ function _ame_factor_pair!(
     # Build design matrices using zero-allocation InplaceModeler
     fill!(workdf[!, f], lvl_i)
     tbl_i = Tables.columntable(workdf)
-    modelmatrix!(imp, tbl_i, Xj)
+    modelmatrix!(ipm, tbl_i, Xj)
 
     fill!(workdf[!, f], lvl_j)
     tbl_j = Tables.columntable(workdf)
-    modelmatrix!(imp, tbl_j, Xk)
+    modelmatrix!(ipm, tbl_j, Xk)
 
     # Vectorized computations
     n = size(Xj, 1)
@@ -105,11 +105,11 @@ function _ame_factor_pair!(
 end
 
 """
-Optimized baseline AME computation with EfficientModelMatrices (zero allocations).
+Optimized baseline AME computation (zero allocations).
 """
 function _ame_factor_baseline!(
     ame_d, se_d, grad_d,
-    imp::InplaceModeler,
+    ipm::InplaceModeler,
     tbl0::NamedTuple, df::DataFrame,
     β, Σβ,
     f::Symbol, invlink, dinvlink,
@@ -128,7 +128,7 @@ function _ame_factor_baseline!(
     # Process each level against baseline
     for lvl in lvls[2:end]
         ame, se, grad = _ame_factor_pair!(
-            ws, imp, β, Σβ, f, base, lvl, invlink, dinvlink
+            ws, ipm, β, Σβ, f, base, lvl, invlink, dinvlink
         )
         
         key = (base, lvl)
@@ -142,11 +142,11 @@ function _ame_factor_baseline!(
 end
 
 """
-Optimized all-pairs AME computation with EfficientModelMatrices (zero allocations).
+Optimized all-pairs AME computation (zero allocations).
 """
 function _ame_factor_allpairs!(
     ame_d, se_d, grad_d,
-    imp::InplaceModeler,
+    ipm::InplaceModeler,
     tbl0::NamedTuple, df::DataFrame,
     β, Σβ,
     f::Symbol, invlink, dinvlink,
@@ -166,7 +166,7 @@ function _ame_factor_allpairs!(
         lvl_i, lvl_j = lvls[i], lvls[j]
 
         ame, se, grad = _ame_factor_pair!(
-            ws, imp, β, Σβ, f, lvl_i, lvl_j, invlink, dinvlink
+            ws, ipm, β, Σβ, f, lvl_i, lvl_j, invlink, dinvlink
         )
         
         key = (lvl_i, lvl_j)

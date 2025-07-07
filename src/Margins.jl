@@ -76,6 +76,7 @@ export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
 # AMEs with EfficientModelMatrices integration
 using ForwardDiff, LinearAlgebra
+using LinearAlgebra.BLAS
 import LinearAlgebra.dot
 using GLM: linkinv, mueta
 using MixedModels: RandomEffectsTerm
