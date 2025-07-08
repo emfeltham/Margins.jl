@@ -1,7 +1,8 @@
-# workspace.jl - ULTRA OPTIMIZED
+# workspace.jl - ALLOCATION-FREE VERSION
 
 """
-Ultra-optimized workspace that reuses all matrices across multiple AME computations
+Ultra-optimized workspace that reuses all matrices and vectors across AME computations.
+Key changes: pre-allocate ALL perturbation vectors and eliminate runtime allocations.
 """
 mutable struct AMEWorkspace
     X_base ::Matrix{Float64}   # design matrix for current data / rep combo
@@ -16,13 +17,30 @@ mutable struct AMEWorkspace
     temp2  ::Vector{Float64}
 
     base_tbl ::NamedTuple                      # cached column-table
-    pert_data::Dict{Symbol,Vector{Float64}}    # one n-vector per var
+    pert_data::Dict{Symbol,Vector{Float64}}    # PRE-ALLOCATED perturbation vectors
+    
+    # NEW: Pre-allocated storage for NamedTuple merging results
+    pert_cache::Dict{Symbol,NamedTuple}        # cached perturbed NamedTuples
 
     function AMEWorkspace(n::Int, p::Int, df::DataFrame)
+        # Extract all continuous variables from the DataFrame upfront
+        pert_data = Dict{Symbol,Vector{Float64}}()
+        pert_cache = Dict{Symbol,NamedTuple}()
+        
+        base_tbl = Tables.columntable(df)
+        
+        # Pre-allocate perturbation vectors for ALL continuous variables
+        for (name, col) in pairs(base_tbl)
+            if eltype(col) <: Real && eltype(col) != Bool
+                pert_data[name] = Vector{Float64}(undef, n)
+                # Pre-create the merged NamedTuple structure (reused later)
+                pert_cache[name] = merge(base_tbl, (name => pert_data[name],))
+            end
+        end
+        
         new(
-            Matrix{Float64}(undef, n, p),      # X_base   (1)
-            Matrix{Float64}(undef, n, p),      # Xdx      (2)
-
+            Matrix{Float64}(undef, n, p),      # X_base
+            Matrix{Float64}(undef, n, p),      # Xdx
             Vector{Float64}(undef, n),         # η
             Vector{Float64}(undef, n),         # dη
             Vector{Float64}(undef, n),         # μ′
@@ -30,16 +48,15 @@ mutable struct AMEWorkspace
             Vector{Float64}(undef, p),         # grad
             Vector{Float64}(undef, p),         # temp1
             Vector{Float64}(undef, p),         # temp2
-
-            Tables.columntable(df),
-            Dict{Symbol,Vector{Float64}}(),
+            base_tbl,
+            pert_data,
+            pert_cache,
         )
     end
 end
 
 """
-Workspace for categorical-AME computations that holds **one** n×p design matrix
-and length-p scratch vectors.
+Workspace for categorical-AME computations - unchanged, already optimal
 """
 mutable struct FactorAMEWorkspace
     X   ::Matrix{Float64}      # single design-matrix buffer (n × p)

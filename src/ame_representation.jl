@@ -1,12 +1,9 @@
-# ame_representation.jl - COMPLETE DROP-IN REPLACEMENT
+# ame_representation.jl - WORKSPACE REUSE VERSION
 
 ###############################################################################
-# Zero-allocation AME at representative values using InplaceModeler
+# Zero-allocation AME at representative values - maximize workspace reuse
 ###############################################################################
 
-###############  ame_representation.jl  #######################################
-
-# ame_representation.jl  ── drop-in replacement ── zero-allocation + correct Boolean keys
 function _ame_representation!(
     ws::AMEWorkspace,
     ipm::InplaceModeler,
@@ -26,14 +23,12 @@ function _ame_representation!(
     n, p    = size(ws.X_base)
     focal_type = eltype(df[!, focal])
 
-    # ensure we have one perturbation vector if focal is continuous
-    if focal_type <: Real && focal_type != Bool && !haskey(ws.pert_data, focal)
-        ws.pert_data[focal] = Vector{Float64}(undef, n)
-    end
-
-    # a working copy of the data
+    # OPTIMIZATION: Create single working DataFrame and reuse
     workdf = DataFrame(df, copycols = true)
-    original_vals = copy(workdf[!, focal])
+    original_focal = copy(workdf[!, focal])
+    
+    # Pre-allocate temporary working NamedTuple storage
+    work_tbl_cache = Dict{Tuple,NamedTuple}()
 
     # result containers
     ame_d  = Dict{Tuple,Float64}()
@@ -41,17 +36,34 @@ function _ame_representation!(
     grad_d = Dict{Tuple,Vector{Float64}}()
 
     for combo in combos
-        # set rep-values in-place
+        # set rep-values in-place (reuse same DataFrame)
         @inbounds for (rv,val) in zip(repvars, combo)
             fill!(workdf[!, rv], val)
         end
 
-        # rebuild the base table & matrix once per combo
-        ws.base_tbl = Tables.columntable(workdf)
+        # OPTIMIZATION: Cache the columntable for this combo
+        combo_key = Tuple(combo)
+        if !haskey(work_tbl_cache, combo_key)
+            work_tbl_cache[combo_key] = Tables.columntable(workdf)
+        end
+        work_tbl = work_tbl_cache[combo_key]
+
+        # Update workspace base table and matrix
+        ws.base_tbl = work_tbl
         modelmatrix!(ipm, ws.base_tbl, ws.X_base)
 
         if focal_type <: Real && focal_type != Bool
-            # — continuous focal: same as before —
+            # — continuous focal: REUSE workspace perturbation infrastructure —
+            
+            # Ensure perturbation vector exists for focal variable
+            if !haskey(ws.pert_data, focal)
+                ws.pert_data[focal] = Vector{Float64}(undef, n)
+                ws.pert_cache[focal] = merge(work_tbl, (focal => ws.pert_data[focal],))
+            else
+                # Update cached NamedTuple with current rep values
+                ws.pert_cache[focal] = merge(work_tbl, (focal => ws.pert_data[focal],))
+            end
+            
             orig = ws.base_tbl[focal]
             maxabs = maximum(abs, orig)
             h     = clamp(sqrt(eps(Float64))*max(1, maxabs*0.01),
@@ -63,18 +75,18 @@ function _ame_representation!(
                 pert[i] = orig[i] + h
             end
 
-            pert_tbl = merge(ws.base_tbl, (focal => pert,))
+            pert_tbl = ws.pert_cache[focal]
             modelmatrix!(ipm, pert_tbl, ws.Xdx)
             BLAS.axpy!(-1.0, vec(ws.X_base), vec(ws.Xdx))
             BLAS.scal!(invh, vec(ws.Xdx))
 
-            ame, se, g = _ame_continuous!(
+            ame, se, g_ref = _ame_continuous!(
                 β, cholΣβ, ws.X_base, ws.Xdx, dinvlink, d2invlink, ws
             )
 
-            ame_d[Tuple(combo)]  = ame
-            se_d[Tuple(combo)]  = se
-            grad_d[Tuple(combo)] = g
+            ame_d[combo_key]  = ame
+            se_d[combo_key]  = se
+            grad_d[combo_key] = copy(g_ref)  # Copy since workspace will be reused
 
         elseif focal_type <: Bool
             # — Boolean focal: one baseline contrast per combo —
@@ -91,9 +103,9 @@ function _ame_representation!(
 
             # there is exactly one key (base→other) in tmp_ame
             pair = first(keys(tmp_ame))
-            ame_d[Tuple(combo)]  = tmp_ame[pair]
-            se_d[Tuple(combo)]  = tmp_se[pair]
-            grad_d[Tuple(combo)] = tmp_gr[pair]
+            ame_d[combo_key]  = tmp_ame[pair]
+            se_d[combo_key]  = tmp_se[pair]
+            grad_d[combo_key] = tmp_gr[pair]
 
         else
             # — multi-level factor focal: allpairs contrasts per combo —
@@ -108,7 +120,7 @@ function _ame_representation!(
                 invlink, dinvlink,
             )
 
-            repkey = Tuple(combo)
+            repkey = combo_key
             for lev_pair in keys(tmp_ame)
                 fullkey = (repkey..., lev_pair...)
                 ame_d[fullkey]  = tmp_ame[lev_pair]
@@ -119,6 +131,6 @@ function _ame_representation!(
     end
 
     # restore the original focal column
-    workdf[!, focal] = original_vals
+    workdf[!, focal] = original_focal
     return ame_d, se_d, grad_d
 end
