@@ -22,7 +22,7 @@ function _ame_continuous!(
     η, dη = ws.η, ws.dη
     μp_vals, μpp_vals = ws.μp_vals, ws.μpp_vals
     grad_work = ws.grad_work
-    temp1, temp2 = ws.temp_vec1, ws.temp_vec2
+    temp1, temp2 = ws.temp1, ws.temp2
     
     # Compute linear predictors (BLAS Level 2)
     mul!(η, X, β)      # η = X * β
@@ -100,75 +100,51 @@ function compute_continuous_ames_batch!(
     ipm::InplaceModeler,
     df::DataFrame,
     cts_vars::Vector{Symbol},
-    β::Vector{Float64},
-    cholΣβ::Cholesky{Float64,<:AbstractMatrix{Float64}},
+    β::AbstractVector,
+    cholΣβ::LinearAlgebra.Cholesky,
     dinvlink::Function,
     d2invlink::Function,
+    ws::AMEWorkspace,                 # ← workspace is *passed in*
 )
-    n, p = nrow(df), length(β)
-    k = length(cts_vars)
-    
-    # Pre-allocate results
-    ames = Vector{Float64}(undef, k)
-    ses = Vector{Float64}(undef, k)
-    grads = Vector{Vector{Float64}}(undef, k)
-    
-    # Create optimized workspace - ONLY major allocation
-    ws = AMEWorkspace(n, p, df)
-    
-    # Build base design matrix ONCE
-    modelmatrix!(ipm, ws.base_tbl, ws.X_base)
-    
-    # Pre-allocate perturbation data for ALL variables
-    for var in cts_vars
-        ws.pert_data[var] = Vector{Float64}(undef, n)
+    n, p   = size(ws.X_base)
+    k      = length(cts_vars)
+
+    ames   = Vector{Float64}(undef, k)
+    ses    = Vector{Float64}(undef, k)
+    grads  = Vector{Vector{Float64}}(undef, k)
+
+    # ensure each variable has a perturbation vector
+    for v in cts_vars
+        ws.pert_data[v] = Vector{Float64}(undef, n)
     end
-    
-    # Process each continuous variable with ZERO allocations
+
+    # ------------------------------------------------------------------------
     for (j, var) in enumerate(cts_vars)
-        # Get original values (direct reference - no allocation)
-        original_vals = ws.base_tbl[var]
-        
-        # Compute perturbation step with numerical stability - OPTIMIZED
-        max_abs = 0.0
+        orig = ws.base_tbl[var]
+        pert = ws.pert_data[var]
+
+        # compute step h
+        maxabs = maximum(abs, orig)
+        h   = clamp(sqrt(eps(Float64))*max(1, maxabs*0.01), 1e-8, maxabs*0.1)
+        invh = 1/h
+
         @inbounds @simd for i in 1:n
-            val = abs(original_vals[i])
-            max_abs = val > max_abs ? val : max_abs
+            pert[i] = orig[i] + h
         end
-        
-        h = sqrt(eps(Float64)) * max(1.0, max_abs * 0.01)
-        h = max(h, 1e-8)  # Lower bound
-        h = min(h, max_abs * 0.1)  # Upper bound
-        inv_h = 1.0 / h
-        
-        # Create perturbed values in pre-allocated array
-        pert_vals = ws.pert_data[var]
-        @inbounds @simd for i in 1:n
-            pert_vals[i] = original_vals[i] + h
-        end
-        
-        # Create perturbed table (minimal allocation - NamedTuple merge)
-        pert_tbl = merge(ws.base_tbl, (var => pert_vals,))
-        
-        # Build perturbed matrix directly into derivative workspace
+
+        pert_tbl = merge(ws.base_tbl, (var => pert,))
         modelmatrix!(ipm, pert_tbl, ws.Xdx)
-        
-        # BLAS-optimized derivative computation - ZERO allocations!
-        # ws.Xdx = (ws.Xdx - ws.X_base) * inv_h
-        
-        # Step 1: ws.Xdx = ws.Xdx - ws.X_base (BLAS axpy: y = a*x + y)
-        BLAS.axpy!(-1.0, vec(ws.X_base), vec(ws.Xdx))
-        
-        # Step 2: ws.Xdx = ws.Xdx * inv_h (BLAS scal: x = a*x)  
-        BLAS.scal!(inv_h, vec(ws.Xdx))
-        
-        # Compute AME for this variable
-        ame, se, grad = _ame_continuous!(β, cholΣβ, ws.X_base, ws.Xdx, dinvlink, d2invlink, ws)
-        
-        ames[j] = ame
-        ses[j] = se
-        grads[j] = grad
+
+        BLAS.axpy!(-1.0, vec(ws.X_base), vec(ws.Xdx))   # Xdx ← Xdx – X_base
+        BLAS.scal!(invh, vec(ws.Xdx))                   # Xdx ← Xdx/h
+
+        ame, se, g = _ame_continuous!(
+            β, cholΣβ, ws.X_base, ws.Xdx,
+            dinvlink, d2invlink, ws
+        )
+        ames[j]  = ame
+        ses[j]   = se
+        grads[j] = g
     end
-    
     return ames, ses, grads
 end

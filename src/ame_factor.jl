@@ -4,104 +4,51 @@
 # Zero-allocation categorical AMEs using InplaceModeler
 ###############################################################################
 
-"""
-Enhanced workspace for factor AME computations
-"""
-struct FactorAMEWorkspace
-    # Pre-allocated design matrices
-    Xj::Matrix{Float64}
-    Xk::Matrix{Float64}
-    
-    # Pre-allocated working vectors
-    ηj::Vector{Float64}
-    ηk::Vector{Float64}
-    μj::Vector{Float64}
-    μk::Vector{Float64}
-    μpj::Vector{Float64}
-    μpk::Vector{Float64}
-    temp_j::Vector{Float64}
-    temp_k::Vector{Float64}
-    grad::Vector{Float64}
-    
-    # Working DataFrame (reused across calls)
-    workdf::DataFrame
-    
-    function FactorAMEWorkspace(n::Int, p::Int, df::DataFrame)
-        new(
-            Matrix{Float64}(undef, n, p),
-            Matrix{Float64}(undef, n, p),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, n),
-            Vector{Float64}(undef, p),
-            Vector{Float64}(undef, p),
-            Vector{Float64}(undef, p),
-            DataFrame(df, copycols=true)
-        )
-    end
-end
-
-"""
-Ultra-optimized pairwise AME with InplaceModeler (zero allocations)
-"""
 function _ame_factor_pair!(
     ws::FactorAMEWorkspace,
     ipm::InplaceModeler,
-    β, Σβ,
+    β::AbstractVector, Σβ::AbstractMatrix,
     f::Symbol, lvl_i, lvl_j,
-    invlink, dinvlink,
+    invlink::Function, dinvlink::Function,
 )
-    # Unpack workspace
-    Xj, Xk = ws.Xj, ws.Xk
-    ηj, ηk = ws.ηj, ws.ηk
-    μj, μk = ws.μj, ws.μk
-    μpj, μpk = ws.μpj, ws.μpk
-    temp_j, temp_k = ws.temp_j, ws.temp_k
-    grad = ws.grad
-    workdf = ws.workdf
-    
-    # Build design matrices using zero-allocation InplaceModeler
+    X, η, μ, μp  = ws.X, ws.η, ws.μ, ws.μp
+    buf, tmp, g  = ws.buf, ws.tmp, ws.grad
+    workdf       = ws.workdf
+    n            = size(X, 1)
+
+    # ---------- level i ------------------------------------------------------
     fill!(workdf[!, f], lvl_i)
-    tbl_i = Tables.columntable(workdf)
-    modelmatrix!(ipm, tbl_i, Xj)
+    modelmatrix!(ipm, Tables.columntable(workdf), X)
 
+    mul!(η, X, β)                                    # η = Xβ
+    @inbounds @simd for k in 1:n
+        μ[k]  = invlink(η[k])
+        μp[k] = dinvlink(η[k])
+    end
+    sumμ_i = sum(μ)
+    mul!(buf, X', μp)                               # buf = X'μp   (p-vector)
+
+    # ---------- level j (overwrite the same buffers) -------------------------
     fill!(workdf[!, f], lvl_j)
-    tbl_j = Tables.columntable(workdf)
-    modelmatrix!(ipm, tbl_j, Xk)
+    modelmatrix!(ipm, Tables.columntable(workdf), X)
 
-    # Vectorized computations
-    n = size(Xj, 1)
-    
-    # Compute linear predictors
-    mul!(ηj, Xj, β)
-    mul!(ηk, Xk, β)
-    
-    # Vectorized link function applications
-    @inbounds @simd for i in 1:n
-        μj[i] = invlink(ηj[i])
-        μk[i] = invlink(ηk[i])
-        μpj[i] = dinvlink(ηj[i])
-        μpk[i] = dinvlink(ηk[i])
+    mul!(η, X, β)
+    @inbounds @simd for k in 1:n
+        μ[k]  = invlink(η[k])
+        μp[k] = dinvlink(η[k])
     end
+    sumμ_j = sum(μ)
+    mul!(tmp, X', μp)                               # tmp = X'μp
 
-    # Compute AME
-    ame = (sum(μk) - sum(μj)) / n
+    # ---------- AME, gradient, SE -------------------------------------------
+    ame = (sumμ_j - sumμ_i) / n
 
-    # Compute gradient efficiently
-    mul!(temp_j, Xj', μpj)
-    mul!(temp_k, Xk', μpk)
-    
-    @inbounds @simd for i in 1:length(β)
-        grad[i] = (temp_k[i] - temp_j[i]) / n
+    @inbounds @simd for k in 1:length(β)
+        g[k] = (tmp[k] - buf[k]) / n
     end
+    se = sqrt(dot(g, Σβ * g))
 
-    # Standard error
-    se = sqrt(dot(grad, Σβ * grad))
-    
-    return ame, se, copy(grad)  # Copy grad since it's reused
+    return ame, se, copy(g)                         # copy grad for safety
 end
 
 """
@@ -111,34 +58,24 @@ function _ame_factor_baseline!(
     ame_d, se_d, grad_d,
     ipm::InplaceModeler,
     tbl0::NamedTuple, df::DataFrame,
-    β, Σβ,
-    f::Symbol, invlink, dinvlink,
+    β::AbstractVector, Σβ::AbstractMatrix,
+    f::Symbol, invlink::Function, dinvlink::Function,
 )
     lvls = levels(categorical(tbl0[f]))
     base = lvls[1]
 
-    # Set up workspace (reused across all level pairs)
-    n = length(tbl0[f])
-    p = length(β)
-    ws = FactorAMEWorkspace(n, p, df)
-    
-    # Store original column for restoration
-    original_col = copy(ws.workdf[!, f])
+    n, p = nrow(df), length(β)
+    ws    = FactorAMEWorkspace(n, p, df)
 
-    # Process each level against baseline
     for lvl in lvls[2:end]
         ame, se, grad = _ame_factor_pair!(
             ws, ipm, β, Σβ, f, base, lvl, invlink, dinvlink
         )
-        
-        key = (base, lvl)
-        ame_d[key] = ame
-        se_d[key] = se  
-        grad_d[key] = grad
+        key            = (base, lvl)
+        ame_d[key]     = ame
+        se_d[key]      = se
+        grad_d[key]    = grad
     end
-
-    # Restore original column
-    ws.workdf[!, f] = original_col
 end
 
 """
@@ -148,33 +85,22 @@ function _ame_factor_allpairs!(
     ame_d, se_d, grad_d,
     ipm::InplaceModeler,
     tbl0::NamedTuple, df::DataFrame,
-    β, Σβ,
-    f::Symbol, invlink, dinvlink,
+    β::AbstractVector, Σβ::AbstractMatrix,
+    f::Symbol, invlink::Function, dinvlink::Function,
 )
     lvls = levels(categorical(tbl0[f]))
+    n, p = nrow(df), length(β)
+    ws    = FactorAMEWorkspace(n, p, df)
 
-    # Set up workspace (reused across all level pairs)
-    n = length(tbl0[f])
-    p = length(β)
-    ws = FactorAMEWorkspace(n, p, df)
-    
-    # Store original column for restoration
-    original_col = copy(ws.workdf[!, f])
-
-    # Process all pairs
     for i in 1:length(lvls)-1, j in i+1:length(lvls)
         lvl_i, lvl_j = lvls[i], lvls[j]
-
         ame, se, grad = _ame_factor_pair!(
             ws, ipm, β, Σβ, f, lvl_i, lvl_j, invlink, dinvlink
         )
-        
-        key = (lvl_i, lvl_j)
-        ame_d[key] = ame
-        se_d[key] = se
-        grad_d[key] = grad
+        key          = (lvl_i, lvl_j)
+        ame_d[key]   = ame
+        se_d[key]    = se
+        grad_d[key]  = grad
     end
-
-    # Restore original column
-    ws.workdf[!, f] = original_col
 end
+

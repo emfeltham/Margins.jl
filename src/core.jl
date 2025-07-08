@@ -19,37 +19,32 @@ function margins(
     type::Symbol = :dydx,
 )
 
-    type ∈ (:dydx, :predict) ||
+        type ∈ (:dydx, :predict) ||
         throw(ArgumentError("`type` must be :dydx or :predict, got `$type`"))
 
-    # Setup
     varlist = isa(vars, Symbol) ? [vars] : collect(vars)
     invlink, dinvlink, d2invlink = link_functions(model)
 
-    # MAJOR OPTIMIZATION: Create InplaceModeler for zero-allocation matrix construction
     n, p = nrow(df), width(fixed_effects_form(model).rhs)
-    ipm = InplaceModeler(model, n)
-    
-    # Pre-allocate matrices that will be reused
-    X_base = Matrix{Float64}(undef, n, p)
-    X_work = Matrix{Float64}(undef, n, p)
-    
-    # Build base design matrix once
-    tbl0 = Tables.columntable(df)
-    modelmatrix!(ipm, tbl0, X_base)
+    ipm  = InplaceModeler(model, n)
 
-    β, Σβ = coef(model), vcov(model)
-    cholΣβ = cholesky(Σβ)
+    # ── single workspace (owns X_base & Xdx) ───────────────────────────────
+    ws = AMEWorkspace(n, p, df)
+    tbl0 = ws.base_tbl        # one-line alias, zero allocations
+    modelmatrix!(ipm, tbl0, ws.X_base)          # build once
 
-    # Variable classification
+    β        = coef(model)
+    Σβ       = vcov(model)
+    cholΣβ   = cholesky(Σβ)
+
     iscts(v) = eltype(df[!, v]) <: Real && eltype(df[!, v]) != Bool
     cts_vars = filter(iscts, union(varlist, keys(repvals)))
     cat_vars = setdiff(varlist, cts_vars)
 
-    # Pre-allocate result containers
-    result_map = Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}()
-    se_map = Dict{Symbol,Union{Float64,Dict{Tuple,Float64}}}()
-    grad_map = Dict{Symbol,Union{Vector{Float64},Dict{Tuple,Vector{Float64}}}}()
+    # containers for results
+    result_map = Dict{Symbol,Any}()
+    se_map     = Dict{Symbol,Any}()
+    grad_map   = Dict{Symbol,Any}()
 
     ensure_dict!(v) = begin
         result_map[v] isa Dict || (result_map[v] = Dict{Tuple,Float64}())
@@ -121,50 +116,54 @@ function margins(
         end
     
     else # :dydx branch
-        if isempty(repvals)
-            # OPTIMIZED: Batch continuous AMEs using new workspace approach
-            if !isempty(cts_vars)
-                requested_cts_vars = filter(var -> var in varlist, cts_vars)
-                
-                if !isempty(requested_cts_vars)
-                    ames, ses, grads = compute_continuous_ames_batch!(
-                        ipm, df, requested_cts_vars, β, cholΣβ, dinvlink, d2invlink
-                    )
-                    
-                    for (i, var) in enumerate(requested_cts_vars)
-                        result_map[var] = ames[i]
-                        se_map[var] = ses[i]
-                        grad_map[var] = grads[i]
-                    end
-                end
-            end
 
-            # Categorical AMEs
-            for v in cat_vars
-                ame_d = Dict{Tuple,Float64}()
-                se_d = Dict{Tuple,Float64}()
-                grad_d = Dict{Tuple,Vector{Float64}}()
-                
-                if pairs == :baseline
-                    _ame_factor_baseline!(
-                        ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
-                    )
-                else
-                    _ame_factor_allpairs!(
-                        ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
-                    )
+
+    # ─────────────────  :dydx, no repvals  ────────────────────────────────
+    if type == :dydx && isempty(repvals)
+
+        ########## continuous variables ####################################
+        if !isempty(cts_vars)
+            requested = filter(v -> v in varlist, cts_vars)
+            if !isempty(requested)
+                am, se, gr = compute_continuous_ames_batch!(
+                    ipm, df, requested, β, cholΣβ,
+                    dinvlink, d2invlink, ws          # ← pass SAME ws
+                )
+                for (i, v) in enumerate(requested)
+                    result_map[v] = am[i]
+                    se_map[v]     = se[i]
+                    grad_map[v]   = gr[i]
                 end
-                
-                result_map[v] = ame_d
-                se_map[v] = se_d
-                grad_map[v] = grad_d
             end
+        end
+
+        # Categorical AMEs
+        for v in cat_vars
+            ame_d = Dict{Tuple,Float64}()
+            se_d = Dict{Tuple,Float64}()
+            grad_d = Dict{Tuple,Vector{Float64}}()
+            
+            if pairs == :baseline
+                _ame_factor_baseline!(
+                    ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
+                )
+            else
+                _ame_factor_allpairs!(
+                    ame_d, se_d, grad_d, ipm, tbl0, df, β, Σβ, v, invlink, dinvlink
+                )
+            end
+            
+            result_map[v] = ame_d
+            se_map[v] = se_d
+            grad_map[v] = grad_d
+        end
 
         else
             # AMEs at representative values
             for v in varlist
-                ame_d, se_d, g_d = _ame_representation(
-                    ipm, df, v, repvals, β, cholΣβ, invlink, dinvlink, d2invlink
+                ame_d, se_d, g_d = _ame_representation!(
+                    ws, ipm, df, v, repvals, β, cholΣβ,
+                    invlink, dinvlink, d2invlink,
                 )
 
                 result_map[v] = ame_d
