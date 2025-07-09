@@ -18,6 +18,8 @@ end
 iris = dataset("datasets", "iris") |> DataFrame;
 iris.Species = categorical(iris.Species);
 
+Revise.retry()
+
 @testset "Margins.jl" begin
     include("bool_test.jl") # linear models with booleans
     include("lm_tests.jl") # linear models

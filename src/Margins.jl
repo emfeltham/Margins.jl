@@ -85,6 +85,7 @@ using MixedModels: RandomEffectsTerm
 import Base: show
 using Printf, Distributions
 
+import StatsBase.vcov
 include("workspace.jl")
 
 # Exported types
@@ -112,6 +113,7 @@ export margins
 include("contrastresult.jl")
 include("contrasts.jl")
 include("contrast_to_df.jl")
+include("selective_updates!.jl")
 
 export DataFrame
 

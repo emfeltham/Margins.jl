@@ -1,106 +1,284 @@
-# ame_factor.jl - ULTRA OPTIMIZED
+# ame_factor.jl - FIXED for categorical data handling
 
 ###############################################################################
-# Zero-allocation categorical AMEs using InplaceModeler
+# Selective update categorical AME computation - FIXED
 ###############################################################################
 
-function _ame_factor_pair!(
-    ws::FactorAMEWorkspace,
-    ipm::InplaceModeler,
-    β::AbstractVector, Σβ::AbstractMatrix,
-    f::Symbol, lvl_i, lvl_j,
-    invlink::Function, dinvlink::Function,
-)
-    X, η, μ, μp  = ws.X, ws.η, ws.μ, ws.μp
-    buf, tmp, g  = ws.buf, ws.tmp, ws.grad
-    workdf       = ws.workdf
-    n            = size(X, 1)
+"""
+    compute_factor_pair_selective!(variable::Symbol, level_i, level_j, 
+                                  ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                  invlink::Function, dinvlink::Function, ipm::InplaceModeler)
 
-    # ---------- level i ------------------------------------------------------
-    fill!(workdf[!, f], lvl_i)
-    modelmatrix!(ipm, Tables.columntable(workdf), X)
+Compute contrast between two levels of a categorical variable using selective updates.
+FIXED: Now properly handles categorical data types.
 
-    mul!(η, X, β)                                    # η = Xβ
-    @inbounds @simd for k in 1:n
-        μ[k]  = invlink(η[k])
-        μp[k] = dinvlink(η[k])
+# Arguments
+- `variable`: Categorical variable symbol
+- `level_i`, `level_j`: Factor levels to compare
+- `ws`: AMEWorkspace with selective update infrastructure
+- `β`: Model coefficients
+- `Σβ`: Coefficient covariance matrix
+- `invlink`: Inverse link function
+- `dinvlink`: First derivative of inverse link function
+- `ipm`: InplaceModeler for matrix construction
+
+# Returns
+- `(ame, se, grad)`: AME difference (level_j - level_i), standard error, gradient
+
+# Details
+Uses selective updates to compute predictions at each level, then takes difference.
+Only columns affected by the categorical variable are updated.
+FIXED: Properly creates CategoricalVector for level data.
+"""
+function compute_factor_pair_selective!(variable::Symbol, level_i, level_j, 
+                                       ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                       invlink::Function, dinvlink::Function, ipm::InplaceModeler)
+    n = length(first(ws.base_data))
+    
+    # Get the original categorical variable to preserve levels and type
+    orig_var = ws.base_data[variable]
+    
+    # ---------- Compute prediction at level_i ------------------------------
+    # Create categorical data with all observations set to level_i
+    if orig_var isa CategoricalVector
+        # Preserve the original levels and ordering
+        level_i_data = categorical(fill(level_i, n), levels=levels(orig_var), ordered=isordered(orig_var))
+    else
+        # For non-categorical data, create appropriate vector
+        level_i_data = fill(level_i, n)
     end
-    sumμ_i = sum(μ)
-    mul!(buf, X', μp)                               # buf = X'μp   (p-vector)
-
-    # ---------- level j (overwrite the same buffers) -------------------------
-    fill!(workdf[!, f], lvl_j)
-    modelmatrix!(ipm, Tables.columntable(workdf), X)
-
-    mul!(η, X, β)
+    
+    update_for_variable!(ws, variable, level_i_data, ipm)
+    
+    # Compute predictions
+    mul!(ws.η, ws.work_matrix, β)
+    
     @inbounds @simd for k in 1:n
-        μ[k]  = invlink(η[k])
-        μp[k] = dinvlink(η[k])
+        ws.μp_vals[k] = invlink(ws.η[k])
+        ws.μpp_vals[k] = dinvlink(ws.η[k])  # Store for gradient
     end
-    sumμ_j = sum(μ)
-    mul!(tmp, X', μp)                               # tmp = X'μp
-
-    # ---------- AME, gradient, SE -------------------------------------------
+    
+    sumμ_i = sum(ws.μp_vals)
+    
+    # Store gradient components for level_i
+    mul!(ws.temp1, ws.work_matrix', ws.μpp_vals)  # temp1 = X_i' * μp_i
+    
+    # ---------- Compute prediction at level_j ------------------------------
+    # Create categorical data with all observations set to level_j
+    if orig_var isa CategoricalVector
+        # Preserve the original levels and ordering
+        level_j_data = categorical(fill(level_j, n), levels=levels(orig_var), ordered=isordered(orig_var))
+    else
+        # For non-categorical data, create appropriate vector
+        level_j_data = fill(level_j, n)
+    end
+    
+    update_for_variable!(ws, variable, level_j_data, ipm)
+    
+    # Compute predictions
+    mul!(ws.η, ws.work_matrix, β)
+    
+    @inbounds @simd for k in 1:n
+        ws.μp_vals[k] = invlink(ws.η[k])
+        ws.μpp_vals[k] = dinvlink(ws.η[k])  # Store for gradient
+    end
+    
+    sumμ_j = sum(ws.μp_vals)
+    
+    # Store gradient components for level_j
+    mul!(ws.temp2, ws.work_matrix', ws.μpp_vals)  # temp2 = X_j' * μp_j
+    
+    # ---------- Compute AME, gradient, and SE -------------------------------
     ame = (sumμ_j - sumμ_i) / n
-
+    
+    # Gradient: (∇μ_j - ∇μ_i) / n
     @inbounds @simd for k in 1:length(β)
-        g[k] = (tmp[k] - buf[k]) / n
+        ws.grad_work[k] = (ws.temp2[k] - ws.temp1[k]) / n
     end
-    se = sqrt(dot(g, Σβ * g))
-
-    return ame, se, copy(g)                         # copy grad for safety
+    
+    # Standard error via delta method
+    se = sqrt(dot(ws.grad_work, Σβ * ws.grad_work))
+    
+    return ame, se, ws.grad_work
 end
 
 """
-Optimized baseline AME computation (zero allocations).
+    compute_factor_baseline_selective!(ame_d, se_d, grad_d, variable::Symbol,
+                                      ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                      invlink::Function, dinvlink::Function, 
+                                      df::AbstractDataFrame, ipm::InplaceModeler)
+
+Compute baseline contrasts for categorical variable using selective updates.
+Updates `ame_d`, `se_d`, `grad_d` dictionaries in-place.
 """
-function _ame_factor_baseline!(
-    ame_d, se_d, grad_d,
-    ipm::InplaceModeler,
-    tbl0::NamedTuple, df::DataFrame,
-    β::AbstractVector, Σβ::AbstractMatrix,
-    f::Symbol, invlink::Function, dinvlink::Function,
-)
-    lvls = levels(categorical(tbl0[f]))
-    base = lvls[1]
-
-    n, p = nrow(df), length(β)
-    ws    = FactorAMEWorkspace(n, p, df)
-
-    for lvl in lvls[2:end]
-        ame, se, grad = _ame_factor_pair!(
-            ws, ipm, β, Σβ, f, base, lvl, invlink, dinvlink
+function compute_factor_baseline_selective!(ame_d, se_d, grad_d, variable::Symbol,
+                                          ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                          invlink::Function, dinvlink::Function, 
+                                          df::AbstractDataFrame, ipm::InplaceModeler)
+    # Get factor levels from original data
+    factor_col = df[!, variable]
+    levels_list = get_factor_levels_safe(factor_col)
+    
+    if length(levels_list) < 2
+        @warn "Variable $variable has fewer than 2 levels, skipping"
+        return
+    end
+    
+    base_level = levels_list[1]
+    
+    # Compute baseline contrasts
+    for level in levels_list[2:end]
+        ame, se, grad = compute_factor_pair_selective!(
+            variable, base_level, level, ws, β, Σβ, invlink, dinvlink, ipm
         )
-        key            = (base, lvl)
-        ame_d[key]     = ame
-        se_d[key]      = se
-        grad_d[key]    = grad
+        
+        key = (base_level, level)
+        ame_d[key] = ame
+        se_d[key] = se
+        grad_d[key] = copy(grad)
     end
 end
 
 """
-Optimized all-pairs AME computation (zero allocations).
-"""
-function _ame_factor_allpairs!(
-    ame_d, se_d, grad_d,
-    ipm::InplaceModeler,
-    tbl0::NamedTuple, df::DataFrame,
-    β::AbstractVector, Σβ::AbstractMatrix,
-    f::Symbol, invlink::Function, dinvlink::Function,
-)
-    lvls = levels(categorical(tbl0[f]))
-    n, p = nrow(df), length(β)
-    ws    = FactorAMEWorkspace(n, p, df)
+    compute_factor_allpairs_selective!(ame_d, se_d, grad_d, variable::Symbol,
+                                     ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                     invlink::Function, dinvlink::Function, 
+                                     df::AbstractDataFrame, ipm::InplaceModeler)
 
-    for i in 1:length(lvls)-1, j in i+1:length(lvls)
-        lvl_i, lvl_j = lvls[i], lvls[j]
-        ame, se, grad = _ame_factor_pair!(
-            ws, ipm, β, Σβ, f, lvl_i, lvl_j, invlink, dinvlink
-        )
-        key          = (lvl_i, lvl_j)
-        ame_d[key]   = ame
-        se_d[key]    = se
-        grad_d[key]  = grad
+Compute all-pairs contrasts for categorical variable using selective updates.
+Updates `ame_d`, `se_d`, `grad_d` dictionaries in-place.
+"""
+function compute_factor_allpairs_selective!(ame_d, se_d, grad_d, variable::Symbol,
+                                          ws::AMEWorkspace, β::AbstractVector, Σβ::AbstractMatrix,
+                                          invlink::Function, dinvlink::Function, 
+                                          df::AbstractDataFrame, ipm::InplaceModeler)
+    # Get factor levels from original data
+    factor_col = df[!, variable]
+    levels_list = get_factor_levels_safe(factor_col)
+    
+    if length(levels_list) < 2
+        @warn "Variable $variable has fewer than 2 levels, skipping"
+        return
+    end
+    
+    # Compute all pairs
+    for i in 1:length(levels_list)-1
+        for j in i+1:length(levels_list)
+            level_i, level_j = levels_list[i], levels_list[j]
+            
+            ame, se, grad = compute_factor_pair_selective!(
+                variable, level_i, level_j, ws, β, Σβ, invlink, dinvlink, ipm
+            )
+            
+            key = (level_i, level_j)
+            ame_d[key] = ame
+            se_d[key] = se
+            grad_d[key] = copy(grad)
+        end
     end
 end
 
+"""
+    compute_single_bool_ame_selective!(variable::Symbol, ws::AMEWorkspace,
+                                     β::AbstractVector, Σβ::AbstractMatrix,
+                                     invlink::Function, dinvlink::Function, 
+                                     ipm::InplaceModeler)
+
+Compute AME for a Boolean variable using selective updates.
+Used for representative values computation.
+
+# Returns
+- `(ame, se, grad)`: AME for true vs false contrast
+"""
+function compute_single_bool_ame_selective!(variable::Symbol, ws::AMEWorkspace,
+                                          β::AbstractVector, Σβ::AbstractMatrix,
+                                          invlink::Function, dinvlink::Function, 
+                                          ipm::InplaceModeler)
+    return compute_factor_pair_selective!(variable, false, true, ws, β, Σβ, invlink, dinvlink, ipm)
+end
+
+"""
+    compute_single_factor_ames_selective!(variable::Symbol, ws::AMEWorkspace,
+                                        β::AbstractVector, Σβ::AbstractMatrix,
+                                        invlink::Function, dinvlink::Function, 
+                                        df::AbstractDataFrame, ipm::InplaceModeler)
+
+Compute all-pairs AMEs for a multi-level categorical variable using selective updates.
+Used for representative values computation.
+
+# Returns
+- Dictionary with keys `:ame`, `:se`, `:grad` containing pairwise results
+"""
+function compute_single_factor_ames_selective!(variable::Symbol, ws::AMEWorkspace,
+                                             β::AbstractVector, Σβ::AbstractMatrix,
+                                             invlink::Function, dinvlink::Function, 
+                                             df::AbstractDataFrame, ipm::InplaceModeler)
+    ame_d = Dict{Tuple,Float64}()
+    se_d = Dict{Tuple,Float64}()
+    grad_d = Dict{Tuple,Vector{Float64}}()
+    
+    compute_factor_allpairs_selective!(ame_d, se_d, grad_d, variable, ws, β, Σβ, 
+                                     invlink, dinvlink, df, ipm)
+    
+    return Dict(:ame => ame_d, :se => se_d, :grad => grad_d)
+end
+
+###############################################################################
+# Helper functions for factor level handling - ENHANCED
+###############################################################################
+
+"""
+    get_factor_levels_safe(data_col)
+
+Extract factor levels from a data column, handling both CategoricalVector and regular vectors.
+"""
+function get_factor_levels_safe(data_col)
+    if data_col isa CategoricalVector
+        return levels(data_col)
+    else
+        return sort(unique(data_col))
+    end
+end
+
+"""
+    create_categorical_level_data(variable::Symbol, level, ws::AMEWorkspace, n::Int)
+
+Create appropriately typed data vector for a categorical variable level.
+Preserves CategoricalVector structure when needed.
+"""
+function create_categorical_level_data(variable::Symbol, level, ws::AMEWorkspace, n::Int)
+    orig_var = ws.base_data[variable]
+    
+    if orig_var isa CategoricalVector
+        # Preserve the original levels and ordering
+        return categorical(fill(level, n), levels=levels(orig_var), ordered=isordered(orig_var))
+    else
+        # For non-categorical data, create plain vector
+        return fill(level, n)
+    end
+end
+
+"""
+    validate_factor_variable(variable::Symbol, ws::AMEWorkspace, df::AbstractDataFrame)
+
+Validate that a variable is categorical and affects model matrix columns.
+"""
+function validate_factor_variable(variable::Symbol, ws::AMEWorkspace, df::AbstractDataFrame)
+    # Check that variable exists in data
+    if !haskey(ws.base_data, variable)
+        throw(ArgumentError("Variable $variable not found in data"))
+    end
+    
+    # Check that variable affects some columns
+    if !haskey(ws.variable_plans, variable) || isempty(ws.variable_plans[variable])
+        throw(ArgumentError("Variable $variable does not affect any model matrix columns"))
+    end
+    
+    # Check that variable has multiple levels
+    levels_list = get_factor_levels_safe(df[!, variable])
+    if length(levels_list) < 2
+        throw(ArgumentError("Variable $variable has fewer than 2 levels"))
+    end
+    
+    return true
+end
