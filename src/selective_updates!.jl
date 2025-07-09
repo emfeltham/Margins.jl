@@ -1,27 +1,14 @@
-# selective_updates.jl - Core selective update utilities for Margins.jl
+# selective_updates.jl - CLEAN VERSION: Simplified data manipulation
 
 ###############################################################################
-# Data Manipulation Functions
+# Data Manipulation Functions - SIMPLIFIED
 ###############################################################################
 
 """
     create_perturbed_data(base_data::NamedTuple, variable::Symbol, values::AbstractVector)
 
-ENHANCED: Create a new NamedTuple with updated values for one variable.
-Uses memory sharing for all unchanged variables.
-FIXED: Proper handling of categorical types to prevent Vector{CategoricalValue} issues.
-
-# Arguments
-- `base_data`: Original data as NamedTuple
-- `variable`: Symbol of variable to perturb
-- `values`: New values for the variable
-
-# Returns
-- New NamedTuple with updated variable, sharing memory for others
-
-# Details
-This version properly handles CategoricalArray types to ensure they remain as
-CategoricalArray (not Vector{CategoricalValue}) to work with refs() in EfficientModelMatrices.
+CLEAN: Simple data update - just replace the variable with new values.
+No complex categorical handling needed since factor AME code creates proper types.
 """
 function create_perturbed_data(base_data::NamedTuple, variable::Symbol, values::AbstractVector)
     # Validate that variable exists in base_data
@@ -38,31 +25,15 @@ function create_perturbed_data(base_data::NamedTuple, variable::Symbol, values::
         ))
     end
     
-    # ENHANCED: Handle categorical types properly
-    orig_var = base_data[variable]
-    processed_values = values
-    
-    if orig_var isa CategoricalArray
-        processed_values = ensure_categorical_array(values, orig_var)
-    end
-    
-    # Create new NamedTuple with updated variable
-    return merge(base_data, (variable => processed_values,))
+    # Simple replacement - factor AME code should provide correctly typed values
+    return merge(base_data, (variable => values,))
 end
 
 """
     batch_perturb_data(base_data::NamedTuple, changes::Dict{Symbol, <:AbstractVector})
 
-ENHANCED: Create a new NamedTuple with multiple variables updated.
-Uses memory sharing for all unchanged variables.
-FIXED: Proper handling of categorical types.
-
-# Arguments
-- `base_data`: Original data as NamedTuple
-- `changes`: Dictionary mapping variable names to new values
-
-# Returns
-- New NamedTuple with all specified variables updated
+CLEAN: Simple batch version - just replace all specified variables.
+No complex categorical handling since we fix it at source.
 """
 function batch_perturb_data(base_data::NamedTuple, changes::Dict{Symbol, <:AbstractVector})
     if isempty(changes)
@@ -70,12 +41,12 @@ function batch_perturb_data(base_data::NamedTuple, changes::Dict{Symbol, <:Abstr
     end
     
     # Validate all variables exist and have correct lengths
+    original_length = length(first(base_data))
     for (var, values) in changes
         if !haskey(base_data, var)
             throw(ArgumentError("Variable $var not found in base data"))
         end
         
-        original_length = length(base_data[var])
         if length(values) != original_length
             throw(DimensionMismatch(
                 "New values for $var have length $(length(values)), " *
@@ -84,20 +55,8 @@ function batch_perturb_data(base_data::NamedTuple, changes::Dict{Symbol, <:Abstr
         end
     end
     
-    # ENHANCED: Process changes with proper categorical type handling
-    processed_changes = Dict{Symbol, AbstractVector}()
-    for (var, values) in changes
-        orig_var = base_data[var]
-        
-        if orig_var isa CategoricalArray
-            processed_changes[var] = ensure_categorical_array(values, orig_var)
-        else
-            processed_changes[var] = values
-        end
-    end
-    
-    # Create new NamedTuple with all processed changes
-    return merge(base_data, processed_changes)
+    # Simple replacement - caller should provide correctly typed values
+    return merge(base_data, changes)
 end
 
 """
@@ -122,71 +81,6 @@ function validate_data_consistency(data::NamedTuple)
     end
     
     return true
-end
-
-###############################################################################
-# New Categorical Helper Functions
-###############################################################################
-
-"""
-    ensure_categorical_array(values::AbstractVector, reference_var::CategoricalArray)
-
-Ensure that values is a proper CategoricalArray compatible with reference_var.
-This prevents Vector{CategoricalValue} issues that cause refs() errors.
-
-# Arguments
-- `values`: Input vector (may be CategoricalArray, Vector{CategoricalValue}, or plain vector)
-- `reference_var`: Reference CategoricalArray to match levels and ordering
-
-# Returns
-- Proper CategoricalArray with same levels and ordering as reference
-
-# Details
-The key fix for refs() errors: converts Vector{CategoricalValue} to CategoricalArray
-by extracting .level values and recreating with proper categorical structure.
-"""
-function ensure_categorical_array(values::AbstractVector, reference_var::CategoricalArray)
-    if values isa CategoricalArray
-        # Already a CategoricalArray - validate compatibility and return
-        validate_categorical_compatibility(values, reference_var)
-        return values
-    elseif eltype(values) <: CategoricalValue
-        # Vector{CategoricalValue} - extract underlying values and recreate
-        # This is the key fix for the refs() error
-        raw_values = [v.level for v in values]
-        return categorical(raw_values, levels=levels(reference_var), ordered=isordered(reference_var))
-    else
-        # Plain values - convert to CategoricalArray with same levels
-        return categorical(values, levels=levels(reference_var), ordered=isordered(reference_var))
-    end
-end
-
-"""
-    validate_categorical_compatibility(values::CategoricalArray, reference_var::CategoricalArray)
-
-Validate that categorical arrays have compatible levels.
-"""
-function validate_categorical_compatibility(values::CategoricalArray, reference_var::CategoricalArray)
-    if levels(values) != levels(reference_var)
-        @warn "Categorical levels don't match. Values: $(levels(values)), Reference: $(levels(reference_var))"
-    end
-    return true
-end
-
-"""
-    extract_categorical_levels(values::AbstractVector)
-
-Extract underlying level values from various categorical vector types.
-Handles CategoricalArray, Vector{CategoricalValue}, and plain vectors.
-"""
-function extract_categorical_levels(values::AbstractVector)
-    if values isa CategoricalArray
-        return [v for v in values]  # Convert to plain values
-    elseif eltype(values) <: CategoricalValue
-        return [v.level for v in values]  # Extract .level from each CategoricalValue
-    else
-        return values  # Already plain values
-    end
 end
 
 ###############################################################################

@@ -169,10 +169,20 @@ function compute_repval_predictions!(result_map, se_map, grad_map, varlist, repv
     combos = collect(Iterators.product((repvals[r] for r in repvars)...))
     
     for combo in combos
-        # Create representative value changes
-        changes = Dict{Symbol, Vector{Float64}}()
+        n = length(first(ws.base_data))
+        changes = Dict{Symbol,AbstractVector}()
         for (rv, val) in zip(repvars, combo)
-            changes[rv] = fill(val, length(first(ws.base_data)))
+            orig_col = ws.base_data[rv]
+            if orig_col isa CategoricalArray || val isa CategoricalValue
+                # proper CategoricalArray for factor‐like repvals
+                changes[rv] = categorical(
+                    fill(val, n);
+                    levels  = levels(orig_col),
+                    ordered = isordered(orig_col),
+                )
+            else
+                changes[rv] = fill(val, n)
+            end
         end
         
         # Update matrices with representative values

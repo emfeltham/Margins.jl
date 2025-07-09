@@ -40,7 +40,7 @@ function compute_factor_pair_selective!(variable::Symbol, level_i, level_j,
     
     # ---------- Compute prediction at level_i ------------------------------
     # Create categorical data with all observations set to level_i
-    if orig_var isa CategoricalVector
+    if orig_var isa CategoricalArray
         # Preserve the original levels and ordering
         level_i_data = categorical(fill(level_i, n), levels=levels(orig_var), ordered=isordered(orig_var))
     else
@@ -65,7 +65,7 @@ function compute_factor_pair_selective!(variable::Symbol, level_i, level_j,
     
     # ---------- Compute prediction at level_j ------------------------------
     # Create categorical data with all observations set to level_j
-    if orig_var isa CategoricalVector
+    if orig_var isa CategoricalArray
         # Preserve the original levels and ordering
         level_j_data = categorical(fill(level_j, n), levels=levels(orig_var), ordered=isordered(orig_var))
     else
@@ -228,15 +228,21 @@ end
 ###############################################################################
 
 """
-    get_factor_levels_safe(data_col)
+    get_factor_levels_safe(col) → Vector
 
-Extract factor levels from a data column, handling both CategoricalVector and regular vectors.
+Return the full, ordered list of levels for anything that should be treated as a
+factor – including `Bool`s and plain `Vector{T}` that happen to contain
+`CategoricalValue`s.  Fallback: unique(col) sorted.
 """
-function get_factor_levels_safe(data_col)
-    if data_col isa CategoricalVector
-        return levels(data_col)
+function get_factor_levels_safe(col)
+    if col isa CategoricalArray
+        return levels(col)
+    elseif eltype(col) <: Bool
+        return [false, true]          # canonical order
+    elseif eltype(col) <: CategoricalValue
+        return levels!(categorical(col))  # wrap in a temporary CategoricalArray
     else
-        return sort(unique(data_col))
+        return sort(unique(col))
     end
 end
 
@@ -249,36 +255,16 @@ Preserves CategoricalVector structure when needed.
 function create_categorical_level_data(variable::Symbol, level, ws::AMEWorkspace, n::Int)
     orig_var = ws.base_data[variable]
     
-    if orig_var isa CategoricalVector
+    if orig_var isa CategoricalArray
         # Preserve the original levels and ordering
-        return categorical(fill(level, n), levels=levels(orig_var), ordered=isordered(orig_var))
+        return categorical(
+            fill(level, n);
+                levels  = levels(orig_var),
+                ordered = isordered(orig_var)
+            )
+
     else
         # For non-categorical data, create plain vector
         return fill(level, n)
     end
-end
-
-"""
-    validate_factor_variable(variable::Symbol, ws::AMEWorkspace, df::AbstractDataFrame)
-
-Validate that a variable is categorical and affects model matrix columns.
-"""
-function validate_factor_variable(variable::Symbol, ws::AMEWorkspace, df::AbstractDataFrame)
-    # Check that variable exists in data
-    if !haskey(ws.base_data, variable)
-        throw(ArgumentError("Variable $variable not found in data"))
-    end
-    
-    # Check that variable affects some columns
-    if !haskey(ws.variable_plans, variable) || isempty(ws.variable_plans[variable])
-        throw(ArgumentError("Variable $variable does not affect any model matrix columns"))
-    end
-    
-    # Check that variable has multiple levels
-    levels_list = get_factor_levels_safe(df[!, variable])
-    if length(levels_list) < 2
-        throw(ArgumentError("Variable $variable has fewer than 2 levels"))
-    end
-    
-    return true
 end

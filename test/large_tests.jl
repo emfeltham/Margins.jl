@@ -1,5 +1,5 @@
 
-@testset "large data OLS" begin
+@testset "large data OLS (with repvals)" begin
     # simulate
     Random.seed!(42)
     n = 2_000_000
