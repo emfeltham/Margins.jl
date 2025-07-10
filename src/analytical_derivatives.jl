@@ -1,8 +1,6 @@
 # analytical_derivatives.jl - NEW FILE
 # Add this as a new file in your src/ directory
 
-using ForwardDiff
-
 # Global registry for function derivatives
 const DERIVATIVE_REGISTRY = Dict{Function, Function}()
 
@@ -87,6 +85,92 @@ function evaluate_term(term::InterceptTerm{false}, data::NamedTuple)
     return zeros(Float64, n)
 end
 
+function evaluate_term(term::CategoricalTerm, data::NamedTuple)
+    # For CategoricalTerm, we need to evaluate the contrast coding
+    # This is complex, so for now we'll use the existing _cols! infrastructure
+    n = length(first(data))
+    w = width(term)
+    
+    # Create temporary matrix and use _cols! to fill it
+    temp_matrix = Matrix{Float64}(undef, n, w)
+    
+    # We need an InplaceModeler, but we don't have one here
+    # For now, implement basic categorical evaluation
+    v = data[term.sym]
+    M = term.contrasts.matrix
+    
+    # Handle both CategoricalArray and regular arrays
+    if isa(v, CategoricalArray)
+        codes = refs(v)
+    else
+        unique_vals = sort(unique(v))
+        code_map = Dict(val => i for (i, val) in enumerate(unique_vals))
+        codes = [code_map[val] for val in v]
+    end
+    
+    # Fill contrast matrix
+    for r in 1:n
+        code = codes[r]
+        for k in 1:w
+            temp_matrix[r, k] = M[code, k]
+        end
+    end
+    
+    if w == 1
+        return temp_matrix[:, 1]
+    else
+        # Return the full matrix as a vector of columns
+        return [temp_matrix[:, k] for k in 1:w]
+    end
+end
+
+function evaluate_term(term::FunctionTerm, data::NamedTuple)
+    if length(term.args) == 1
+        # Single argument function
+        arg_values = evaluate_term(term.args[1], data)
+        if arg_values isa Vector
+            return term.f.(arg_values)
+        else
+            # Multi-column argument - not supported yet
+            error("Multi-column function arguments not yet supported")
+        end
+    else
+        # Multi-argument functions
+        arg_values = [evaluate_term(arg, data) for arg in term.args]
+        
+        # Check if all arguments are vectors
+        if all(arg -> arg isa Vector, arg_values)
+            return [term.f(args...) for args in zip(arg_values...)]
+        else
+            error("Multi-column function arguments not yet supported")
+        end
+    end
+end
+
+function evaluate_term(term::InteractionTerm, data::NamedTuple)
+    # For interaction terms, we need to compute the Kronecker product
+    # This is also complex, so use the _cols! infrastructure via the fallback
+    n = length(first(data))
+    w = width(term)
+    
+    if w == 1
+        # Simple case: all components are single-column
+        result = ones(Float64, n)
+        for component in term.terms
+            component_values = evaluate_term(component, data)
+            if component_values isa Vector
+                result .*= component_values
+            else
+                error("Multi-column interaction components not supported in simple evaluate_term")
+            end
+        end
+        return result
+    else
+        # Multi-column interaction - delegate to matrix evaluation
+        error("Multi-column interaction evaluation requires matrix approach")
+    end
+end
+
 """
     get_function_derivative(f::Function) -> Function
 
@@ -138,31 +222,70 @@ end
 function analytical_derivative(term::InteractionTerm, variable::Symbol, data::NamedTuple)
     components = term.terms
     n = length(data[variable])
-    result = zeros(Float64, n)
     
-    # Product rule: ∂(f₁*f₂*...*fₙ)/∂x = Σᵢ(f₁*...*fᵢ₋₁*fᵢ'*fᵢ₊₁*...*fₙ)
-    for i in 1:length(components)
-        # Derivative of i-th component
-        component_derivative = analytical_derivative(components[i], variable, data)
-        
-        # If this component doesn't depend on variable, skip
-        if all(x -> x == 0, component_derivative)
-            continue
+    # Check if any component depends on the variable
+    any_depends = false
+    for component in components
+        comp_deriv = analytical_derivative(component, variable, data)
+        if !all(x -> x == 0, comp_deriv)
+            any_depends = true
+            break
         end
-        
-        # Product of all other components (constant w.r.t. variable)
-        product = component_derivative
-        for j in 1:length(components)
-            if i != j
-                component_values = evaluate_term(components[j], data)
-                product .*= component_values
-            end
-        end
-        
-        result .+= product
     end
     
-    return result
+    if !any_depends
+        return zeros(Float64, n)
+    end
+    
+    # For interactions involving categorical terms, we need to be careful
+    # The derivative depends on which output column we're computing
+    
+    # Check if this is a simple interaction (all single-column terms)
+    all_single_column = all(component -> width(component) == 1, components)
+    
+    if all_single_column
+        # Simple product rule: ∂(f₁*f₂*...*fₙ)/∂x = Σᵢ(f₁*...*fᵢ₋₁*fᵢ'*fᵢ₊₁*...*fₙ)
+        result = zeros(Float64, n)
+        
+        for i in 1:length(components)
+            # Derivative of i-th component
+            component_derivative = analytical_derivative(components[i], variable, data)
+            
+            # If this component doesn't depend on variable, skip
+            if all(x -> x == 0, component_derivative)
+                continue
+            end
+            
+            # Product of all other components (constant w.r.t. variable)
+            product = component_derivative
+            for j in 1:length(components)
+                if i != j
+                    try
+                        component_values = evaluate_term(components[j], data)
+                        if component_values isa Vector
+                            product .*= component_values
+                        else
+                            # Multi-column component - this shouldn't happen in simple case
+                            @warn "Unexpected multi-column component in simple interaction"
+                            return zeros(Float64, n)
+                        end
+                    catch e
+                        @warn "Failed to evaluate component $(typeof(components[j])): $e"
+                        return zeros(Float64, n)
+                    end
+                end
+            end
+            
+            result .+= product
+        end
+        
+        return result
+    else
+        # Complex interaction with multi-column terms
+        # This will be handled by the multi-column derivative computation
+        @warn "Complex interaction with multi-column terms - using fallback"
+        return zeros(Float64, n)
+    end
 end
 
 """
@@ -187,34 +310,46 @@ function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::
     # Initialize finite difference matrix (will contain analytical derivatives)
     fill!(ws.finite_diff_matrix, 0.0)
     
-    # For each affected column, compute analytical derivative
+    # Group affected columns by their generating term
+    terms_to_process = Dict{AbstractTerm, Vector{Int}}()
     for col in affected_cols
-        # Find which term generates this column
         term, local_col_in_term = find_term_for_column(ws.mapping, col)
-        
         if term !== nothing
-            try
-                # Compute analytical derivative of this term
+            if !haskey(terms_to_process, term)
+                terms_to_process[term] = Int[]
+            end
+            push!(terms_to_process[term], col)
+        end
+    end
+    
+    # Process each term and its columns
+    for (term, cols) in terms_to_process
+        try
+            if width(term) == 1
+                # Single column term - compute derivative directly
                 term_derivative = analytical_derivative(term, variable, ws.base_data)
+                @assert length(cols) == 1 "Single-width term should affect exactly one column"
+                ws.finite_diff_matrix[:, cols[1]] = term_derivative
                 
-                # For multi-column terms (like interactions), we need the derivative 
-                # of the specific output column, not the whole term
-                if width(term) == 1
-                    # Single column term - use derivative directly
-                    ws.finite_diff_matrix[:, col] = term_derivative
-                else
-                    # Multi-column term - need to handle this carefully
-                    # For now, use the term derivative (this will need refinement)
-                    ws.finite_diff_matrix[:, col] = term_derivative
+            else
+                # Multi-column term - need to compute derivative of each output column
+                term_derivatives = compute_term_column_derivatives(term, variable, ws.base_data, ipm)
+                
+                for (i, col) in enumerate(cols)
+                    if i <= length(term_derivatives)
+                        ws.finite_diff_matrix[:, col] = term_derivatives[i]
+                    else
+                        @warn "Not enough derivatives computed for term $(typeof(term)), column $col"
+                        ws.finite_diff_matrix[:, col] .= 0.0
+                    end
                 end
-                
-            catch e
-                @warn "Failed to compute analytical derivative for column $col, term $(typeof(term)): $e"
+            end
+            
+        catch e
+            @warn "Failed to compute analytical derivative for term $(typeof(term)): $e"
+            for col in cols
                 ws.finite_diff_matrix[:, col] .= 0.0
             end
-        else
-            @warn "Could not find term for column $col"
-            ws.finite_diff_matrix[:, col] .= 0.0
         end
     end
     
@@ -224,6 +359,76 @@ function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::
     
     @inbounds for col in unaffected_cols, row in axes(ws.finite_diff_matrix, 1)
         ws.finite_diff_matrix[row, col] = 0.0
+    end
+end
+
+"""
+    compute_term_column_derivatives(term::AbstractTerm, variable::Symbol, data::NamedTuple, ipm::InplaceModeler) -> Vector{Vector{Float64}}
+
+For multi-column terms, compute the derivative of each output column.
+Returns a vector of derivative vectors, one for each output column.
+"""
+function compute_term_column_derivatives(term::AbstractTerm, variable::Symbol, data::NamedTuple, ipm::InplaceModeler)
+    # For now, use finite differences to compute derivatives of each column
+    # This is a temporary solution until we implement full analytical derivatives for multi-column terms
+    
+    n = length(data[variable])
+    w = width(term)
+    
+    if w == 1
+        # Single column - should not reach here
+        term_deriv = analytical_derivative(term, variable, data)
+        return [term_deriv]
+    end
+    
+    # Multi-column term - use finite differences as fallback
+    h = 1e-6  # Small step size
+    original_values = data[variable]
+    
+    # Evaluate term at original values
+    original_matrix = Matrix{Float64}(undef, n, w)
+    evaluate_term_to_matrix!(term, data, original_matrix, ipm)
+    
+    derivatives = Vector{Vector{Float64}}(undef, w)
+    
+    for col_idx in 1:w
+        col_derivatives = Vector{Float64}(undef, n)
+        
+        for row_idx in 1:n
+            # Perturb single element
+            perturbed_values = copy(original_values)
+            perturbed_values[row_idx] += h
+            perturbed_data = merge(data, (variable => perturbed_values,))
+            
+            # Evaluate term at perturbed values
+            perturbed_matrix = Matrix{Float64}(undef, n, w)
+            evaluate_term_to_matrix!(term, perturbed_data, perturbed_matrix, ipm)
+            
+            # Finite difference for this element
+            col_derivatives[row_idx] = (perturbed_matrix[row_idx, col_idx] - original_matrix[row_idx, col_idx]) / h
+        end
+        
+        derivatives[col_idx] = col_derivatives
+    end
+    
+    return derivatives
+end
+
+"""
+    evaluate_term_to_matrix!(term::AbstractTerm, data::NamedTuple, matrix::Matrix{Float64}, ipm::InplaceModeler)
+
+Evaluate a term and fill the provided matrix with its output.
+"""
+function evaluate_term_to_matrix!(term::AbstractTerm, data::NamedTuple, matrix::Matrix{Float64}, ipm::InplaceModeler)
+    # Use the existing _cols! infrastructure to evaluate the term
+    fn_i = Ref(1)
+    int_i = Ref(1)
+    
+    try
+        _cols!(term, data, matrix, 1, ipm, fn_i, int_i)
+    catch e
+        @warn "Failed to evaluate term $(typeof(term)): $e"
+        fill!(matrix, 0.0)
     end
 end
 
