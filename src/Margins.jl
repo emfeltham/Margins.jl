@@ -1,7 +1,7 @@
 module Margins
 
 using CategoricalArrays
-import CategoricalArrays.pool
+using CategoricalArrays: pool, refs 
 
 using DataFrames, Tables
 import DataFrames.DataFrame
@@ -39,6 +39,7 @@ using StandardizedPredictors
 # INTEGRATION WITH EfficientModelMatrices.jl
 using EfficientModelMatrices
 using EfficientModelMatrices: InplaceModeler, modelmatrix!, fixed_effects_form
+using EfficientModelMatrices: _cols!
 
 ## formula helpers
 # Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy

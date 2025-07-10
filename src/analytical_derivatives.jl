@@ -345,55 +345,79 @@ function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::
 end
 
 """
+    compute_term_column_derivatives(term::InteractionTerm{T}, variable, data, ipm) where T<:Tuple
+
+Fully‐analytic, per‐column derivatives for an InteractionTerm.
+Works for any # of components (continuous×continuous, continuous×factor, etc.).
+"""
+function compute_term_column_derivatives(
+    term::InteractionTerm{T},
+    variable::Symbol,
+    data::NamedTuple,
+    ipm::InplaceModeler
+) where T<:Tuple
+
+    n = length(data[variable])
+    w = width(term)
+
+    # 1) Build the full design‐matrix for this interaction (n×w)
+    X_int = Matrix{Float64}(undef, n, w)
+    evaluate_term_to_matrix!(term, data, X_int, ipm)
+
+    # 2) Find the continuous subterm f(x) whose dériv we want
+    cont_vals = nothing
+    for comp in term.terms
+        if variable in termvars(comp)
+            # evaluate_term on a single‐column term → Vector{Float64}
+            cont_vals = evaluate_term(comp, data)
+            break
+        end
+    end
+    @assert cont_vals !== nothing "No continuous component in $term to differentiate"
+
+    # 3) For each column j, ∂(f(x)*other_j)/∂x = other_j
+    derivs = Vector{Vector{Float64}}(undef, w)
+    for j in 1:w
+        col = view(X_int, :, j)
+
+        # product of *all* components except the focal one
+        other_vals = col ./ cont_vals            # good when |cont_vals|>0
+        zero_rows  = cont_vals .== 0.0
+        if any(zero_rows)
+            other_vals[zero_rows] .= view(X_int, zero_rows, j)  # == product(other components)
+        end
+        derivs[j] = other_vals
+    end
+
+    return derivs
+end
+
+"""
     compute_term_column_derivatives(term::AbstractTerm, variable::Symbol, data::NamedTuple, ipm::InplaceModeler) -> Vector{Vector{Float64}}
 
 For multi-column terms, compute the derivative of each output column.
 Returns a vector of derivative vectors, one for each output column.
 """
-function compute_term_column_derivatives(term::AbstractTerm, variable::Symbol, data::NamedTuple, ipm::InplaceModeler)
-    # For now, use finite differences to compute derivatives of each column
-    # This is a temporary solution until we implement full analytical derivatives for multi-column terms
-    
-    n = length(data[variable])
+function compute_term_column_derivatives(term::AbstractTerm, variable::Symbol,
+                                        data::NamedTuple, ipm::InplaceModeler)
+    # Directly dispatch to the analytic‐derivative routines, then split into columns
+    M = analytical_derivative(term, variable, data)  
+    # assume this returns either an n×w Matrix or Vector{Vector{Float64}}
+
+    # how many output cols should this term have?
     w = width(term)
-    
-    if w == 1
-        # Single column - should not reach here
-        term_deriv = analytical_derivative(term, variable, data)
-        return [term_deriv]
+    if M isa AbstractMatrix
+        @assert size(M,2) == w
+        return [view(M, :, j) for j in 1:w]
+    elseif M isa AbstractVector
+        # single‐column derivative – replicate for each column
+        # (e.g. categoricalTerm or constantTerm → zeros(n))
+        return [copy(M) for _ in 1:w]
+    else
+        throw(ArgumentError(
+            "analytical_derivative returned $(typeof(M)), expected Vector or Matrix"
+        ))
     end
-    
-    # Multi-column term - use finite differences as fallback
-    h = 1e-6  # Small step size
-    original_values = data[variable]
-    
-    # Evaluate term at original values
-    original_matrix = Matrix{Float64}(undef, n, w)
-    evaluate_term_to_matrix!(term, data, original_matrix, ipm)
-    
-    derivatives = Vector{Vector{Float64}}(undef, w)
-    
-    for col_idx in 1:w
-        col_derivatives = Vector{Float64}(undef, n)
-        
-        for row_idx in 1:n
-            # Perturb single element
-            perturbed_values = copy(original_values)
-            perturbed_values[row_idx] += h
-            perturbed_data = merge(data, (variable => perturbed_values,))
-            
-            # Evaluate term at perturbed values
-            perturbed_matrix = Matrix{Float64}(undef, n, w)
-            evaluate_term_to_matrix!(term, perturbed_data, perturbed_matrix, ipm)
-            
-            # Finite difference for this element
-            col_derivatives[row_idx] = (perturbed_matrix[row_idx, col_idx] - original_matrix[row_idx, col_idx]) / h
-        end
-        
-        derivatives[col_idx] = col_derivatives
-    end
-    
-    return derivatives
 end
 
 """

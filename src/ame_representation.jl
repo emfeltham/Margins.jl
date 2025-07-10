@@ -38,33 +38,34 @@ function compute_continuous_focal_at_repvals_fixed!(
     # EFFICIENT: Build perturbed matrix using selective updates
     # ws.work_matrix is our baseline (at rep values)
     # ws.finite_diff_matrix will hold the perturbed version
-    modelmatrix_with_base!(ipm, pert_data, ws.finite_diff_matrix, ws.work_matrix, [focal], ws.mapping)
+    # modelmatrix_with_base!(ipm, pert_data, ws.finite_diff_matrix, ws.work_matrix, [focal], ws.mapping)
     
-    # Compute finite differences for affected columns only
-    affected_cols = ws.variable_plans[focal]
-    invh = 1.0 / h
+    # # Compute finite differences for affected columns only
+    # affected_cols = ws.variable_plans[focal]
+    # invh = 1.0 / h
     
-    @inbounds for col in affected_cols
-        for row in 1:n
-            baseline_val = ws.work_matrix[row, col]
-            perturbed_val = ws.finite_diff_matrix[row, col]
+    # @inbounds for col in affected_cols
+    #     for row in 1:n
+    #         baseline_val = ws.work_matrix[row, col]
+    #         perturbed_val = ws.finite_diff_matrix[row, col]
             
-            if !isfinite(baseline_val) || !isfinite(perturbed_val)
-                ws.finite_diff_matrix[row, col] = 0.0
-                continue
-            end
+    #         if !isfinite(baseline_val) || !isfinite(perturbed_val)
+    #             ws.finite_diff_matrix[row, col] = 0.0
+    #             continue
+    #         end
             
-            raw_diff = perturbed_val - baseline_val
-            finite_diff = raw_diff * invh
+    #         raw_diff = perturbed_val - baseline_val
+    #         finite_diff = raw_diff * invh
             
-            if isfinite(finite_diff)
-                ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
-            else
-                ws.finite_diff_matrix[row, col] = 0.0
-            end
-        end
-    end
-    
+    #         if isfinite(finite_diff)
+    #             ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
+    #         else
+    #             ws.finite_diff_matrix[row, col] = 0.0
+    #         end
+    #     end
+    # end
+    prepare_analytical_derivatives!(ws, focal, 0.0, ipm)
+
     # Zero out unaffected columns
     total_cols = size(ws.finite_diff_matrix, 2)
     unaffected_cols = get_unchanged_columns(ws.mapping, [focal], total_cols)
