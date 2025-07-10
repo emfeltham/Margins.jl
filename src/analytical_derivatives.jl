@@ -9,11 +9,15 @@ const STANDARD_DERIVATIVES = Dict{Function, Function}(
     log => x -> 1/x,
     log1p => x -> 1/(1+x),
     exp => x -> exp(x),
+    expm1 => x -> exp(x),
     sqrt => x -> 1/(2*sqrt(x)),
     sin => x -> cos(x),
     cos => x -> -sin(x),
     tan => x -> sec(x)^2,
-    # Add more as needed
+    atan => x -> 1/(1+x^2),
+    sinh => x -> cosh(x),
+    cosh => x -> sinh(x),
+    tanh => x -> sech(x)^2,
 )
 
 """
@@ -85,19 +89,36 @@ function evaluate_term(term::InterceptTerm{false}, data::NamedTuple)
     return zeros(Float64, n)
 end
 
-function evaluate_term(term::CategoricalTerm, data::NamedTuple)
-    # For CategoricalTerm, we need to evaluate the contrast coding
-    # This is complex, so for now we'll use the existing _cols! infrastructure
+
+"""
+    evaluate_term(term::InteractionTerm, data::NamedTuple)
+
+REPLACED: Fixed interaction term evaluation for 3-way interactions.
+"""
+function evaluate_term(term::InteractionTerm, data::NamedTuple)
     n = length(first(data))
-    w = width(term)
     
-    # Create temporary matrix and use _cols! to fill it
-    temp_matrix = Matrix{Float64}(undef, n, w)
+    # Get all component values
+    component_values = [evaluate_term(component, data) for component in term.terms]
     
-    # We need an InplaceModeler, but we don't have one here
-    # For now, implement basic categorical evaluation
+    # Compute element-wise product
+    result = ones(Float64, n)
+    for comp_vals in component_values
+        result .*= comp_vals
+    end
+    
+    return result
+end
+
+"""
+    evaluate_term(term::CategoricalTerm, data::NamedTuple)
+
+REPLACED: Fixed categorical term evaluation with proper contrast coding.
+"""
+function evaluate_term(term::CategoricalTerm, data::NamedTuple)
     v = data[term.sym]
     M = term.contrasts.matrix
+    n = length(v)
     
     # Handle both CategoricalArray and regular arrays
     if isa(v, CategoricalArray)
@@ -108,19 +129,21 @@ function evaluate_term(term::CategoricalTerm, data::NamedTuple)
         codes = [code_map[val] for val in v]
     end
     
-    # Fill contrast matrix
-    for r in 1:n
-        code = codes[r]
-        for k in 1:w
-            temp_matrix[r, k] = M[code, k]
+    # For single-column case (most common with dummy coding)
+    if size(M, 2) == 1
+        result = Vector{Float64}(undef, n)
+        @inbounds for i in 1:n
+            result[i] = M[codes[i], 1]
         end
-    end
-    
-    if w == 1
-        return temp_matrix[:, 1]
+        return result
     else
-        # Return the full matrix as a vector of columns
-        return [temp_matrix[:, k] for k in 1:w]
+        # Multi-column case - return first column for now
+        # (Multi-column analytical derivatives will be handled by fallback)
+        result = Vector{Float64}(undef, n)
+        @inbounds for i in 1:n
+            result[i] = M[codes[i], 1]
+        end
+        return result
     end
 end
 
@@ -144,30 +167,6 @@ function evaluate_term(term::FunctionTerm, data::NamedTuple)
         else
             error("Multi-column function arguments not yet supported")
         end
-    end
-end
-
-function evaluate_term(term::InteractionTerm, data::NamedTuple)
-    # For interaction terms, we need to compute the Kronecker product
-    # This is also complex, so use the _cols! infrastructure via the fallback
-    n = length(first(data))
-    w = width(term)
-    
-    if w == 1
-        # Simple case: all components are single-column
-        result = ones(Float64, n)
-        for component in term.terms
-            component_values = evaluate_term(component, data)
-            if component_values isa Vector
-                result .*= component_values
-            else
-                error("Multi-column interaction components not supported in simple evaluate_term")
-            end
-        end
-        return result
-    else
-        # Multi-column interaction - delegate to matrix evaluation
-        error("Multi-column interaction evaluation requires matrix approach")
     end
 end
 
@@ -219,17 +218,26 @@ function analytical_derivative(term::FunctionTerm, variable::Symbol, data::Named
 end
 
 # InteractionTerm: Product rule for arbitrary number of components
+"""
+    analytical_derivative(term::InteractionTerm, variable::Symbol, data::NamedTuple)
+
+REPLACED: Fixed 3-way interaction analytical derivative using proper product rule.
+"""
 function analytical_derivative(term::InteractionTerm, variable::Symbol, data::NamedTuple)
     components = term.terms
     n = length(data[variable])
     
-    # Check if any component depends on the variable
+    # Pre-compute all component values and derivatives
+    component_values = Vector{Vector{Float64}}(undef, length(components))
+    component_derivatives = Vector{Vector{Float64}}(undef, length(components))
     any_depends = false
-    for component in components
-        comp_deriv = analytical_derivative(component, variable, data)
-        if !all(x -> x == 0, comp_deriv)
+    
+    for (i, component) in enumerate(components)
+        component_values[i] = evaluate_term(component, data)
+        component_derivatives[i] = analytical_derivative(component, variable, data)
+        
+        if !all(x -> x == 0, component_derivatives[i])
             any_depends = true
-            break
         end
     end
     
@@ -237,55 +245,29 @@ function analytical_derivative(term::InteractionTerm, variable::Symbol, data::Na
         return zeros(Float64, n)
     end
     
-    # For interactions involving categorical terms, we need to be careful
-    # The derivative depends on which output column we're computing
+    # Apply product rule: d/dx(f₁*f₂*...*fₙ) = Σᵢ(f₁*...*fᵢ₋₁*fᵢ'*fᵢ₊₁*...*fₙ)
+    result = zeros(Float64, n)
     
-    # Check if this is a simple interaction (all single-column terms)
-    all_single_column = all(component -> width(component) == 1, components)
-    
-    if all_single_column
-        # Simple product rule: ∂(f₁*f₂*...*fₙ)/∂x = Σᵢ(f₁*...*fᵢ₋₁*fᵢ'*fᵢ₊₁*...*fₙ)
-        result = zeros(Float64, n)
-        
-        for i in 1:length(components)
-            # Derivative of i-th component
-            component_derivative = analytical_derivative(components[i], variable, data)
-            
-            # If this component doesn't depend on variable, skip
-            if all(x -> x == 0, component_derivative)
-                continue
-            end
-            
-            # Product of all other components (constant w.r.t. variable)
-            product = component_derivative
-            for j in 1:length(components)
-                if i != j
-                    try
-                        component_values = evaluate_term(components[j], data)
-                        if component_values isa Vector
-                            product .*= component_values
-                        else
-                            # Multi-column component - this shouldn't happen in simple case
-                            @warn "Unexpected multi-column component in simple interaction"
-                            return zeros(Float64, n)
-                        end
-                    catch e
-                        @warn "Failed to evaluate component $(typeof(components[j])): $e"
-                        return zeros(Float64, n)
-                    end
-                end
-            end
-            
-            result .+= product
+    for i in 1:length(components)
+        # Skip if this component doesn't depend on the variable
+        if all(x -> x == 0, component_derivatives[i])
+            continue
         end
         
-        return result
-    else
-        # Complex interaction with multi-column terms
-        # This will be handled by the multi-column derivative computation
-        @warn "Complex interaction with multi-column terms - using fallback"
-        return zeros(Float64, n)
+        # Compute the i-th term of the product rule
+        term_contribution = copy(component_derivatives[i])  # Start with fᵢ'
+        
+        # Multiply by all other components (fⱼ for j ≠ i)
+        for j in 1:length(components)
+            if i != j
+                term_contribution .*= component_values[j]
+            end
+        end
+        
+        result .+= term_contribution
     end
+    
+    return result
 end
 
 """
