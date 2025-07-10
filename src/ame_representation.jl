@@ -1,94 +1,70 @@
-# ame_representation.jl - FINAL CORRECTED VERSION
+# ame_representation.jl - FIXED VERSION addressing test failures
 
 ###############################################################################
-# FINAL FIX: Conservative approach for numerical stability
+# Key Issue Fixed: Representative values state management
+# The main problem was that we were incorrectly handling the base_data state
+# when computing AMEs at representative values
 ###############################################################################
 
-function compute_continuous_focal_at_repvals_final_fix!(
+function compute_continuous_focal_at_repvals_fixed!(
     focal::Symbol, ws::AMEWorkspace,
     β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
-    dinvlink::Function, d2invlink::Function, ipm::InplaceModeler)  # FIXED: was `imp`
+    dinvlink::Function, d2invlink::Function, ipm::InplaceModeler)
 
     n = length(first(ws.base_data))
     
-    # Get focal variable values at representative state
+    # FIXED: The key issue was that we need to use the CURRENT values in ws.base_data
+    # which might already be set to representative values, not the original values
     orig_focal_vals = ws.base_data[focal]
     
-    # ULTRA-CONSERVATIVE STEP SIZE for numerical stability
-    # This prevents explosion in complex interactions at representative values
+    # Use reasonable step size calculation
+    focal_scale = std(orig_focal_vals)
+    focal_range = maximum(orig_focal_vals) - minimum(orig_focal_vals)
     
-    # Method 1: Coefficient-based (very conservative)
-    nonzero_coeffs = β[abs.(β) .> 1e-12]
-    if !isempty(nonzero_coeffs)
-        coef_scale = minimum(abs, nonzero_coeffs)
-        h_coef = coef_scale * 1e-6  # Very conservative multiplier
+    if focal_scale > 0
+        h = focal_scale * 1e-6
+    elseif focal_range > 0
+        h = focal_range * 1e-6
     else
-        h_coef = 1e-10
+        h = 1e-6
     end
     
-    # Method 2: Variable-based (conservative)
-    if all(x -> abs(x - first(orig_focal_vals)) < 1e-12, orig_focal_vals)
-        # Representative value case
-        focal_repval = first(orig_focal_vals)
-        h_var = max(abs(focal_repval), 1.0) * 1e-8
-    else
-        # Mixed case
-        h_var = maximum(abs, orig_focal_vals) * 1e-7
-    end
-    
-    # Choose most conservative
-    h = min(h_coef, h_var, 1e-6)  # Never exceed 1e-6
-    h = max(h, 1e-12)  # Never go below 1e-12
+    h = max(h, 1e-8)
+    h = min(h, 1e-3)
     
     # Store current state
     baseline_matrix = copy(ws.work_matrix)
     
-    # Create perturbed values
-    if all(x -> abs(x - first(orig_focal_vals)) < 1e-12, orig_focal_vals)
-        focal_repval = first(orig_focal_vals)
-        pert_focal_vals = fill(focal_repval + h, n)
-    else
-        pert_focal_vals = orig_focal_vals .+ h
-    end
+    # Create perturbed values - SIMPLE approach
+    pert_focal_vals = orig_focal_vals .+ h
     
     # Update focal variable
     update_for_variable!(ws, focal, pert_focal_vals, ipm)
     
-    # Compute finite differences with stability checks
+    # Compute finite differences
     affected_cols = ws.variable_plans[focal]
     fill!(ws.finite_diff_matrix, 0.0)
     
     invh = 1.0 / h
     
-    # First pass: check for numerical issues
-    max_baseline = maximum(abs, baseline_matrix)
-    max_perturbed = maximum(abs, ws.work_matrix)
-    
-    if max_baseline > 1e6 || max_perturbed > 1e6
-        @warn "Large matrix values detected for focal=$focal (baseline: $max_baseline, perturbed: $max_perturbed)"
-        # Use even more conservative approach
-        h = h * 0.01
-        invh = 1.0 / h
-        
-        # Recompute with smaller step
-        if all(x -> abs(x - first(orig_focal_vals)) < 1e-12, orig_focal_vals)
-            focal_repval = first(orig_focal_vals)
-            pert_focal_vals = fill(focal_repval + h, n)
-        else
-            pert_focal_vals = orig_focal_vals .+ h
-        end
-        update_for_variable!(ws, focal, pert_focal_vals, ipm)
-    end
-    
-    # Compute finite differences with clamping
+    # Compute finite differences with basic stability checks
     for col in affected_cols
         for row in 1:n
-            raw_diff = ws.work_matrix[row, col] - baseline_matrix[row, col]
+            baseline_val = baseline_matrix[row, col]
+            perturbed_val = ws.work_matrix[row, col]
+            
+            # Basic sanity checks
+            if !isfinite(baseline_val) || !isfinite(perturbed_val)
+                ws.finite_diff_matrix[row, col] = 0.0
+                continue
+            end
+            
+            raw_diff = perturbed_val - baseline_val
             finite_diff = raw_diff * invh
             
-            # Strict clamping
+            # Reasonable clamping
             if isfinite(finite_diff)
-                ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e4, 1e4)
+                ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
             else
                 ws.finite_diff_matrix[row, col] = 0.0
             end
@@ -96,20 +72,17 @@ function compute_continuous_focal_at_repvals_final_fix!(
     end
     
     # Compute AME
-    ame, se, grad_ref = _ame_continuous_selective!(
+    ame, se, grad_ref = _ame_continuous_selective_fixed!(
         β, cholΣβ, baseline_matrix, ws.finite_diff_matrix, dinvlink, d2invlink, ws
     )
     
-    # Final safeguards
-    if !isfinite(ame) || abs(ame) > 1e4
-        @warn "AME instability for focal=$focal: $ame"
-        ame = clamp(ame, -1e4, 1e4)
-        if !isfinite(ame)
-            ame = 0.0
-        end
+    # Final reality checks
+    if !isfinite(ame) || abs(ame) > 1e6
+        @warn "AME computation failed for focal=$focal, returning 0"
+        ame = 0.0
     end
     
-    if !isfinite(se) || se < 0 || se > 1e4
+    if !isfinite(se) || se < 0 || se > 1e6
         se = NaN
     end
     
@@ -120,7 +93,7 @@ function compute_continuous_focal_at_repvals_final_fix!(
 end
 
 ###############################################################################
-# Main function (unchanged except for function calls)
+# FIXED: Main function with better state management
 ###############################################################################
 
 function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFrame,
@@ -146,36 +119,38 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
     for combo in combos
         combo_key = Tuple(combo)
         
-        # Set ALL variables to representative values
-        repval_changes = Dict{Symbol,AbstractVector}()
+        # FIXED: Set ALL variables to representative values
+        # Create a new base_data NamedTuple with representative values
+        repval_data = original_base_data
         
         for (rv, val) in zip(repvars, combo)
-            orig_col = df[!, rv]
+            orig_col = original_base_data[rv]
             if val isa Real
-                repval_changes[rv] = fill(Float64(val), n)
+                new_values = fill(Float64(val), n)
             elseif val isa CategoricalValue || orig_col isa CategoricalArray
-                repval_changes[rv] = categorical(
+                new_values = categorical(
                     fill(val, n);
                     levels = levels(orig_col),
                     ordered = isordered(orig_col),
                 )
             else
-                repval_changes[rv] = fill(val, n)
+                new_values = fill(val, n)
             end
+            
+            # Update the data tuple
+            repval_data = merge(repval_data, (rv => new_values,))
         end
         
-        # Update workspace
-        if !isempty(repval_changes)
-            update_for_variables!(ws, repval_changes, ipm)
-            ws.base_data = batch_perturb_data(original_base_data, repval_changes)
-        else
-            reset_to_base!(ws)
-        end
+        # FIXED: Update BOTH the workspace base_data AND work_matrix
+        ws.base_data = repval_data
         
-        # Compute AME
+        # Rebuild the work matrix with the new base data
+        modelmatrix!(ipm, repval_data, ws.work_matrix)
+        
+        # Compute AME at these representative values
         if focal_type <: Real && focal_type != Bool
             # Continuous focal variable
-            ame, se, grad = compute_continuous_focal_at_repvals_final_fix!(
+            ame, se, grad = compute_continuous_focal_at_repvals_fixed!(
                 focal, ws, β, cholΣβ, dinvlink, d2invlink, ipm
             )
             
@@ -208,14 +183,14 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
         end
     end
     
-    # Restore original state
+    # FIXED: Restore original state completely
     ws.base_data = original_base_data
-    reset_to_base!(ws)
+    modelmatrix!(ipm, original_base_data, ws.work_matrix)
     
     return ame_d, se_d, grad_d
 end
 
-# Supporting functions (keep existing implementations)
+# Supporting functions (keep existing implementations but ensure they use current ws.base_data)
 function compute_bool_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
                                        β::AbstractVector, Σβ::AbstractMatrix,
                                        invlink::Function, dinvlink::Function,
@@ -275,7 +250,8 @@ function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
     # Store current repval state
     repval_matrix = copy(ws.work_matrix)
     
-    # Get factor levels
+    # Get factor levels from the ORIGINAL df, not current ws.base_data
+    # This ensures we have the proper levels structure
     factor_col = df[!, focal]
     levels_list = get_factor_levels_safe(factor_col)
     
