@@ -257,28 +257,3 @@ function get_memory_info(ws::AMEWorkspace)
         n_continuous = length(ws.pert_vectors)
     )
 end
-
-"""
-    validate_data_consistency(data::NamedTuple)
-
-Validate that all vectors in a NamedTuple have the same length.
-FIXED: Better error messages.
-"""
-function validate_data_consistency(data::NamedTuple)
-    if isempty(data)
-        return true
-    end
-    
-    first_length = length(first(data))
-    
-    for (name, values) in pairs(data)
-        if length(values) != first_length
-            throw(DimensionMismatch(
-                "Variable $name has length $(length(values)), " *
-                "but expected length $first_length"
-            ))
-        end
-    end
-    
-    return true
-end

@@ -1,12 +1,4 @@
-# ame_continuous.jl - FIXED VERSION addressing test failures
-
-###############################################################################
-# Key Issues Fixed:
-# 1. Finite difference step size calculation was too conservative
-# 2. Matrix scaling checks were interfering with normal computations
-# 3. Gradient computation had numerical stability issues
-# 4. Representative values computation had incorrect base state handling
-###############################################################################
+# ame_continuous.jl
 
 """
     compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWorkspace,
@@ -85,11 +77,15 @@ function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWo
     return ames, ses, grads
 end
 
+#####
+
 """
     prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h::Real, 
                                      ipm::InplaceModeler)
 
-Prepare finite difference matrix with fixed numerical methods.
+ForwardDiff-based replacement that computes EXACT derivatives instead of finite differences.
+Produces the same output format as the original but with exact derivatives.
+The h parameter is ignored (kept for API compatibility).
 """
 function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h::Real, 
                                           ipm::InplaceModeler)
@@ -101,49 +97,52 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
         ))
     end
     
-    # Store current work matrix state (might be at repvals)
-    current_matrix = copy(ws.work_matrix)
-    
-    # Create perturbed values: current variable values + h
+    # Get original variable values and affected columns
     current_var_values = ws.base_data[variable]
-    pert_vector = ws.pert_vectors[variable]
-    
-    # Fill perturbation vector
-    @inbounds for i in eachindex(pert_vector)
-        pert_vector[i] = current_var_values[i] + h
-    end
-    
-    # Update work matrix with perturbed values  
-    update_for_variable!(ws, variable, pert_vector, ipm)
-    
-    # Get affected columns
     affected_cols = ws.variable_plans[variable]
     
-    # Compute finite differences: (X_perturbed - X_current) / h
-    invh = 1.0 / h
+    # Store current work matrix state
+    current_matrix = copy(ws.work_matrix)
     
-    @inbounds for col in affected_cols, row in axes(ws.finite_diff_matrix, 1)
-        baseline_val = current_matrix[row, col]
-        perturbed_val = ws.work_matrix[row, col]
+    # Initialize finite difference matrix (will contain exact derivatives)
+    fill!(ws.finite_diff_matrix, 0.0)
+    
+    # Define function to compute model matrix as function of the variable values
+    function matrix_function(var_vals::Vector{T}) where T
+        # Create perturbed data with new variable values
+        pert_data = merge(ws.base_data, (variable => var_vals,))
         
-        # Basic sanity checks only
-        if !isfinite(baseline_val) || !isfinite(perturbed_val)
-            ws.finite_diff_matrix[row, col] = 0.0
-            continue
-        end
+        # Create working matrix that can handle dual numbers
+        work_matrix = Matrix{T}(undef, size(ws.work_matrix)...)
+        work_matrix .= current_matrix  # Copy current state
         
-        raw_diff = perturbed_val - baseline_val
-        finite_diff = raw_diff * invh
+        # Selectively update only affected columns using ForwardDiff-compatible operations
+        update_affected_columns_forwarddiff!(work_matrix, pert_data, affected_cols, variable, ws, ipm)
         
-        # FIXED: Less aggressive clamping for larger step sizes
-        if isfinite(finite_diff)
-            ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e8, 1e8)  # CHANGED: from 1e6 to 1e8
-        else
-            ws.finite_diff_matrix[row, col] = 0.0
+        return work_matrix
+    end
+    
+    # Use ForwardDiff to compute the Jacobian (derivative of each matrix element w.r.t. each variable value)
+    # This gives us exact derivatives instead of finite difference approximations
+    jacobian_result = ForwardDiff.jacobian(var_vals -> vec(matrix_function(var_vals)), current_var_values)
+    
+    # Reshape jacobian result back to matrix form and extract affected columns
+    n_rows, n_cols = size(ws.work_matrix)
+    
+    for (i, col) in enumerate(affected_cols)
+        for row in 1:n_rows
+            # The jacobian gives us ∂(matrix[row,col])/∂(var_vals[row])
+            # We want the derivative of matrix[row,col] w.r.t. var_vals[row]
+            matrix_idx = (col - 1) * n_rows + row  # Column-major indexing
+            var_idx = row  # Variable value index
+            
+            if matrix_idx <= size(jacobian_result, 1) && var_idx <= size(jacobian_result, 2)
+                ws.finite_diff_matrix[row, col] = jacobian_result[matrix_idx, var_idx]
+            end
         end
     end
     
-    # For unaffected columns, finite difference is zero
+    # Zero out unaffected columns (same as original)
     total_cols = size(ws.finite_diff_matrix, 2)
     unaffected_cols = get_unchanged_columns(ws.mapping, [variable], total_cols)
     
@@ -151,9 +150,182 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
         ws.finite_diff_matrix[row, col] = 0.0
     end
     
-    # Restore current state
+    # Restore current state (same as original)
     ws.work_matrix .= current_matrix
 end
+
+"""
+    update_affected_columns_forwarddiff!(work_matrix, data, affected_cols, variable, ws, ipm)
+
+ForwardDiff-compatible selective column update.
+"""
+function update_affected_columns_forwarddiff!(work_matrix::AbstractMatrix{T}, 
+                                            data::NamedTuple, 
+                                            affected_cols::Vector{Int}, 
+                                            variable::Symbol,
+                                            ws::AMEWorkspace,
+                                            ipm::InplaceModeler) where T
+    
+    # Get the terms that affect these columns
+    terms_to_update = Set{AbstractTerm}()
+    for (term, range) in ws.mapping.term_info
+        if !isempty(intersect(collect(range), affected_cols))
+            push!(terms_to_update, term)
+        end
+    end
+    
+    # Re-evaluate only the affected terms using ForwardDiff-compatible operations
+    fn_i = Ref(1)
+    int_i = Ref(1)
+    
+    for term in terms_to_update
+        range = ws.mapping.term_to_range[term]
+        if !isempty(range)
+            # Use ForwardDiff-compatible _cols! function
+            _cols_forwarddiff!(term, data, work_matrix, first(range), ipm, fn_i, int_i)
+        end
+    end
+end
+
+"""
+    _cols_forwarddiff!(term, data, X, j, ipm, fn_i, int_i)
+
+ForwardDiff-compatible version of _cols! that handles dual numbers.
+"""
+function _cols_forwarddiff!(term::ContinuousTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    copy!(view(X, :, j), data[term.sym])
+    return j + 1
+end
+
+function _cols_forwarddiff!(term::Term, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    copy!(view(X, :, j), data[term.sym])
+    return j + 1
+end
+
+function _cols_forwarddiff!(term::InterceptTerm{true}, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    fill!(view(X, :, j), one(T))
+    return j + 1
+end
+
+function _cols_forwarddiff!(term::InterceptTerm{false}, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    return j  # No columns for false intercept
+end
+
+function _cols_forwarddiff!(term::ConstantTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    fill!(view(X, :, j), T(term.n))
+    return j + 1
+end
+
+function _cols_forwarddiff!(term::CategoricalTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    v = data[term.sym]
+    M = term.contrasts.matrix
+    n_contrast_cols = size(M, 2)
+    
+    # Handle both CategoricalArray and regular arrays
+    if isa(v, CategoricalArray)
+        codes = refs(v)
+    else
+        unique_vals = sort(unique(v))
+        code_map = Dict(val => i for (i, val) in enumerate(unique_vals))
+        codes = [code_map[val] for val in v]
+    end
+    
+    @inbounds for r in 1:length(codes)
+        code = codes[r]
+        @simd for k in 1:n_contrast_cols
+            X[r, j + k - 1] = T(M[code, k])
+        end
+    end
+    
+    return j + n_contrast_cols
+end
+
+function _cols_forwarddiff!(term::FunctionTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    idx = fn_i[]; fn_i[] += 1
+    nargs = length(term.args)
+    
+    # Create temporary scratch that can handle dual numbers
+    temp_scratch = Matrix{T}(undef, size(X, 1), nargs)
+    
+    # Fill each argument into its column
+    for (arg_i, arg) in enumerate(term.args)
+        _cols_forwarddiff!(arg, data, temp_scratch, arg_i, ipm, fn_i, int_i)
+    end
+    
+    # Apply function and store result
+    col = view(X, :, j)
+    rows = size(col, 1)
+    @inbounds @simd for r in 1:rows
+        if nargs == 1
+            col[r] = term.f(temp_scratch[r, 1])
+        elseif nargs == 2
+            col[r] = term.f(temp_scratch[r, 1], temp_scratch[r, 2])
+        elseif nargs == 3
+            col[r] = term.f(temp_scratch[r, 1], temp_scratch[r, 2], temp_scratch[r, 3])
+        else
+            col[r] = term.f(ntuple(k -> temp_scratch[r, k], nargs)...)
+        end
+    end
+    
+    return j + 1
+end
+
+function _cols_forwarddiff!(term::InteractionTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    idx = int_i[]; int_i[] += 1
+    sw = ipm.int_subw[idx]
+    stride = ipm.int_stride[idx]
+    rows = size(X, 1)
+    
+    # Create temporary scratch that can handle dual numbers
+    total_component_width = sum(sw)
+    temp_scratch = Matrix{T}(undef, rows, total_component_width)
+    
+    # Fill each component into temp_scratch
+    ofs = 0
+    for (comp, w) in zip(term.terms, sw)
+        comp_view = view(temp_scratch, :, ofs+1:ofs+w)
+        _cols_forwarddiff!(comp, data, comp_view, 1, ipm, fn_i, int_i)
+        ofs += w
+    end
+    
+    # Compute Kronecker product into destination
+    total = prod(sw)
+    dest = view(X, :, j:j+total-1)
+    
+    @inbounds for r in 1:rows, col in 1:total
+        off = col - 1
+        acc = one(T)
+        ofs = 0
+        for p in 1:length(sw)
+            k = (off ÷ stride[p]) % sw[p]
+            acc *= temp_scratch[r, ofs + k + 1]
+            ofs += sw[p]
+        end
+        dest[r, col] = acc
+    end
+    
+    return j + total
+end
+
+# Fallback for any other term types
+function _cols_forwarddiff!(term::AbstractTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    # Use the regular _cols! function and convert result
+    w = width(term)
+    temp_matrix = Matrix{Float64}(undef, size(X, 1), w)
+    next_j = _cols!(term, data, temp_matrix, 1, ipm, fn_i, int_i)
+    
+    # Copy and convert to target type
+    n_cols = next_j - j
+    for k in 1:n_cols
+        for r in 1:size(X, 1)
+            X[r, j + k - 1] = T(temp_matrix[r, k])
+        end
+    end
+    
+    return next_j
+end
+
+##########
 
 function _ame_continuous_selective_fixed!(
     β::Vector{Float64},
@@ -396,5 +568,3 @@ function compute_single_continuous_ame_selective!(variable::Symbol, ws::AMEWorks
     
     return ame, se, grad_ref
 end
-
-
