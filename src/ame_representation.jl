@@ -13,11 +13,10 @@ function compute_continuous_focal_at_repvals_fixed!(
 
     n = length(first(ws.base_data))
     
-    # FIXED: The key issue was that we need to use the CURRENT values in ws.base_data
-    # which might already be set to representative values, not the original values
+    # Use current values in ws.base_data (might already be at representative values)
     orig_focal_vals = ws.base_data[focal]
     
-    # Use reasonable step size calculation
+    # Calculate step size
     focal_scale = std(orig_focal_vals)
     focal_range = maximum(orig_focal_vals) - minimum(orig_focal_vals)
     
@@ -32,28 +31,24 @@ function compute_continuous_focal_at_repvals_fixed!(
     h = max(h, 1e-8)
     h = min(h, 1e-3)
     
-    # Store current state
-    baseline_matrix = copy(ws.work_matrix)
-    
-    # Create perturbed values - SIMPLE approach
+    # Create perturbed values
     pert_focal_vals = orig_focal_vals .+ h
+    pert_data = create_perturbed_data(ws.base_data, focal, pert_focal_vals)
     
-    # Update focal variable
-    update_for_variable!(ws, focal, pert_focal_vals, ipm)
+    # EFFICIENT: Build perturbed matrix using selective updates
+    # ws.work_matrix is our baseline (at rep values)
+    # ws.finite_diff_matrix will hold the perturbed version
+    modelmatrix_with_base!(ipm, pert_data, ws.finite_diff_matrix, ws.work_matrix, [focal], ws.mapping)
     
-    # Compute finite differences
+    # Compute finite differences for affected columns only
     affected_cols = ws.variable_plans[focal]
-    fill!(ws.finite_diff_matrix, 0.0)
-    
     invh = 1.0 / h
     
-    # Compute finite differences with basic stability checks
-    for col in affected_cols
+    @inbounds for col in affected_cols
         for row in 1:n
-            baseline_val = baseline_matrix[row, col]
-            perturbed_val = ws.work_matrix[row, col]
+            baseline_val = ws.work_matrix[row, col]
+            perturbed_val = ws.finite_diff_matrix[row, col]
             
-            # Basic sanity checks
             if !isfinite(baseline_val) || !isfinite(perturbed_val)
                 ws.finite_diff_matrix[row, col] = 0.0
                 continue
@@ -62,7 +57,6 @@ function compute_continuous_focal_at_repvals_fixed!(
             raw_diff = perturbed_val - baseline_val
             finite_diff = raw_diff * invh
             
-            # Reasonable clamping
             if isfinite(finite_diff)
                 ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
             else
@@ -71,12 +65,22 @@ function compute_continuous_focal_at_repvals_fixed!(
         end
     end
     
-    # Compute AME
+    # Zero out unaffected columns
+    total_cols = size(ws.finite_diff_matrix, 2)
+    unaffected_cols = get_unchanged_columns(ws.mapping, [focal], total_cols)
+    
+    @inbounds for col in unaffected_cols
+        for row in 1:n
+            ws.finite_diff_matrix[row, col] = 0.0
+        end
+    end
+    
+    # Compute AME using baseline work_matrix and finite_diff_matrix
     ame, se, grad_ref = _ame_continuous_selective_fixed!(
-        β, cholΣβ, baseline_matrix, ws.finite_diff_matrix, dinvlink, d2invlink, ws
+        β, cholΣβ, ws.work_matrix, ws.finite_diff_matrix, dinvlink, d2invlink, ws
     )
     
-    # Final reality checks
+    # Validation
     if !isfinite(ame) || abs(ame) > 1e6
         @warn "AME computation failed for focal=$focal, returning 0"
         ame = 0.0
@@ -85,9 +89,6 @@ function compute_continuous_focal_at_repvals_fixed!(
     if !isfinite(se) || se < 0 || se > 1e6
         se = NaN
     end
-    
-    # Restore state
-    ws.work_matrix .= baseline_matrix
     
     return ame, se, grad_ref
 end
@@ -110,6 +111,7 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
     
     # Store original base_data to restore later
     original_base_data = ws.base_data
+    original_base_matrix = copy(ws.base_matrix)  # Only one copy for restoration
     
     # Result containers
     ame_d = Dict{Tuple,Float64}()
@@ -119,8 +121,7 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
     for combo in combos
         combo_key = Tuple(combo)
         
-        # FIXED: Set ALL variables to representative values
-        # Create a new base_data NamedTuple with representative values
+        # Create representative value data
         repval_data = original_base_data
         
         for (rv, val) in zip(repvars, combo)
@@ -137,15 +138,14 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
                 new_values = fill(val, n)
             end
             
-            # Update the data tuple
             repval_data = merge(repval_data, (rv => new_values,))
         end
         
-        # FIXED: Update BOTH the workspace base_data AND work_matrix
+        # Update workspace state for representative values
         ws.base_data = repval_data
         
-        # Rebuild the work matrix with the new base data
-        modelmatrix!(ipm, repval_data, ws.work_matrix)
+        # EFFICIENT: Build representative value matrix using selective updates
+        modelmatrix_with_base!(ipm, repval_data, ws.work_matrix, original_base_matrix, repvars, ws.mapping)
         
         # Compute AME at these representative values
         if focal_type <: Real && focal_type != Bool
@@ -183,9 +183,10 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
         end
     end
     
-    # FIXED: Restore original state completely
+    # Restore original state
     ws.base_data = original_base_data
-    modelmatrix!(ipm, original_base_data, ws.work_matrix)
+    ws.base_matrix .= original_base_matrix
+    ws.work_matrix .= original_base_matrix
     
     return ame_d, se_d, grad_d
 end

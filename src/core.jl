@@ -101,15 +101,15 @@ end
 
 """
     compute_standard_ames_fixed!(
-    result_map, se_map, grad_map, varlist, cts_vars, cat_vars, 
-    pairs, ws, β, cholΣβ, invlink, dinvlink, d2invlink, df, ipm
-)
+        result_map, se_map, grad_map, varlist, cts_vars, cat_vars, 
+        pairs, ws, β, cholΣβ, invlink, dinvlink, d2invlink, df, ipm
+    )
 
-Compute standard AMEs without representative values using fixed selective updates.
+Compute standard AMEs without representative values using efficient selective updates.
 """
 function compute_standard_ames_fixed!(result_map, se_map, grad_map, varlist, cts_vars, cat_vars, 
                                      pairs, ws, β, cholΣβ, invlink, dinvlink, d2invlink, df, ipm)
-    # Continuous variables - use FIXED version
+    # Continuous variables - now uses efficient selective updates
     if !isempty(cts_vars)
         requested_cts = filter(v -> v in varlist, cts_vars)
         if !isempty(requested_cts)
@@ -125,7 +125,7 @@ function compute_standard_ames_fixed!(result_map, se_map, grad_map, varlist, cts
         end
     end
     
-    # Categorical variables
+    # Categorical variables - unchanged
     for v in cat_vars
         ame_d = Dict{Tuple,Float64}()
         se_d = Dict{Tuple,Float64}()
@@ -157,7 +157,7 @@ end
     compute_repval_ames_fixed!(result_map, se_map, grad_map, varlist, repvals,
                               ws, β, cholΣβ, invlink, dinvlink, d2invlink, df, ipm)
 
-Compute AMEs at representative values using fixed selective updates.
+Compute AMEs at representative values using efficient selective updates.
 """
 function compute_repval_ames_fixed!(result_map, se_map, grad_map, varlist, repvals,
                                    ws, β, cholΣβ, invlink, dinvlink, d2invlink, df, ipm)
@@ -214,7 +214,7 @@ function compute_predictions!(result_map, se_map, grad_map, varlist, repvals,
     else
         # Predictions at representative values
         compute_repval_predictions!(result_map, se_map, grad_map, varlist, repvals,
-                                   ws, β, Σβ, invlink, dinvlink, imp)
+                                   ws, β, Σβ, invlink, dinvlink, ipm)
     end
 end
 

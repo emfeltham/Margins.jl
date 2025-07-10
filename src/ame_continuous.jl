@@ -39,24 +39,34 @@ function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWo
             ))
         end
         
-        # FIXED: Use standard finite difference step size
+        # FIXED: Use robust step size calculation instead of ultra-conservative 1e-6
         orig_values = ws.base_data[variable]
         
-        # Use a reasonable step size - not ultra-conservative
-        var_scale = std(orig_values)
-        var_range = maximum(orig_values) - minimum(orig_values)
+        # Compute robust scale measures
+        finite_vals = filter(isfinite, orig_values)
         
-        if var_scale > 0
-            h = var_scale * 1e-6  # 0.0001% of one standard deviation
-        elseif var_range > 0
-            h = var_range * 1e-6  # 0.0001% of range
+        if !isempty(finite_vals)
+            var_std = std(finite_vals)
+            var_range = maximum(finite_vals) - minimum(finite_vals)
+            var_mean = mean(finite_vals)
+            
+            # Use 0.1% of standard deviation (much larger than previous 0.0001%)
+            if var_std > 0 && isfinite(var_std)
+                h = var_std * 1e-3  # CHANGED: from 1e-6 to 1e-3
+            elseif var_range > 0 && isfinite(var_range)
+                h = var_range * 1e-3  # CHANGED: from 1e-6 to 1e-3
+            elseif abs(var_mean) > 0 && isfinite(var_mean)
+                h = abs(var_mean) * 1e-3  # CHANGED: from 1e-6 to 1e-3
+            else
+                h = 1e-3  # CHANGED: from 1e-6 to 1e-3
+            end
         else
-            h = 1e-6  # Fallback for constant variables
+            h = 1e-3  # CHANGED: from 1e-6 to 1e-3
         end
         
         # Ensure reasonable bounds
-        h = max(h, 1e-8)   # Not too small
-        h = min(h, 1e-3)   # Not too large
+        h = max(h, 1e-6)   # Not too small
+        h = min(h, 1e-1)   # Not too large
         
         # Prepare finite difference matrix using selective updates
         prepare_finite_differences_fixed!(ws, variable, h, ipm)
@@ -109,9 +119,6 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
     # Get affected columns
     affected_cols = ws.variable_plans[variable]
     
-    # FIXED: Remove overly aggressive matrix scaling checks
-    # These were interfering with normal-sized computations
-    
     # Compute finite differences: (X_perturbed - X_current) / h
     invh = 1.0 / h
     
@@ -128,9 +135,9 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
         raw_diff = perturbed_val - baseline_val
         finite_diff = raw_diff * invh
         
-        # Reasonable clamping for numerical stability
+        # FIXED: Less aggressive clamping for larger step sizes
         if isfinite(finite_diff)
-            ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
+            ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e8, 1e8)  # CHANGED: from 1e6 to 1e8
         else
             ws.finite_diff_matrix[row, col] = 0.0
         end
@@ -169,7 +176,6 @@ function _ame_continuous_selective_fixed!(
     mul!(η, X, β)
     mul!(dη, Xdx, β)
     
-    # FIXED: Remove aggressive clamping that was distorting results
     # Only clamp extreme values that would cause link function failures
     @inbounds for i in 1:n
         if abs(η[i]) > 50.0  # Very generous bounds
@@ -300,22 +306,33 @@ function compute_single_continuous_ame_selective!(variable::Symbol, ws::AMEWorks
         ))
     end
     
-    # FIXED: Use reasonable step size for representative values too
+    # FIXED: Use robust step size calculation for representative values too
     orig_values = ws.base_data[variable]
     
-    var_scale = std(orig_values)
-    var_range = maximum(orig_values) - minimum(orig_values)
+    # Compute robust scale measures
+    finite_vals = filter(isfinite, orig_values)
     
-    if var_scale > 0
-        h = var_scale * 1e-6  # Same as main computation
-    elseif var_range > 0
-        h = var_range * 1e-6
+    if !isempty(finite_vals)
+        var_std = std(finite_vals)
+        var_range = maximum(finite_vals) - minimum(finite_vals)
+        var_mean = mean(finite_vals)
+        
+        # Use 0.1% of standard deviation (same as main computation)
+        if var_std > 0 && isfinite(var_std)
+            h = var_std * 1e-3  # CHANGED: from 1e-6 to 1e-3
+        elseif var_range > 0 && isfinite(var_range)
+            h = var_range * 1e-3  # CHANGED: from 1e-6 to 1e-3
+        elseif abs(var_mean) > 0 && isfinite(var_mean)
+            h = abs(var_mean) * 1e-3  # CHANGED: from 1e-6 to 1e-3
+        else
+            h = 1e-3  # CHANGED: from 1e-6 to 1e-3
+        end
     else
-        h = 1e-6
+        h = 1e-3  # CHANGED: from 1e-6 to 1e-3
     end
     
-    h = max(h, 1e-8)
-    h = min(h, 1e-3)
+    h = max(h, 1e-6)
+    h = min(h, 1e-1)
     
     # The workspace should already have work_matrix set to representative values
     # We need to compute finite differences from this state
@@ -337,8 +354,6 @@ function compute_single_continuous_ame_selective!(variable::Symbol, ws::AMEWorks
     # Get affected columns
     affected_cols = ws.variable_plans[variable]
     
-    # FIXED: Remove overly conservative matrix scaling checks
-    
     # Compute finite differences: (X_perturbed - X_current) / h
     invh = 1.0 / h
     
@@ -355,9 +370,9 @@ function compute_single_continuous_ame_selective!(variable::Symbol, ws::AMEWorks
         raw_diff = perturbed_val - baseline_val
         finite_diff = raw_diff * invh
         
-        # Reasonable clamping
+        # FIXED: Less aggressive clamping
         if isfinite(finite_diff)
-            ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
+            ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e8, 1e8)  # CHANGED: from 1e6 to 1e8
         else
             ws.finite_diff_matrix[row, col] = 0.0
         end
@@ -381,3 +396,5 @@ function compute_single_continuous_ame_selective!(variable::Symbol, ws::AMEWorks
     
     return ame, se, grad_ref
 end
+
+

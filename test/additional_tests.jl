@@ -48,7 +48,6 @@
         @test isapprox(ame.ses[:x][(false, zv)], se_closed; atol=1e-6)
     end
 
-
     # 2. Boolean moderator in a Logit GLM
     @testset "Bool moderator in Logit GLM" begin
         # -- load & fit --

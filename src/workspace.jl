@@ -113,10 +113,9 @@ end
 
 """
     update_for_variable!(ws::AMEWorkspace, variable::Symbol, new_values::AbstractVector, 
-                        ipm::InplaceModeler)
+                        imp::InplaceModeler)
 
-Update workspace matrices for a single perturbed variable using selective updates.
-FIXED: Better error handling and validation.
+Update workspace matrices for a single perturbed variable using efficient selective updates.
 """
 function update_for_variable!(ws::AMEWorkspace, variable::Symbol, new_values::AbstractVector, 
                              ipm::InplaceModeler)
@@ -133,26 +132,18 @@ function update_for_variable!(ws::AMEWorkspace, variable::Symbol, new_values::Ab
         ))
     end
     
-    # FIXED: Use enhanced function from selective_updates.jl 
+    # Create perturbed data structure
     pert_data = create_perturbed_data(ws.base_data, variable, new_values)
     
-    # Get affected and unaffected columns using EfficientModelMatrices.jl function
-    total_cols = size(ws.work_matrix, 2)
-    unchanged_cols = get_unchanged_columns(ws.mapping, [variable], total_cols)
-    
-    # Update only affected columns in work matrix using EfficientModelMatrices.jl function
-    eval_columns_for_variable!(variable, pert_data, ws.work_matrix, ws.mapping, ipm)
-    
-    # Share memory for unchanged columns
-    share_unchanged_columns!(ws.work_matrix, ws.base_matrix, unchanged_cols)
+    # EFFICIENT: Use selective matrix update with base sharing
+    modelmatrix_with_base!(ipm, pert_data, ws.work_matrix, ws.base_matrix, [variable], ws.mapping)
 end
 
 """
     update_for_variables!(ws::AMEWorkspace, changes::Dict{Symbol, <:AbstractVector}, 
                          ipm::InplaceModeler)
 
-Update workspace matrices for multiple variables simultaneously.
-FIXED: Better handling of edge cases.
+Update workspace matrices for multiple variables simultaneously using efficient selective updates.
 """
 function update_for_variables!(ws::AMEWorkspace, changes::Dict{Symbol, <:AbstractVector}, 
                               ipm::InplaceModeler)
@@ -160,19 +151,14 @@ function update_for_variables!(ws::AMEWorkspace, changes::Dict{Symbol, <:Abstrac
         return
     end
     
-    # FIXED: Use enhanced function from selective_updates.jl
+    # Create perturbed data structure
     pert_data = batch_perturb_data(ws.base_data, changes)
     
-    # Get unchanged columns using EfficientModelMatrices.jl function
+    # Get changed variables
     changed_vars = collect(keys(changes))
-    total_cols = size(ws.work_matrix, 2)
-    unchanged_cols = get_unchanged_columns(ws.mapping, changed_vars, total_cols)
     
-    # Update affected columns using EfficientModelMatrices.jl function
-    eval_columns_for_variables!(changed_vars, pert_data, ws.work_matrix, ws.mapping, ipm)
-    
-    # Share memory for unchanged columns  
-    share_unchanged_columns!(ws.work_matrix, ws.base_matrix, unchanged_cols)
+    # EFFICIENT: Use selective matrix update with base sharing
+    modelmatrix_with_base!(ipm, pert_data, ws.work_matrix, ws.base_matrix, changed_vars, ws.mapping)
 end
 
 """
