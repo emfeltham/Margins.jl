@@ -89,6 +89,11 @@ The h parameter is ignored (kept for API compatibility).
 """
 function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h::Real, 
                                           ipm::InplaceModeler)
+    println("=== DEBUG: prepare_finite_differences_fixed! ===")
+    println("Variable: $variable")
+    println("Variable type: $(typeof(ws.base_data[variable]))")
+    println("Variable eltype: $(eltype(ws.base_data[variable]))")
+    
     # Validate that variable is continuous and pre-allocated
     if !haskey(ws.pert_vectors, variable)
         throw(ArgumentError(
@@ -112,9 +117,30 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
         # Create perturbed data with new variable values
         pert_data = merge(ws.base_data, (variable => var_vals,))
         
-        # Create working matrix that can handle dual numbers
-        work_matrix = Matrix{T}(undef, size(ws.work_matrix)...)
-        work_matrix .= current_matrix  # Copy current state
+        # FIXED: Create working matrix with proper type compatibility
+        # The issue is that current_matrix has Float64 values (from log1p etc.)
+        # but T might be Dual{Int32, ...}, causing conversion errors
+        
+        # Use Float64 as the base type for the value part, regardless of original variable type
+        if T <: ForwardDiff.Dual
+            # Extract the value type from the dual number
+            value_type = ForwardDiff.valtype(T)
+            # Create dual type with Float64 value type to match matrix contents
+            matrix_dual_type = ForwardDiff.Dual{ForwardDiff.tagtype(T), Float64, ForwardDiff.npartials(T)}
+            work_matrix = Matrix{matrix_dual_type}(undef, size(ws.work_matrix)...)
+        else
+            work_matrix = Matrix{T}(undef, size(ws.work_matrix)...)
+        end
+        
+        # Copy current state with proper type conversion
+        @inbounds for i in eachindex(work_matrix)
+            if T <: ForwardDiff.Dual
+                # Convert Float64 matrix values to dual numbers with Float64 value type
+                work_matrix[i] = matrix_dual_type(current_matrix[i])
+            else
+                work_matrix[i] = T(current_matrix[i])
+            end
+        end
         
         # Selectively update only affected columns using ForwardDiff-compatible operations
         update_affected_columns_forwarddiff!(work_matrix, pert_data, affected_cols, variable, ws, ipm)
@@ -122,24 +148,35 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
         return work_matrix
     end
     
-    # Use ForwardDiff to compute the Jacobian (derivative of each matrix element w.r.t. each variable value)
-    # This gives us exact derivatives instead of finite difference approximations
-    jacobian_result = ForwardDiff.jacobian(var_vals -> vec(matrix_function(var_vals)), current_var_values)
+    println("About to call ForwardDiff.jacobian...")
     
-    # Reshape jacobian result back to matrix form and extract affected columns
-    n_rows, n_cols = size(ws.work_matrix)
-    
-    for (i, col) in enumerate(affected_cols)
-        for row in 1:n_rows
-            # The jacobian gives us ∂(matrix[row,col])/∂(var_vals[row])
-            # We want the derivative of matrix[row,col] w.r.t. var_vals[row]
-            matrix_idx = (col - 1) * n_rows + row  # Column-major indexing
-            var_idx = row  # Variable value index
-            
-            if matrix_idx <= size(jacobian_result, 1) && var_idx <= size(jacobian_result, 2)
-                ws.finite_diff_matrix[row, col] = jacobian_result[matrix_idx, var_idx]
+    # Use ForwardDiff to compute the Jacobian
+    try
+jacobian_result = ForwardDiff.jacobian(var_vals -> vec(matrix_function(var_vals)), 
+                                         convert(Vector{Float64}, current_var_values))  # Convert to Float64
+        println("ForwardDiff.jacobian completed successfully")
+        
+        # Reshape jacobian result back to matrix form and extract affected columns
+        n_rows, n_cols = size(ws.work_matrix)
+        
+        for (i, col) in enumerate(affected_cols)
+            for row in 1:n_rows
+                matrix_idx = (col - 1) * n_rows + row  # Column-major indexing
+                var_idx = row  # Variable value index
+                
+                if matrix_idx <= size(jacobian_result, 1) && var_idx <= size(jacobian_result, 2)
+                    ws.finite_diff_matrix[row, col] = jacobian_result[matrix_idx, var_idx]
+                end
             end
         end
+        
+    catch e
+        println("ERROR in ForwardDiff.jacobian: $e")
+        println("Error type: $(typeof(e))")
+        if isa(e, MethodError)
+            println("Method error details: $(e.f) with args $(e.args)")
+        end
+        rethrow(e)
     end
     
     # Zero out unaffected columns (same as original)
@@ -152,6 +189,8 @@ function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h
     
     # Restore current state (same as original)
     ws.work_matrix .= current_matrix
+    
+    println("=== END DEBUG: prepare_finite_differences_fixed! ===")
 end
 
 """
@@ -166,11 +205,17 @@ function update_affected_columns_forwarddiff!(work_matrix::AbstractMatrix{T},
                                             ws::AMEWorkspace,
                                             ipm::InplaceModeler) where T
     
+    println("  === DEBUG: update_affected_columns_forwarddiff! ===")
+    println("  Work matrix type: $(typeof(work_matrix))")
+    println("  Target variable: $variable")
+    println("  Affected cols: $affected_cols")
+    
     # Get the terms that affect these columns
     terms_to_update = Set{AbstractTerm}()
     for (term, range) in ws.mapping.term_info
         if !isempty(intersect(collect(range), affected_cols))
             push!(terms_to_update, term)
+            println("  Term to update: $(typeof(term)) affecting $range")
         end
     end
     
@@ -181,10 +226,24 @@ function update_affected_columns_forwarddiff!(work_matrix::AbstractMatrix{T},
     for term in terms_to_update
         range = ws.mapping.term_to_range[term]
         if !isempty(range)
-            # Use ForwardDiff-compatible _cols! function
-            _cols_forwarddiff!(term, data, work_matrix, first(range), ipm, fn_i, int_i)
+            println("  Processing term $(typeof(term)) for range $range")
+            
+            try
+                # Use ForwardDiff-compatible _cols! function
+                _cols_forwarddiff!(term, data, work_matrix, first(range), ipm, fn_i, int_i)
+                println("  Successfully processed $(typeof(term))")
+            catch e
+                println("  ERROR processing $(typeof(term)): $e")
+                println("  Error type: $(typeof(e))")
+                if isa(e, MethodError)
+                    println("  Method error: $(e.f) with args types $(typeof.(e.args))")
+                end
+                rethrow(e)
+            end
         end
     end
+    
+    println("  === END DEBUG: update_affected_columns_forwarddiff! ===")
 end
 
 """
@@ -217,26 +276,65 @@ function _cols_forwarddiff!(term::ConstantTerm, data::NamedTuple, X::AbstractMat
 end
 
 function _cols_forwarddiff!(term::CategoricalTerm, data::NamedTuple, X::AbstractMatrix{T}, j::Int, ipm, fn_i, int_i) where T
+    println("    === DEBUG: _cols_forwarddiff! CategoricalTerm ===")
+    println("    Term symbol: $(term.sym)")
+    println("    Matrix type T: $T")
+    
     v = data[term.sym]
+    println("    Variable v type: $(typeof(v))")
+    println("    Variable v eltype: $(eltype(v))")
+    println("    Variable v sample: $(v[1:min(3, length(v))])")
+    
     M = term.contrasts.matrix
     n_contrast_cols = size(M, 2)
     
+    println("    Contrast matrix size: $(size(M))")
+    println("    n_contrast_cols: $n_contrast_cols")
+    
     # Handle both CategoricalArray and regular arrays
     if isa(v, CategoricalArray)
+        println("    Using CategoricalArray path")
         codes = refs(v)
+        println("    Codes type: $(typeof(codes))")
+        println("    Codes sample: $(codes[1:min(3, length(codes))])")
     else
-        unique_vals = sort(unique(v))
-        code_map = Dict(val => i for (i, val) in enumerate(unique_vals))
-        codes = [code_map[val] for val in v]
-    end
-    
-    @inbounds for r in 1:length(codes)
-        code = codes[r]
-        @simd for k in 1:n_contrast_cols
-            X[r, j + k - 1] = T(M[code, k])
+        println("    Using regular array path")
+        
+        # Check if we have dual numbers
+        if eltype(v) <: ForwardDiff.Dual
+            println("    FOUND DUAL NUMBERS in categorical variable!")
+            v_values = [ForwardDiff.value(x) for x in v]
+            println("    Extracted values: $(v_values[1:min(3, length(v_values))])")
+        else
+            v_values = v
+            println("    No dual numbers, using values directly")
         end
+        
+        unique_vals = sort(unique(v_values))
+        println("    Unique values: $unique_vals")
+        code_map = Dict(val => i for (i, val) in enumerate(unique_vals))
+        println("    Code map: $code_map")
+        codes = [code_map[val] for val in v_values]
+        println("    Generated codes: $(codes[1:min(3, length(codes))])")
     end
     
+    println("    About to fill matrix...")
+    
+    try
+        @inbounds for r in 1:length(codes)
+            code = codes[r]
+            @simd for k in 1:n_contrast_cols
+                X[r, j + k - 1] = T(M[code, k])
+            end
+        end
+        println("    Matrix filling completed successfully")
+    catch e
+        println("    ERROR in matrix filling: $e")
+        println("    Error type: $(typeof(e))")
+        rethrow(e)
+    end
+    
+    println("    === END DEBUG: _cols_forwarddiff! CategoricalTerm ===")
     return j + n_contrast_cols
 end
 
