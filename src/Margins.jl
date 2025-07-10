@@ -88,6 +88,8 @@ using Printf, Distributions
 import StatsBase.vcov
 include("workspace.jl")
 
+include("analytical_derivatives.jl")
+
 # Exported types
 include("marginsresult.jl")
 export MarginsResult

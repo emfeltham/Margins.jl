@@ -61,7 +61,7 @@ function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWo
         h = min(h, 1e-1)   # Not too large
         
         # Prepare finite difference matrix using selective updates
-        prepare_finite_differences_fixed!(ws, variable, h, ipm)
+        prepare_analytical_derivatives!(ws, variable, h, ipm)
         
         # Compute AME and SE using selective finite difference matrix
         ame, se, grad_ref = _ame_continuous_selective_fixed!(
@@ -78,120 +78,6 @@ function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWo
 end
 
 #####
-
-"""
-    prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h::Real, 
-                                     ipm::InplaceModeler)
-
-ForwardDiff-based replacement that computes EXACT derivatives instead of finite differences.
-Produces the same output format as the original but with exact derivatives.
-The h parameter is ignored (kept for API compatibility).
-"""
-function prepare_finite_differences_fixed!(ws::AMEWorkspace, variable::Symbol, h::Real, 
-                                          ipm::InplaceModeler)
-    println("=== DEBUG: prepare_finite_differences_fixed! ===")
-    println("Variable: $variable")
-    println("Variable type: $(typeof(ws.base_data[variable]))")
-    println("Variable eltype: $(eltype(ws.base_data[variable]))")
-    
-    # Validate that variable is continuous and pre-allocated
-    if !haskey(ws.pert_vectors, variable)
-        throw(ArgumentError(
-            "Variable $variable not found in perturbation vectors. " *
-            "Only continuous (non-Bool) variables are supported."
-        ))
-    end
-    
-    # Get original variable values and affected columns
-    current_var_values = ws.base_data[variable]
-    affected_cols = ws.variable_plans[variable]
-    
-    # Store current work matrix state
-    current_matrix = copy(ws.work_matrix)
-    
-    # Initialize finite difference matrix (will contain exact derivatives)
-    fill!(ws.finite_diff_matrix, 0.0)
-    
-    # Define function to compute model matrix as function of the variable values
-    function matrix_function(var_vals::Vector{T}) where T
-        # Create perturbed data with new variable values
-        pert_data = merge(ws.base_data, (variable => var_vals,))
-        
-        # FIXED: Create working matrix with proper type compatibility
-        # The issue is that current_matrix has Float64 values (from log1p etc.)
-        # but T might be Dual{Int32, ...}, causing conversion errors
-        
-        # Use Float64 as the base type for the value part, regardless of original variable type
-        if T <: ForwardDiff.Dual
-            # Extract the value type from the dual number
-            value_type = ForwardDiff.valtype(T)
-            # Create dual type with Float64 value type to match matrix contents
-            matrix_dual_type = ForwardDiff.Dual{ForwardDiff.tagtype(T), Float64, ForwardDiff.npartials(T)}
-            work_matrix = Matrix{matrix_dual_type}(undef, size(ws.work_matrix)...)
-        else
-            work_matrix = Matrix{T}(undef, size(ws.work_matrix)...)
-        end
-        
-        # Copy current state with proper type conversion
-        @inbounds for i in eachindex(work_matrix)
-            if T <: ForwardDiff.Dual
-                # Convert Float64 matrix values to dual numbers with Float64 value type
-                work_matrix[i] = matrix_dual_type(current_matrix[i])
-            else
-                work_matrix[i] = T(current_matrix[i])
-            end
-        end
-        
-        # Selectively update only affected columns using ForwardDiff-compatible operations
-        update_affected_columns_forwarddiff!(work_matrix, pert_data, affected_cols, variable, ws, ipm)
-        
-        return work_matrix
-    end
-    
-    println("About to call ForwardDiff.jacobian...")
-    
-    # Use ForwardDiff to compute the Jacobian
-    try
-jacobian_result = ForwardDiff.jacobian(var_vals -> vec(matrix_function(var_vals)), 
-                                         convert(Vector{Float64}, current_var_values))  # Convert to Float64
-        println("ForwardDiff.jacobian completed successfully")
-        
-        # Reshape jacobian result back to matrix form and extract affected columns
-        n_rows, n_cols = size(ws.work_matrix)
-        
-        for (i, col) in enumerate(affected_cols)
-            for row in 1:n_rows
-                matrix_idx = (col - 1) * n_rows + row  # Column-major indexing
-                var_idx = row  # Variable value index
-                
-                if matrix_idx <= size(jacobian_result, 1) && var_idx <= size(jacobian_result, 2)
-                    ws.finite_diff_matrix[row, col] = jacobian_result[matrix_idx, var_idx]
-                end
-            end
-        end
-        
-    catch e
-        println("ERROR in ForwardDiff.jacobian: $e")
-        println("Error type: $(typeof(e))")
-        if isa(e, MethodError)
-            println("Method error details: $(e.f) with args $(e.args)")
-        end
-        rethrow(e)
-    end
-    
-    # Zero out unaffected columns (same as original)
-    total_cols = size(ws.finite_diff_matrix, 2)
-    unaffected_cols = get_unchanged_columns(ws.mapping, [variable], total_cols)
-    
-    @inbounds for col in unaffected_cols, row in axes(ws.finite_diff_matrix, 1)
-        ws.finite_diff_matrix[row, col] = 0.0
-    end
-    
-    # Restore current state (same as original)
-    ws.work_matrix .= current_matrix
-    
-    println("=== END DEBUG: prepare_finite_differences_fixed! ===")
-end
 
 """
     update_affected_columns_forwarddiff!(work_matrix, data, affected_cols, variable, ws, ipm)
