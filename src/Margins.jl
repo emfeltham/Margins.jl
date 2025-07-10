@@ -8,17 +8,15 @@ import DataFrames.DataFrame
 import Tables.columntable
 
 using Statistics
-using StatsBase, StatsModels
 using Distributions
 
 using StatsModels
 using StatsModels: formula, termvars
-import StatsModels: TupleTerm,ColumnTable
+using StatsModels: TupleTerm, ColumnTable
+using StatsModels: AbstractTerm, ContinuousTerm, width, termvars
 
 using StatsBase
-import StatsBase.confint
-using StatsBase: vcov
-using StatsModels: AbstractTerm, width, termvars
+import StatsBase: confint, vcov
 
 # Needed from Effects.jl to compute effects!:
 using Effects: TypicalTerm  # Import the type only
@@ -35,6 +33,7 @@ using MixedModels: MixedModel, fnames, RandomEffectsTerm
 using MixedModels: fixef, fixefnames
 
 using StandardizedPredictors
+import StandardizedPredictors: ZScoredTerm
 
 # INTEGRATION WITH EfficientModelMatrices.jl
 using EfficientModelMatrices
@@ -90,6 +89,7 @@ import StatsBase.vcov
 include("workspace.jl")
 
 include("analytical_derivatives.jl")
+include("analytical_derivatives_add.jl")
 
 # Exported types
 include("marginsresult.jl")

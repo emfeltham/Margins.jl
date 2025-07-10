@@ -29,4 +29,5 @@ Revise.retry()
     include("df_tests.jl") # DataFrame conversion
     include("contrast_tests.jl") # contrasts
     include("large_tests.jl") # larger data with repvals
+    include("standardization_tests.jl")
 end;
