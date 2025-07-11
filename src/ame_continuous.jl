@@ -7,7 +7,6 @@
                                       ipm::InplaceModeler)
 
 Compute AMEs for multiple continuous variables using selective matrix updates.
-FIXED: Now uses appropriate step sizes and stable numerical methods.
 """
 function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWorkspace,
                                           β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
@@ -36,7 +35,7 @@ function compute_continuous_ames_selective!(variables::Vector{Symbol}, ws::AMEWo
         
         # Compute AME and SE using selective finite difference matrix
         ame, se, grad_ref = _ame_continuous_selective_fixed!(
-            β, cholΣβ, ws.base_matrix, ws.finite_diff_matrix, dinvlink, d2invlink, ws
+            β, cholΣβ, ws.base_matrix, ws.derivative_matrix, dinvlink, d2invlink, ws
         )
         
         # Store results (copy gradient since workspace will be reused)

@@ -1,87 +1,42 @@
-# ame_representation.jl - FIXED VERSION addressing test failures
+# ame_representation.jl - FIXED VERSION
 
 ###############################################################################
-# Key Issue Fixed: Representative values state management
-# The main problem was that we were incorrectly handling the base_data state
-# when computing AMEs at representative values
+# Representative Values AME Computation with Pure Analytical Derivatives
+# FIXED: Corrected variable references and simplified logic
 ###############################################################################
 
-function compute_continuous_focal_at_repvals_fixed!(
+"""
+    compute_continuous_focal_at_repvals!(
+        focal::Symbol, ws::AMEWorkspace,
+        β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
+        dinvlink::Function, d2invlink::Function, ipm::InplaceModeler)
+
+Compute AME for a continuous focal variable at representative values using 
+pure analytical derivatives. ws.work_matrix already contains the representative value state.
+"""
+function compute_continuous_focal_at_repvals!(
     focal::Symbol, ws::AMEWorkspace,
     β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
     dinvlink::Function, d2invlink::Function, ipm::InplaceModeler)
 
-    n = length(first(ws.base_data))
-    
-    # Use current values in ws.base_data (might already be at representative values)
-    orig_focal_vals = ws.base_data[focal]
-    
-    # Calculate step size
-    focal_scale = std(orig_focal_vals)
-    focal_range = maximum(orig_focal_vals) - minimum(orig_focal_vals)
-    
-    if focal_scale > 0
-        h = focal_scale * 1e-6
-    elseif focal_range > 0
-        h = focal_range * 1e-6
-    else
-        h = 1e-6
+    # Validate that variable is continuous and supported
+    if !haskey(ws.pert_vectors, focal)
+        throw(ArgumentError(
+            "Variable $focal not found in perturbation vectors. " *
+            "Only continuous (non-Bool) variables are supported."
+        ))
     end
     
-    h = max(h, 1e-8)
-    h = min(h, 1e-3)
-    
-    # Create perturbed values
-    pert_focal_vals = orig_focal_vals .+ h
-    pert_data = create_perturbed_data(ws.base_data, focal, pert_focal_vals)
-    
-    # EFFICIENT: Build perturbed matrix using selective updates
-    # ws.work_matrix is our baseline (at rep values)
-    # ws.finite_diff_matrix will hold the perturbed version
-    # modelmatrix_with_base!(ipm, pert_data, ws.finite_diff_matrix, ws.work_matrix, [focal], ws.mapping)
-    
-    # # Compute finite differences for affected columns only
-    # affected_cols = ws.variable_plans[focal]
-    # invh = 1.0 / h
-    
-    # @inbounds for col in affected_cols
-    #     for row in 1:n
-    #         baseline_val = ws.work_matrix[row, col]
-    #         perturbed_val = ws.finite_diff_matrix[row, col]
-            
-    #         if !isfinite(baseline_val) || !isfinite(perturbed_val)
-    #             ws.finite_diff_matrix[row, col] = 0.0
-    #             continue
-    #         end
-            
-    #         raw_diff = perturbed_val - baseline_val
-    #         finite_diff = raw_diff * invh
-            
-    #         if isfinite(finite_diff)
-    #             ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
-    #         else
-    #             ws.finite_diff_matrix[row, col] = 0.0
-    #         end
-    #     end
-    # end
+    # Compute analytical derivatives at the current representative value state
+    # ws.work_matrix already contains the representative value state
     prepare_analytical_derivatives!(ws, focal, 0.0, ipm)
-
-    # Zero out unaffected columns
-    total_cols = size(ws.finite_diff_matrix, 2)
-    unaffected_cols = get_unchanged_columns(ws.mapping, [focal], total_cols)
     
-    @inbounds for col in unaffected_cols
-        for row in 1:n
-            ws.finite_diff_matrix[row, col] = 0.0
-        end
-    end
-    
-    # Compute AME using baseline work_matrix and finite_diff_matrix
+    # Compute AME using analytical derivatives
     ame, se, grad_ref = _ame_continuous_selective_fixed!(
-        β, cholΣβ, ws.work_matrix, ws.finite_diff_matrix, dinvlink, d2invlink, ws
+        β, cholΣβ, ws.work_matrix, ws.derivative_matrix, dinvlink, d2invlink, ws
     )
     
-    # Validation
+    # Validation and bounds checking
     if !isfinite(ame) || abs(ame) > 1e6
         @warn "AME computation failed for focal=$focal, returning 0"
         ame = 0.0
@@ -94,11 +49,16 @@ function compute_continuous_focal_at_repvals_fixed!(
     return ame, se, grad_ref
 end
 
-###############################################################################
-# FIXED: Main function with better state management
-###############################################################################
+"""
+    _ame_representation!(ws::AMEWorkspace, imp::InplaceModeler, df::DataFrame,
+                        focal::Symbol, repvals::AbstractDict{Symbol,<:AbstractVector},
+                        β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
+                        invlink::Function, dinvlink::Function, d2invlink::Function)
 
-function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFrame,
+Compute AMEs at representative values. For continuous focal variables, uses analytical 
+derivatives. For Boolean/categorical focal variables, uses discrete comparisons.
+"""
+function _ame_representation!(ws::AMEWorkspace, imp::InplaceModeler, df::DataFrame,
                              focal::Symbol, repvals::AbstractDict{Symbol,<:AbstractVector},
                              β::AbstractVector, cholΣβ::LinearAlgebra.Cholesky,
                              invlink::Function, dinvlink::Function, d2invlink::Function)
@@ -110,9 +70,9 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
     n = length(first(ws.base_data))
     focal_type = eltype(df[!, focal])
     
-    # Store original base_data to restore later
+    # Store original state for restoration
     original_base_data = ws.base_data
-    original_base_matrix = copy(ws.base_matrix)  # Only one copy for restoration
+    original_base_matrix = copy(ws.base_matrix)
     
     # Result containers
     ame_d = Dict{Tuple,Float64}()
@@ -123,36 +83,19 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
         combo_key = Tuple(combo)
         
         # Create representative value data
-        repval_data = original_base_data
-        
-        for (rv, val) in zip(repvars, combo)
-            orig_col = original_base_data[rv]
-            if val isa Real
-                new_values = fill(Float64(val), n)
-            elseif val isa CategoricalValue || orig_col isa CategoricalArray
-                new_values = categorical(
-                    fill(val, n);
-                    levels = levels(orig_col),
-                    ordered = isordered(orig_col),
-                )
-            else
-                new_values = fill(val, n)
-            end
-            
-            repval_data = merge(repval_data, (rv => new_values,))
-        end
+        repval_data = create_representative_data(original_base_data, repvars, combo, n)
         
         # Update workspace state for representative values
         ws.base_data = repval_data
         
-        # EFFICIENT: Build representative value matrix using selective updates
-        modelmatrix_with_base!(ipm, repval_data, ws.work_matrix, original_base_matrix, repvars, ws.mapping)
+        # Build representative value matrix using selective updates
+        modelmatrix_with_base!(imp, repval_data, ws.work_matrix, original_base_matrix, repvars, ws.mapping)
         
-        # Compute AME at these representative values
+        # Compute AME at these representative values based on focal variable type
         if focal_type <: Real && focal_type != Bool
-            # Continuous focal variable
-            ame, se, grad = compute_continuous_focal_at_repvals_fixed!(
-                focal, ws, β, cholΣβ, dinvlink, d2invlink, ipm
+            # Continuous focal variable - use analytical derivatives
+            ame, se, grad = compute_continuous_focal_at_repvals!(
+                focal, ws, β, cholΣβ, dinvlink, d2invlink, imp
             )
             
             ame_d[combo_key] = ame
@@ -160,9 +103,9 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
             grad_d[combo_key] = copy(grad)
             
         elseif focal_type <: Bool
-            # Boolean focal variable
+            # Boolean focal variable - use discrete comparison
             ame, se, grad = compute_bool_focal_at_repvals!(
-                focal, ws, β, vcov(cholΣβ), invlink, dinvlink, ipm
+                focal, ws, β, vcov(cholΣβ), invlink, dinvlink, imp
             )
             
             ame_d[combo_key] = ame
@@ -172,7 +115,7 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
         else
             # Multi-level categorical focal variable
             factor_results = compute_categorical_focal_at_repvals!(
-                focal, ws, β, vcov(cholΣβ), invlink, dinvlink, df, ipm
+                focal, ws, β, vcov(cholΣβ), invlink, dinvlink, df, imp
             )
             
             for (level_pair, ame_val) in factor_results[:ame]
@@ -192,19 +135,86 @@ function _ame_representation!(ws::AMEWorkspace, ipm::InplaceModeler, df::DataFra
     return ame_d, se_d, grad_d
 end
 
-# Supporting functions (keep existing implementations but ensure they use current ws.base_data)
+###############################################################################
+# Helper Functions for Representative Value Data Creation
+###############################################################################
+
+"""
+    create_representative_data(base_data::NamedTuple, repvars::Vector{Symbol}, 
+                              combo::Tuple, n::Int) -> NamedTuple
+
+Create data structure with representative values substituted for specified variables.
+Handles both continuous and categorical variables appropriately.
+"""
+function create_representative_data(base_data::NamedTuple, repvars::Vector{Symbol}, 
+                                   combo::Tuple, n::Int)
+    repval_data = base_data
+    
+    for (rv, val) in zip(repvars, combo)
+        orig_col = base_data[rv]
+        
+        new_values = create_representative_column(orig_col, val, n)
+        repval_data = merge(repval_data, (rv => new_values,))
+    end
+    
+    return repval_data
+end
+
+"""
+    create_representative_column(orig_col, val, n::Int)
+
+Create a column vector with representative value `val` repeated `n` times,
+preserving the appropriate data type and structure.
+"""
+function create_representative_column(orig_col, val, n::Int)
+    if orig_col isa CategoricalArray
+        # Preserve categorical structure with original levels and ordering
+        return categorical(
+            fill(val, n);
+            levels = levels(orig_col),
+            ordered = isordered(orig_col)
+        )
+    elseif val isa CategoricalValue
+        # Handle CategoricalValue input
+        return categorical(
+            fill(val, n);
+            levels = levels(orig_col),
+            ordered = isordered(orig_col)
+        )
+    elseif val isa Real
+        # Continuous representative value
+        return fill(Float64(val), n)
+    else
+        # Generic fallback
+        return fill(val, n)
+    end
+end
+
+###############################################################################
+# Boolean and Categorical AME Functions
+###############################################################################
+
+"""
+    compute_bool_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
+                                  β::AbstractVector, Σβ::AbstractMatrix,
+                                  invlink::Function, dinvlink::Function,
+                                  imp::InplaceModeler)
+
+Compute AME for Boolean focal variable at representative values.
+Uses discrete comparison between true and false states.
+"""
 function compute_bool_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
                                        β::AbstractVector, Σβ::AbstractMatrix,
                                        invlink::Function, dinvlink::Function,
-                                       ipm::InplaceModeler)
+                                       imp::InplaceModeler)
     n = length(first(ws.base_data))
     
-    # Store current repval state
+    # Store current representative values state
     repval_matrix = copy(ws.work_matrix)
     
     # Compute prediction at focal = false
     false_data = fill(false, n)
-    update_for_variable!(ws, focal, false_data, ipm)
+    update_for_variable!(ws, focal, false_data, imp)
     
     mul!(ws.η, ws.work_matrix, β)
     
@@ -218,7 +228,7 @@ function compute_bool_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
     
     # Compute prediction at focal = true
     true_data = fill(true, n)
-    update_for_variable!(ws, focal, true_data, ipm)
+    update_for_variable!(ws, focal, true_data, imp)
     
     mul!(ws.η, ws.work_matrix, β)
     
@@ -239,21 +249,28 @@ function compute_bool_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
     
     se = sqrt(dot(ws.grad_work, Σβ * ws.grad_work))
     
-    # Restore repval state
+    # Restore representative values state
     ws.work_matrix .= repval_matrix
     
     return ame, se, ws.grad_work
 end
 
+"""
+    compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
+                                         β::AbstractVector, Σβ::AbstractMatrix,
+                                         invlink::Function, dinvlink::Function,
+                                         df::AbstractDataFrame, imp::InplaceModeler)
+
+Compute pairwise AMEs for categorical focal variable at representative values.
+"""
 function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
                                              β::AbstractVector, Σβ::AbstractMatrix,
                                              invlink::Function, dinvlink::Function,
-                                             df::AbstractDataFrame, ipm::InplaceModeler)
-    # Store current repval state
+                                             df::AbstractDataFrame, imp::InplaceModeler)
+    # Store current representative values state
     repval_matrix = copy(ws.work_matrix)
     
-    # Get factor levels from the ORIGINAL df, not current ws.base_data
-    # This ensures we have the proper levels structure
+    # Get factor levels from original DataFrame
     factor_col = df[!, focal]
     levels_list = get_factor_levels_safe(factor_col)
     
@@ -268,14 +285,14 @@ function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
     
     n = length(first(ws.base_data))
     
-    # Compute all pairs
+    # Compute all pairwise comparisons
     for i in 1:length(levels_list)-1
         for j in i+1:length(levels_list)
             level_i, level_j = levels_list[i], levels_list[j]
             
             # Compute prediction at level_i
             level_i_data = create_categorical_level_data(focal, level_i, ws, n)
-            update_for_variable!(ws, focal, level_i_data, ipm)
+            update_for_variable!(ws, focal, level_i_data, imp)
             
             mul!(ws.η, ws.work_matrix, β)
             
@@ -289,7 +306,7 @@ function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
             
             # Compute prediction at level_j
             level_j_data = create_categorical_level_data(focal, level_j, ws, n)
-            update_for_variable!(ws, focal, level_j_data, ipm)
+            update_for_variable!(ws, focal, level_j_data, imp)
             
             mul!(ws.η, ws.work_matrix, β)
             
@@ -301,7 +318,7 @@ function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
             sumμ_j = sum(ws.μp_vals)
             mul!(ws.temp2, ws.work_matrix', ws.μpp_vals)
             
-            # Compute AME and SE
+            # Compute AME and SE for this pair
             ame = (sumμ_j - sumμ_i) / n
             
             @inbounds @simd for k in 1:length(β)
@@ -318,7 +335,7 @@ function compute_categorical_focal_at_repvals!(focal::Symbol, ws::AMEWorkspace,
         end
     end
     
-    # Restore repval state
+    # Restore representative values state
     ws.work_matrix .= repval_matrix
     
     return Dict(:ame => ame_d, :se => se_d, :grad => grad_d)

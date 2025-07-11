@@ -58,9 +58,11 @@ function analytical_derivative(term::CategoricalTerm, variable::Symbol, data::Na
 end
 
 """
-    evaluate_term(term::AbstractTerm, data::NamedTuple) -> Vector
+    evaluate_term(term::AbstractTerm, data::NamedTuple) -> Vector or Matrix
 
 Evaluate a term at the given data points.
+For single-column terms, returns a Vector.
+For multi-column terms, returns a Matrix.
 """
 function evaluate_term(term::AbstractTerm, data::NamedTuple)
     error("Term evaluation not implemented for $(typeof(term))")
@@ -89,36 +91,17 @@ function evaluate_term(term::InterceptTerm{false}, data::NamedTuple)
     return zeros(Float64, n)
 end
 
-
-"""
-    evaluate_term(term::InteractionTerm, data::NamedTuple)
-
-REPLACED: Fixed interaction term evaluation for 3-way interactions.
-"""
-function evaluate_term(term::InteractionTerm, data::NamedTuple)
-    n = length(first(data))
-    
-    # Get all component values
-    component_values = [evaluate_term(component, data) for component in term.terms]
-    
-    # Compute element-wise product
-    result = ones(Float64, n)
-    for comp_vals in component_values
-        result .*= comp_vals
-    end
-    
-    return result
-end
-
 """
     evaluate_term(term::CategoricalTerm, data::NamedTuple)
 
-REPLACED: Fixed categorical term evaluation with proper contrast coding.
+FIXED: Properly handle multi-column categorical terms.
+Returns Matrix{Float64} with shape (n, num_contrasts).
 """
 function evaluate_term(term::CategoricalTerm, data::NamedTuple)
     v = data[term.sym]
     M = term.contrasts.matrix
     n = length(v)
+    num_contrasts = size(M, 2)
     
     # Handle both CategoricalArray and regular arrays
     if isa(v, CategoricalArray)
@@ -129,44 +112,122 @@ function evaluate_term(term::CategoricalTerm, data::NamedTuple)
         codes = [code_map[val] for val in v]
     end
     
-    # For single-column case (most common with dummy coding)
-    if size(M, 2) == 1
-        result = Vector{Float64}(undef, n)
-        @inbounds for i in 1:n
-            result[i] = M[codes[i], 1]
-        end
-        return result
-    else
-        # Multi-column case - return first column for now
-        # (Multi-column analytical derivatives will be handled by fallback)
-        result = Vector{Float64}(undef, n)
-        @inbounds for i in 1:n
-            result[i] = M[codes[i], 1]
-        end
-        return result
+    # Return full contrast matrix for multi-column terms
+    result = Matrix{Float64}(undef, n, num_contrasts)
+    @inbounds for i in 1:n, j in 1:num_contrasts
+        result[i, j] = M[codes[i], j]
     end
+    
+    return result
 end
 
+"""
+    evaluate_term(term::InteractionTerm, data::NamedTuple)
+
+FIXED: Handle interactions with multi-column categorical terms using Kronecker products.
+"""
+function evaluate_term(term::InteractionTerm, data::NamedTuple)
+    # Get values for all components
+    component_values = [evaluate_term(component, data) for component in term.terms]
+    
+    # Use Kronecker product to handle multi-column terms properly
+    result = component_values[1]
+    for i in 2:length(component_values)
+        result = kron_product_columns(result, component_values[i])
+    end
+    
+    return result
+end
+
+"""
+    kron_product_columns(A, B) -> Matrix
+
+Compute Kronecker product of columns between two arrays.
+If A is n×p and B is n×q, result is n×(p*q).
+"""
+function kron_product_columns(A::AbstractVecOrMat, B::AbstractVecOrMat)
+    A_mat = A isa AbstractVector ? reshape(A, :, 1) : A
+    B_mat = B isa AbstractVector ? reshape(B, :, 1) : B
+    
+    n = size(A_mat, 1)
+    @assert size(B_mat, 1) == n "Arrays must have same number of rows"
+    
+    p, q = size(A_mat, 2), size(B_mat, 2)
+    result = Matrix{Float64}(undef, n, p * q)
+    
+    col_idx = 1
+    for j in 1:q, i in 1:p
+        @inbounds for row in 1:n
+            result[row, col_idx] = A_mat[row, i] * B_mat[row, j]
+        end
+        col_idx += 1
+    end
+    
+    return result
+end
+
+"""
+    evaluate_term(term::FunctionTerm, data::NamedTuple)
+
+FIXED: Handle comparison operators and other functions correctly.
+"""
 function evaluate_term(term::FunctionTerm, data::NamedTuple)
     if length(term.args) == 1
         # Single argument function
         arg_values = evaluate_term(term.args[1], data)
         if arg_values isa Vector
-            return term.f.(arg_values)
+            if term.f in [<=, >=, <, >, ==, !=]
+                @warn "Single-argument comparison operator $(term.f) applied to vector, returning input"
+                return arg_values
+            else
+                return term.f.(arg_values)
+            end
         else
-            # Multi-column argument - not supported yet
-            error("Multi-column function arguments not yet supported")
+            error("Multi-column single-argument functions not yet supported")
+        end
+    elseif length(term.args) == 2
+        # Two argument functions - handle comparisons with constants
+        arg1_values = evaluate_term(term.args[1], data)
+        arg2 = term.args[2]
+        
+        if arg2 isa ConstantTerm
+            # Comparison with constant
+            arg2_val = arg2.n
+            if arg1_values isa Vector
+                if term.f === (<=)
+                    return Float64.(arg1_values .<= arg2_val)
+                elseif term.f === (>=)
+                    return Float64.(arg1_values .>= arg2_val)
+                elseif term.f === (<)
+                    return Float64.(arg1_values .< arg2_val)
+                elseif term.f === (>)
+                    return Float64.(arg1_values .> arg2_val)
+                elseif term.f === (==)
+                    return Float64.(arg1_values .== arg2_val)
+                elseif term.f === (!=)
+                    return Float64.(arg1_values .!= arg2_val)
+                else
+                    # Mathematical function with constant
+                    return term.f.(arg1_values, arg2_val)
+                end
+            else
+                error("Multi-column comparisons not yet supported")
+            end
+        else
+            # Two variable arguments
+            arg2_values = evaluate_term(arg2, data)
+            if arg1_values isa Vector && arg2_values isa Vector
+                if term.f in [<=, >=, <, >, ==, !=]
+                    return Float64.(term.f.(arg1_values, arg2_values))
+                else
+                    return term.f.(arg1_values, arg2_values)
+                end
+            else
+                error("Multi-column two-argument functions not yet supported")
+            end
         end
     else
-        # Multi-argument functions
-        arg_values = [evaluate_term(arg, data) for arg in term.args]
-        
-        # Check if all arguments are vectors
-        if all(arg -> arg isa Vector, arg_values)
-            return [term.f(args...) for args in zip(arg_values...)]
-        else
-            error("Multi-column function arguments not yet supported")
-        end
+        error("Functions with $(length(term.args)) arguments not supported")
     end
 end
 
@@ -189,82 +250,157 @@ function get_function_derivative(f::Function)
     end
 end
 
-# FunctionTerm: Handle single-argument functions with chain rule
+"""
+    analytical_derivative(term::FunctionTerm, variable::Symbol, data::NamedTuple)
+
+FIXED: Handle derivatives of comparison operators correctly.
+"""
 function analytical_derivative(term::FunctionTerm, variable::Symbol, data::NamedTuple)
     if length(term.args) == 1
         # Single argument: f(g(x)) -> f'(g(x)) * g'(x)
         inner_term = term.args[1]
         inner_derivative = analytical_derivative(inner_term, variable, data)
         
-        # If inner term doesn't depend on variable, derivative is zero
-        if all(x -> x == 0, inner_derivative)
+        # Check if inner term depends on variable
+        if inner_derivative isa Vector && all(x -> x == 0, inner_derivative)
             return zeros(Float64, length(data[variable]))
         end
         
-        inner_values = evaluate_term(inner_term, data)
-        f_prime = get_function_derivative(term.f)
-        
-        try
-            return f_prime.(inner_values) .* inner_derivative
-        catch e
-            @warn "Failed to compute analytical derivative for $(term.f): $e"
+        if term.f in [<=, >=, <, >, ==, !=]
+            # Comparison operators have zero derivative almost everywhere
             return zeros(Float64, length(data[variable]))
+        else
+            # Regular mathematical functions
+            inner_values = evaluate_term(inner_term, data)
+            f_prime = get_function_derivative(term.f)
+            
+            try
+                if inner_values isa Vector && inner_derivative isa Vector
+                    return f_prime.(inner_values) .* inner_derivative
+                else
+                    error("Multi-column function derivatives not yet implemented")
+                end
+            catch e
+                @warn "Failed to compute analytical derivative for $(term.f): $e"
+                return zeros(Float64, length(data[variable]))
+            end
+        end
+        
+    elseif length(term.args) == 2
+        # Two argument functions
+        arg1, arg2 = term.args
+        
+        if arg2 isa ConstantTerm
+            # f(g(x), c) where c is constant
+            if term.f in [<=, >=, <, >, ==, !=]
+                # Comparison with constant has zero derivative almost everywhere
+                return zeros(Float64, length(data[variable]))
+            else
+                # Mathematical function: ∂f/∂x = ∂f/∂g * ∂g/∂x
+                inner_derivative = analytical_derivative(arg1, variable, data)
+                if inner_derivative isa Vector && all(x -> x == 0, inner_derivative)
+                    return zeros(Float64, length(data[variable]))
+                end
+                
+                # For most mathematical functions, we'd need partial derivatives
+                # For now, return zero for safety
+                @warn "Derivative of $(term.f) with respect to first argument not implemented"
+                return zeros(Float64, length(data[variable]))
+            end
+        else
+            # Two variable arguments - more complex
+            if term.f in [<=, >=, <, >, ==, !=]
+                return zeros(Float64, length(data[variable]))
+            else
+                @warn "Derivative of two-variable function $(term.f) not implemented"
+                return zeros(Float64, length(data[variable]))
+            end
         end
     else
-        # Multi-argument functions - implement later
-        @warn "Multi-argument functions not yet implemented for $(term.f)"
+        @warn "Derivative of $(length(term.args))-argument function not implemented"
         return zeros(Float64, length(data[variable]))
     end
 end
 
-# InteractionTerm: Product rule for arbitrary number of components
 """
     analytical_derivative(term::InteractionTerm, variable::Symbol, data::NamedTuple)
 
-REPLACED: Fixed 3-way interaction analytical derivative using proper product rule.
+FIXED: Handle interactions with multi-column categorical terms using proper product rule.
+Returns Matrix{Float64} for multi-column results.
 """
 function analytical_derivative(term::InteractionTerm, variable::Symbol, data::NamedTuple)
     components = term.terms
     n = length(data[variable])
     
     # Pre-compute all component values and derivatives
-    component_values = Vector{Vector{Float64}}(undef, length(components))
-    component_derivatives = Vector{Vector{Float64}}(undef, length(components))
+    component_values = Vector{Any}(undef, length(components))
+    component_derivatives = Vector{Any}(undef, length(components))
     any_depends = false
     
     for (i, component) in enumerate(components)
         component_values[i] = evaluate_term(component, data)
         component_derivatives[i] = analytical_derivative(component, variable, data)
         
-        if !all(x -> x == 0, component_derivatives[i])
-            any_depends = true
+        # Check if this component depends on the variable
+        if component_derivatives[i] isa Vector
+            if !all(x -> x == 0, component_derivatives[i])
+                any_depends = true
+            end
+        elseif component_derivatives[i] isa Matrix
+            if !all(x -> x == 0, component_derivatives[i])
+                any_depends = true
+            end
         end
     end
     
     if !any_depends
-        return zeros(Float64, n)
+        # Need to figure out the correct output size
+        full_values = evaluate_term(term, data)
+        if full_values isa Vector
+            return zeros(Float64, n)
+        else
+            return zeros(Float64, size(full_values))
+        end
     end
     
-    # Apply product rule: d/dx(f₁*f₂*...*fₙ) = Σᵢ(f₁*...*fᵢ₋₁*fᵢ'*fᵢ₊₁*...*fₙ)
-    result = zeros(Float64, n)
+    # Apply product rule using Kronecker products for multi-column terms
+    result_parts = []
     
     for i in 1:length(components)
         # Skip if this component doesn't depend on the variable
-        if all(x -> x == 0, component_derivatives[i])
+        deriv_i = component_derivatives[i]
+        if (deriv_i isa Vector && all(x -> x == 0, deriv_i)) ||
+           (deriv_i isa Matrix && all(x -> x == 0, deriv_i))
             continue
         end
         
         # Compute the i-th term of the product rule
-        term_contribution = copy(component_derivatives[i])  # Start with fᵢ'
+        term_contribution = deriv_i  # Start with fᵢ'
         
         # Multiply by all other components (fⱼ for j ≠ i)
         for j in 1:length(components)
             if i != j
-                term_contribution .*= component_values[j]
+                term_contribution = kron_product_columns(term_contribution, component_values[j])
             end
         end
         
-        result .+= term_contribution
+        push!(result_parts, term_contribution)
+    end
+    
+    # Sum all parts
+    if isempty(result_parts)
+        # This shouldn't happen, but just in case
+        full_values = evaluate_term(term, data)
+        if full_values isa Vector
+            return zeros(Float64, n)
+        else
+            return zeros(Float64, size(full_values))
+        end
+    end
+    
+    result = result_parts[1]
+    for i in 2:length(result_parts)
+        result = result .+ result_parts[i]
     end
     
     return result
@@ -273,8 +409,8 @@ end
 """
     prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::Real, ipm::InplaceModeler)
 
-Compute analytical derivatives and fill finite_diff_matrix.
-This is a drop-in replacement for prepare_finite_differences_fixed!
+Compute analytical derivatives and fill derivative_matrix.
+This is a drop-in replacement for prepare_derivativeerences_fixed!
 The h parameter is ignored (kept for API compatibility).
 """
 function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::Real, ipm::InplaceModeler)
@@ -290,7 +426,7 @@ function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::
     affected_cols = ws.variable_plans[variable]
     
     # Initialize finite difference matrix (will contain analytical derivatives)
-    fill!(ws.finite_diff_matrix, 0.0)
+    fill!(ws.derivative_matrix, 0.0)
     
     # Group affected columns by their generating term
     terms_to_process = Dict{AbstractTerm, Vector{Int}}()
@@ -307,40 +443,41 @@ function prepare_analytical_derivatives!(ws::AMEWorkspace, variable::Symbol, h::
     # Process each term and its columns
     for (term, cols) in terms_to_process
         try
-            if width(term) == 1
-                # Single column term - compute derivative directly
-                term_derivative = analytical_derivative(term, variable, ws.base_data)
-                @assert length(cols) == 1 "Single-width term should affect exactly one column"
-                ws.finite_diff_matrix[:, cols[1]] = term_derivative
+            # Compute analytical derivative for this term
+            term_derivative = analytical_derivative(term, variable, ws.base_data)
+            
+            if term_derivative isa Vector
+                # Single column result
+                @assert length(cols) == 1 "Single-width derivative should affect exactly one column"
+                ws.derivative_matrix[:, cols[1]] = term_derivative
+                
+            elseif term_derivative isa Matrix
+                # Multi-column result
+                num_cols = size(term_derivative, 2)
+                @assert length(cols) == num_cols "Number of derivative columns should match affected columns"
+                
+                for (local_idx, global_col) in enumerate(cols)
+                    ws.derivative_matrix[:, global_col] = term_derivative[:, local_idx]
+                end
                 
             else
-                # Multi-column term - need to compute derivative of each output column
-                term_derivatives = compute_term_column_derivatives(term, variable, ws.base_data, ipm)
-                
-                for (i, col) in enumerate(cols)
-                    if i <= length(term_derivatives)
-                        ws.finite_diff_matrix[:, col] = term_derivatives[i]
-                    else
-                        @warn "Not enough derivatives computed for term $(typeof(term)), column $col"
-                        ws.finite_diff_matrix[:, col] .= 0.0
-                    end
-                end
+                error("Unexpected derivative type: $(typeof(term_derivative))")
             end
             
         catch e
             @warn "Failed to compute analytical derivative for term $(typeof(term)): $e"
             for col in cols
-                ws.finite_diff_matrix[:, col] .= 0.0
+                ws.derivative_matrix[:, col] .= 0.0
             end
         end
     end
     
     # Zero out unaffected columns
-    total_cols = size(ws.finite_diff_matrix, 2)
+    total_cols = size(ws.derivative_matrix, 2)
     unaffected_cols = get_unchanged_columns(ws.mapping, [variable], total_cols)
     
-    @inbounds for col in unaffected_cols, row in axes(ws.finite_diff_matrix, 1)
-        ws.finite_diff_matrix[row, col] = 0.0
+    @inbounds for col in unaffected_cols, row in axes(ws.derivative_matrix, 1)
+        ws.derivative_matrix[row, col] = 0.0
     end
 end
 
@@ -349,6 +486,7 @@ end
 
 Fully‐analytic, per‐column derivatives for an InteractionTerm.
 Works for any # of components (continuous×continuous, continuous×factor, etc.).
+DEPRECATED: Now handled by the main analytical_derivative function.
 """
 function compute_term_column_derivatives(
     term::InteractionTerm{T},
@@ -356,40 +494,17 @@ function compute_term_column_derivatives(
     data::NamedTuple,
     ipm::InplaceModeler
 ) where T<:Tuple
-
-    n = length(data[variable])
-    w = width(term)
-
-    # 1) Build the full design‐matrix for this interaction (n×w)
-    X_int = Matrix{Float64}(undef, n, w)
-    evaluate_term_to_matrix!(term, data, X_int, ipm)
-
-    # 2) Find the continuous subterm f(x) whose dériv we want
-    cont_vals = nothing
-    for comp in term.terms
-        if variable in termvars(comp)
-            # evaluate_term on a single‐column term → Vector{Float64}
-            cont_vals = evaluate_term(comp, data)
-            break
-        end
+    
+    # Use the main analytical derivative function
+    derivatives = analytical_derivative(term, variable, data)
+    
+    if derivatives isa Vector
+        return [derivatives]
+    elseif derivatives isa Matrix
+        return [derivatives[:, j] for j in 1:size(derivatives, 2)]
+    else
+        error("Unexpected derivative type: $(typeof(derivatives))")
     end
-    @assert cont_vals !== nothing "No continuous component in $term to differentiate"
-
-    # 3) For each column j, ∂(f(x)*other_j)/∂x = other_j
-    derivs = Vector{Vector{Float64}}(undef, w)
-    for j in 1:w
-        col = view(X_int, :, j)
-
-        # product of *all* components except the focal one
-        other_vals = col ./ cont_vals            # good when |cont_vals|>0
-        zero_rows  = cont_vals .== 0.0
-        if any(zero_rows)
-            other_vals[zero_rows] .= view(X_int, zero_rows, j)  # == product(other components)
-        end
-        derivs[j] = other_vals
-    end
-
-    return derivs
 end
 
 """
@@ -400,23 +515,17 @@ Returns a vector of derivative vectors, one for each output column.
 """
 function compute_term_column_derivatives(term::AbstractTerm, variable::Symbol,
                                         data::NamedTuple, ipm::InplaceModeler)
-    # Directly dispatch to the analytic‐derivative routines, then split into columns
-    M = analytical_derivative(term, variable, data)  
-    # assume this returns either an n×w Matrix or Vector{Vector{Float64}}
-
-    # how many output cols should this term have?
-    w = width(term)
-    if M isa AbstractMatrix
-        @assert size(M,2) == w
-        return [view(M, :, j) for j in 1:w]
-    elseif M isa AbstractVector
-        # single‐column derivative – replicate for each column
-        # (e.g. categoricalTerm or constantTerm → zeros(n))
-        return [copy(M) for _ in 1:w]
+    # Use the main analytical derivative function
+    derivatives = analytical_derivative(term, variable, data)
+    
+    if derivatives isa Vector
+        # Single column case
+        return [derivatives]
+    elseif derivatives isa Matrix
+        # Multi-column case
+        return [derivatives[:, j] for j in 1:size(derivatives, 2)]
     else
-        throw(ArgumentError(
-            "analytical_derivative returned $(typeof(M)), expected Vector or Matrix"
-        ))
+        error("Unexpected derivative type: $(typeof(derivatives))")
     end
 end
 

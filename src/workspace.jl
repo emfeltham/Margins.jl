@@ -23,7 +23,7 @@ mutable struct AMEWorkspace
     
     # Working state (selective updates)
     work_matrix::Matrix{Float64}                    # n × p working matrix (selective updates)
-    finite_diff_matrix::Matrix{Float64}            # n × p matrix for finite differences
+    derivative_matrix::Matrix{Float64}            # n × p matrix for finite differences
     
     # Perturbation data management
     pert_vectors::Dict{Symbol, Vector{Float64}}     # Pre-allocated vectors for each continuous var
@@ -88,7 +88,7 @@ function AMEWorkspace(model::StatisticalModel, data)
     
     # Allocate working matrices
     work_matrix = Matrix{Float64}(undef, n, p)
-    finite_diff_matrix = Matrix{Float64}(undef, n, p)
+    derivative_matrix = Matrix{Float64}(undef, n, p)
     
     # Initialize work_matrix to base_matrix
     work_matrix .= base_matrix
@@ -105,7 +105,7 @@ function AMEWorkspace(model::StatisticalModel, data)
     return AMEWorkspace(
         base_data, base_matrix,
         mapping, variable_plans,
-        work_matrix, finite_diff_matrix,
+        work_matrix, derivative_matrix,
         pert_vectors, pert_cache,
         η, dη, μp_vals, μpp_vals, grad_work, temp1, temp2
     )
@@ -159,18 +159,6 @@ function update_for_variables!(ws::AMEWorkspace, changes::Dict{Symbol, <:Abstrac
     
     # EFFICIENT: Use selective matrix update with base sharing
     modelmatrix_with_base!(ipm, pert_data, ws.work_matrix, ws.base_matrix, changed_vars, ws.mapping)
-end
-
-"""
-    prepare_finite_differences!(ws::AMEWorkspace, variable::Symbol, h::Real, 
-                               ipm::InplaceModeler)
-
-Prepare finite difference matrix for AME computation of a continuous variable.
-FIXED: Now calls the fixed version.
-"""
-function prepare_finite_differences!(ws::AMEWorkspace, variable::Symbol, h::Real, 
-                                    ipm::InplaceModeler)
-    prepare_finite_differences_fixed!(ws, variable, h, ipm)
 end
 
 """
@@ -237,7 +225,7 @@ function get_memory_info(ws::AMEWorkspace)
     matrices = Dict(
         "base_matrix" => ws.base_matrix,
         "work_matrix" => ws.work_matrix, 
-        "finite_diff_matrix" => ws.finite_diff_matrix
+        "derivative_matrix" => ws.derivative_matrix
     )
     
     vectors_size = sum(sizeof(v) for v in values(ws.pert_vectors)) + 

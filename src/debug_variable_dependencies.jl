@@ -1,7 +1,7 @@
 # Debug script to check if we're identifying all affected columns correctly
 
 using Margins: AMEWorkspace, InplaceModeler, modelmatrix!
-using Margins: prepare_finite_differences_fixed!
+using Margins: prepare_derivativeerences_fixed!
 
 """
     debug_variable_dependencies(model, df, variable::Symbol)
@@ -83,11 +83,11 @@ function debug_variable_dependencies(model, df, variable::Symbol)
 end
 
 """
-    compare_finite_differences(model, df, variable::Symbol)
+    compare_derivativeerences(model, df, variable::Symbol)
 
 Compare our finite difference computation against ground truth.
 """
-function compare_finite_differences(model, df, variable::Symbol)
+function compare_derivativeerences(model, df, variable::Symbol)
     println("=== Comparing finite difference computations for :$variable ===")
     
     # Build workspace and step size
@@ -102,8 +102,8 @@ function compare_finite_differences(model, df, variable::Symbol)
     println("Using step size h = $h")
     
     # Our selective approach
-    prepare_finite_differences_fixed!(ws, variable, h, ipm)
-    our_finite_diff = copy(ws.finite_diff_matrix)
+    prepare_derivativeerences_fixed!(ws, variable, h, ipm)
+    our_derivative = copy(ws.derivative_matrix)
     
     # Ground truth approach - build both matrices manually
     X_base = modelmatrix(model)
@@ -113,10 +113,10 @@ function compare_finite_differences(model, df, variable::Symbol)
     X_pert = similar(X_base)
     modelmatrix!(ipm, Tables.columntable(df_pert), X_pert)
     
-    ground_truth_finite_diff = (X_pert - X_base) / h
+    ground_truth_derivative = (X_pert - X_base) / h
     
     # Compare
-    max_diff = maximum(abs.(our_finite_diff - ground_truth_finite_diff))
+    max_diff = maximum(abs.(our_derivative - ground_truth_derivative))
     affected_cols = ws.variable_plans[variable]
     
     println("Maximum difference in finite differences: $max_diff")
@@ -126,7 +126,7 @@ function compare_finite_differences(model, df, variable::Symbol)
         
         # Show where the differences are
         for col in affected_cols
-            col_diff = maximum(abs.(our_finite_diff[:, col] - ground_truth_finite_diff[:, col]))
+            col_diff = maximum(abs.(our_derivative[:, col] - ground_truth_derivative[:, col]))
             if col_diff > 1e-10
                 println("   Column $col: max diff = $col_diff")
             end
@@ -136,19 +136,19 @@ function compare_finite_differences(model, df, variable::Symbol)
     end
     
     return (
-        our_result = our_finite_diff,
-        ground_truth = ground_truth_finite_diff,
+        our_result = our_derivative,
+        ground_truth = ground_truth_derivative,
         max_diff = max_diff
     )
 end
 
 """
-    prepare_finite_differences_fixed_fallback!(ws::AMEWorkspace, variable::Symbol, h::Real, 
+    prepare_derivativeerences_fixed_fallback!(ws::AMEWorkspace, variable::Symbol, h::Real, 
                                      ipm::InplaceModeler)
 
 FALLBACK VERSION: Use full matrix construction for finite differences until we fix selective updates.
 """
-function prepare_finite_differences_fixed_fallback!(ws::AMEWorkspace, variable::Symbol, h::Real, 
+function prepare_derivativeerences_fixed_fallback!(ws::AMEWorkspace, variable::Symbol, h::Real, 
                                           ipm::InplaceModeler)
     # Validate that variable is continuous and pre-allocated
     if !haskey(ws.pert_vectors, variable)
@@ -172,45 +172,45 @@ function prepare_finite_differences_fixed_fallback!(ws::AMEWorkspace, variable::
     
     # FALLBACK: Use full matrix construction for now
     # This should give us the correct finite differences
-    modelmatrix!(ipm, pert_data, ws.finite_diff_matrix)
+    modelmatrix!(ipm, pert_data, ws.derivative_matrix)
     
     # Compute finite differences: (X_perturbed - X_baseline) / h
     invh = 1.0 / h
     
-    @inbounds for col in 1:size(ws.finite_diff_matrix, 2)
-        for row in 1:size(ws.finite_diff_matrix, 1)
+    @inbounds for col in 1:size(ws.derivative_matrix, 2)
+        for row in 1:size(ws.derivative_matrix, 1)
             baseline_val = ws.work_matrix[row, col]
-            perturbed_val = ws.finite_diff_matrix[row, col]
+            perturbed_val = ws.derivative_matrix[row, col]
             
             if !isfinite(baseline_val) || !isfinite(perturbed_val)
-                ws.finite_diff_matrix[row, col] = 0.0
+                ws.derivative_matrix[row, col] = 0.0
                 continue
             end
             
             raw_diff = perturbed_val - baseline_val
-            finite_diff = raw_diff * invh
+            derivative = raw_diff * invh
             
-            if isfinite(finite_diff)
-                ws.finite_diff_matrix[row, col] = clamp(finite_diff, -1e6, 1e6)
+            if isfinite(derivative)
+                ws.derivative_matrix[row, col] = clamp(derivative, -1e6, 1e6)
             else
-                ws.finite_diff_matrix[row, col] = 0.0
+                ws.derivative_matrix[row, col] = 0.0
             end
         end
     end
     
     # Set unaffected columns to zero (this is mathematically correct)
     affected_cols = ws.variable_plans[variable]
-    total_cols = size(ws.finite_diff_matrix, 2)
+    total_cols = size(ws.derivative_matrix, 2)
     unaffected_cols = setdiff(1:total_cols, affected_cols)
     
     @inbounds for col in unaffected_cols
-        for row in 1:size(ws.finite_diff_matrix, 1)
-            ws.finite_diff_matrix[row, col] = 0.0
+        for row in 1:size(ws.derivative_matrix, 1)
+            ws.derivative_matrix[row, col] = 0.0
         end
     end
 end
 
-function compare_finite_differences_fallback(model, df, variable::Symbol)
+function compare_derivativeerences_fallback(model, df, variable::Symbol)
     println("=== Comparing finite difference computations for :$variable ===")
     
     # Build workspace and step size
@@ -225,8 +225,8 @@ function compare_finite_differences_fallback(model, df, variable::Symbol)
     println("Using step size h = $h")
     
     # Our selective approach
-    prepare_finite_differences_fixed_fallback!(ws, variable, h, ipm)
-    our_finite_diff = copy(ws.finite_diff_matrix)
+    prepare_derivativeerences_fixed_fallback!(ws, variable, h, ipm)
+    our_derivative = copy(ws.derivative_matrix)
     
     # Ground truth approach - build both matrices manually
     X_base = modelmatrix(model)
@@ -236,10 +236,10 @@ function compare_finite_differences_fallback(model, df, variable::Symbol)
     X_pert = similar(X_base)
     modelmatrix!(ipm, Tables.columntable(df_pert), X_pert)
     
-    ground_truth_finite_diff = (X_pert - X_base) / h
+    ground_truth_derivative = (X_pert - X_base) / h
     
     # Compare
-    max_diff = maximum(abs.(our_finite_diff - ground_truth_finite_diff))
+    max_diff = maximum(abs.(our_derivative - ground_truth_derivative))
     affected_cols = ws.variable_plans[variable]
     
     println("Maximum difference in finite differences: $max_diff")
@@ -249,7 +249,7 @@ function compare_finite_differences_fallback(model, df, variable::Symbol)
         
         # Show where the differences are
         for col in affected_cols
-            col_diff = maximum(abs.(our_finite_diff[:, col] - ground_truth_finite_diff[:, col]))
+            col_diff = maximum(abs.(our_derivative[:, col] - ground_truth_derivative[:, col]))
             if col_diff > 1e-10
                 println("   Column $col: max diff = $col_diff")
             end
@@ -259,8 +259,8 @@ function compare_finite_differences_fallback(model, df, variable::Symbol)
     end
     
     return (
-        our_result = our_finite_diff,
-        ground_truth = ground_truth_finite_diff,
+        our_result = our_derivative,
+        ground_truth = ground_truth_derivative,
         max_diff = max_diff
     )
 end
@@ -269,12 +269,12 @@ model = m;
 
 # For the 3-way interaction test case
 debug_variable_dependencies(model, df, :x)
-compare_finite_differences(model, df, :x)
+compare_derivativeerences(model, df, :x)
 
 using Margins: create_perturbed_data, get_variable_term_ranges
 
 # fallback version to test error
-compare_finite_differences_fallback(model, df, :x)
+compare_derivativeerences_fallback(model, df, :x)
 # yes, this version is correct
 
 # deeper diagnosis
