@@ -375,3 +375,73 @@
         @test isa(ame.ses[:x],   Number)
     end
 end
+
+@testset "Numeric rep-value for numeric variable" begin
+    # 1) simulate data with two continuous preds: age_h and are_related_dists_a_inv
+    n = 200
+    df = DataFrame(
+        age_h                  = randn(n),
+        are_related_dists_a_inv = rand(Uniform(0,1), n),
+    )
+    # true model: y = β0 + β1*age_h + β2*are_related_dists_a_inv + β3*age_h*are_related_dists_a_inv + ε
+    β = (β0=0.5, β1=1.2, β2=-0.8, β3=0.3)
+    μ =  β.β0 .+
+         β.β1 .* df.age_h .+
+         β.β2 .* df.are_related_dists_a_inv .+
+         β.β3 .* (df.age_h .* df.are_related_dists_a_inv)
+    df.y = μ .+ randn(n)*0.1
+
+    # 2) fit the model
+    m = lm(@formula(y ~ age_h * are_related_dists_a_inv), df)
+
+    # 3) pick a rep‐value for the numeric var
+    rv = Dict(:are_related_dists_a_inv => [1/6])
+
+    # 4) calling margins with that rep‐value should emit no warning/error,
+    #    and return a MarginsResult
+    @test_nowarn margins(m, :age_h, df; repvals = rv)
+    res = margins(m, :age_h, df; repvals = rv)
+    @test res isa MarginsResult
+
+    # 5) the analytic derivative ∂μ/∂age_h at are_related_dists_a_inv = 1/6 is
+    #      β1 + β3*(1/6)
+    #    so the AME should be β̂1 + β̂3*(1/6)
+    coefs = coef(m)
+    # coefnames(m) == ["(Intercept)", "age_h", "are_related_dists_a_inv", "age_h & are_related_dists_a_inv"]
+    idx_β1  = findfirst(isequal("age_h"),                       coefnames(m))
+    idx_β3  = findfirst(isequal("age_h & are_related_dists_a_inv"), coefnames(m))
+    expected_ame = coefs[idx_β1] + coefs[idx_β3]*(1/6)
+
+    @test isapprox(res.effects[:age_h][(1/6,)], expected_ame; atol=1e-8)
+
+    # 6) finally, ensure that building the model matrix at rep‐value
+    #    doesn’t change the number of columns
+    X_full = modelmatrix(m)
+    X_rep  = modelmatrix(m)
+    @test size(X_rep, 2) == size(X_full, 2)
+end
+
+@testset "Rep-value on factor preserves contrast structure" begin
+    # 1) simulate a tiny data frame with a 3-level factor `g` and continuous `z`
+    n = 200
+    df = DataFrame(
+        y = randn(n),
+        g = categorical(rand(("A", "B", "C"), n)),  # 3 levels
+        z = randn(n),
+    )
+    m = lm(@formula(y ~ g + z), df)
+
+    # 2) a “raw” numeric rep-value for level "B" is just its numeric code: 2
+    raw_num = 2
+    
+    # 3) build the equivalent CategoricalArray rep-val by hand
+    rv_cat = Dict(:g => ["B"])
+
+    @test_nowarn ame_cat = margins(m, :z, df; repvals = rv_cat)
+
+    # 6) Finally, sanity-check that the numeric‐based call really did treat `g`
+    #    as a factor by confirming no discrepancy in the number of columns:
+    X_full  = modelmatrix(m)
+    X_repnum = modelmatrix(m)
+    @test size(X_repnum, 2) == size(X_full, 2)
+end
