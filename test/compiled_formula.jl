@@ -412,28 +412,53 @@ end
 
 ###############################################################################
 
+# correct tuple version below -- 
+# function generate_instruction_code(instr::CategoricalColumn)
+#     lines = String[]
+#     col = instr.column
+#     pos = instr.position
+    
+#     # Store contrast matrix as a local constant (embed in generated function)
+#     matrix_var = "contrast_$(col)_matrix"
+#     push!(lines, "@inbounds cat_val = data.$(col)[row_idx]")
+#     push!(lines, "@inbounds level_code = cat_val isa CategoricalValue ? levelcode(cat_val) : 1")
+    
+#     # Embed matrix values directly to avoid runtime lookups
+#     for j in 1:instr.num_cols
+#         for i in 1:size(instr.contrast_matrix, 1)
+#             matrix_val = instr.contrast_matrix[i, j]
+#             if i == 1
+#                 push!(lines, "@inbounds row_vec[$(pos + j - 1)] = level_code == $i ? $matrix_val :")
+#             elseif i == size(instr.contrast_matrix, 1)
+#                 push!(lines, "                                        $matrix_val")
+#             else
+#                 push!(lines, "                                        level_code == $i ? $matrix_val :")
+#             end
+#         end
+#     end
+    
+#     return lines
+# end
+
 function generate_instruction_code(instr::CategoricalColumn)
     lines = String[]
     col = instr.column
     pos = instr.position
     
-    # Store contrast matrix as a local constant (embed in generated function)
-    matrix_var = "contrast_$(col)_matrix"
     push!(lines, "@inbounds cat_val = data.$(col)[row_idx]")
     push!(lines, "@inbounds level_code = cat_val isa CategoricalValue ? levelcode(cat_val) : 1")
     
-    # Embed matrix values directly to avoid runtime lookups
+    # Pre-generate the lookup arrays as local constants to avoid runtime allocation
     for j in 1:instr.num_cols
-        for i in 1:size(instr.contrast_matrix, 1)
-            matrix_val = instr.contrast_matrix[i, j]
-            if i == 1
-                push!(lines, "@inbounds row_vec[$(pos + j - 1)] = level_code == $i ? $matrix_val :")
-            elseif i == size(instr.contrast_matrix, 1)
-                push!(lines, "                                        $matrix_val")
-            else
-                push!(lines, "                                        level_code == $i ? $matrix_val :")
-            end
-        end
+        values = [instr.contrast_matrix[i, j] for i in 1:size(instr.contrast_matrix, 1)]
+        
+        # Create a unique variable name for this lookup array
+        array_var = "lookup_$(col)_$(j)"
+        
+        # Embed the array as a local constant in the generated function
+        values_str = "(" * join(string.(values), ", ") * ",)"  # Use tuple instead of array
+        push!(lines, "$array_var = $values_str")
+        push!(lines, "@inbounds row_vec[$(pos + j - 1)] = $array_var[level_code]")
     end
     
     return lines
@@ -518,5 +543,3 @@ compiled_formula_123456789(row_vec, data, 1)  # Where 123456789 is the hash
 The generated function will be named something like `compiled_formula_123456789`
 based on the hash of your formula, and you can call it directly for maximum speed.
 """
-
-export CompiledFormula, compile_formula, zero_alloc_modelrow!
