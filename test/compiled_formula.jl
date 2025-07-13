@@ -417,18 +417,46 @@ function generate_instruction_code(instr::CategoricalColumn)
     col = instr.column
     pos = instr.position
     
+    # Store contrast matrix as a local constant (embed in generated function)
+    matrix_var = "contrast_$(col)_matrix"
     push!(lines, "@inbounds cat_val = data.$(col)[row_idx]")
     push!(lines, "@inbounds level_code = cat_val isa CategoricalValue ? levelcode(cat_val) : 1")
     
-    # Simple array indexing instead of ternary
+    # Embed matrix values directly to avoid runtime lookups
     for j in 1:instr.num_cols
-        values = [instr.contrast_matrix[i, j] for i in 1:size(instr.contrast_matrix, 1)]
-        values_str = "[" * join(string.(values), ", ") * "]"
-        push!(lines, "@inbounds row_vec[$(pos + j - 1)] = $values_str[level_code]")
+        for i in 1:size(instr.contrast_matrix, 1)
+            matrix_val = instr.contrast_matrix[i, j]
+            if i == 1
+                push!(lines, "@inbounds row_vec[$(pos + j - 1)] = level_code == $i ? $matrix_val :")
+            elseif i == size(instr.contrast_matrix, 1)
+                push!(lines, "                                        $matrix_val")
+            else
+                push!(lines, "                                        level_code == $i ? $matrix_val :")
+            end
+        end
     end
     
     return lines
 end
+
+# Correct, but allocates
+# function generate_instruction_code(instr::CategoricalColumn)
+#     lines = String[]
+#     col = instr.column
+#     pos = instr.position
+    
+#     push!(lines, "@inbounds cat_val = data.$(col)[row_idx]")
+#     push!(lines, "@inbounds level_code = cat_val isa CategoricalValue ? levelcode(cat_val) : 1")
+    
+#     # Simple array indexing instead of ternary
+#     for j in 1:instr.num_cols
+#         values = [instr.contrast_matrix[i, j] for i in 1:size(instr.contrast_matrix, 1)]
+#         values_str = "[" * join(string.(values), ", ") * "]"
+#         push!(lines, "@inbounds row_vec[$(pos + j - 1)] = $values_str[level_code]")
+#     end
+    
+#     return lines
+# end
 
 
 # compiled_formula.jl - Direct code generation for zero-allocation formula evaluation
