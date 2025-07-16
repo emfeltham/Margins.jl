@@ -1,44 +1,33 @@
 module Margins
 
-using CategoricalArrays
-using CategoricalArrays: pool, refs 
+using BenchmarkTools: @belapsed
 
-using DataFrames, Tables
+using EfficientModelMatrices
+
+using DataFrames, CategoricalArrays, Tables
 import DataFrames.DataFrame
-import Tables.columntable
-
-using Statistics
-using Distributions
-
-using StatsModels
-using StatsModels: formula, termvars
-using StatsModels: TupleTerm, ColumnTable
-using StatsModels: AbstractTerm, ContinuousTerm, width, termvars
-
-using StatsBase
-import StatsBase: confint, vcov
-
-# Needed from Effects.jl to compute effects!:
-using Effects: TypicalTerm  # Import the type only
-import Effects: diag,vcov, _difference_method!, _responsename, something
-import Effects: _invlink_and_deriv, AutoInvLink
-import Effects: expand_grid
-
-using GLM
-import GLM: LinearModel, GeneralizedLinearModel
-import MixedModels
-import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
-import MixedModels: sdest
-using MixedModels: MixedModel, fnames, RandomEffectsTerm
-using MixedModels: fixef, fixefnames
+using Tables: ColumnTable, columntable
 
 using StandardizedPredictors
 import StandardizedPredictors: ZScoredTerm
 
-# INTEGRATION WITH EfficientModelMatrices.jl
-using EfficientModelMatrices
-using EfficientModelMatrices: InplaceModeler, modelmatrix!, fixed_effects_form
-using EfficientModelMatrices: _cols!
+using LinearAlgebra: norm, dot
+using Statistics: mean, std, var
+using StatsModels
+using StatsModels: TupleTerm
+
+using GLM: 
+    linkinv, mueta, IdentityLink, LogLink, LogitLink, ProbitLink, 
+    CloglogLink, InverseLink, InverseSquareLink, SqrtLink, PowerLink, Link
+using Distributions: Normal, pdf
+using ForwardDiff
+
+
+# Needed from Effects.jl to compute APM/MEM effects!:
+using Effects: TypicalTerm  # Import the type only
+import Effects: diag, vcov, _difference_method!, _responsename, something
+import Effects: _invlink_and_deriv, AutoInvLink
+import Effects: expand_grid
 
 ## formula helpers
 # Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
@@ -52,10 +41,6 @@ import StatsModels: term
 Base.:!(t::StatsModels.Term) = term(not, t)
 
 export not
-##
-
-include("family.jl")
-export Family, family
 
 # APMs and MEMs
 include("reference grid.jl")
@@ -79,56 +64,39 @@ using ForwardDiff, LinearAlgebra
 using LinearAlgebra.BLAS
 import LinearAlgebra.dot
 using GLM: linkinv, mueta
-using MixedModels: RandomEffectsTerm
 
 # Core type definitions
 import Base: show
 using Printf, Distributions
 
-import StatsBase.vcov
-include("workspace.jl")
-
-include("analytical_derivatives.jl")
-include("analytical_derivatives_add.jl")
-
-# Exported types
-include("marginsresult.jl")
-export MarginsResult
-include("margins_to_df.jl")
-
-# Helper functions for AMEs
-include("mueta2.jl")
-include("link.jl")
-
-# Core AME functions with EfficientModelMatrices integration
-include("core.jl")
-include("ame_continuous.jl")
-include("ame_factor.jl")
-include("ame_representation.jl")
-
-include("confint.jl")
-export confint
-
-# Exported types and functions
-export margins
-
-# AME contrasts
-include("contrastresult.jl")
-include("contrasts.jl")
-include("contrast_to_df.jl")
-include("selective_updates!.jl")
-
-export DataFrame
-
-# Export type; functions
-export ContrastResult, contrast, contrast_levels
-
 # Bayesian methods (very early stage; may be removed)
-
-# Methods for Bayesian models
-import LinearAlgebra.mul!
-
 include("hpdi.jl")
 include("bayes.jl")
+
+####
+
+include("workspace.jl")
+
+include("link_functions.jl")
+include("marginal_effects_results.jl")
+
+include("marginal_effects_core.jl")
+include("representative_effects.jl")
+export compute_marginal_effects
+include("continuous_variable_effects.jl")
+include("categorical_variable_effects.jl")
+# include("categorical_variable_effects_utilities.jl")
+
+# contrasts and export
+# include("margins_to_df.jl")
+# AME contrasts
+# include("contrastresult.jl")
+# include("contrasts.jl")
+# include("contrast_to_df.jl")
+# Export type; functions
+# export ContrastResult, contrast, contrast_levels
+# Exported types
+
+export DataFrame
 
 end # end module
