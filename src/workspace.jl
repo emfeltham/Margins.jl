@@ -4,9 +4,6 @@
 # Enhanced MarginalEffectsWorkspace with Analytical Derivatives
 ###############################################################################
 
-using EfficientModelMatrices: compile_formula, compile_derivative_formula, CompiledFormula, CompiledDerivativeFormula
-using EfficientModelMatrices: create_scenario, DataScenario
-
 """
     MarginalEffectsWorkspace
 
@@ -72,7 +69,7 @@ function MarginalEffectsWorkspace(model::StatisticalModel, data, focal_variables
     column_data = Tables.columntable(data)
     validate_data_structure(column_data)
     
-    # Compile model formula using EfficientModelMatrices
+    # Compile model formula using FormulaCompiler
     compiled_formula = compile_formula(model)
     parameter_count = length(compiled_formula)
     

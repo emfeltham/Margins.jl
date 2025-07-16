@@ -99,7 +99,7 @@
         form5 = @formula(SepalLength ~ SepalWidth * Species)
         m5 = lm(form5, iris)
         levels_list = levels(iris.Species)
-        repvals_cat = Dict(:Species => categorical(levels_list; levels=levels_list))
+        repvals_cat = Dict(:Species => levels_list)
         ame5 = margins(m5, :SepalWidth, iris; repvals=repvals_cat)
 
         β5 = coef(m5)

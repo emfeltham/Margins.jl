@@ -128,7 +128,7 @@
         c[iβxz] = zv
         se_closed = sqrt(c' * V * c)
 
-        ame   = margins(m, :x, df; repvals=Dict(:d => categorical([false]), :z => [zv]))
+        ame   = margins(m, :x, df; repvals=Dict(:d => [false], :z => [zv]))
         
         # fails at high tolerance (above 1e-2)
         # @test isapprox(ame.effects[:x][(false, zv)], ame_closed; atol=1e-6)

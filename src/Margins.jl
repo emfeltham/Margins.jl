@@ -2,7 +2,9 @@ module Margins
 
 using BenchmarkTools: @belapsed
 
-using EfficientModelMatrices
+using FormulaCompiler
+using FormulaCompiler: compile_formula, compile_derivative_formula, CompiledFormula, CompiledDerivativeFormula
+using FormulaCompiler: create_scenario, DataScenario
 
 using DataFrames, CategoricalArrays, Tables
 import DataFrames.DataFrame
@@ -59,7 +61,7 @@ export modelvariables
 export effects2!
 export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
 
-# AMEs with EfficientModelMatrices integration
+# AMEs with FormulaCompiler integration
 using ForwardDiff, LinearAlgebra
 using LinearAlgebra.BLAS
 import LinearAlgebra.dot
