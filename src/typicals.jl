@@ -117,7 +117,7 @@ function typicals!(
     # 2) drop any grouping factors
     exclude = Symbol[]
     if model isa MixedModel
-        append!(exclude, Symbol.(fnames(model)))
+        append!(exclude, Symbol.(coefnames(model)))
     end
     fixed_vars = setdiff(all_vars, exclude)
 

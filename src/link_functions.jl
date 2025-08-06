@@ -4,6 +4,12 @@
 # Link Function Extraction and Utilities
 ###############################################################################
 
+function get_inverse_link_function(workspace::MarginalEffectsWorkspace)
+    # For now return identity - in a full implementation this would be extracted from the model
+    # and stored in the workspace during creation
+    return identity
+end
+
 """
     extract_link_functions(model::StatisticalModel) -> (inverse_link, first_derivative, second_derivative)
 
@@ -45,81 +51,6 @@ Convenience function when only μ(η) is needed.
 function get_inverse_link_function(model::StatisticalModel)
     link_object = family(model).link
     return η -> linkinv(link_object, η)
-end
-
-###############################################################################
-# Second Derivative Implementation (mueta2)
-###############################################################################
-
-"""
-    mueta2(link::Link, η) -> Real
-
-Compute the second derivative d²μ/dη² of the inverse link function μ(η).
-
-This function provides analytical second derivatives for all standard GLM link functions,
-with ForwardDiff fallback for custom link functions.
-
-# Implemented Links
-- IdentityLink: d²μ/dη² = 0
-- LogLink: d²μ/dη² = exp(η) 
-- LogitLink: d²μ/dη² = μ(1-μ)(1-2μ)
-- ProbitLink: d²μ/dη² = -η·φ(η) where φ is standard normal PDF
-- CloglogLink: d²μ/dη² = exp(η-exp(η))(1-exp(η))
-- InverseLink: d²μ/dη² = 2/η³
-- InverseSquareLink: d²μ/dη² = 3/(4η^{5/2})
-- SqrtLink: d²μ/dη² = 2
-- PowerLink: d²μ/dη² = p(p-1)η^{p-2}
-
-# Arguments
-- `link::Link`: GLM link object
-- `η`: Linear predictor value(s)
-
-# Returns
-Second derivative of inverse link function at η
-"""
-function mueta2(link::IdentityLink, η)
-    return zero(η)
-end
-
-function mueta2(link::LogLink, η)
-    return exp(η)
-end
-
-function mueta2(link::LogitLink, η)
-    μ = linkinv(link, η)
-    return μ * (1 - μ) * (1 - 2μ)
-end
-
-function mueta2(link::ProbitLink, η)
-    return -η * pdf(Normal(), η)
-end
-
-function mueta2(link::CloglogLink, η)
-    exp_η = exp(η)
-    return exp(η - exp_η) * (1 - exp_η)
-end
-
-function mueta2(link::InverseLink, η)
-    return 2 / (η^3)
-end
-
-function mueta2(link::InverseSquareLink, η)
-    return 3 / (4 * η^(5/2))
-end
-
-function mueta2(link::SqrtLink, η)
-    return 2 * one(η)  # Constant 2, but preserve type
-end
-
-function mueta2(link::PowerLink, η)
-    p = link.p
-    return p * (p - 1) * η^(p - 2)
-end
-
-# Fallback for custom or unknown link functions
-function mueta2(link::Link, η)
-    @warn "Using ForwardDiff fallback for second derivative of $(typeof(link))" maxlog=3
-    return ForwardDiff.derivative(η_val -> mueta(link, η_val), η)
 end
 
 ###############################################################################

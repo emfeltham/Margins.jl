@@ -1,24 +1,14 @@
-# categorical_variable_effects.jl - Complete implementation for categorical marginal effects
-
-###############################################################################
-# Categorical Variable Marginal Effects Computation
-###############################################################################
+# categorical_variable_effects.jl
+# Updated to use workspace scenarios
 
 """
     compute_baseline_factor_contrasts!(
-        effect_estimates::Dict{Tuple,Float64}, 
-        standard_errors::Dict{Tuple,Float64}, 
-        gradient_vectors::Dict{Tuple,Vector{Float64}}, 
-        focal_variable::Symbol,
-        workspace::MarginalEffectsWorkspace,
-        coefficient_vector::AbstractVector, 
-        covariance_matrix::AbstractMatrix,
-        inverse_link_function::Function, 
-        first_derivative::Function;
-        variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}()
-    )
+    effect_estimates, standard_errors, gradient_vectors,
+    focal_variable, workspace, coefficient_vector, covariance_matrix,
+    inverse_link_function, first_derivative; variable_overrides
+)
 
-Compute baseline contrasts for categorical variable (all levels vs. first level).
+Compute baseline contrasts for categorical variable using workspace scenarios.
 """
 function compute_baseline_factor_contrasts!(
     effect_estimates::Dict{Tuple,Float64}, 
@@ -32,7 +22,7 @@ function compute_baseline_factor_contrasts!(
     first_derivative::Function;
     variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}()
 )
-    # Extract factor levels from workspace data
+    # Extract factor levels using workspace data
     factor_levels = extract_factor_levels(workspace.column_data[focal_variable])
     
     if length(factor_levels) < 2
@@ -42,7 +32,7 @@ function compute_baseline_factor_contrasts!(
     
     baseline_level = factor_levels[1]
     
-    # Compute contrasts against baseline
+    # Compute contrasts against baseline using workspace scenarios
     for comparison_level in factor_levels[2:end]
         effect, se, gradient = compute_factor_level_contrast(
             focal_variable, baseline_level, comparison_level, 
@@ -59,18 +49,11 @@ function compute_baseline_factor_contrasts!(
 end
 
 """
-    compute_all_pairs_factor_contrasts!(effect_estimates::Dict{Tuple,Float64}, 
-                                       standard_errors::Dict{Tuple,Float64}, 
-                                       gradient_vectors::Dict{Tuple,Vector{Float64}}, 
-                                       focal_variable::Symbol,
-                                       workspace::MarginalEffectsWorkspace,
-                                       coefficient_vector::AbstractVector, 
-                                       covariance_matrix::AbstractMatrix,
-                                       inverse_link_function::Function, 
-                                       first_derivative::Function;
-                                       variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    compute_all_pairs_factor_contrasts!(effect_estimates, standard_errors, gradient_vectors,
+                                       focal_variable, workspace, coefficient_vector, covariance_matrix,
+                                       inverse_link_function, first_derivative; variable_overrides)
 
-Compute all pairwise contrasts for categorical variable.
+Compute all pairwise contrasts for categorical variable using workspace scenarios.
 """
 function compute_all_pairs_factor_contrasts!(
     effect_estimates::Dict{Tuple,Float64}, 
@@ -84,7 +67,7 @@ function compute_all_pairs_factor_contrasts!(
     first_derivative::Function;
     variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}()
 )
-    # Extract factor levels from workspace data
+    # Extract factor levels using workspace data
     factor_levels = extract_factor_levels(workspace.column_data[focal_variable])
     
     if length(factor_levels) < 2
@@ -92,7 +75,7 @@ function compute_all_pairs_factor_contrasts!(
         return
     end
     
-    # Compute all pairwise contrasts
+    # Compute all pairwise contrasts using workspace scenarios
     for level_i_index in 1:length(factor_levels)-1
         for level_j_index in level_i_index+1:length(factor_levels)
             level_i, level_j = factor_levels[level_i_index], factor_levels[level_j_index]
@@ -113,28 +96,11 @@ function compute_all_pairs_factor_contrasts!(
 end
 
 """
-    compute_factor_level_contrast(focal_variable::Symbol, 
-                                 reference_level, 
-                                 comparison_level, 
-                                 workspace::MarginalEffectsWorkspace,
-                                 coefficient_vector::AbstractVector, 
-                                 covariance_matrix::AbstractMatrix,
-                                 inverse_link_function::Function, 
-                                 first_derivative::Function;
-                                 variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    compute_factor_level_contrast(focal_variable, reference_level, comparison_level,
+                                 workspace, coefficient_vector, covariance_matrix,
+                                 inverse_link_function, first_derivative; variable_overrides)
 
-Core function: Compute contrast between two levels of a categorical variable.
-
-# Algorithm
-1. Compute average prediction when focal_variable = reference_level (with overrides)
-2. Compute average prediction when focal_variable = comparison_level (with overrides)  
-3. Marginal effect = mean(prediction_comparison) - mean(prediction_reference)
-4. Gradient = ∇[mean(prediction_comparison)] - ∇[mean(prediction_reference)]
-
-# Performance
-- Memory: O(p) - uses workspace buffers only
-- Time: O(n×p) - linear in observations and parameters
-- Zero additional allocations beyond workspace
+Core function: Compute contrast between two levels using workspace scenarios consistently.
 """
 function compute_factor_level_contrast(
     focal_variable::Symbol, 
@@ -151,18 +117,17 @@ function compute_factor_level_contrast(
     parameter_count = get_parameter_count(workspace)
     
     # Use workspace buffers for accumulators
-    # gradient_accumulator will store reference level gradients
-    # computation_buffer will store comparison level gradients
-    fill!(workspace.gradient_accumulator, 0.0)  # Reference level
-    fill!(workspace.computation_buffer, 0.0)    # Comparison level
+    fill!(workspace.gradient_accumulator, 0.0)  # Reference level gradients
+    fill!(workspace.computation_buffer, 0.0)    # Comparison level gradients
     
     # Initialize prediction accumulators
     reference_prediction_sum = 0.0
     comparison_prediction_sum = 0.0
     
-    # STEP 1: Compute average prediction at reference level
+    # STEP 1: Compute average prediction at reference level using workspace scenarios
     reference_overrides = merge(variable_overrides, Dict(focal_variable => reference_level))
     for observation_index in 1:observation_count
+        # Use workspace scenario system instead of custom override logic
         evaluate_model_row!(workspace, observation_index; variable_overrides=reference_overrides)
         linear_predictor = dot(workspace.model_row_buffer, coefficient_vector)
         predicted_value = inverse_link_function(linear_predictor)
@@ -170,14 +135,15 @@ function compute_factor_level_contrast(
         
         # Accumulate prediction and gradient
         reference_prediction_sum += predicted_value
-        @inbounds for param_index in 1:parameter_count
+        for param_index in 1:parameter_count
             workspace.gradient_accumulator[param_index] += link_derivative * workspace.model_row_buffer[param_index] / observation_count
         end
     end
     
-    # STEP 2: Compute average prediction at comparison level
+    # STEP 2: Compute average prediction at comparison level using workspace scenarios
     comparison_overrides = merge(variable_overrides, Dict(focal_variable => comparison_level))
     for observation_index in 1:observation_count
+        # Use workspace scenario system instead of custom override logic
         evaluate_model_row!(workspace, observation_index; variable_overrides=comparison_overrides)
         linear_predictor = dot(workspace.model_row_buffer, coefficient_vector)
         predicted_value = inverse_link_function(linear_predictor)
@@ -185,7 +151,7 @@ function compute_factor_level_contrast(
         
         # Accumulate prediction and gradient
         comparison_prediction_sum += predicted_value
-        @inbounds for param_index in 1:parameter_count
+        for param_index in 1:parameter_count
             workspace.computation_buffer[param_index] += link_derivative * workspace.model_row_buffer[param_index] / observation_count
         end
     end
@@ -196,8 +162,7 @@ function compute_factor_level_contrast(
     marginal_effect = comparison_mean - reference_mean
     
     # Gradient = ∇[mean(comparison)] - ∇[mean(reference)]
-    # Store final gradient in gradient_accumulator
-    @inbounds for param_index in 1:parameter_count
+    for param_index in 1:parameter_count
         workspace.gradient_accumulator[param_index] = workspace.computation_buffer[param_index] - workspace.gradient_accumulator[param_index]
     end
     
@@ -210,8 +175,7 @@ end
 """
     extract_factor_levels(factor_column) -> Vector
 
-Extract ordered list of factor levels from any column type that should be treated as categorical.
-Handles CategoricalArray, Bool, and general vectors consistently.
+Extract ordered list of factor levels from any column type (consistent with workspace data).
 """
 function extract_factor_levels(factor_column)
     if factor_column isa CategoricalArray
@@ -219,7 +183,6 @@ function extract_factor_levels(factor_column)
     elseif eltype(factor_column) <: Bool
         return [false, true]  # Canonical Boolean ordering
     elseif eltype(factor_column) <: CategoricalValue
-        # Handle case where we have a vector of CategoricalValues
         return levels(categorical(factor_column))
     else
         # For other types, use sorted unique values

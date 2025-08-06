@@ -1,20 +1,36 @@
 # mueta2.jl
 
-import GLM: linkinv, IdentityLink, LogLink, LogitLink, ProbitLink, CloglogLink,
-            InverseLink, InverseSquareLink, SqrtLink, PowerLink, Link
+import GLM: 
+    linkinv, IdentityLink, LogLink, LogitLink, ProbitLink, CloglogLink,
+    InverseLink, InverseSquareLink, SqrtLink, PowerLink, Link
 using Distributions: Normal, pdf
 
-@doc raw"""
-Compute the second derivative ``d^2\mu / d\eta^2`` of the inverse link function ``\mu(\eta)`` for each GLM.jl `Link` type.
+"""
+    mueta2(link::Link, η) -> Real
+
+Compute the second derivative d²μ/dη² of the inverse link function μ(η).
+
+This function provides analytical second derivatives for all standard GLM link functions,
+with ForwardDiff fallback for custom link functions.
+
+# Implemented Links
+- IdentityLink: d²μ/dη² = 0
+- LogLink: d²μ/dη² = exp(η) 
+- LogitLink: d²μ/dη² = μ(1-μ)(1-2μ)
+- ProbitLink: d²μ/dη² = -η·φ(η) where φ is standard normal PDF
+- CloglogLink: d²μ/dη² = exp(η-exp(η))(1-exp(η))
+- InverseLink: d²μ/dη² = 2/η³
+- InverseSquareLink: d²μ/dη² = 3/(4η^{5/2})
+- SqrtLink: d²μ/dη² = 2
+- PowerLink: d²μ/dη² = p(p-1)η^{p-2}
 
 # Arguments
-- `L::Link`: A GLM.jl link object.
-- `η`: Linear predictor value(s).
+- `link::Link`: GLM link object
+- `η`: Linear predictor value(s)
 
 # Returns
-- The analytic second derivative of the inverse link at `η`.
+Second derivative of inverse link function at η
 """
-
 # — Explicit second‐derivatives (Block 2 style) —
 mueta2(::IdentityLink, η) = zero(η)
 mueta2(::LogLink, η)      = exp(η)

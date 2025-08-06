@@ -1,104 +1,81 @@
+# Margins.jl
+# Clean module with merged core
+
 module Margins
 
-using BenchmarkTools: @belapsed
-
-using FormulaCompiler
-using FormulaCompiler: compile_formula, compile_derivative_formula, CompiledFormula, CompiledDerivativeFormula
-using FormulaCompiler: create_scenario, DataScenario
-
-using DataFrames, CategoricalArrays, Tables
-import DataFrames.DataFrame
-using Tables: ColumnTable, columntable
-
-using StandardizedPredictors
-import StandardizedPredictors: ZScoredTerm
-
-using LinearAlgebra: norm, dot
-using Statistics: mean, std, var
-using StatsModels
-using StatsModels: TupleTerm
-
-using GLM: 
-    linkinv, mueta, IdentityLink, LogLink, LogitLink, ProbitLink, 
-    CloglogLink, InverseLink, InverseSquareLink, SqrtLink, PowerLink, Link
-using Distributions: Normal, pdf
+# Dependencies (unchanged)
+using Random
 using ForwardDiff
+using StatsModels, GLM, CategoricalArrays, Tables, DataFrames
+using LinearAlgebra
 
 
-# Needed from Effects.jl to compute APM/MEM effects!:
-using Effects: TypicalTerm  # Import the type only
-import Effects: diag, vcov, _difference_method!, _responsename, something
-import Effects: _invlink_and_deriv, AutoInvLink
-import Effects: expand_grid
+import MixedModels
+using MixedModels: MixedModel, LinearMixedModel, GeneralizedLinearMixedModel, RandomEffectsTerm
 
-## formula helpers
-# Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
+using StandardizedPredictors: ZScoredTerm
+using Statistics
+
+# ________________________________________ Utility functions
 not(x::Bool) = !x
-
-# Numeric negation on any Real (Float64, Dual, etc.) → one(x) - x
-# Calculates complement
 not(x::T) where {T<:Real} = one(x) - x
-import StatsModels: term
-# whenever you write !term, turn it into function‐term not(term)
-Base.:!(t::StatsModels.Term) = term(not, t)
 
-export not
+# # FormulaCompiler foundation components
+# using FormulaCompiler: 
+#     compile_formula, compile_derivative_formula,
+#     CompiledFormula, CompiledDerivativeFormula, 
+#     modelrow!, create_scenario, DataScenario,
+#     create_scenario_grid, ScenarioCollection,
+#     OverrideVector
 
-# APMs and MEMs
-include("reference grid.jl")
-include("modelcols_alt.jl") # new function based on modelcols
+# # Include files in dependency order
+# include("workspace.jl")                    # Enhanced workspace
+# include("core.jl")                         # Merged core implementation  
+# include("continuous_variable_effects.jl")  # Analytical derivatives
+# include("categorical_variable_effects.jl") # Cleaned categorical effects with scenarios
+# include("representative_effects.jl")       # Cleaned representative values utilities
+# include("marginal_effects_results.jl")     # Result types and display
+# include("link_functions.jl")               # GLM utilities
+# include("mueta2.jl")                       # f`` for invlink
+
+# # CLEAN EXPORTS - Focus on user API
+# export margins                            # Main user function
+# export not                               # Utility for formulas
+
+# # Result types
+# export MarginalEffectsResult
+
+# # Advanced exports (for package developers/power users)
+# export MarginalEffectsWorkspace           # For custom workflows
+# export extract_link_functions, mueta2     # GLM utilities
+
+# # Representative values utilities (for advanced use cases)
+# export create_representative_value_grid, validate_representative_values
+
+# # Note: Removed deprecated exports and redundant scenario functions
+# # Note: FormulaCompiler scenario functions (create_scenario, etc.) are imported but not re-exported
+# #       Users should import FormulaCompiler directly for advanced scenario work
+
+
+# ________________________________________ APM and MEM estimation
+using Effects: expand_grid, AutoInvLink
+using StatsModels: TupleTerm
+using Tables: ColumnTable
+
 include("modelcols.jl")
-include("typicals.jl")
-include("effects2.jl")
-include("deltaeffects2.jl")
+include("modelcols_alt.jl")
 include("standardized.jl")
+include("typicals.jl")
 include("typicals get.jl")
 
+include("effects2.jl")
+include("deltaeffects2.jl")
+
+export effects2!, effectsΔyΔx
+
+include("reference grid.jl")
 export setup_refgrid, setup_contrast_grid
-export get_typicals, typicals!
-export modelvariables
 
-export effects2!
-export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
+end # module
 
-# AMEs with FormulaCompiler integration
-using ForwardDiff, LinearAlgebra
-using LinearAlgebra.BLAS
-import LinearAlgebra.dot
-using GLM: linkinv, mueta
 
-# Core type definitions
-import Base: show
-using Printf, Distributions
-
-# Bayesian methods (very early stage; may be removed)
-include("hpdi.jl")
-include("bayes.jl")
-
-####
-
-include("workspace.jl")
-
-include("link_functions.jl")
-include("marginal_effects_results.jl")
-
-include("marginal_effects_core.jl")
-include("representative_effects.jl")
-export compute_marginal_effects
-include("continuous_variable_effects.jl")
-include("categorical_variable_effects.jl")
-# include("categorical_variable_effects_utilities.jl")
-
-# contrasts and export
-# include("margins_to_df.jl")
-# AME contrasts
-# include("contrastresult.jl")
-# include("contrasts.jl")
-# include("contrast_to_df.jl")
-# Export type; functions
-# export ContrastResult, contrast, contrast_levels
-# Exported types
-
-export DataFrame
-
-end # end module

@@ -1,335 +1,347 @@
-# updated_marginal_effects_workspace.jl - Integrate analytical derivatives
+# workspace.jl
+# Enhanced version with FormulaCompiler integration and performance tracking
 
-###############################################################################
-# Enhanced MarginalEffectsWorkspace with Analytical Derivatives
-###############################################################################
-
-"""
-    MarginalEffectsWorkspace
-
-Zero-allocation workspace for marginal effects computation with analytical derivatives.
-
-# Fields
-- `compiled_formula::CompiledFormula`: Pre-compiled model formula
-- `derivative_formulas::Dict{Symbol,CompiledDerivativeFormula}`: Pre-compiled analytical derivatives
-- `column_data::NamedTuple`: Efficient column-table format data
-- `model_row_buffer::Vector{Float64}`: Pre-allocated buffer for model matrix rows
-- `derivative_buffer::Vector{Float64}`: Pre-allocated buffer for analytical derivatives
-- `gradient_accumulator::Vector{Float64}`: Accumulates gradient contributions across observations
-- `computation_buffer::Vector{Float64}`: General-purpose buffer for intermediate calculations
-
-# Performance Characteristics
-- Memory: O(p) where p = number of model parameters
-- Model row evaluation: ~50-100ns per observation
-- Derivative evaluation: ~50-100ns per observation (analytical!)
-- Zero allocations during marginal effect computation
-
-# Key Improvement
-Now uses analytical derivatives instead of ForwardDiff for massive performance gain.
-"""
-struct MarginalEffectsWorkspace
+mutable struct MarginalEffectsWorkspace
+    # FormulaCompiler components
     compiled_formula::CompiledFormula
     derivative_formulas::Dict{Symbol,CompiledDerivativeFormula}
     column_data::NamedTuple
+    
+    # Pre-allocated buffers
     model_row_buffer::Vector{Float64}
     derivative_buffer::Vector{Float64}
     gradient_accumulator::Vector{Float64}
     computation_buffer::Vector{Float64}
+    
+    # Link functions (ADD THESE)
+    inverse_link_function::Function
+    first_derivative::Function
+    second_derivative::Function
+    
+    # Performance tracking
+    total_model_evaluations::Int
+    total_derivative_evaluations::Int
+    analytical_derivative_successes::Int
+    forwarddiff_fallbacks::Int
+    creation_time_ns::Int
 end
 
-"""
-    MarginalEffectsWorkspace(model::StatisticalModel, data, focal_variables::Vector{Symbol}) -> MarginalEffectsWorkspace
-
-Create workspace with pre-compiled analytical derivatives for focal variables.
-
-# Arguments
-- `model::StatisticalModel`: Fitted model (LinearModel, GeneralizedLinearModel, etc.)
-- `data`: Input data (DataFrame, NamedTuple, or Tables.jl compatible)
-- `focal_variables::Vector{Symbol}`: Variables to compute derivatives for
-
-# Key Innovation
-Pre-compiles analytical derivatives for all focal variables upfront, enabling
-zero-allocation derivative evaluation during runtime.
-
-# Example
-```julia
-model = lm(@formula(y ~ x * group + log(z)), df)
-focal_vars = [:x, :z]  # Variables we'll compute marginal effects for
-workspace = MarginalEffectsWorkspace(model, df, focal_vars)
-
-# Zero-allocation usage
-for i in 1:nrow(df)
-    evaluate_model_row!(workspace, i)           # ~50ns
-    evaluate_model_derivative!(workspace, i, :x)  # ~50ns (analytical!)
-end
-```
-"""
 function MarginalEffectsWorkspace(model::StatisticalModel, data, focal_variables::Vector{Symbol})
+    start_time = time_ns()
+    
     # Convert to efficient column-table format and validate
     column_data = Tables.columntable(data)
     validate_data_structure(column_data)
     
-    # Compile model formula using FormulaCompiler
+    # Compile model formula using FormulaCompiler.jl
     compiled_formula = compile_formula(model)
     parameter_count = length(compiled_formula)
     
-    println("=== Creating MarginalEffectsWorkspace ===")
-    println("Model parameters: $parameter_count")
-    println("Focal variables: $focal_variables")
+    # Extract link functions from model
+    inverse_link, first_deriv, second_deriv = extract_link_functions(model)
     
-    # KEY INNOVATION: Pre-compile analytical derivatives for all focal variables
+    # Pre-compile analytical derivatives using FormulaCompiler.jl
     derivative_formulas = Dict{Symbol,CompiledDerivativeFormula}()
     
     for focal_var in focal_variables
-        println("Compiling analytical derivatives for $focal_var...")
         try
             derivative_compiled = compile_derivative_formula(compiled_formula, focal_var)
             derivative_formulas[focal_var] = derivative_compiled
-            println("✓ Analytical derivatives compiled for $focal_var")
         catch e
-            @warn "Failed to compile analytical derivatives for $focal_var: $e. Will fall back to ForwardDiff."
-            # Could add ForwardDiff fallback here if needed
+            @warn "Failed to compile analytical derivatives for $focal_var: $e. Will use fallback during evaluation."
         end
     end
     
-    println("✓ Workspace created with $(length(derivative_formulas)) analytical derivative formulas")
+    creation_time = time_ns() - start_time
     
-    # Pre-allocate all working buffers
     return MarginalEffectsWorkspace(
         compiled_formula,
         derivative_formulas,
         column_data,
-        Vector{Float64}(undef, parameter_count),  # model_row_buffer
-        Vector{Float64}(undef, parameter_count),  # derivative_buffer
-        Vector{Float64}(undef, parameter_count),  # gradient_accumulator
-        Vector{Float64}(undef, parameter_count)   # computation_buffer
+        Vector{Float64}(undef, parameter_count),
+        Vector{Float64}(undef, parameter_count),
+        Vector{Float64}(undef, parameter_count),
+        Vector{Float64}(undef, parameter_count),
+        inverse_link,      # Store the link functions
+        first_deriv,
+        second_deriv,
+        0, 0, 0, 0, Int(creation_time)
     )
 end
 
-# Convenience constructor that auto-detects continuous variables
+# Simple accessor function
+function get_inverse_link_function(workspace::MarginalEffectsWorkspace)
+    return workspace.inverse_link_function
+end
+
+# Convenience constructor
 function MarginalEffectsWorkspace(model::StatisticalModel, data)
     column_data = Tables.columntable(data)
     continuous_vars = filter(var -> is_continuous_variable(var, column_data), collect(keys(column_data)))
-    
-    if isempty(continuous_vars)
-        @warn "No continuous variables detected for derivative compilation"
-    end
-    
     return MarginalEffectsWorkspace(model, data, continuous_vars)
 end
 
-###############################################################################
-# Zero-Allocation Row Evaluation Functions - UPDATED
-###############################################################################
-
 """
-    evaluate_model_row!(workspace::MarginalEffectsWorkspace, 
-                       observation_index::Int; 
-                       variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    evaluate_model_row!(workspace, observation_index; variable_overrides)
 
-Fill workspace.model_row_buffer with model matrix row for the specified observation.
-Uses pre-compiled formula for maximum performance.
-
-# Performance
-- Time: ~50-100ns per call
-- Allocations: 0 bytes
-- Memory: Reuses pre-allocated workspace.model_row_buffer
+Zero-allocation model row evaluation using FormulaCompiler.
 """
 function evaluate_model_row!(workspace::MarginalEffectsWorkspace, 
                             observation_index::Int; 
                             variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    workspace.total_model_evaluations += 1
+    
     if isempty(variable_overrides)
-        # Standard path - maximum performance
-        workspace.compiled_formula(workspace.model_row_buffer, workspace.column_data, observation_index)
+        modelrow!(workspace.model_row_buffer, workspace.compiled_formula, workspace.column_data, observation_index)
     else
-        # Representative values path using scenario system
         scenario = create_scenario("evaluation", workspace.column_data; variable_overrides...)
-        workspace.compiled_formula(workspace.model_row_buffer, scenario.data, observation_index)
+        modelrow!(workspace.model_row_buffer, workspace.compiled_formula, scenario.data, observation_index)
     end
     return workspace.model_row_buffer
 end
 
 """
-    evaluate_model_derivative!(workspace::MarginalEffectsWorkspace, 
-                              observation_index::Int, 
-                              focal_variable::Symbol;
-                              variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    evaluate_model_derivative!(workspace, observation_index, focal_variable; variable_overrides)
 
-Fill workspace.derivative_buffer with analytical derivatives of model matrix row 
-with respect to focal_variable for the specified observation.
-
-# MAJOR PERFORMANCE IMPROVEMENT
-Now uses pre-compiled analytical derivatives instead of ForwardDiff!
-
-# Performance  
-- Time: ~50-100ns per call (was ~1-10μs with ForwardDiff)
-- Allocations: 0 bytes (was allocating with ForwardDiff)
-- Memory: Reuses pre-allocated workspace.derivative_buffer
-
-# Speed Improvement
-~10-100x faster than the previous ForwardDiff approach!
+Zero-allocation analytical derivative evaluation with automatic ForwardDiff fallback.
 """
 function evaluate_model_derivative!(workspace::MarginalEffectsWorkspace, 
                                    observation_index::Int, 
                                    focal_variable::Symbol;
                                    variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
+    workspace.total_derivative_evaluations += 1
     
-    # Check if we have pre-compiled derivatives for this variable
-    if !haskey(workspace.derivative_formulas, focal_variable)
-        error("No pre-compiled derivatives found for variable $focal_variable. " *
-              "Make sure to include it in focal_variables when creating the workspace.")
-    end
-    
-    derivative_formula = workspace.derivative_formulas[focal_variable]
-    
-    if isempty(variable_overrides)
-        # Standard path - maximum performance with analytical derivatives
-        derivative_formula(workspace.derivative_buffer, workspace.column_data, observation_index)
-    else
-        # Representative values path
-        scenario = create_scenario("derivative_evaluation", workspace.column_data; variable_overrides...)
-        derivative_formula(workspace.derivative_buffer, scenario.data, observation_index)
-    end
-    
-    return workspace.derivative_buffer
-end
-
-###############################################################################
-# Updated Continuous Variable Effects with Analytical Derivatives
-###############################################################################
-
-"""
-    compute_continuous_variable_effects(focal_variables::Vector{Symbol}, 
-                                       workspace::MarginalEffectsWorkspace,
-                                       coefficient_vector::AbstractVector,
-                                       cholesky_covariance::LinearAlgebra.Cholesky,
-                                       first_derivative::Function,
-                                       second_derivative::Function;
-                                       variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
-
-Compute AMEs for multiple continuous variables using zero-allocation analytical derivatives.
-
-# MAJOR PERFORMANCE IMPROVEMENT
-Now uses analytical derivatives for ~10-100x speedup over ForwardDiff approach.
-
-# Performance
-- Memory: O(p) - uses workspace buffers only
-- Time: ~100-200ns per observation per variable (was ~1-10μs)
-- Zero allocations during computation
-"""
-function compute_continuous_variable_effects(
-    focal_variables::Vector{Symbol}, 
-    workspace::MarginalEffectsWorkspace,
-    coefficient_vector::AbstractVector,
-    cholesky_covariance::LinearAlgebra.Cholesky,
-    first_derivative::Function,
-    second_derivative::Function;
-    variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}()
-)
-    variable_count = length(focal_variables)
-    effects = Vector{Float64}(undef, variable_count)
-    standard_errors = Vector{Float64}(undef, variable_count)
-    gradients = Vector{Vector{Float64}}(undef, variable_count)
-    
-    # Process each variable using analytical derivatives
-    for (variable_index, focal_variable) in enumerate(focal_variables)
-        effect, se, gradient = compute_single_continuous_effect(
-            focal_variable, workspace, coefficient_vector, cholesky_covariance,
-            first_derivative, second_derivative; variable_overrides=variable_overrides
-        )
-        
-        effects[variable_index] = effect
-        standard_errors[variable_index] = se
-        gradients[variable_index] = gradient
-    end
-    
-    return effects, standard_errors, gradients
-end
-
-"""
-    compute_single_continuous_effect(focal_variable::Symbol, 
-                                    workspace::MarginalEffectsWorkspace,
-                                    coefficient_vector::AbstractVector, 
-                                    cholesky_covariance::LinearAlgebra.Cholesky,
-                                    first_derivative::Function, 
-                                    second_derivative::Function;
-                                    variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}())
-
-Compute AME for a single continuous variable using analytical derivatives.
-
-# CORE ALGORITHM WITH ANALYTICAL DERIVATIVES
-For each observation i:
-1. evaluate_model_row!(workspace, i; variable_overrides) - get model matrix row
-2. η_i = dot(model_row, β) - compute linear predictor
-3. evaluate_model_derivative!(workspace, i, variable; variable_overrides) - ANALYTICAL derivatives!
-4. dη_dx_i = dot(derivative_row, β) - compute derivative of linear predictor
-5. marginal_effect_i = μ'(η_i) * dη_dx_i - compute marginal effect for observation
-6. Accumulate AME and gradient contributions
-
-# Performance
-- Time: ~100-200ns per observation (was ~1-10μs with ForwardDiff)
-- Memory: O(p) - reuses workspace buffers
-- Allocations: 0 bytes during computation
-"""
-function compute_single_continuous_effect(
-    focal_variable::Symbol, 
-    workspace::MarginalEffectsWorkspace,
-    coefficient_vector::AbstractVector, 
-    cholesky_covariance::LinearAlgebra.Cholesky,
-    first_derivative::Function, 
-    second_derivative::Function;
-    variable_overrides::Dict{Symbol,Any} = Dict{Symbol,Any}()
-)
-    observation_count = get_observation_count(workspace)
-    parameter_count = get_parameter_count(workspace)
-    
-    # Initialize accumulators
-    marginal_effect_sum = 0.0
-    fill!(workspace.gradient_accumulator, 0.0)
-    
-    # THE CORE LOOP - NOW WITH ANALYTICAL DERIVATIVES!
-    for observation_index in 1:observation_count
-        # Fill model matrix row for observation i (same as before)
-        evaluate_model_row!(workspace, observation_index; variable_overrides=variable_overrides)
-        linear_predictor = dot(workspace.model_row_buffer, coefficient_vector)
-        
-        # Fill analytical derivative row - THIS IS THE KEY IMPROVEMENT!
-        # Was: ForwardDiff.derivative(...) taking ~1-10μs 
-        # Now: Analytical evaluation taking ~50-100ns
-        evaluate_model_derivative!(workspace, observation_index, focal_variable; variable_overrides=variable_overrides)
-        predictor_derivative = dot(workspace.derivative_buffer, coefficient_vector)
-        
-        # Compute marginal effect for this observation (same as before)
-        if all_finite_and_reasonable(linear_predictor, predictor_derivative)
-            link_first_derivative = first_derivative(linear_predictor)
-            observation_marginal_effect = link_first_derivative * predictor_derivative
+    # Try analytical derivatives first
+    if haskey(workspace.derivative_formulas, focal_variable)
+        try
+            derivative_formula = workspace.derivative_formulas[focal_variable]
             
-            if is_finite_and_reasonable(observation_marginal_effect)
-                marginal_effect_sum += observation_marginal_effect
-                
-                # Gradient computation for this observation (same as before)
-                link_second_derivative = second_derivative(linear_predictor)
-                
-                @inbounds for param_index in 1:parameter_count
-                    second_order_term = link_second_derivative * workspace.model_row_buffer[param_index] * predictor_derivative
-                    first_order_term = link_first_derivative * workspace.derivative_buffer[param_index]
-                    workspace.gradient_accumulator[param_index] += (second_order_term + first_order_term) / observation_count
-                end
+            if isempty(variable_overrides)
+                modelrow!(workspace.derivative_buffer, derivative_formula, workspace.column_data, observation_index)
+            else
+                scenario = create_scenario("derivative_evaluation", workspace.column_data; variable_overrides...)
+                modelrow!(workspace.derivative_buffer, derivative_formula, scenario.data, observation_index)
             end
+            
+            workspace.analytical_derivative_successes += 1
+            return workspace.derivative_buffer
+            
+        catch e
+            workspace.forwarddiff_fallbacks += 1
+            @warn "Analytical derivative failed for $focal_variable, using ForwardDiff fallback: $e" maxlog=3
+            return _evaluate_derivative_forwarddiff_fallback!(workspace, observation_index, focal_variable, variable_overrides)
+        end
+    else
+        workspace.forwarddiff_fallbacks += 1
+        return _evaluate_derivative_forwarddiff_fallback!(workspace, observation_index, focal_variable, variable_overrides)
+    end
+end
+
+function _evaluate_derivative_forwarddiff_fallback!(workspace::MarginalEffectsWorkspace,
+                                                   observation_index::Int,
+                                                   focal_variable::Symbol,
+                                                   variable_overrides::Dict{Symbol,Any})
+    
+    function model_eval_func(var_value::Real)
+        temp_overrides = merge(variable_overrides, Dict(focal_variable => var_value))
+        
+        if isempty(temp_overrides)
+            modelrow!(workspace.derivative_buffer, workspace.compiled_formula, workspace.column_data, observation_index)
+        else
+            scenario = create_scenario("forwarddiff_fallback", workspace.column_data; temp_overrides...)
+            modelrow!(workspace.derivative_buffer, workspace.compiled_formula, scenario.data, observation_index)
+        end
+        
+        return copy(workspace.derivative_buffer)
+    end
+    
+    if haskey(variable_overrides, focal_variable)
+        current_value = Float64(variable_overrides[focal_variable])
+    else
+        current_value = Float64(workspace.column_data[focal_variable][observation_index])
+    end
+    
+    try
+        derivative_result = ForwardDiff.derivative(model_eval_func, current_value)
+        workspace.derivative_buffer .= derivative_result
+        return workspace.derivative_buffer
+    catch e
+        @error "ForwardDiff fallback failed for $focal_variable: $e"
+        fill!(workspace.derivative_buffer, NaN)
+        return workspace.derivative_buffer
+    end
+end
+
+# Utility functions
+get_observation_count(workspace::MarginalEffectsWorkspace) = length(first(workspace.column_data))
+get_parameter_count(workspace::MarginalEffectsWorkspace) = length(workspace.compiled_formula)
+get_variable_names(workspace::MarginalEffectsWorkspace) = collect(keys(workspace.column_data))
+
+function validate_data_structure(column_data::NamedTuple)
+    if isempty(column_data)
+        throw(ArgumentError("Data cannot be empty"))
+    end
+    
+    reference_length = length(first(column_data))
+    if reference_length == 0
+        throw(ArgumentError("Data cannot have zero observations"))
+    end
+    
+    for (variable_name, variable_values) in pairs(column_data)
+        current_length = length(variable_values)
+        if current_length != reference_length
+            throw(DimensionMismatch(
+                "Variable $variable_name has $current_length observations, " *
+                "expected $reference_length observations"
+            ))
         end
     end
     
-    # Final AME and standard error (same as before)
-    average_marginal_effect = marginal_effect_sum / observation_count
-    standard_error = compute_standard_error_from_gradient(workspace, cholesky_covariance)
-    
-    return average_marginal_effect, standard_error, copy(workspace.gradient_accumulator)
+    return true
 end
 
-###############################################################################
-# Export statements
-###############################################################################
+function is_continuous_variable(variable::Symbol, column_data::NamedTuple)
+    if !haskey(column_data, variable)
+        return false
+    end
+    
+    values = column_data[variable]
+    element_type = eltype(values)
+    
+    if element_type <: Bool || values isa CategoricalArray
+        return false
+    end
+    
+    return element_type <: Real
+end
 
-export MarginalEffectsWorkspace
-export evaluate_model_row!, evaluate_model_derivative!  
-export compute_continuous_variable_effects, compute_single_continuous_effect
+function all_finite_and_reasonable(values...)
+    return all(is_finite_and_reasonable, values)
+end
+
+function is_finite_and_reasonable(value::Real)
+    return isfinite(value) && abs(value) < 1e10
+end
+
+function compute_standard_error_from_gradient(workspace::MarginalEffectsWorkspace,
+                                            cholesky_covariance::LinearAlgebra.Cholesky)
+    try
+        mul!(workspace.computation_buffer, cholesky_covariance.U, workspace.gradient_accumulator)
+        variance_estimate = dot(workspace.computation_buffer, workspace.computation_buffer)
+        
+        if variance_estimate >= 0 && isfinite(variance_estimate)
+            return sqrt(variance_estimate)
+        else
+            @warn "Invalid variance estimate: $variance_estimate"
+            return NaN
+        end
+    catch exception
+        @warn "Standard error computation failed: $exception"
+        return NaN
+    end
+end
+
+"""
+    get_workspace_performance_summary(workspace::MarginalEffectsWorkspace) -> NamedTuple
+
+Get comprehensive performance summary for the workspace.
+"""
+function get_workspace_performance_summary(workspace::MarginalEffectsWorkspace)
+    total_evaluations = workspace.total_derivative_evaluations
+    analytical_rate = total_evaluations > 0 ? workspace.analytical_derivative_successes / total_evaluations : 0.0
+    
+    return (
+        creation_time_ms = workspace.creation_time_ns / 1e6,
+        total_model_evaluations = workspace.total_model_evaluations,
+        total_derivative_evaluations = workspace.total_derivative_evaluations,
+        analytical_successes = workspace.analytical_derivative_successes,
+        forwarddiff_fallbacks = workspace.forwarddiff_fallbacks,
+        analytical_success_rate = analytical_rate,
+        compiled_derivatives = length(workspace.derivative_formulas),
+        zero_allocation_capable = analytical_rate > 0.9,
+        performance_score = _compute_performance_score(workspace)
+    )
+end
+
+function _compute_performance_score(workspace::MarginalEffectsWorkspace)
+    # Simple performance score based on analytical derivative usage
+    total_evals = workspace.total_derivative_evaluations
+    if total_evals == 0
+        return 100.0  # No evaluations yet
+    end
+    
+    analytical_rate = workspace.analytical_derivative_successes / total_evals
+    return round(analytical_rate * 100, digits=1)
+end
+
+"""
+    diagnose_workspace_efficiency(workspace::MarginalEffectsWorkspace) -> NamedTuple
+
+Analyze workspace efficiency and provide recommendations.
+"""
+function diagnose_workspace_efficiency(workspace::MarginalEffectsWorkspace)
+    summary = get_workspace_performance_summary(workspace)
+    
+    recommendations = String[]
+    warnings = String[]
+    
+    # Analyze analytical derivative usage
+    if summary.analytical_success_rate < 0.5
+        push!(warnings, "Low analytical derivative success rate ($(round(summary.analytical_success_rate * 100, digits=1))%)")
+        push!(recommendations, "Check model formula complexity - some terms may not support analytical derivatives")
+    elseif summary.analytical_success_rate < 0.9
+        push!(warnings, "Moderate analytical derivative usage ($(round(summary.analytical_success_rate * 100, digits=1))%)")
+        push!(recommendations, "Consider simplifying model formula for better performance")
+    end
+    
+    # Analyze compilation time
+    if summary.creation_time_ms > 1000
+        push!(warnings, "Slow workspace creation ($(round(summary.creation_time_ms, digits=1))ms)")
+        push!(recommendations, "Consider pre-compiling workspace for repeated use")
+    end
+    
+    # Analyze ForwardDiff fallbacks
+    if summary.forwarddiff_fallbacks > summary.analytical_successes * 0.1
+        push!(warnings, "High ForwardDiff fallback usage ($(summary.forwarddiff_fallbacks) calls)")
+        push!(recommendations, "Review model terms for analytical derivative compatibility")
+    end
+    
+    # Overall assessment
+    efficiency_rating = if summary.performance_score >= 90
+        "Excellent"
+    elseif summary.performance_score >= 70
+        "Good"
+    elseif summary.performance_score >= 50
+        "Fair"
+    else
+        "Poor"
+    end
+    
+    return (
+        efficiency_rating = efficiency_rating,
+        performance_score = summary.performance_score,
+        analytical_success_rate = summary.analytical_success_rate,
+        warnings = warnings,
+        recommendations = recommendations,
+        summary = summary
+    )
+end
+
+function Base.show(io::IO, ::MIME"text/plain", workspace::MarginalEffectsWorkspace)
+    summary = get_workspace_performance_summary(workspace)
+    
+    println(io, "MarginalEffectsWorkspace")
+    println(io, "━" ^ 40)
+    println(io, "Parameters: $(length(workspace.compiled_formula))")
+    println(io, "Compiled derivatives: $(summary.compiled_derivatives)")
+    println(io, "Creation time: $(round(summary.creation_time_ms, digits=1))ms")
+    println(io, "Performance score: $(summary.performance_score)%")
+    
+    if summary.total_derivative_evaluations > 0
+        println(io, "Usage statistics:")
+        println(io, "  Model evaluations: $(summary.total_model_evaluations)")
+        println(io, "  Derivative evaluations: $(summary.total_derivative_evaluations)")
+        println(io, "  Analytical success rate: $(round(summary.analytical_success_rate * 100, digits=1))%")
+        println(io, "  ForwardDiff fallbacks: $(summary.forwarddiff_fallbacks)")
+    end
+end

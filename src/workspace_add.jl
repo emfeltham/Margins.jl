@@ -1,33 +1,9 @@
-###############################################################################
-# Helper Functions (mostly unchanged)
-###############################################################################
+# workspace_add.jl
+# Updated helper functions for FormulaCompiler integration
 
-get_observation_count(workspace::MarginalEffectsWorkspace) = length(first(workspace.column_data))
-get_parameter_count(workspace::MarginalEffectsWorkspace) = length(workspace.compiled_formula)
-get_variable_names(workspace::MarginalEffectsWorkspace) = collect(keys(workspace.column_data))
-
-function validate_data_structure(column_data::NamedTuple)
-    if isempty(column_data)
-        throw(ArgumentError("Data cannot be empty"))
-    end
-    
-    reference_length = length(first(column_data))
-    if reference_length == 0
-        throw(ArgumentError("Data cannot have zero observations"))
-    end
-    
-    for (variable_name, variable_values) in pairs(column_data)
-        current_length = length(variable_values)
-        if current_length != reference_length
-            throw(DimensionMismatch(
-                "Variable $variable_name has $current_length observations, " *
-                "expected $reference_length observations"
-            ))
-        end
-    end
-    
-    return true
-end
+###############################################################################
+# Helper Functions for MarginalEffectsWorkspace
+###############################################################################
 
 function all_finite_and_reasonable(values...)
     return all(is_finite_and_reasonable, values)
@@ -55,23 +31,8 @@ function compute_standard_error_from_gradient(workspace::MarginalEffectsWorkspac
     end
 end
 
-function is_continuous_variable(variable::Symbol, column_data::NamedTuple)
-    if !haskey(column_data, variable)
-        return false
-    end
-    
-    values = column_data[variable]
-    element_type = eltype(values)
-    
-    if element_type <: Bool || values isa CategoricalArray
-        return false
-    end
-    
-    return element_type <: Real
-end
-
 ###############################################################################
-# Performance Benchmarking
+# Performance Benchmarking with FormulaCompiler
 ###############################################################################
 
 """
@@ -83,7 +44,7 @@ end
                                     second_derivative::Function;
                                     samples::Int = 100) -> NamedTuple
 
-Benchmark the performance improvement from analytical derivatives.
+Benchmark the performance improvement from FormulaCompiler.jl analytical derivatives.
 """
 function benchmark_analytical_derivatives(
     focal_variable::Symbol, 
@@ -96,45 +57,52 @@ function benchmark_analytical_derivatives(
 )
     observation_count = get_observation_count(workspace)
     
-    # Benchmark analytical approach
+    # Benchmark FormulaCompiler analytical approach
     analytical_times = Float64[]
     analytical_allocations = Int[]
     
     # Warm up
     for _ in 1:10
-        compute_single_continuous_effect(focal_variable, workspace, coefficient_vector, 
-                                       cholesky_covariance, first_derivative, second_derivative)
+        for i in 1:min(10, observation_count)
+            evaluate_model_derivative!(workspace, i, focal_variable)
+        end
     end
     
-    # Benchmark analytical derivatives
+    # Benchmark analytical derivatives from FormulaCompiler
     for _ in 1:samples
-        timing_result = @timed compute_single_continuous_effect(
-            focal_variable, workspace, coefficient_vector, 
-            cholesky_covariance, first_derivative, second_derivative
-        )
+        timing_result = @timed begin
+            for i in 1:min(100, observation_count)  # Sample subset for benchmarking
+                evaluate_model_derivative!(workspace, i, focal_variable)
+            end
+        end
         push!(analytical_times, timing_result.time)
         push!(analytical_allocations, timing_result.bytes)
     end
     
     return (
         focal_variable = focal_variable,
-        observations = observation_count,
+        observations_tested = min(100, observation_count),
+        total_observations = observation_count,
         parameters = get_parameter_count(workspace),
-        samples = samples,
+        benchmark_samples = samples,
         
-        # Analytical performance
+        # FormulaCompiler analytical performance
         mean_time_seconds = mean(analytical_times),
         min_time_seconds = minimum(analytical_times),
-        time_per_observation_nanoseconds = mean(analytical_times) * 1e9 / observation_count,
+        time_per_observation_nanoseconds = mean(analytical_times) * 1e9 / min(100, observation_count),
         
-        # Allocation analysis
+        # Allocation analysis (should be near zero)
         mean_allocations_bytes = mean(analytical_allocations),
         min_allocations_bytes = minimum(analytical_allocations),
         zero_allocation_percentage = 100 * count(==(0), analytical_allocations) / length(analytical_allocations),
         
         # Throughput
-        observations_per_second = observation_count / mean(analytical_times),
-        computations_per_second = 1.0 / mean(analytical_times)
+        observations_per_second = min(100, observation_count) / mean(analytical_times),
+        derivative_computations_per_second = min(100, observation_count) / mean(analytical_times),
+        
+        # Integration info
+        using_formulacompiler = true,
+        method = "analytical_derivatives"
     )
 end
 

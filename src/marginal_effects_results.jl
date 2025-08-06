@@ -1,20 +1,13 @@
-# marginal_effects_results.jl - Clean result types and display
+# marginal_effects_results.jl
+# Result types and display methods
 
-###############################################################################
-# Result Type Definitions
-###############################################################################
-
-"""
-    AbstractMarginalEffectsResult
-
-Abstract supertype for all marginal effects results.
-"""
-abstract type AbstractMarginalEffectsResult end
+using Printf
+using Distributions: Normal, TDist, cdf, quantile
 
 """
     MarginalEffectsResult{EffectType}
 
-Container for marginal effects computation results.
+Container for marginal effects computation results with complete metadata.
 
 # Type Parameter
 - `EffectType`: Either `:dydx` for marginal effects or `:predictions` for predicted values
@@ -25,10 +18,10 @@ Container for marginal effects computation results.
 - `effect_estimates::AbstractDict`: Effect estimates (scalar or Dict{Tuple,Float64})
 - `standard_errors::AbstractDict`: Standard errors for each effect
 - `gradient_vectors::AbstractDict`: Delta-method gradients for each effect
-- `observation_count::Int`: Number of observations in original data
-- `degrees_of_freedom::Real`: Model degrees of freedom
-- `distribution_family::String`: Model distribution family
-- `link_function::String`: Model link function
+- `n_observations::Int`: Number of observations in original data
+- `df_residual::Real`: Model degrees of freedom
+- `model_family::String`: Model distribution family
+- `model_link::String`: Model link function
 
 # Result Structure
 - When `representative_values` is empty: effects are scalars for each focal variable
@@ -41,11 +34,14 @@ struct MarginalEffectsResult{EffectType} <: AbstractMarginalEffectsResult
     effect_estimates::AbstractDict
     standard_errors::AbstractDict
     gradient_vectors::AbstractDict
-    observation_count::Int
-    degrees_of_freedom::Real
-    distribution_family::String
-    link_function::String
+    n_observations::Int
+    df_residual::Real
+    model_family::String
+    model_link::String
 end
+
+# Abstract supertype for results
+abstract type AbstractMarginalEffectsResult end
 
 """
     get_effect_type(result::MarginalEffectsResult{T}) -> Symbol
@@ -119,7 +115,7 @@ function get_representative_variables(result::MarginalEffectsResult)
 end
 
 ###############################################################################
-# Confidence Intervals
+# Statistical Inference
 ###############################################################################
 
 """
@@ -139,9 +135,13 @@ function compute_confidence_intervals(result::MarginalEffectsResult; confidence_
         throw(ArgumentError("confidence_level must be between 0 and 1, got $confidence_level"))
     end
     
-    # Compute critical value (two-tailed)
+    # Compute critical value (use t-distribution for small samples, normal for large)
     alpha = 1 - confidence_level
-    critical_value = quantile(Normal(), 1 - alpha/2)
+    if result.df_residual < 30
+        critical_value = quantile(TDist(result.df_residual), 1 - alpha/2)
+    else
+        critical_value = quantile(Normal(), 1 - alpha/2)
+    end
     
     confidence_intervals = Dict{Symbol,Any}()
     
@@ -174,10 +174,6 @@ function compute_confidence_intervals(result::MarginalEffectsResult; confidence_
     
     return confidence_intervals
 end
-
-###############################################################################
-# Statistical Tests
-###############################################################################
 
 """
     compute_z_statistics(result::MarginalEffectsResult)
@@ -222,12 +218,19 @@ function compute_p_values(result::MarginalEffectsResult)
     z_stats = compute_z_statistics(result)
     p_values = Dict{Symbol,Any}()
     
+    # Use appropriate distribution
+    if result.df_residual < 30
+        dist = TDist(result.df_residual)
+    else
+        dist = Normal()
+    end
+    
     for variable in result.focal_variables
         z_stat = z_stats[variable]
         
         if z_stat isa Number
             # Scalar z-statistic
-            p_val = isfinite(z_stat) ? 2 * (1 - cdf(Normal(), abs(z_stat))) : NaN
+            p_val = isfinite(z_stat) ? 2 * (1 - cdf(dist, abs(z_stat))) : NaN
             p_values[variable] = p_val
             
         else
@@ -235,7 +238,7 @@ function compute_p_values(result::MarginalEffectsResult)
             variable_p_values = Dict{Tuple,Float64}()
             
             for (key, z_value) in z_stat
-                p_val = isfinite(z_value) ? 2 * (1 - cdf(Normal(), abs(z_value))) : NaN
+                p_val = isfinite(z_value) ? 2 * (1 - cdf(dist, abs(z_value))) : NaN
                 variable_p_values[key] = p_val
             end
             
@@ -289,22 +292,25 @@ function Base.show(io::IO, ::MIME"text/plain", result::MarginalEffectsResult)
     
     # Header
     title = if effect_type == :dydx
-        "Average Marginal Effects"
-    else
+        "Marginal Effects"
+    elseif effect_type == :predictions
         "Average Predictions"
+    else
+        "Effects"
     end
     
     println(io, title)
-    println(io, "Distribution: $(result.distribution_family), Link: $(result.link_function)")
-    println(io, "Observations: $(result.observation_count), df: $(result.degrees_of_freedom)")
+    println(io, "Model: $(result.model_family), Link: $(result.model_link)")
+    println(io, "Observations: $(result.n_observations), df: $(result.df_residual)")
     println(io, "═" ^ 80)
     
     # Representative values header if applicable
     if has_representative_values(result)
         rep_vars = get_representative_variables(result)
         println(io, "Representative values set for: $(join(rep_vars, ", "))")
+        println(io)
         
-        # Print column headers
+        # Print column headers for representative values
         for var in rep_vars
             @printf(io, "%-12s ", string(var))
         end
@@ -398,7 +404,7 @@ function Base.show(io::IO, ::MIME"text/plain", result::MarginalEffectsResult)
 end
 
 ###############################################################################
-# Export to DataFrame
+# DataFrame Conversion
 ###############################################################################
 
 """
@@ -476,13 +482,17 @@ function DataFrame(result::MarginalEffectsResult)
                     # Add contrast information if this is a categorical variable
                     if length(key) > rep_count
                         contrast_levels = key[rep_count+1:end]
-                        row[:contrast_from] = contrast_levels[1]
-                        row[:contrast_to] = contrast_levels[2]
+                        if length(contrast_levels) >= 2
+                            row[:contrast_from] = contrast_levels[1]
+                            row[:contrast_to] = contrast_levels[2]
+                        end
                     end
                 else
                     # Pure categorical contrast
-                    row[:contrast_from] = key[1]
-                    row[:contrast_to] = key[2]
+                    if length(key) >= 2
+                        row[:contrast_from] = key[1]
+                        row[:contrast_to] = key[2]
+                    end
                 end
                 
                 push!(rows, row)
