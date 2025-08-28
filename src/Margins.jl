@@ -9,9 +9,8 @@ using StatsModels, GLM, CategoricalArrays
 using FormulaCompiler
 using CovarianceMatrices
 
-# Public API exports
-export ame, mem, mer, ape, apm, apr, MarginsResult
-export population_margins, profile_margins
+# Public API exports - Clean two-function design
+export population_margins, profile_margins, MarginsResult
 
 # Internal modules
 include("results.jl")     # Result type and builders
