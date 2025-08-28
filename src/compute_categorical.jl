@@ -1,3 +1,5 @@
+# compute_categorical.jl
+
 """
     _categorical_effects(model, data_nt, engine; target=:mu, contrasts=:pairwise, rows=:all, at=:none)
 
@@ -8,7 +10,7 @@ Supports `:pairwise` (all pairs) and `:baseline` (vs first level).
 """
 function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contrasts::Symbol=:pairwise, rows=:all, at=:none)
     (; compiled, vars, β, Σ, link) = engine
-    idxs = rows === :all ? 1:_nrows(data_nt) : rows
+    idxs = rows === :all ? 1 : _nrows(data_nt) : rows
     out = DataFrame(term=Symbol[], level_from=String[], level_to=String[], dydx=Float64[], se=Float64[])
     # Buffers
     X_to = Vector{Float64}(undef, length(compiled))

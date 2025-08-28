@@ -1,3 +1,5 @@
+# compute_continuous.jl
+
 """
     _ame_continuous(model, data_nt, engine; target=:mu, backend=:ad, rows=:all, measure=:effect)
 
@@ -6,7 +8,7 @@ Compute AME for continuous vars with delta-method SEs.
 function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Symbol=:ad, rows=:all, measure::Symbol=:effect, weights=nothing)
     (; compiled, de, vars, β, Σ, link) = engine
     n = rows === :all ? _nrows(data_nt) : length(rows)
-    idxs = rows === :all ? 1:_nrows(data_nt) : rows
+    idxs = rows === :all ? 1 : _nrows(data_nt) : rows
     # Buffers
     gη = Vector{Float64}(undef, length(vars))
     gβ = Vector{Float64}(undef, length(compiled))

@@ -1,3 +1,5 @@
+# Margins.jl
+
 module Margins
 
 using Statistics
@@ -5,6 +7,7 @@ using LinearAlgebra
 using Tables, DataFrames
 using StatsModels, GLM, CategoricalArrays
 using FormulaCompiler
+using CovarianceMatrices
 
 # Public API exports
 export margins, ame, mem, mer, ape, apm, apr, MarginsResult

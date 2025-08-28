@@ -1,3 +1,5 @@
+# result.jl
+
 struct MarginsResult
     table::DataFrame
     metadata::NamedTuple

@@ -1,3 +1,5 @@
+# api.jl
+
 """
     margins(model, data; kwargs...) -> MarginsResult
 
@@ -61,7 +63,7 @@ function margins(
             all_dfs = DataFrame[]
             # If strata specified, outer loop per strata, inner loop groups
             if strata === nothing
-                strata = [(NamedTuple(), rows === :all ? collect(1:_nrows(data_nt)) : rows)]
+                strata = [(NamedTuple(), rows === :all ? collect(1 : _nrows(data_nt)) : rows)]
             end
             for (bylabels, sidxs) in strata
                 local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, within, sidxs)
@@ -102,7 +104,7 @@ function margins(
                 df = DataFrame(term=[:prediction], dydx=[val], se=[se])
             else
                 all_dfs = DataFrame[]
-                strata = strata === nothing ? [(NamedTuple(), rows === :all ? collect(1:_nrows(data_nt)) : rows)] : strata
+                strata = strata === nothing ? [(NamedTuple(), rows === :all ? collect(1 : _nrows(data_nt)) : rows)] : strata
                 for (bylabels, sidxs) in strata
                     local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, within, sidxs)
                     for (labels, idxs) in local_groups
@@ -141,7 +143,7 @@ function margins(
     append!(groupcols, [c for c in names(df) if startswith(String(c), "at_")])
     _add_ci!(df; level=ci_level, dof=dof, mcompare=mcompare, groupcols=groupcols)
     md = (; mode, dydx, target, at, backend, rows, contrasts, levels, by, measure,
-           n=_nrows(data_nt), link=string(typeof(engine.link)), dof, vcov=vcov, scale=scale)
+           n = _nrows(data_nt), link=string(typeof(engine.link)), dof, vcov=vcov, scale=scale)
     return _new_result(df; md...)
 end
 
@@ -171,7 +173,7 @@ function _build_groups(data_nt::NamedTuple, over, within=nothing, idxs=nothing)
     end
     # Build mapping from group label -> row indices
     groups = Dict{NamedTuple, Vector{Int}}()
-    rows = idxs === nothing ? collect(1:_nrows(data_nt)) : idxs
+    rows = idxs === nothing ? collect(1 : _nrows(data_nt)) : idxs
     for i in rows
         key = NamedTuple{Tuple(vars)}(Tuple(getproperty(data_nt, v)[i] for v in vars))
         push!(get!(groups, key, Int[]), i)
