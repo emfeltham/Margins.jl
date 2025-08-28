@@ -20,9 +20,27 @@ function _build_profiles(at, data_nt::NamedTuple)
             end
         end
         return [prof]
-    elseif at isa Dict{Symbol,<:AbstractVector}
-        keys_vec = collect(keys(at))
-        vals_vec = [collect(at[k]) for k in keys_vec]
+    elseif at isa Dict{Symbol,<:Any}
+        # General-to-specific precedence with optional :all key 
+        # Build a merged map var=>values
+        merged = Dict{Symbol,Vector{Any}}()
+        # Handle :all summary spec across real columns
+        if haskey(at, :all)
+            spec_all = at[:all]
+            for (k, col) in pairs(data_nt)
+                if eltype(col) <: Real
+                    merged[k] = Any[_expand_at_values(data_nt, k, spec_all)...]
+                end
+            end
+        end
+        # Overlay specific variable settings
+        for (k, v) in pairs(at)
+            k === :all && continue
+            merged[k] = Any[_expand_at_values(data_nt, k, v)...]
+        end
+        # Produce Cartesian product over merged keys
+        keys_vec = collect(keys(merged))
+        vals_vec = [merged[k] for k in keys_vec]
         profs = Dict{Symbol,Any}[]
         for combo in Iterators.product(vals_vec...)
             d = Dict{Symbol,Any}()
@@ -33,8 +51,53 @@ function _build_profiles(at, data_nt::NamedTuple)
         end
         return profs
     elseif at isa Vector{<:Dict}
-        return Dict{Symbol,Any}.(at)
+        # Multiple at() blocks → concatenate profile sets from each block
+        profs = Dict{Symbol,Any}[]
+        for blk in at
+            append!(profs, _build_profiles(blk, data_nt))
+        end
+        return profs
     else
         error("Unsupported at specification: $(typeof(at))")
     end
+end
+
+function _expand_at_values(data_nt::NamedTuple, var::Symbol, spec)
+    if spec isa AbstractVector
+        return collect(spec)
+    elseif spec isa AbstractString
+        return _parse_numlist(spec)
+    elseif spec isa Symbol
+        col = getproperty(data_nt, var)
+        if spec === :mean
+            return [mean(col)]
+        elseif spec === :median
+            return [Statistics.median(col)]
+        elseif startswith(String(spec), "p")
+            p = parse(Float64, String(spec)[2:end]) / 100
+            return [Statistics.quantile(col, p)]
+        else
+            error("Unknown summary spec: $spec for $var")
+        end
+    else
+        return [spec]
+    end
+end
+
+function _parse_numlist(s::AbstractString)
+    # Parse forms like "10(5)30" -> 10:5:30, allow comma-separated values too
+    s = strip(s)
+    if occursin('(', s) && occursin(')', s)
+        m = match(r"^\s*([+-]?\d*\.?\d+)\((\d*\.?\d+)\)([+-]?\d*\.?\d+)\s*$", s)
+        if m !== nothing
+            a = parse(Float64, m.captures[1])
+            step = parse(Float64, m.captures[2])
+            b = parse(Float64, m.captures[3])
+            n = Int(floor((b - a) / step)) + 1
+            return [a + i*step for i in 0:(n-1)]
+        end
+    end
+    # Fallback: comma/space separated
+    parts = split(replace(s, ',' => ' '))
+    return [parse(Float64, p) for p in parts if !isempty(strip(p))]
 end

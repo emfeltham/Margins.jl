@@ -1,16 +1,35 @@
 """
     margins(model, data; kwargs...) -> MarginsResult
 
-Stata-like interface for marginal effects and adjusted predictions.
+Stata-like marginal effects for the JuliaStats stack.
+
+Compat:
+- `model`: Fits from GLM.jl (TableRegressionModel) or any StatsModels-compatible model.
+- `data`: Tables.jl-compatible table (e.g., DataFrame); Margins respects StatsModels design.
+- `target`: `:mu` (response) or `:eta` (link), aligned with GLM predict types.
+- `scale`: `:auto|:response|:link` (predictions mode) mirrors GLM.predict scales.
+- Covariance: defaults to `vcov(model)`; pass `vcov` matrix/function/estimator for robust/cluster/HAC via CovarianceMatrices.jl.
+
+Examples:
+    using CovarianceMatrices
+    res = ame(m, df; dydx=[:x], vcov = m->vcov(m, HC1()))
 """
-function margins(model, data; mode::Symbol=:effects, dydx=:continuous, target::Symbol=:mu,
-                 at=:none, over=nothing, backend::Symbol=:ad, link=nothing, vce::Symbol=:delta,
-                 rows=:all, contrasts::Symbol=:pairwise, levels=:all, by=nothing,
-                 weights=nothing, measure::Symbol=:effect, ci_level::Real=0.95)
+function margins(
+    model, data; mode::Symbol=:effects, dydx=:continuous, target::Symbol=:mu,
+    at=:none, over=nothing, within=nothing, backend::Symbol=:ad,
+    rows=:all, contrasts::Symbol=:pairwise, levels=:all, by=nothing,
+    weights=nothing, asbalanced::Bool=false, measure::Symbol=:effect, ci_level::Real=0.95,
+    mcompare::Symbol=:noadjust,
+    vcov::Union{Symbol,AbstractMatrix,Function,Any}=:model,
+    scale::Symbol=:auto
+)
     engine = _build_engine(model, data, dydx, target)
+    # Resolve Σ via vcov spec
+    Σ_override = _resolve_vcov(vcov, model, length(engine.β))
+    engine = (; engine..., Σ=Σ_override)
     data_nt = engine.data_nt
-    # Grouping: build groups if over specified and computation is row-based (at=:none)
-    groups = _build_groups(data_nt, over)
+    # Grouping: build groups if over/within specified and computation is row-based (at=:none)
+    groups = _build_groups(data_nt, over, within)
     if mode === :effects
         # Split vars into continuous and categorical
         cont_vars = [v for v in engine.vars if !_is_categorical(data_nt, v)]
@@ -21,7 +40,9 @@ function margins(model, data; mode::Symbol=:effects, dydx=:continuous, target::S
             if !isempty(cont_vars)
                 eng_cont = (; engine..., vars=cont_vars)
                 if at === :none
-                    push!(df_parts, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=rows, measure=measure))
+                    # merge weights with asbalanced if requested
+                    w_final = _merge_weights(weights, asbalanced ? _balanced_weights(data_nt, rows) : nothing, data_nt, rows)
+                    push!(df_parts, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=rows, measure=measure, weights=w_final))
                 else
                     push!(df_parts, _mem_mer_continuous(model, data_nt, eng_cont, at; target=target, backend=backend, measure=measure))
                 end
@@ -37,7 +58,8 @@ function margins(model, data; mode::Symbol=:effects, dydx=:continuous, target::S
             for (labels, idxs) in groups
                 if !isempty(cont_vars)
                     eng_cont = (; engine..., vars=cont_vars)
-                    push!(all_dfs, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=idxs, measure=measure))
+                    w_final = _merge_weights(weights, asbalanced ? _balanced_weights(data_nt, idxs) : nothing, data_nt, idxs)
+                    push!(all_dfs, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=idxs, measure=measure, weights=w_final))
                 end
                 if !isempty(cat_vars)
                     eng_cat = (; engine..., vars=cat_vars)
@@ -56,31 +78,16 @@ function margins(model, data; mode::Symbol=:effects, dydx=:continuous, target::S
     elseif mode === :predictions
         if at === :none
             if groups === nothing
-                val, se = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target, link=engine.link)
+                target_pred = scale === :auto ? target : (scale === :response ? :mu : :eta)
+                w_final = _merge_weights(weights, asbalanced ? _balanced_weights(data_nt, rows) : nothing, data_nt, rows)
+                val, se = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=rows, weights=w_final)
                 df = DataFrame(term=[:prediction], dydx=[val], se=[se])
             else
                 all_dfs = DataFrame[]
                 for (labels, idxs) in groups
-                    # APE by group: compute average predictions using subgroup rows
-                    # Implement subgroup APE by temporarily subsetting rows via weights (simple approach: recompute mean over idxs)
-                    n = length(idxs)
-                    xbuf = Vector{Float64}(undef, length(engine.compiled))
-                    acc_val = 0.0
-                    acc_gβ = zeros(Float64, length(engine.compiled))
-                    for row in idxs
-                        η = _predict_eta!(xbuf, engine.compiled, data_nt, row, engine.β)
-                        if target === :mu
-                            μ = GLM.linkinv(engine.link, η)
-                            acc_val += μ
-                            acc_gβ .+= _dmu_deta_local(engine.link, η) .* xbuf
-                        else
-                            acc_val += η
-                            acc_gβ .+= xbuf
-                        end
-                    end
-                    val = acc_val / n
-                    gβ = acc_gβ / n
-                    se = FormulaCompiler.delta_method_se(gβ, engine.Σ)
+                    target_pred = scale === :auto ? target : (scale === :response ? :mu : :eta)
+                    w_final = _merge_weights(weights, asbalanced ? _balanced_weights(data_nt, idxs) : nothing, data_nt, idxs)
+                    val, se = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=idxs, weights=w_final)
                     df_g = DataFrame(term=[:prediction], dydx=[val], se=[se])
                     for (k, v) in pairs(labels)
                         df_g[!, k] = fill(v, nrow(df_g))
@@ -91,15 +98,23 @@ function margins(model, data; mode::Symbol=:effects, dydx=:continuous, target::S
             end
         else
             profs = _build_profiles(at, data_nt)
-            df = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target, link=engine.link)
+            target_pred = scale === :auto ? target : (scale === :response ? :mu : :eta)
+            df = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
             df[!, :term] = fill(:prediction, nrow(df))
         end
     else
         error("Unsupported mode: $mode")
     end
-    _add_ci!(df; level=ci_level)
+    dof = _try_dof_residual(model)
+    groupcols = Symbol[]
+    if over !== nothing
+        append!(groupcols, over isa Symbol ? [over] : collect(over))
+    end
+    # At-profile columns are prefixed with at_
+    append!(groupcols, [c for c in names(df) if startswith(String(c), "at_")])
+    _add_ci!(df; level=ci_level, dof=dof, mcompare=mcompare, groupcols=groupcols)
     md = (; mode, dydx, target, at, backend, rows, contrasts, levels, by, vce, measure,
-           n=_nrows(data_nt), link=string(typeof(engine.link)))
+           n=_nrows(data_nt), link=string(typeof(engine.link)), dof)
     return _new_result(df; md...)
 end
 
@@ -116,11 +131,17 @@ apr(model, data; at, kwargs...) = margins(model, data; mode=:predictions, at=at,
 
 Build grouping index from over specification. Returns nothing if over is nothing.
 """
-function _build_groups(data_nt::NamedTuple, over)
-    if over === nothing
+function _build_groups(data_nt::NamedTuple, over, within=nothing)
+    if over === nothing && within === nothing
         return nothing
     end
-    vars = over isa Symbol ? [over] : collect(over)
+    vars = Symbol[]
+    if over !== nothing
+        append!(vars, over isa Symbol ? [over] : collect(over))
+    end
+    if within !== nothing
+        append!(vars, within isa Symbol ? [within] : collect(within))
+    end
     # Build mapping from group label -> row indices
     groups = Dict{NamedTuple, Vector{Int}}()
     n = _nrows(data_nt)
@@ -129,4 +150,12 @@ function _build_groups(data_nt::NamedTuple, over)
         push!(get!(groups, key, Int[]), i)
     end
     return collect(groups)
+end
+
+function _try_dof_residual(model)
+    try
+        return dof_residual(model)
+    catch
+        return nothing
+    end
 end

@@ -3,7 +3,7 @@
 
 Compute AME for continuous vars with delta-method SEs.
 """
-function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Symbol=:ad, rows=:all, measure::Symbol=:effect)
+function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Symbol=:ad, rows=:all, measure::Symbol=:effect, weights=nothing)
     (; compiled, de, vars, β, Σ, link) = engine
     n = rows === :all ? _nrows(data_nt) : length(rows)
     idxs = rows === :all ? 1:_nrows(data_nt) : rows
@@ -13,27 +13,46 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
     gβ_sum = Vector{Float64}(undef, length(compiled))
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
     # For μ target, we still compute gradient wrt β via accumulate_ame_gradient! (μ chain rule inside)
+    w = _resolve_weights(weights, data_nt, idxs)
     for var in vars
         fill!(gβ_sum, 0.0)
-        if target === :eta
-            FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, idxs, var; link=GLM.IdentityLink(), backend=backend)
-        else
-            FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, idxs, var; link=link, backend=backend)
-        end
-        # AME value: average of per-row marginal effects
-        # Compute via marginal_effects_* and averaging
         acc_val = 0.0
-        g_row = Vector{Float64}(undef, length(vars))
-        for row in idxs
+        if w === nothing
             if target === :eta
-                FormulaCompiler.marginal_effects_eta!(g_row, de, β, row; backend=backend)
+                FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, idxs, var; link=GLM.IdentityLink(), backend=backend)
             else
-                FormulaCompiler.marginal_effects_mu!(g_row, de, β, row; link=link, backend=backend)
+                FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, idxs, var; link=link, backend=backend)
             end
-            acc_val += g_row[findfirst(==(var), vars)]
+            # AME value via averaging
+            g_row = Vector{Float64}(undef, length(vars))
+            for row in idxs
+                if target === :eta
+                    FormulaCompiler.marginal_effects_eta!(g_row, de, β, row; backend=backend)
+                else
+                    FormulaCompiler.marginal_effects_mu!(g_row, de, β, row; link=link, backend=backend)
+                end
+                acc_val += g_row[findfirst(==(var), vars)]
+            end
+            ame_val = acc_val / n
+            se = FormulaCompiler.delta_method_se(gβ_sum ./ n, Σ)
+        else
+            # Weighted average: accumulate per-row gradient and value with weights
+            gβ_temp = Vector{Float64}(undef, length(compiled))
+            g_row = Vector{Float64}(undef, length(vars))
+            for (j, row) in enumerate(idxs)
+                if target === :eta
+                    FormulaCompiler.me_eta_grad_beta!(gβ_temp, de, β, row, var)
+                    FormulaCompiler.marginal_effects_eta!(g_row, de, β, row; backend=backend)
+                else
+                    FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
+                    FormulaCompiler.marginal_effects_mu!(g_row, de, β, row; link=link, backend=backend)
+                end
+                gβ_sum .+= w[j] .* gβ_temp
+                acc_val += w[j] .* g_row[findfirst(==(var), vars)]
+            end
+            ame_val = acc_val
+            se = FormulaCompiler.delta_method_se(gβ_sum, Σ)
         end
-        ame_val = acc_val / n
-        se = FormulaCompiler.delta_method_se(gβ_sum ./ n, Σ)
         val = ame_val
         # Elasticity & semi-elasticities transformations
         if measure != :effect

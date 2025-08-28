@@ -13,24 +13,36 @@ end
 
 Average predictions across rows; returns (value, se).
 """
-function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_link(model))
-    n = _nrows(data_nt)
+function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_link(model), rows=:all, weights=nothing)
+    idxs = rows === :all ? 1:_nrows(data_nt) : rows
+    n = length(idxs)
     xbuf = Vector{Float64}(undef, length(compiled))
     acc_val = 0.0
     acc_gβ = zeros(Float64, length(compiled))
-    for row in 1:n
+    w = _resolve_weights(weights, data_nt, idxs)
+    for (j, row) in enumerate(idxs)
         η = _predict_eta!(xbuf, compiled, data_nt, row, β)
         if target === :mu
             μ = GLM.linkinv(link, η)
-            acc_val += μ
-            acc_gβ .+= _dmu_deta_local(link, η) .* xbuf
+            if w === nothing
+                acc_val += μ
+                acc_gβ .+= _dmu_deta_local(link, η) .* xbuf
+            else
+                acc_val += w[j] * μ
+                acc_gβ .+= w[j] .* (_dmu_deta_local(link, η) .* xbuf)
+            end
         else
-            acc_val += η
-            acc_gβ .+= xbuf
+            if w === nothing
+                acc_val += η
+                acc_gβ .+= xbuf
+            else
+                acc_val += w[j] * η
+                acc_gβ .+= w[j] .* xbuf
+            end
         end
     end
-    val = acc_val / n
-    gβ = acc_gβ / n
+    val = w === nothing ? (acc_val / n) : acc_val
+    gβ = w === nothing ? (acc_gβ / n) : acc_gβ
     se = FormulaCompiler.delta_method_se(gβ, Σ)
     return val, se
 end
