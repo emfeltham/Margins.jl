@@ -18,7 +18,7 @@ The functionality should mirror Stata's `margins`; but, we also want it to be Ju
 
 ## 3. Core Public API
 
-- `margins(model, data; mode=:effects, dydx=:continuous, target=:mu, at=:none, over=nothing, backend=:ad, rows=:all, contrasts=:pairwise, levels=:all, by=nothing, weights=nothing, measure=:effect, vcov=:model, scale=:auto) -> MarginsResult`
+- `margins(model, data; mode=:effects, dydx=:continuous, target=:mu, at=:none, over=nothing, backend=:ad, rows=:all, contrasts=:pairwise, levels=:all, by=nothing, weights=nothing, asbalanced=false, measure=:effect, vcov=:model, scale=:auto) -> MarginsResult`
   - `mode`: `:effects` (marginal effects) or `:predictions` (adjusted predictions: APM/APR/APE)
   - `measure` (Stata parity): `:effect` (default), `:elasticity` (eyex), `:semielasticity_x` (dyex), `:semielasticity_y` (eydx)
   - `dydx`: `:continuous` | `Symbol` | `Vector{Symbol}` — variables to differentiate w.r.t. (continuous MEs). 
@@ -34,6 +34,7 @@ The functionality should mirror Stata's `margins`; but, we also want it to be Ju
   - `levels`: level subset for categorical variables (e.g., `:all`, `[:A,:B]`).
   - `by`: additional stratification variables (just for reporting; orthogonal to `over`).
   - `weights`: optional weights for AME/MEM/MER aggregation (Phase 2+).
+  - `asbalanced`: `Bool` or `Vector{Symbol}`. When `true`, balances over all factor columns for row-based averages (AME/APE). When a vector is provided, balances only over those factor variables.
 
 - Convenience wrappers:
   - `ame(model, data; kwargs...)` — Average Marginal Effects (averaged across rows or within groups).
@@ -110,6 +111,11 @@ MER/MEM:
 - Output one row per (profile × term × group) into `MarginsResult.table`.
 - Profiles are recorded as `at_var1`, `at_var2`, ... columns in the result.
 
+### Profiles UX (APM/MEM/MER/APR)
+
+- Grid averaging: optionally provide a flag (e.g., `average_profiles=true`) to report a single summary averaged across the generated profiles (equal weights), in addition to per-profile rows.
+- Labeling/ordering: normalize `at_*` column order (consistent with the order in `at`), and provide readable labels for categorical values.
+
 ## 7. Grouping (over/by) and Rows
 
 - `over`: compute effects within each group combination (subset rows for rowwise/AME; apply profiles for MER), return group columns in output.
@@ -133,6 +139,7 @@ MER/MEM:
 - `src/inference.jl` — delta method, CI, z/p-values; (Phase 2+) joint covariances.
 - `src/results.jl` — `MarginsResult`, builder from computed values/SEs, tidy DataFrame assembly.
 - `src/link.jl` — link extraction/utilities; default to model’s link for `:mu`.
+- Polish: a lightweight printer/summary for `MarginsResult` (column order, rounding, group/at labels) to improve default display.
 
 ## 10. Implementation Plan
 
@@ -172,6 +179,7 @@ Phase 3 — Advanced features
   - `rtol=1e-6`, `atol=1e-8` (align to FC guidelines)
 - Performance:
   - Benchmarks on synthetic datasets; report per-row and aggregate latencies
+  - CI: run tests on basic GLM; skip robust/cluster/HAC tests when CovarianceMatrices.jl is not installed (or guard with feature detection)
 
 ## 12.5. Stata Parity Feature Checklist (Roadmap)
 
