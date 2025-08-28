@@ -1,12 +1,8 @@
 # api.jl
 
-# Convenience wrappers for legacy API compatibility
-ame(model, data; dydx=:continuous, kwargs...) = population_margins(model, data; type=:effects, vars=dydx, kwargs...)
-mem(model, data; dydx=:continuous, kwargs...) = profile_margins(model, data; at=:means, type=:effects, vars=dydx, kwargs...)
-mer(model, data; at, dydx=:continuous, kwargs...) = profile_margins(model, data; at=at, type=:effects, vars=dydx, kwargs...)
-ape(model, data; kwargs...) = population_margins(model, data; type=:predictions, kwargs...)  
-apm(model, data; kwargs...) = profile_margins(model, data; at=:means, type=:predictions, kwargs...)
-apr(model, data; at, kwargs...) = profile_margins(model, data; at=at, type=:predictions, kwargs...)
+# This file contains the core API implementation with two primary functions:
+# - population_margins(): for population-averaged analysis (AME/APE equivalent)  
+# - profile_margins(): for profile-based analysis (MEM/MER/APM/APR equivalent)
 
 """
     _build_groups(data_nt, over, within=nothing, idxs=nothing)
