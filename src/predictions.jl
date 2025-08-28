@@ -52,9 +52,32 @@ end
 
 Compute adjusted predictions at each profile dict.
 """
-function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model))
+function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
     xbuf = Vector{Float64}(undef, length(compiled))
     out = DataFrame()
+    if average_profiles
+        acc_val = 0.0
+        acc_gβ = zeros(Float64, length(compiled))
+        n = 0
+        for prof in profiles
+            scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+            η = _predict_eta!(xbuf, compiled, scen.data, 1, β)
+            if target === :mu
+                μ = GLM.linkinv(link, η)
+                acc_val += μ
+                acc_gβ .+= _dmu_deta_local(link, η) .* xbuf
+            else
+                acc_val += η
+                acc_gβ .+= xbuf
+            end
+            n += 1
+        end
+        val = n > 0 ? acc_val / n : acc_val
+        gβ = n > 0 ? acc_gβ / n : acc_gβ
+        se = FormulaCompiler.delta_method_se(gβ, Σ)
+        out = DataFrame(dydx=[val], se=[se])
+        return out
+    end
     for prof in profiles
         scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
         η = _predict_eta!(xbuf, compiled, scen.data, 1, β)  # single-row synthetic; value drawn from profile
