@@ -36,7 +36,7 @@ function _new_result(table::DataFrame; kwargs...)
 end
 
 function _add_ci!(df::DataFrame; level::Real=0.95, dof::Union{Nothing,Real}=nothing, mcompare::Symbol=:noadjust, groupcols::Vector{Symbol}=Symbol[])
-    if !haskey(df, :se) || !haskey(df, :dydx)
+    if !(:se in names(df)) || !(:dydx in names(df))
         return df
     end
     # Compute test statistic and p-values

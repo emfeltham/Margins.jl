@@ -8,7 +8,7 @@ Compute AME for continuous vars with delta-method SEs.
 function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Symbol=:ad, rows=:all, measure::Symbol=:effect, weights=nothing)
     (; compiled, de, vars, β, Σ, link) = engine
     n = rows === :all ? _nrows(data_nt) : length(rows)
-    idxs = rows === :all ? 1 : _nrows(data_nt) : rows
+    idxs = rows === :all ? (1:_nrows(data_nt)) : rows
     # Buffers
     gη = Vector{Float64}(undef, length(vars))
     gβ = Vector{Float64}(undef, length(compiled))
@@ -134,8 +134,12 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
             push!(out, row)
             # Attach profile columns
             for (k,v) in prof
-                out[!, Symbol("at_", k)] = get(out, Symbol("at_", k), fill(v, nrow(out)))
-                out[end, Symbol("at_", k)] = v
+                col_name = Symbol("at_", k)
+                if !(col_name in names(out))
+                    out[!, col_name] = fill(v, nrow(out))
+                else
+                    out[end, col_name] = v
+                end
             end
         end
     end

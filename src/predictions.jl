@@ -16,7 +16,7 @@ end
 Average predictions across rows; returns (value, se).
 """
 function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_link(model), rows=:all, weights=nothing)
-    idxs = rows === :all ? 1 : _nrows(data_nt) : rows
+    idxs = rows === :all ? (1:_nrows(data_nt)) : rows
     n = length(idxs)
     xbuf = Vector{Float64}(undef, length(compiled))
     acc_val = 0.0
