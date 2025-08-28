@@ -103,13 +103,22 @@ end
 Compute row weights that balance categorical level combinations equally.
 Returns a normalized Vector{Float64} aligned with `idxs`, or nothing if no categorical columns.
 """
-function _balanced_weights(data_nt::NamedTuple, idxs)
+function _balanced_weights(data_nt::NamedTuple, idxs, subset::Union{Nothing,Vector{Symbol}}=nothing)
     n = length(idxs)
     # Identify categorical columns
     cat_syms = Symbol[]
-    for (k, col) in pairs(data_nt)
-        if (Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)) || (eltype(col) <: Bool)
-            push!(cat_syms, k)
+    if subset === nothing
+        for (k, col) in pairs(data_nt)
+            if (Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)) || (eltype(col) <: Bool)
+                push!(cat_syms, k)
+            end
+        end
+    else
+        for k in subset
+            col = getproperty(data_nt, k)
+            if (Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)) || (eltype(col) <: Bool)
+                push!(cat_syms, k)
+            end
         end
     end
     isempty(cat_syms) && return nothing
