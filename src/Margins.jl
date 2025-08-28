@@ -10,7 +10,8 @@ using FormulaCompiler
 using CovarianceMatrices
 
 # Public API exports
-export margins, ame, mem, mer, ape, apm, apr, MarginsResult
+export ame, mem, mer, ape, apm, apr, MarginsResult
+export population_margins, profile_margins
 
 # Internal modules
 include("results.jl")     # Result type and builders
