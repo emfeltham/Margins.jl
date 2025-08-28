@@ -1,106 +1,78 @@
 # Margins.jl
 
-**Note**: This package is in active development. The public API may change in future versions. Hence, the package is still in a pre-registration state. See below for verified cases.
-
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
-[![Latest](https://img.shields.io/badge/docs-latest-blue.svg)](https://emfeltham.github.io/Margins.jl/)
 
-This Julia package provides a suite of functions to compute marginal effects and related contrasts for predictors in GLM/GLMM models:
-1. **Adjusted predictions at the mean** (APM) and **marginal effects at the mean** (MEM)
-2. **Average Marginal Effects** (AMEs) and **marginal effects at representative values** (MERS)
+Stata-like marginal effects for the JuliaStats stack, built on:
+- [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) (formulas/design)
+- [GLM.jl](https://github.com/JuliaStats/GLM.jl) (links/predict types)
+- [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) (zero-allocation compiled evaluators)
+- [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) (robust/cluster/HAC covariance)
 
-As it stands, marginal effect calculations, and AME calculations in particular, are a huge gap in statistical modeling in Julia that really limits the ways researchers can take advantage of packages like [MixedModels.jl](https://github.com/JuliaStats/MixedModels.jl).[^1]
+This rewrite provides:
+- Marginal effects: AME, MEM, MER (η or μ)
+- Adjusted predictions: APE, APM, APR (link or response scale)
+- Categorical contrasts: baseline/pairwise
+- Weights, grouping (over), profiles (at), elasticities
+- Delta-method SEs with normal/t CIs, multiple-comparison adjustments
 
-[^1]: Furthermore, other packages that seek to convert models estimated in Julia into R objects (which can then be used with the mature modeling ecosystem) ultimately feed into another two-language problem (though this strategy may be the best current option in many situations).
+See MARGINS_PLAN.md for full design and ROBUST.md for VCE integration.
 
-Note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations. Ultimately, the design of this package refers heavily to Stata's ["margins"](https://www.stata.com/manuals/cmmargins.pdf) commands.
-
-## Development
-
-- This package is in under development (as noted above).
-- See "test/" for scenarios that have been verified against manual calculation (this currently includes various cases with LMs, GLMs, and LMM/GLMMs).
-
-## Core functions
-
-- `effects2!()`
-- `effectsΔyΔx()`
-- `margins()`
-
-## Example usage for AMEs
+## API
 
 ```julia
-using RDatasets # work with iris dataset
-using DataFrames, CategoricalArrays
-using Margins # development
-
-# Load data (150 × 5)
-iris = dataset("datasets", "iris") |> DataFrame
-iris.Species = categorical(iris.Species);
-
-# 1. No interactions – several covariates
-
-form1 = @formula(SepalLength ~ SepalWidth + PetalLength + PetalWidth)
-
-m = lm(form1, iris) # linear regression
-
-ame1  = margins(m, :SepalWidth, iris)
-ame2  = margins(m, [:SepalWidth, :PetalLength, :PetalWidth], iris)
-```
-
-**More cases to come...**
-
-See "tests/" for a detailed set of scenarios.
-
-## Example usage for APMs
-
-```julia
-using DataFrames, CategoricalArrays, GLM
-
-# Simulate data
-df = DataFrame(
-    y = randn(100) .+ 2 .* (rand(100) .> 0.5),
-    x = rand(100),
-    g = categorical(rand(["A","B"], 100))
+Margins.margins(model, data; 
+  mode=:effects,              # :effects or :predictions
+  dydx=:continuous,           # variables for effects (or :continuous)
+  target=:mu,                 # :mu (response) or :eta (link)
+  at=:none,                   # :none | :means | Dict/Vector{Dict} profiles
+  over=nothing,               # grouping columns
+  backend=:ad,                # FormulaCompiler backend (:ad or :fd)
+  scale=:auto,                # :auto|:response|:link for predictions
+  vcov=:model,                # :model | matrix | function | estimator (CovarianceMatrices)
+  weights=nothing,            # vector or column Symbol
+  measure=:effect,            # :effect|:elasticity|:semielasticity_x|:semielasticity_y
+  mcompare=:noadjust,         # :noadjust|:bonferroni|:sidak
 )
 
-# Fit a linear model
-m = lm(@formula(y ~ x + g), df)
-
-# Build a reference grid over x
-dct = Dict(x => range(extrema(df.x)..., 5))
-grid = expand_grid(dct)
-
-# Compute effects at the mean of g
-effects2!(grid, m, df; eff_col=:pred, err_col=:se_pred)
-# grid now contains :pred and :se_pred columns
+# Convenience
+ame(...); mem(...); mer(...)
+ape(...); apm(...); apr(...)
 ```
 
-### APM contrasts
+Results return a `MarginsResult` with a tidy DataFrame table and metadata (Σ source, link, dof, etc.).
+
+## Examples
 
 ```julia
-effectsΔyΔx(...)
+using DataFrames, CategoricalArrays, GLM, Margins
+
+df = DataFrame(y = rand(Bool, 1000), x = randn(1000), z = randn(1000), g = categorical(rand(["A","B"], 1000)))
+m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
+
+# AME on response scale
+res_ame = ame(m, df; dydx=[:x, :z], target=:mu)
+
+# MER at representative values
+res_mer = mer(m, df; dydx=[:x], target=:mu, at=Dict(:x=>[-1,0,1], :g=>["A","B"]))
+
+# Adjusted predictions (APR) on link or response
+res_apr_mu = apr(m, df; target=:mu, at=Dict(:x=>[-2,0,2]))
+res_apr_eta = apr(m, df; target=:eta, at=Dict(:x=>[-2,0,2]))
+
+# Robust covariance via CovarianceMatrices
+# using CovarianceMatrices
+# res_robust = ame(m, df; dydx=[:x], vcov = HC1())
 ```
 
-(Example to come)
+## JuliaStats Compatibility
 
-## Mixed models
+- Formulas and design: StatsModels.jl
+- Predict types: `pred_type=:response|:link` matches GLM conventions
+- Covariance: defaults to `vcov(model)`; for robust/cluster/HAC use CovarianceMatrices.jl 
+- Data: any Tables.jl table
+- Mixed models: operates on fixed effects (FormulaCompiler extracts fixed part)
 
-**Current limitation**: All predictions and summaries are based solely on the fixed‐effects. Random effects are treated as zero (_i.e._, we do not marginalize or integrate over their distribution in GLMMs).
+## Notes
 
-## Automatic differentiation
-
-Margins.jl relies on **Forward‐mode AD** ([ForwardDiff.jl](https://github.com/JuliaDiff/ForwardDiff.jl)) to differentiate functions with respect to one scalar input at a time.
-
-Forward mode computes all needed partials in one “dual‐number” pass at essentially $O(\text{cost of f})$ work when there’s only one AD input. With ForwardDiff we wrap scalars in a `Dual` and call `derivative`. Because we inject a single dual into the design‐matrix machinery for each observation, _every_ transform (`log`, `^2`, interactions, splines, etc.) automatically propagates that dual. Furthermore, this strategy integrates easily with the [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) framework, automatically propagating derivatives through data transformations (_e.g._, log(x), x^2, interactions with other variables) without requiring complex tracing of the entire model matrix construction.
-
-## Other issues
-
-Possibly planned.
-
-- [X] DataFrame construction (from `MarginsResult`, `ContrastResult`)
-- [ ] Missing data handling (just match the model's strategy)
-- [ ] Check on integration with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl)
-- [ ] Elasticities
-- [ ] Efficiency for larger data (see branch "efficient")
-- [ ] Inspect APM workflow, possibly change UI
-- [ ] Plotting integration
+- This is an active rewrite; APIs may evolve.
+- Delta method SEs require only a parameter covariance `Σ` and gradients; all robust logic remains in the covariance provider.
