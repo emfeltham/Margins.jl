@@ -1,11 +1,13 @@
-# basic_usage.jl - Examples showing new margins() function
+# basic_usage.jl
+# Examples showing new margins() function
 
 using Margins
-using DataFrames, GLM, StatsModels
+using DataFrames, GLM, StatsModels, CategoricalArrays
 using Random
 
 # Create example data
-Random.seed!(123)
+Random.seed!(06515)
+
 df = DataFrame(
     wage = exp.(randn(1000) .+ 5),  # Log-normal wages
     education = rand(8:16, 1000),   # Years of education
@@ -17,7 +19,7 @@ df = DataFrame(
 println("=== Basic margins() Usage Examples ===\n")
 
 # Fit a wage model
-wage_model = lm(@formula(log(wage) ~ education + experience + I(experience^2) + gender + urban), df)
+wage_model = lm(@formula(log(wage) ~ education + experience + experience^2 + gender + urban), df)
 
 println("Model fitted: log(wage) ~ education + experience + experience² + gender + urban\n")
 

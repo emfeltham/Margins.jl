@@ -1,3 +1,5 @@
+# margins_glm.jl
+
 using DataFrames, CategoricalArrays, GLM, Margins
 # Robust covariance provider (optional)
 # using CovarianceMatrices
