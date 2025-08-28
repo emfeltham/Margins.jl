@@ -13,12 +13,13 @@ using LinearAlgebra
 import MixedModels
 using MixedModels: MixedModel, LinearMixedModel, GeneralizedLinearMixedModel, RandomEffectsTerm
 
-using StandardizedPredictors: ZScoredTerm
+using StandardizedPredictors: ZScoredTerm, ScaledTerm, CenteredTerm
 using Statistics
 
 # ________________________________________ Utility functions
 not(x::Bool) = !x
 not(x::T) where {T<:Real} = one(x) - x
+export not
 
 # # FormulaCompiler foundation components
 # using FormulaCompiler: 
@@ -77,5 +78,3 @@ include("reference grid.jl")
 export setup_refgrid, setup_contrast_grid
 
 end # module
-
-
