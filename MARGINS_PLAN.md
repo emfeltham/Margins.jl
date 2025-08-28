@@ -1,50 +1,38 @@
 # Margins.jl Rewrite Plan (Built on FormulaCompiler.jl)
 
-This document lays out a comprehensive plan to rewrite Margins.jl on top of FormulaCompiler.jl. The goal is a Stata-like `margins()` interface with high performance, clear semantics, and robust inference. Breaking changes are allowed to achieve the best design.
+This document lays out a comprehensive plan to rewrite Margins.jl on top of FormulaCompiler.jl. The public API removes the legacy `margins()` entry point and uses statistical names as the canonical interface. Breaking changes are allowed to achieve the best design.
 
-The functionality should mirror Stata's `margins`; but, we also want it to be Julian, and consistent with the JuliaStats ecosystem.
+The functionality mirrors Stata’s workflows conceptually, but is Julian and consistent with the JuliaStats ecosystem.
 
 ## 1. Vision and Principles
 
 - Foundation-first: Delegate all heavy computation to FormulaCompiler (FC): compiled evaluators, derivatives, FD/AD backends, delta-method SEs, scenarios.
-- Stata parity: `margins()` semantics for dydx(), at(), over(), contrasts, targets (`:eta|:mu`), clean tabular outputs.
+- Statistical names as the API: AME/MEM/MER/APM/APR/APE are the entry points; optional wrappers `effects`/`predictions` delegate to them.
 - Zero-allocation where it matters: FD backend for rowwise and AME; AD backend for MER/MEM convenience and accuracy.
 - Predictable, composable API: Orthogonal options; defaults that make statistical sense.
 
 ## 2. Scope
 
-- In-scope: `margins()`, `ame`, `mem`, `mer`, categorical contrasts, SEs/CI via delta method, grouped results, representative values, tidy outputs.
+- In-scope: `ame`, `mem`, `mer`, `ape`, `apm`, `apr`, categorical contrasts, SEs/CI via delta method, grouped results, representative values, tidy outputs.
 - Out-of-scope (Phase 1): robust/cluster VCEs, bootstrap/jackknife, plotting, reporting templates. These can come later.
 
 ## 3. Core Public API
 
-- `margins(model, data; mode=:effects, dydx=:continuous, target=:mu, at=:none, over=nothing, backend=:ad, rows=:all, contrasts=:pairwise, levels=:all, by=nothing, weights=nothing, asbalanced=false, measure=:effect, vcov=:model, scale=:auto) -> MarginsResult`
-  - `mode`: `:effects` (marginal effects) or `:predictions` (adjusted predictions: APM/APR/APE)
-  - `measure` (Stata parity): `:effect` (default), `:elasticity` (eyex), `:semielasticity_x` (dyex), `:semielasticity_y` (eydx)
-  - `dydx`: `:continuous` | `Symbol` | `Vector{Symbol}` — variables to differentiate w.r.t. (continuous MEs). 
-  - `target`: `:mu` | `:eta` — response scale vs linear predictor (default `:mu`).
-  - `at`: `:none` (per-row) | `:means` (MEM) | `Dict{Symbol,Vector}` or `Vector{Dict}` (MER grid; representative values).
-  - `over`: `Symbol` or `Vector{Symbol}` — compute effects within groups; results carry group columns.
-  - `backend`: `:fd` | `:ad` — FC backend choice; default `:ad` (convenient/accurate; MER friendly). Use `:fd` for zero-alloc rowwise/AME.
-  - `link`: link function for `:mu` target; auto-detected from model when available.
-  - `vcov`: variance source. Accepts `:model` (default), a covariance matrix, a function `m->Σ`, or an estimator object (e.g., `HC1()`, `Clustered(id)`) when CovarianceMatrices.jl is present.
-  - `scale`: predictions scale in `mode=:predictions`: `:auto|:response|:link` (mirrors GLM predict semantics).
-  - `rows`: `:all` or vector of indices — restrict subset for rowwise/AME.
-  - `contrasts`: categorical variable contrasts: `:pairwise` or `:baseline`.
-  - `levels`: level subset for categorical variables (e.g., `:all`, `[:A,:B]`).
-  - `by`: additional stratification variables (just for reporting; orthogonal to `over`).
-  - `weights`: optional weights for AME/MEM/MER aggregation (Phase 2+).
-  - `asbalanced`: `Bool` or `Vector{Symbol}`. When `true`, balances over all factor columns for row-based averages (AME/APE). When a vector is provided, balances only over those factor variables.
+Statistical entry points (public):
 
-- Convenience wrappers:
-  - `ame(model, data; kwargs...)` — Average Marginal Effects (averaged across rows or within groups).
-  - `mem(model, data; at=:means, kwargs...)` — Marginal Effects at the Means.
-  - `mer(model, data; at=Dict(...), kwargs...)` — Marginal Effects at Representative values (supports grids).
-  - `ape(model, data; kwargs...)` — Average Predictions across rows.
-  - `apm(model, data; at=:means, kwargs...)` — Adjusted Predictions at Means.
-  - `apr(model, data; at=Dict(...), kwargs...)` — Adjusted Predictions at Representative values.
-  - Elasticities: `ame(...; measure=:elasticity)` etc. for per-row and aggregated elasticities on η or μ.
-  - `margins_se(result; level=0.95)` — add/compute CI columns using stored gradients and Σ.
+- Row‑averaged over observed data
+  - AME: `ame(model, data; vars=:continuous, target=:mu, vcov=:model, weights=nothing, balance=:none|:all|Vector{Symbol}, over=nothing, within=nothing, by=nothing)`
+  - APE: `ape(model, data; scale=:response|:link, vcov=:model, weights=nothing, balance=:none|:all|Vector{Symbol}, over=nothing, within=nothing, by=nothing)`
+
+- At profiles (explicit covariate settings)
+  - MEM: `mem(model, data; vars=:continuous, target=:mu, vcov=:model, at=:means, over=nothing, by=nothing)`
+  - MER: `mer(model, data; vars=:continuous, target=:mu, vcov=:model, at=Dict|Vector{Dict}, over=nothing, by=nothing)`
+  - APM: `apm(model, data; scale=:response|:link, vcov=:model, at=:means, over=nothing, by=nothing)`
+  - APR: `apr(model, data; scale=:response|:link, vcov=:model, at=Dict|Vector{Dict}, average=false, over=nothing, by=nothing)`
+
+Optional general wrappers (secondary, for discoverability):
+- `effects(model, data; vars, target, vcov, weights, balance, over, within, by, at=:none)` → AME when `at=:none`; MEM/MER when `at≠:none`.
+- `predictions(model, data; at=:none|:means|Dict|Vector{Dict}, scale, vcov, average=false, weights, balance, over, within, by)` → APE when `at=:none`; APM/APR when `at≠:none`.
 
 ## 4. Result Type and Output
 
@@ -59,6 +47,22 @@ The functionality should mirror Stata's `margins`; but, we also want it to be Ju
     - For categoricals: `level_from`, `level_to` (or `contrast` string)
   - `metadata::NamedTuple` (β snapshot, Σ, backend, link, model info)
   - Optional `gradients::Vector{Vector{Float64}}` aligned with rows for advanced users
+
+## 4.1 Two Axes and Major Paths
+
+We organize the user API along two orthogonal axes and implement them via two core paths:
+
+- What is computed:
+  - Predictions (values on link/response scale)
+  - Derivatives/contrasts (continuous slopes vs discrete changes)
+
+- Where it is evaluated:
+  - Row‑averaged over observed data (AME/APE)
+  - At explicit profiles (MEM/MER/APM/APR)
+
+Major implementation paths:
+- Average over observed rows: “Average Marginal/Predicted Effects” (drives AME/APE; supports `weights`, `balance`, `over/within/by`).
+- Profiles at explicit settings: “Predictions/Effects at Means/Profile grids” (drives APM/APR and MEM/MER; supports `at=:means|Dict|Vector{Dict}`, optional `average`).
 
 ## 5. Computational Mapping to FormulaCompiler
 
@@ -225,7 +229,8 @@ res.table
 
 Categorical contrasts (μ):
 ```julia
-res = margins(m, df; dydx=:group, contrasts=:pairwise, target=:mu)
+# Example sketch: contrasts are exposed via vars/levels on MER/MEM paths
+res = mer(m, df; vars=:group, target=:mu, at=:means)  # contrasts configured via kwargs
 res.table
 ```
 
@@ -259,10 +264,15 @@ Aggregations:
 - APM/APR: profile-specific predictions; use single-profile `gβ`.
 
 
-This plan enables a first-class, Stata-like Margins.jl on top of FormulaCompiler with strong performance guarantees and clean semantics. The implementation proceeds in phases, delivering immediate value with AME/MEM/MER and building towards richer inference and reporting.
+This plan enables a first-class, statistical Margins.jl on top of FormulaCompiler with strong performance guarantees and clean semantics. The implementation proceeds in phases, delivering immediate value with AME/MEM/MER and building towards richer inference and reporting.
 APM/APR (μ) adjusted predictions:
 ```julia
 res_apm = apm(m, df; target=:mu)                 # at means
 res_apr = apr(m, df; at=Dict(:x=>[-1,0,1]))      # profiles grid
-res_ape = margins(m, df; mode=:predictions)      # average predictions
+res_ape = ape(m, df)                             # average predictions
 ```
+
+---
+
+Deprecations/removals:
+- `margins(...)` is fully removed from the public API and documentation. Use AME/MEM/MER/APM/APR/APE or optional `effects`/`predictions` wrappers.
