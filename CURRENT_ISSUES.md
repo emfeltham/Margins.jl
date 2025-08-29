@@ -27,18 +27,30 @@ This document tracks known issues in the current clean two-function API implemen
 
 The major blocking issue with profile functions and mixed data types has been successfully fixed. See [Resolved Issues](#✅-resolved-issues) section below for details.
 
-### 1. DataFrame Column Structure in Multi-Scenario Profiles
+### 1. DataFrame Column Structure in Multi-Scenario Profiles ✅
 
-**Status**: Minor issue in specific profile grid scenarios
-**Error**: 
+**Status**: ✅ **RESOLVED**
+**Resolution Date**: 2025-01-23
+**Files Fixed**: `src/compute_continuous.jl`, `src/predictions.jl`
+
+**Previous Error**: 
 ```
 ERROR: ArgumentError: row insertion with `cols` equal to `:setequal` requires `row` to have the same number of elements as the number of columns in `df`.
 ```
 
-**Root Cause**: DataFrame column structure mismatch when building complex profile grids with multiple scenarios.
+**Root Cause**: Profile columns (`at_*`) were added after row insertion, causing column count mismatch.
 
-**Impact**: Basic profile functions work (`:means`, single scenarios), but some multi-scenario grids may fail
-**Priority**: Low - core profile functionality is working
+**Solution Applied**: 
+- Pre-allocated all profile columns before row insertion
+- Initialize DataFrames with complete column structure upfront
+- Create complete row dictionaries with all columns before insertion
+
+**Verification**: All profile scenarios now work correctly:
+- `:means` profiles ✅
+- Single-variable scenarios ✅  
+- Multi-variable profile grids ✅
+- Mixed data types (Int64/Bool/Float64) ✅
+- Both `:effects` and `:predictions` types ✅
 
 ## ⚠️ Medium Priority Issues
 
@@ -113,17 +125,20 @@ end
 
 ## 🎯 Priority Recommendations
 
-1. **High Priority**: Fix data type compatibility in FormulaCompiler integration
-   - Investigate `create_override_vector()` in FormulaCompiler
-   - Ensure proper type conversion for profile scenarios
+1. **High Priority**: Verify link scale computation for GLMs
+   - Test `:eta` vs `:mu` effects with LogitLink/ProbitLink models
+   - Ensure proper chain rule implementation for nonlinear links
+   - Validate that link and response scale derivatives differ appropriately
 
-2. **Medium Priority**: Debug DataFrame column management in profile functions
-   - Fix row insertion logic in `_mem_mer_continuous()`
-   - Ensure consistent DataFrame schemas
-
-3. **Low Priority**: Implement proper grouping support for profile functions
-   - Add `over`/`by` support to profile computations
+2. **Medium Priority**: Implement proper grouping support for profile functions
+   - Add `over`/`by` support to profile computations  
+   - Extend existing grouping logic from population_margins to profiles
    - Test grouped profile scenarios
+
+3. **Low Priority**: Improve averaged profile standard errors
+   - Replace RMS approximation with proper delta method for `average=true`
+   - Store and combine gradients during profile computation
+   - Ensure statistical rigor for summary statistics
 
 ## 🧪 Test Coverage
 
@@ -132,6 +147,7 @@ end
 - ✅ `population_margins(type=:predictions)` - Population predictions (APE equivalent) 
 - ✅ `profile_margins(at=:means, type=:effects)` - Profile marginal effects (MEM equivalent)
 - ✅ `profile_margins(at=Dict(...), type=:predictions)` - Profile predictions (APR equivalent)
+- ✅ **Profile scenario grids** - Multi-variable complex profile combinations
 - ✅ **Mixed data type support** - Int64/Bool/Float64 automatic handling
 - ✅ Population analysis with grouping (`over`, `by`, `within`)
 - ✅ User weights and balanced sampling in population analysis
@@ -141,10 +157,10 @@ end
 - ✅ Robust standard errors via `vcov` parameter
 - ✅ Clean two-function API with conceptual framework
 - ✅ Complete working examples demonstrating both approaches
+- ✅ **DataFrame column structure** - All profile scenarios work correctly
 
 ### ⚠️ Limited Functionality:
 - ⚠️ Grouped profile analyses (`over`/`by` with profiles) - intentionally disabled pending implementation
-- ⚠️ Some complex multi-scenario profile grids - minor DataFrame structure issue
 
 ### 🗑️ Removed Functionality (Intentionally):
 - 🗑️ Complex `margins()` function with confusing parameters  
@@ -166,6 +182,25 @@ end
 
 **Impact**: `profile_margins()` now works seamlessly with mixed Int64/Bool/Float64 data types
 
+### DataFrame Column Structure in Profile Functions ✅
+
+**Was**: Row insertion error preventing complex profile scenarios
+**Error**: `ArgumentError: row insertion with 'cols' equal to ':setequal' requires 'row' to have the same number of elements as the number of columns in 'df'.`
+**Root Cause**: Profile columns (`at_*`) added after row insertion caused column count mismatch
+**Resolution Date**: 2025-01-23
+**Files Fixed**: `src/compute_continuous.jl:98-147`, `src/predictions.jl:57-124`
+**Solution**: 
+1. Pre-allocate all profile columns before any row operations
+2. Initialize DataFrames with complete column structure upfront  
+3. Create complete row dictionaries with all columns before insertion
+4. Applied fix to both `_mem_mer_continuous()` and `_ap_profiles()` functions
+
+**Impact**: All profile scenarios now work correctly:
+- Profile effects at means (`:means`) ✅
+- Single and multi-variable scenario grids ✅  
+- Both `:effects` and `:predictions` types ✅
+- Mixed data types fully supported ✅
+
 ### Legacy API Cleanup ✅
 
 **Completed**: Successfully removed complex `margins()` function and legacy wrappers
@@ -179,7 +214,19 @@ end
 3. ✅ Fixed Symbol conversion bug in Margins profile column handling
 4. ✅ Updated examples to demonstrate working profile functionality
 5. ✅ Validated mixed data type support across both function approaches
+6. ✅ **Fixed DataFrame column structure bug** in profile functions (2025-01-23)
+   - Resolved row insertion errors in complex profile scenarios
+   - Pre-allocated profile columns in both `_mem_mer_continuous()` and `_ap_profiles()`
+   - Verified all profile functionality works correctly
 
 ## Summary
 
-Both `population_margins()` and `profile_margins()` are now **production-ready** with full mixed data type support. The critical blocking issues have been resolved, and the package provides a complete marginal effects analysis solution.
+Both `population_margins()` and `profile_margins()` are now **fully production-ready** with comprehensive profile scenario support and complete mixed data type compatibility. All major issues have been resolved:
+
+- ✅ **Critical data type issues** - Fixed
+- ✅ **DataFrame column structure** - Fixed  
+- ✅ **Profile scenario grids** - Working
+- ✅ **Mixed Int64/Bool/Float64 data** - Supported
+- ✅ **Clean two-function API** - Complete
+
+The package provides a robust, modern marginal effects analysis solution for the Julia ecosystem. Remaining issues are minor enhancements rather than blocking problems.

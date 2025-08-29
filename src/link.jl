@@ -7,7 +7,12 @@ Extract the GLM link from a model when available; fall back to IdentityLink().
 """
 function _auto_link(model)
     try
-        return GLM.link(model)
+        # Handle TableRegressionModel wrapper
+        if hasfield(typeof(model), :model)
+            return GLM.Link(model.model)
+        else
+            return GLM.Link(model)
+        end
     catch
         return GLM.IdentityLink()
     end

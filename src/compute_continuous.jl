@@ -99,6 +99,18 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
     (; compiled, de, vars, β, Σ, link) = engine
     profiles = _build_profiles(at, data_nt)
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    
+    # Pre-allocate all profile columns to avoid column count mismatch
+    all_profile_keys = Set{Symbol}()
+    for prof in profiles
+        for k in keys(prof)
+            push!(all_profile_keys, Symbol("at_", k))
+        end
+    end
+    for col_name in all_profile_keys
+        out[!, col_name] = Union{Missing,Any}[]
+    end
+    
     gβ = Vector{Float64}(undef, length(compiled))
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for var in vars
@@ -130,17 +142,19 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
                     val = (1 / ȳ) * val
                 end
             end
-            row = (term=var, dydx=val, se=se)
-            push!(out, row)
-            # Attach profile columns
+            # Create row with profile columns
+            row_data = Dict{Symbol,Any}(:term => var, :dydx => val, :se => se)
             for (k,v) in prof
                 col_name = Symbol("at_", k)
-                if !(col_name in names(out))
-                    out[!, col_name] = fill(v, nrow(out))
-                else
-                    out[end, col_name] = v
+                row_data[col_name] = v
+            end
+            # Fill missing profile columns with missing
+            for col_name in all_profile_keys
+                if !haskey(row_data, col_name)
+                    row_data[col_name] = missing
                 end
             end
+            push!(out, row_data)
         end
     end
     return out

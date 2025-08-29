@@ -56,7 +56,21 @@ Compute adjusted predictions at each profile dict.
 """
 function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
     xbuf = Vector{Float64}(undef, length(compiled))
-    out = DataFrame()
+    
+    # Pre-allocate all columns including profile columns to avoid column count mismatch
+    all_profile_keys = Set{Symbol}()
+    for prof in profiles
+        for k in keys(prof)
+            push!(all_profile_keys, Symbol("at_", k))
+        end
+    end
+    
+    # Initialize DataFrame with all required columns
+    out = DataFrame(dydx=Float64[], se=Float64[])
+    for col_name in all_profile_keys
+        out[!, col_name] = Union{Missing,Any}[]
+    end
+    
     if average_profiles
         acc_val = 0.0
         acc_gβ = zeros(Float64, length(compiled))
@@ -83,25 +97,30 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
     for prof in profiles
         scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
         η = _predict_eta!(xbuf, compiled, scen.data, 1, β)  # single-row synthetic; value drawn from profile
+        # Create row with profile columns
         if target === :mu
             μ = GLM.linkinv(link, η)
             gβ = _dmu_deta_local(link, η) .* xbuf
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            push!(out, (; dydx=μ, se))
+            row_data = Dict{Symbol,Any}(:dydx => μ, :se => se)
         else
             gβ = xbuf
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            push!(out, (; dydx=η, se))
+            row_data = Dict{Symbol,Any}(:dydx => η, :se => se)
         end
-        # attach profile columns
+        
+        # Add profile columns to row
         for (k,v) in prof
             col_name = Symbol("at_", k)
-            if !(col_name in names(out))
-                out[!, col_name] = fill(v, nrow(out))
-            else
-                out[end, col_name] = v
+            row_data[col_name] = v
+        end
+        # Fill missing profile columns with missing
+        for col_name in all_profile_keys
+            if !haskey(row_data, col_name)
+                row_data[col_name] = missing
             end
         end
+        push!(out, row_data)
     end
     return out
 end
