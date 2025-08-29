@@ -53,9 +53,11 @@ end
     _ap_profiles(model, data_nt, compiled, β, Σ, profiles; target)
 
 Compute adjusted predictions at each profile dict.
+Returns (df, gradients) where gradients is a Dict mapping profile_idx => gradient vector.
 """
 function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
     xbuf = Vector{Float64}(undef, length(compiled))
+    gradients = Dict{Int, Vector{Float64}}()
     
     # Pre-allocate all columns including profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -93,9 +95,10 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         gβ = n > 0 ? acc_gβ / n : acc_gβ
         se = FormulaCompiler.delta_method_se(gβ, Σ)
         out = DataFrame(dydx=[val], se=[se])
-        return out
+        gradients[1] = copy(gβ)  # Store averaged gradient
+        return (out, gradients)
     end
-    for prof in profiles
+    for (prof_idx, prof) in enumerate(profiles)
         processed_prof = _process_profile_for_scenario(prof, data_nt)
         scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
         η = _predict_eta!(xbuf, compiled, scen.data, 1, β)  # single-row synthetic; value drawn from profile
@@ -104,10 +107,12 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
             μ = GLM.linkinv(link, η)
             gβ = _dmu_deta_local(link, η) .* xbuf
             se = FormulaCompiler.delta_method_se(gβ, Σ)
+            gradients[prof_idx] = copy(gβ)
             row_data = Dict{Symbol,Any}(:dydx => μ, :se => se)
         else
             gβ = xbuf
             se = FormulaCompiler.delta_method_se(gβ, Σ)
+            gradients[prof_idx] = copy(gβ)
             row_data = Dict{Symbol,Any}(:dydx => η, :se => se)
         end
         
@@ -124,5 +129,5 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         end
         push!(out, row_data)
     end
-    return out
+    return (out, gradients)
 end

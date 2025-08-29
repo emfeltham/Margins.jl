@@ -94,11 +94,13 @@ end
     _mem_mer_continuous(model, data_nt, engine, at; target=:mu, backend=:ad, measure=:effect)
 
 Compute MEM (at=:means) or MER (profiles Dict/Vector{Dict}) for continuous vars.
+Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => gradient vector.
 """
 function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
     profiles = _build_profiles(at, data_nt)
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
     
     # Pre-allocate all profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -114,7 +116,7 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
     gβ = Vector{Float64}(undef, length(compiled))
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for var in vars
-        for prof in profiles
+        for (prof_idx, prof) in enumerate(profiles)
             processed_prof = _process_profile_for_scenario(prof, data_nt)
             scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
             # Value
@@ -128,6 +130,8 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
             end
             val = g_row[findfirst(==(var), vars)]
             se = FormulaCompiler.delta_method_se(gβ, Σ)
+            # Store gradient for proper averaging
+            gradients[(var, prof_idx)] = copy(gβ)
             # Elasticities
             if measure != :effect
                 xcol = getproperty(scen.data, var)
@@ -158,7 +162,7 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
             push!(out, row_data)
         end
     end
-    return out
+    return (out, gradients)
 end
 
 """
@@ -166,10 +170,12 @@ end
 
 Compute continuous effects from pre-built profiles (bypassing _build_profiles step).
 Used by the table-based profile_margins dispatch.
+Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => gradient vector.
 """
 function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad)
     (; compiled, de, vars, β, Σ, link) = engine
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
     
     # Pre-allocate all profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -185,7 +191,7 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
     gβ = Vector{Float64}(undef, length(compiled))
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for v in vars
-        for prof in profiles
+        for (prof_idx, prof) in enumerate(profiles)
             processed_prof = _process_profile_for_scenario(prof, data_nt)
             scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
             # Value
@@ -199,6 +205,8 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
             end
             val = g_row[findfirst(==(v), vars)]
             se = FormulaCompiler.delta_method_se(gβ, Σ)
+            # Store gradient for proper averaging
+            gradients[(v, prof_idx)] = copy(gβ)
             
             # Create row data
             row_data = Dict{Symbol,Any}()
@@ -222,5 +230,5 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
         end
     end
     
-    return out
+    return (out, gradients)
 end

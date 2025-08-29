@@ -57,6 +57,111 @@ function _try_dof_residual(model)
     end
 end
 
+"""
+    _subset_data(data_nt, idxs)
+
+Create a subset of the NamedTuple data using the provided indices.
+"""
+function _subset_data(data_nt::NamedTuple, idxs::Vector{Int})
+    subset_data = NamedTuple{keys(data_nt)}(
+        Tuple(getproperty(data_nt, k)[idxs] for k in keys(data_nt))
+    )
+    return subset_data
+end
+
+"""
+    _average_profiles_with_proper_se(df, gradients, Σ; group_cols)
+
+Average profile results using proper delta method on averaged gradients.
+"""
+function _average_profiles_with_proper_se(df::DataFrame, gradients::Dict, Σ::AbstractMatrix; group_cols::Vector{String}=String[])
+    profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
+    exclude_cols = ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols
+    
+    if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
+        # Simple case: average all rows for each term
+        terms = unique(df.term)
+        avg_parts = DataFrame[]
+        
+        for term in terms
+            term_rows = findall(==(term), df.term)
+            if length(term_rows) <= 1
+                # Single row, just keep as-is
+                push!(avg_parts, df[term_rows, :])
+                continue
+            end
+            
+            # Collect gradients for this term and average them
+            term_gradients = Vector{Float64}[]
+            for (i, row_idx) in enumerate(term_rows)
+                # Find corresponding gradient
+                for ((g_term, g_prof_idx), grad) in gradients
+                    if g_term == term && g_prof_idx == i
+                        push!(term_gradients, grad)
+                        break
+                    end
+                end
+            end
+            
+            if !isempty(term_gradients)
+                # Average gradients and apply delta method
+                avg_gradient = mean(term_gradients)
+                se_proper = FormulaCompiler.delta_method_se(avg_gradient, Σ)
+                
+                # Create averaged result
+                avg_row = DataFrame(
+                    term = [term],
+                    dydx = [mean(df[term_rows, :dydx])],
+                    se = [se_proper]
+                )
+                
+                # Add constant columns
+                for col in names(df)
+                    if !(col in exclude_cols ∪ ["term"])
+                        if length(unique(df[term_rows, col])) == 1
+                            avg_row[!, col] = [df[term_rows[1], col]]
+                        end
+                    end
+                end
+                push!(avg_parts, avg_row)
+            end
+        end
+        
+        return isempty(avg_parts) ? DataFrame() : reduce(vcat, avg_parts)
+    else
+        # Complex case: group by non-profile columns and average within groups
+        grouped = groupby(df, group_cols)
+        avg_parts = DataFrame[]
+        
+        for group in grouped
+            terms = unique(group.term)
+            for term in terms
+                term_rows = findall(==(term), group.term)
+                if length(term_rows) <= 1
+                    push!(avg_parts, group[term_rows, :])
+                    continue
+                end
+                
+                # Similar logic but more complex gradient lookup
+                # This would need more work to properly map gradients to grouped results
+                # For now, fall back to simple averaging
+                avg_group = DataFrame(
+                    term = [term],
+                    dydx = [mean(group[term_rows, :dydx])],
+                    se = [sqrt(sum(group[term_rows, :se].^2)) / length(term_rows)]  # Improved approximation
+                )
+                
+                for col in group_cols
+                    avg_group[!, col] = [group[term_rows[1], col]]
+                end
+                push!(avg_parts, avg_group)
+            end
+        end
+        
+        return isempty(avg_parts) ? DataFrame() : reduce(vcat, avg_parts)
+    end
+end
+
 # Profile/Population API
 
 """
@@ -335,6 +440,7 @@ function profile_margins(
     
     # Build profiles
     profs = _build_profiles(at, data_nt)
+    gradients_for_averaging = Dict()  # Store gradients for proper averaging
     
     if type === :effects
         # Profile effects - call MEM/MER computational path
@@ -344,7 +450,9 @@ function profile_margins(
         
         if !isempty(cont_vars)
             eng_cont = (; engine..., vars=cont_vars)
-            push!(df_parts, _mem_mer_continuous(model, data_nt, eng_cont, at; target=target, backend=backend))
+            df_cont, gradients_cont = _mem_mer_continuous(model, data_nt, eng_cont, at; target=target, backend=backend)
+            push!(df_parts, df_cont)
+            merge!(gradients_for_averaging, gradients_cont)
         end
         if !isempty(cat_vars)
             eng_cat = (; engine..., vars=cat_vars)
@@ -355,59 +463,71 @@ function profile_margins(
     else  # :predictions
         # Profile predictions - call APM/APR computational path
         target_pred = scale === :response ? :mu : :eta
-        df = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
+        df, gradients_pred = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
         df[!, :term] = fill(:prediction, nrow(df))
+        gradients_for_averaging = gradients_pred
     end
     
     # Handle grouping if specified
     if over !== nothing || by !== nothing
-        # For profile analysis with grouping, we need to handle this differently
-        # This is a complex case - for now, throw an informative error
-        if over !== nothing || by !== nothing
-            @warn "Grouping with profile_margins not fully implemented yet. Use population_margins for grouped analysis."
+        # Apply grouping to profile results
+        groups = _build_groups(data_nt, over, nothing)  # within not used in profiles
+        strata = _split_by(data_nt, by)
+        
+        # Rebuild computation with grouping
+        grouped_dfs = DataFrame[]
+        strata_list = strata === nothing ? [(NamedTuple(), 1:_nrows(data_nt))] : strata
+        
+        for (bylabels, sidxs) in strata_list
+            local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, nothing, sidxs)
+            for (labels, idxs) in local_groups
+                # Create group-specific data subset for profile computation
+                group_data_nt = _subset_data(data_nt, idxs)
+                group_engine = (; engine..., data_nt=group_data_nt)
+                
+                if type === :effects
+                    cont_vars = [v for v in engine.vars if !_is_categorical(data_nt, v)]
+                    cat_vars = [v for v in engine.vars if _is_categorical(data_nt, v)]
+                    group_df_parts = DataFrame[]
+                    
+                    if !isempty(cont_vars)
+                        eng_cont = (; group_engine..., vars=cont_vars)
+                        df_group_cont, gradients_group_cont = _mem_mer_continuous(model, group_data_nt, eng_cont, at; target=target, backend=backend)
+                        push!(group_df_parts, df_group_cont)
+                    end
+                    if !isempty(cat_vars)
+                        eng_cat = (; group_engine..., vars=cat_vars)
+                        push!(group_df_parts, _categorical_effects(model, group_data_nt, eng_cat; target=target, contrasts=contrasts, at=at))
+                    end
+                    
+                    group_df = isempty(group_df_parts) ? DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]) : reduce(vcat, group_df_parts)
+                else  # :predictions
+                    target_pred = scale === :response ? :mu : :eta
+                    group_profs = _build_profiles(at, group_data_nt)
+                    group_df, gradients_group_pred = _ap_profiles(model, group_data_nt, group_engine.compiled, group_engine.β, group_engine.Σ, group_profs; target=target_pred, link=group_engine.link)
+                    group_df[!, :term] = fill(:prediction, nrow(group_df))
+                end
+                
+                # Add group columns to results
+                for (k, v) in pairs(bylabels)
+                    group_df[!, k] = fill(v, nrow(group_df))
+                end
+                for (k, v) in pairs(labels)
+                    group_df[!, k] = fill(v, nrow(group_df))
+                end
+                
+                push!(grouped_dfs, group_df)
+            end
         end
+        
+        df = isempty(grouped_dfs) ? DataFrame() : reduce(vcat, grouped_dfs)
     end
     
     # Handle averaging if requested
     if average && nrow(df) > 1
-        # Group by non-profile columns and average across profiles
         profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
         group_cols = setdiff(names(df), ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
-        
-        if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
-            # Simple case: just average all rows
-            avg_result = DataFrame(
-                term = [df.term[1]],
-                dydx = [mean(df.dydx)],
-                se = [sqrt(mean(df.se.^2))],  # RMS of standard errors
-            )
-            # Add other metadata columns that exist
-            for col in names(df)
-                if !(col in ["term", "dydx", "se", "z", "p", "ci_lo", "ci_hi"]) && !startswith(String(col), "at_")
-                    if length(unique(df[!, col])) == 1
-                        avg_result[!, col] = [df[1, col]]
-                    end
-                end
-            end
-        else
-            # Group by non-profile columns and average within groups  
-            grouped = groupby(df, group_cols)
-            avg_parts = []
-            for group in grouped
-                avg_group = DataFrame(
-                    term = [group.term[1]],
-                    dydx = [mean(group.dydx)],
-                    se = [sqrt(mean(group.se.^2))]
-                )
-                # Carry over group columns
-                for col in group_cols
-                    avg_group[!, col] = [group[1, col]]
-                end
-                push!(avg_parts, avg_group)
-            end
-            avg_result = vcat(avg_parts...)
-        end
-        df = avg_result
+        df = _average_profiles_with_proper_se(df, gradients_for_averaging, engine.Σ; group_cols=String.(group_cols))
     end
     
     # Add confidence intervals
@@ -522,6 +642,8 @@ function profile_margins(
         push!(profs, prof_dict)
     end
     
+    gradients_table_for_averaging = Dict()  # Store gradients for proper averaging
+    
     if type === :effects
         # Profile effects - use existing computational paths but with direct profiles
         cont_vars = [v for v in engine.vars if !_is_categorical(data_nt, v)]
@@ -531,7 +653,9 @@ function profile_margins(
         if !isempty(cont_vars)
             eng_cont = (; engine..., vars=cont_vars)
             # Use existing function but pass profiles directly as the 'at' parameter
-            push!(df_parts, _mem_mer_continuous_from_profiles(model, data_nt, eng_cont, profs; target=target, backend=backend))
+            df_table_cont, gradients_table_cont = _mem_mer_continuous_from_profiles(model, data_nt, eng_cont, profs; target=target, backend=backend)
+            push!(df_parts, df_table_cont)
+            merge!(gradients_table_for_averaging, gradients_table_cont)
         end
         if !isempty(cat_vars)
             # For now, categorical effects with table-based profiles not yet implemented
@@ -542,49 +666,16 @@ function profile_margins(
     else  # :predictions
         # Profile predictions - reuse existing computational path
         target_pred = scale === :response ? :mu : :eta
-        df = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
+        df, gradients_table_pred = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
         df[!, :term] = fill(:prediction, nrow(df))
+        gradients_table_for_averaging = gradients_table_pred
     end
     
     # Handle averaging if requested
     if average && nrow(df) > 1
-        # Group by non-profile columns and average across profiles
         profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
         group_cols = setdiff(names(df), ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
-        
-        if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
-            # Simple case: just average all rows
-            avg_result = DataFrame(
-                term = [df.term[1]],
-                dydx = [mean(df.dydx)],
-                se = [sqrt(mean(df.se.^2))],  # RMS of standard errors
-            )
-            # Add other metadata columns that exist
-            for col in names(df)
-                if !(col in ["term", "dydx", "se", "z", "p", "ci_lo", "ci_hi"]) && !startswith(String(col), "at_")
-                    if length(unique(df[!, col])) == 1
-                        avg_result[!, col] = [df[1, col]]
-                    end
-                end
-            end
-        else
-            # Complex case: group by non-profile columns
-            avg_parts = DataFrame[]
-            for group in groupby(df, group_cols)
-                avg_group = DataFrame(
-                    term = [group.term[1]],
-                    dydx = [mean(group.dydx)],
-                    se = [sqrt(mean(group.se.^2))]
-                )
-                # Carry over group columns
-                for col in group_cols
-                    avg_group[!, col] = [group[1, col]]
-                end
-                push!(avg_parts, avg_group)
-            end
-            avg_result = vcat(avg_parts...)
-        end
-        df = avg_result
+        df = _average_profiles_with_proper_se(df, gradients_table_for_averaging, engine.Σ; group_cols=String.(group_cols))
     end
     
     # Add confidence intervals
