@@ -260,10 +260,21 @@ The package has been **successfully reorganized** following the FILE_PLAN.md wit
 
 ### **📋 Phase 3 — Future Enhancements**
 - 📋 **Expose elasticity features in main API** - Add `measure` parameter to public functions
-- 📋 **Bootstrap/jackknife standard errors** - Alternative SE computation methods  
-- 📋 **Plotting/reporting utilities** - Visualization and summary tools
-- 📋 **Additional convenience wrappers** - Statistical acronyms as aliases (e.g., `ame()`, `mem()`)
 - 📋 **Advanced categorical contrasts** - More contrast types and custom specifications
+- 📋 **Additional convenience wrappers** - Statistical acronyms as aliases (e.g., `ame()`, `mem()`) if needed
+
+### **🔮 Advanced Statistical Features (FUTURE ROADMAP)**
+- 📋 **Bootstrap inference** - Would complement our delta-method approach
+- 📋 **Survey designs** - Integration with survey weights/complex sampling
+- 📋 **Mixed models** - MixedModels.jl integration for random effects
+- 📋 **Partial effects** - Explicit API for holding subsets fixed
+- 📋 **Extrapolation diagnostics** - Convex hull warnings, leverage readouts
+
+### **🌐 Ecosystem Integration (FUTURE ROADMAP)**
+- 📋 **MLJ.jl integration** - Expand beyond GLM/StatsModels ecosystem
+- 📋 **Survival.jl integration** - Hazard ratios and survival contrasts
+- 📋 **Plotting utilities** - AlgebraOfGraphics/Makie integration
+- 📋 **Effect-size unitization** - Per-SD, per-IQR reporting options
 
 ### **❌ Not Yet Implemented:**
 - ❌ **Robust/cluster/HAC standard errors** - While CovarianceMatrices.jl integration exists for custom matrices, automatic robust SE computation is not implemented
