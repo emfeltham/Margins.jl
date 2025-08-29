@@ -47,20 +47,22 @@ println()
 
 println("=== PROFILE APPROACH (At specific covariate values) ===")
 
-# Note: Profile functions have some edge cases still being debugged
-println("4. Profile approach examples:")
-println("   (Note: profile_margins() has some compatibility issues being resolved)")
+# Example 4: Profile marginal effects at sample means (MEM)
+println("4. Profile marginal effects at sample means:")
+prof_education = profile_margins(wage_model, df; at=:means, type=:effects, vars=[:education])
+println(prof_education.table)
+println()
 
-# Simple profile example that should work
-println("   Demonstrating conceptual approach:")
-println("   profile_margins(model, data; at=:means, type=:effects, vars=[:education])")
-println("   profile_margins(model, data; at=Dict(:education=>[12,16,20]), type=:predictions)")
+# Example 5: Profile predictions at specific scenarios
+println("5. Profile predictions at specific education levels:")
+prof_pred = profile_margins(wage_model, df; at=Dict(:education=>[12.0, 16.0, 20.0]), type=:predictions)
+println(prof_pred.table)
 println()
 
 println("=== COMPARISON: Population vs Profile Framework ===")
 
-# Example 7: Compare the two approaches conceptually
-println("7. Framework comparison:")
+# Example 6: Compare the two approaches conceptually
+println("6. Framework comparison:")
 println("   Population approach: Averages across your actual sample distribution")
 println("   Profile approach: Evaluates at specific representative cases")
 println("   
@@ -73,8 +75,8 @@ println("
    ")
 println()
 
-# Example 8: GLM example with population approach
-println("8. GLM example - Urban residence probability (population effects):")
+# Example 7: GLM example with population approach
+println("7. GLM example - Urban residence probability (population effects):")
 urban_model = glm(@formula(urban ~ education + experience + wage), df, Binomial(), LogitLink())
 urban_effects = population_margins(urban_model, df; type=:effects, vars=[:education, :wage], target=:mu)
 println(urban_effects.table)
