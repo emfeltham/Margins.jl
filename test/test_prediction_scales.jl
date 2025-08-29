@@ -14,8 +14,8 @@ using Margins
     )
     
     @testset "LogitLink Predictions" begin
-        # Create binary outcome as Float64 for logistic regression
-        df.y_binom = Float64.(rand(n) .< (1 ./ (1 .+ exp.(-(0.3 .+ 0.8 .* df.x .- 0.2 .* df.z)))))
+        # Create binary outcome for logistic regression
+        df.y_binom = rand(n) .< (1 ./ (1 .+ exp.(-(0.3 .+ 0.8 .* df.x .- 0.2 .* df.z))))
         m_logit = glm(@formula(y_binom ~ x + z), df, Binomial(), LogitLink())
         
         # Test population predictions
@@ -131,7 +131,7 @@ end
         x = randn(n),
         z = randn(n)
     )
-    df.y = Float64.(rand(n) .< (1 ./ (1 .+ exp.(-(df.x)))))
+    df.y = rand(n) .< (1 ./ (1 .+ exp.(-(df.x))))
     
     m = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
     
@@ -159,7 +159,7 @@ end
         x1 = randn(n),
         x2 = randn(n)
     )
-    df.y = Float64.(rand(n) .< (1 ./ (1 .+ exp.(-(0.1 .+ 0.4.*df.x1 + 0.3.*df.x2)))))
+    df.y = rand(n) .< (1 ./ (1 .+ exp.(-(0.1 .+ 0.4.*df.x1 + 0.3.*df.x2))))
     
     m = glm(@formula(y ~ x1 + x2), df, Binomial(), LogitLink())
     
@@ -201,7 +201,7 @@ end
     n = 200
     df = DataFrame(
         x = randn(n),
-        y = Float64.(rand(Bool, n))
+        y = rand(Bool, n)
     )
     
     m = glm(@formula(y ~ x), df, Binomial(), LogitLink())

@@ -15,8 +15,8 @@ using Margins
     )
     
     @testset "LogitLink (Binomial GLM)" begin
-        # Create binary outcome as Float64 to avoid FormulaCompiler Bool issues
-        df.y_binom = Float64.(rand(n) .< (1 ./ (1 .+ exp.(-(0.5 .+ 1.0 .* df.x .- 0.3 .* df.z)))))
+        # Create binary outcome
+        df.y_binom = rand(n) .< (1 ./ (1 .+ exp.(-(0.5 .+ 1.0 .* df.x .- 0.3 .* df.z))))
         m_logit = glm(@formula(y_binom ~ x + z), df, Binomial(), LogitLink())
         
         # Test population margins
@@ -114,7 +114,7 @@ end
 @testset "_auto_link Function" begin
     Random.seed!(12345)
     n = 100
-    df = DataFrame(x = randn(n), y = Float64.(rand(Bool, n)))
+    df = DataFrame(x = randn(n), y = rand(Bool, n))
     
     @testset "GLM Models" begin
         # Test different GLM families
@@ -154,7 +154,7 @@ end
         x = randn(n),
         z = randn(n) 
     )
-    df.y = rand(n) .< (1 ./ (1 .+ exp.(-(0.5 .+ df.x))))
+    df.y = rand(Bool, n)
     
     m = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
     
@@ -183,7 +183,7 @@ end
         x2 = randn(n),
         x3 = randn(n)
     )
-    df.y = rand(n) .< (1 ./ (1 .+ exp.(-(0.2 .+ 0.5.*df.x1 .- 0.3.*df.x2 + 0.1.*df.x3))))
+    df.y = rand(Bool, n)
     
     m = glm(@formula(y ~ x1 + x2 + x3), df, Binomial(), LogitLink())
     

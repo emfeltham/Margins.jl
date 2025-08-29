@@ -90,13 +90,13 @@ where effects/predictions are calculated for each observation and then averaged.
 # Examples
 ```julia
 # Population average marginal effects (AME)
-population_margins(model, df; type=:effects, vars=[:x, :z], target=:mu)
+population_margins(model, df; type = :effects, vars = [:x, :z], target = :mu)
 
 # Population average predictions  
-population_margins(model, df; type=:predictions, scale=:response)
+population_margins(model, df; type = :predictions, scale = :response)
 
 # With grouping and weights
-population_margins(model, df; type=:effects, over=:region, weights=:survey_weight)
+population_margins(model, df; type = :effects, over = :region, weights = :survey_weight)
 ```
 
 This corresponds to traditional AME/APE approaches in the econometrics literature.
@@ -288,15 +288,19 @@ where effects/predictions are evaluated at explicit covariate combinations.
 # Examples
 ```julia
 # Effects at sample means (MEM)
-profile_margins(model, df; at=:means, type=:effects, vars=[:x, :z])
+profile_margins(model, df; at = :means, type = :effects, vars = [:x, :z])
 
 # Predictions at specific profiles (APR-style)
-profile_margins(model, df; at=Dict(:x=>[-1,0,1], :group=>["A","B"]), 
-                type=:predictions, scale=:response)
+profile_margins(
+    model, df; at = Dict(:x => [-1,0,1], :group => ["A","B"]), 
+    type = :predictions, scale = :response
+)
 
 # MER-style: focal variable grid with others at means
-profile_margins(model, df; at=Dict(:education=>[8,12,16,20], :experience=>[mean]),
-                type=:effects, vars=[:education])
+profile_margins(
+    model, df; at = Dict(:education => [8,12,16,20], :experience => [mean]),
+    type = :effects, vars = [:education]
+)
 ```
 
 This corresponds to traditional MEM/MER/APM/APR approaches in the econometrics literature.

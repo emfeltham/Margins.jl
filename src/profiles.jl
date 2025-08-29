@@ -15,10 +15,13 @@ function _build_profiles(at, data_nt::NamedTuple)
     elseif at === :means
         prof = Dict{Symbol,Any}()
         for (k, col) in pairs(data_nt)
-            if eltype(col) <: Real
+            if eltype(col) <: Real && !(eltype(col) <: Bool)
                 prof[k] = mean(col)
             elseif Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
                 prof[k] = levels(col)[1]
+            elseif eltype(col) <: Bool
+                # For Bool columns, use the first level (false) as default
+                prof[k] = false
             end
         end
         return [prof]
@@ -30,7 +33,7 @@ function _build_profiles(at, data_nt::NamedTuple)
         if haskey(at, :all)
             spec_all = at[:all]
             for (k, col) in pairs(data_nt)
-                if eltype(col) <: Real
+                if eltype(col) <: Real && !(eltype(col) <: Bool)
                     merged[k] = Any[_expand_at_values(data_nt, k, spec_all)...]
                 end
             end
