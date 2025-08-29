@@ -159,3 +159,66 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
     end
     return out
 end
+
+"""
+    _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target=:mu, backend=:ad)
+
+Compute continuous effects from pre-built profiles (bypassing _build_profiles step).
+Used by the table-based profile_margins dispatch.
+"""
+function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad)
+    (; compiled, de, vars, β, Σ, link) = engine
+    out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    
+    # Pre-allocate all profile columns to avoid column count mismatch
+    all_profile_keys = Set{Symbol}()
+    for prof in profiles
+        for k in keys(prof)
+            push!(all_profile_keys, Symbol("at_", k))
+        end
+    end
+    for col_name in all_profile_keys
+        out[!, col_name] = Union{Missing,Any}[]
+    end
+    
+    gβ = Vector{Float64}(undef, length(compiled))
+    # Use row=1 on scenario with overrides to emulate profile evaluation
+    for v in vars
+        for prof in profiles
+            scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+            # Value
+            g_row = Vector{Float64}(undef, length(vars))
+            if target === :eta
+                FormulaCompiler.marginal_effects_eta!(g_row, de, β, 1; backend=backend)
+                FormulaCompiler.me_eta_grad_beta!(gβ, de, β, 1, v)
+            else
+                FormulaCompiler.marginal_effects_mu!(g_row, de, β, 1; link=link, backend=backend)
+                FormulaCompiler.me_mu_grad_beta!(gβ, de, β, 1, v; link=link)
+            end
+            val = g_row[findfirst(==(v), vars)]
+            se = FormulaCompiler.delta_method_se(gβ, Σ)
+            
+            # Create row data
+            row_data = Dict{Symbol,Any}()
+            row_data[:term] = v
+            row_data[:dydx] = val
+            row_data[:se] = se
+            
+            # Add profile information
+            for (k, pv) in pairs(prof)
+                row_data[Symbol("at_", k)] = pv
+            end
+            
+            # Fill missing profile columns with missing
+            for col_name in all_profile_keys
+                if !haskey(row_data, col_name)
+                    row_data[col_name] = missing
+                end
+            end
+            
+            push!(out, row_data)
+        end
+    end
+    
+    return out
+end

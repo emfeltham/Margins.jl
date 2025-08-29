@@ -439,3 +439,177 @@ function profile_margins(
     
     return _new_result(df; md...)
 end
+
+"""
+    profile_margins(model, data, reference_grid::AbstractDataFrame; kwargs...) -> MarginsResult
+
+Compute marginal effects or predictions using a direct reference grid specification.
+This method provides maximum control by accepting the reference grid as a DataFrame,
+bypassing the `at` parameter parsing entirely.
+
+# Arguments
+- `model`: Fitted model (GLM, LM, etc.)
+- `data`: Original data used to fit the model
+- `reference_grid::AbstractDataFrame`: Table specifying exact covariate combinations for evaluation
+
+# Keywords
+- `type::Symbol = :effects`: `:effects` (derivatives/slopes) or `:predictions` (levels/values)
+- `vars = :continuous`: Variables for marginal effects (ignored for predictions)
+- `target::Symbol = :mu`: `:mu` (response scale) or `:eta` (link scale) for effects
+- `scale::Symbol = :response`: `:response` or `:link` for predictions
+- `average::Bool = false`: Collapse reference grid to single summary row
+- `vcov = :model`: Covariance specification (`:model`, matrix, function, or estimator)
+- `backend::Symbol = :ad`: Computational backend (`:ad` recommended for profiles)
+- `contrasts::Symbol = :pairwise`: Contrast type for categorical variables
+- `ci_level::Real = 0.95`: Confidence interval level
+- `mcompare::Symbol = :none`: Multiple comparison adjustment
+
+# Examples
+```julia
+# Custom reference grid with exact control
+reference_grid = DataFrame(
+    x1 = [1.0, 2.0, 1.0, 2.0],
+    x2 = [0.5, 0.5, 1.5, 1.5], 
+    treated = [true, false, true, false]
+)
+
+# Effects at these exact combinations
+result = profile_margins(model, data, reference_grid; 
+                        type = :effects, vars = [:x1])
+
+# Predictions at these exact combinations
+result = profile_margins(model, data, reference_grid;
+                        type = :predictions, scale = :response)
+```
+
+This approach provides maximum flexibility for complex reference grid specifications
+that may be difficult to express through the `at` parameter Dict syntax.
+"""
+function profile_margins(
+    model, data, reference_grid::AbstractDataFrame;
+    type::Symbol = :effects,
+    vars = :continuous,
+    target::Symbol = :mu,
+    scale::Symbol = :response,
+    average::Bool = false,
+    vcov = :model,
+    backend::Symbol = :ad,
+    contrasts::Symbol = :pairwise,
+    ci_level::Real = 0.95,
+    mcompare::Symbol = :none
+)
+    # Parameter validation
+    type in (:effects, :predictions) || throw(ArgumentError("type must be :effects or :predictions"))
+    target in (:mu, :eta) || throw(ArgumentError("target must be :mu or :eta"))
+    scale in (:response, :link) || throw(ArgumentError("scale must be :response or :link"))
+    
+    # Validate reference_grid
+    nrow(reference_grid) > 0 || throw(ArgumentError("reference_grid must have at least one row"))
+    
+    # Build computational engine
+    engine = _build_engine(model, data, vars, target)
+    Σ_override = _resolve_vcov(vcov, model, length(engine.β))
+    engine = (; engine..., Σ=Σ_override)
+    data_nt = engine.data_nt
+    
+    # Convert reference_grid DataFrame to Vector{Dict} format expected by internal functions
+    profs = Dict{Symbol,Any}[]
+    for row in eachrow(reference_grid)
+        prof_dict = Dict{Symbol,Any}()
+        for (col, val) in pairs(row)
+            prof_dict[col] = val
+        end
+        push!(profs, prof_dict)
+    end
+    
+    if type === :effects
+        # Profile effects - use existing computational paths but with direct profiles
+        cont_vars = [v for v in engine.vars if !_is_categorical(data_nt, v)]
+        cat_vars = [v for v in engine.vars if _is_categorical(data_nt, v)]
+        df_parts = DataFrame[]
+        
+        if !isempty(cont_vars)
+            eng_cont = (; engine..., vars=cont_vars)
+            # Use existing function but pass profiles directly as the 'at' parameter
+            push!(df_parts, _mem_mer_continuous_from_profiles(model, data_nt, eng_cont, profs; target=target, backend=backend))
+        end
+        if !isempty(cat_vars)
+            # For now, categorical effects with table-based profiles not yet implemented
+            @warn "Categorical effects with table-based reference grids not yet implemented. Only continuous effects supported."
+        end
+        
+        df = isempty(df_parts) ? DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]) : reduce(vcat, df_parts)
+    else  # :predictions
+        # Profile predictions - reuse existing computational path
+        target_pred = scale === :response ? :mu : :eta
+        df = _ap_profiles(model, data_nt, engine.compiled, engine.β, engine.Σ, profs; target=target_pred, link=engine.link)
+        df[!, :term] = fill(:prediction, nrow(df))
+    end
+    
+    # Handle averaging if requested
+    if average && nrow(df) > 1
+        # Group by non-profile columns and average across profiles
+        profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
+        group_cols = setdiff(names(df), ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
+        
+        if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
+            # Simple case: just average all rows
+            avg_result = DataFrame(
+                term = [df.term[1]],
+                dydx = [mean(df.dydx)],
+                se = [sqrt(mean(df.se.^2))],  # RMS of standard errors
+            )
+            # Add other metadata columns that exist
+            for col in names(df)
+                if !(col in ["term", "dydx", "se", "z", "p", "ci_lo", "ci_hi"]) && !startswith(String(col), "at_")
+                    if length(unique(df[!, col])) == 1
+                        avg_result[!, col] = [df[1, col]]
+                    end
+                end
+            end
+        else
+            # Complex case: group by non-profile columns
+            avg_parts = DataFrame[]
+            for group in groupby(df, group_cols)
+                avg_group = DataFrame(
+                    term = [group.term[1]],
+                    dydx = [mean(group.dydx)],
+                    se = [sqrt(mean(group.se.^2))]
+                )
+                # Carry over group columns
+                for col in group_cols
+                    avg_group[!, col] = [group[1, col]]
+                end
+                push!(avg_parts, avg_group)
+            end
+            avg_result = vcat(avg_parts...)
+        end
+        df = avg_result
+    end
+    
+    # Add confidence intervals
+    dof = _try_dof_residual(model)
+    groupcols = Symbol[]
+    # Include profile columns in grouping for CI computation
+    append!(groupcols, [Symbol(c) for c in names(df) if startswith(String(c), "at_")])
+    _add_ci!(df; level=ci_level, dof=dof, mcompare=mcompare, groupcols=groupcols)
+    
+    # Build result metadata
+    md = (; 
+        mode = type === :effects ? :effects : :predictions,
+        dydx = vars, 
+        target = target, 
+        scale = scale,
+        at = reference_grid,  # Store the original reference grid
+        backend = backend, 
+        contrasts = contrasts, 
+        by = nothing,  # Grouping not supported in this dispatch
+        average = average,
+        n = _nrows(data_nt), 
+        link = string(typeof(engine.link)), 
+        dof = dof, 
+        vcov = vcov
+    )
+    
+    return _new_result(df; md...)
+end
