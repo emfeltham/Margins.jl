@@ -1,18 +1,36 @@
 # Reference Grid Specification
 
-Reference grids define the covariate scenarios where marginal effects and predictions are evaluated in profile-based analysis. Margins.jl provides a flexible, unified system for specifying reference grids through the `at` parameter in `profile_margins()`.
+Reference grids define the covariate scenarios where marginal effects and predictions are evaluated in profile-based analysis. Margins.jl provides a flexible, unified system for specifying reference grids through two main approaches:
+
+1. **Dict-based specification** via the `at` parameter
+2. **Table-based specification** via direct DataFrame input
 
 ## Overview
 
-When computing profile margins, you specify scenarios using the `at` parameter:
+### Dict-Based Approach
+
+Specify scenarios using the `at` parameter with various Dict formats:
 
 ```julia
 profile_margins(model, data; at=scenarios, type=:effects, ...)
 ```
 
-The reference grid system supports multiple specification methods, all processed through a unified architecture that flows through `_build_profiles()` → `FormulaCompiler.create_scenario()`.
+### Table-Based Approach
 
-## Specification Methods
+Specify scenarios directly as a DataFrame for maximum control:
+
+```julia
+reference_grid = DataFrame(
+    x1 = [0.0, 1.0, 0.0, 1.0],
+    x2 = [0.5, 0.5, -0.5, -0.5],
+    treated = [true, false, true, false]
+)
+profile_margins(model, data, reference_grid; type=:effects, ...)
+```
+
+Both approaches use a unified architecture that flows through `_build_profiles()` or direct conversion → `FormulaCompiler.create_scenario()`.
+
+## Dict-Based Specification Methods
 
 ### 1. Cartesian Product Grids
 
@@ -164,5 +182,100 @@ predictions = profile_margins(
     model, data; at = grid, type = :predictions, scale = :response
 )
 ```
+
+## Table-Based Specification
+
+For maximum control and complex scenarios that are difficult to express through Dict syntax, use the table-based approach by passing a DataFrame directly as the third argument:
+
+### Basic Table-Based Usage
+
+```julia
+# Define exact covariate combinations
+reference_grid = DataFrame(
+    x1 = [0.0, 1.0, 0.0, 1.0, 2.0],
+    x2 = [0.5, 0.5, -0.5, -0.5, 0.0],
+    treated = [true, false, true, false, false]
+)
+
+# Compute effects at these exact combinations
+results = profile_margins(model, data, reference_grid; type=:effects, vars=[:x1])
+
+# Compute predictions at these exact combinations
+predictions = profile_margins(model, data, reference_grid; type=:predictions, scale=:response)
+```
+
+### Advanced Table-Based Examples
+
+```julia
+# Complex interaction analysis
+interaction_grid = DataFrame(
+    age = [25, 25, 65, 65],
+    income = [30000, 80000, 30000, 80000],
+    treatment = [false, false, true, true],
+    region = ["urban", "rural", "urban", "rural"]
+)
+
+# Non-uniform spacing for dose-response analysis
+dose_response_grid = DataFrame(
+    dose = [0.0, 0.1, 0.5, 2.0, 10.0],  # Log-spaced doses
+    age = [40.0, 40.0, 40.0, 40.0, 40.0],  # Fixed age
+    weight = [70.0, 70.0, 70.0, 70.0, 70.0]  # Fixed weight
+)
+
+# Factorial design with unbalanced scenarios
+factorial_grid = DataFrame(
+    factor_a = [1, 1, 2, 2, 3],
+    factor_b = [1, 2, 1, 2, 1],  # Unbalanced - no (3,2) combination
+    covariate = [0.0, 0.5, -0.5, 1.0, 0.25]
+)
+```
+
+### Advantages of Table-Based Specification
+
+1. **Exact Control**: Specify any combination of covariate values, including irregular grids
+2. **Complex Designs**: Handle factorial, response surface, or custom experimental designs
+3. **Unbalanced Scenarios**: Include only the specific combinations you need
+4. **External Integration**: Import reference grids from spreadsheets, databases, or other analyses
+5. **Reproducible Research**: Store and version control exact evaluation points
+
+### Equivalence Between Approaches
+
+The two approaches are equivalent when the table represents a full Cartesian product:
+
+```julia
+# Dict approach (Cartesian product)
+dict_spec = Dict(:x1 => [0.0, 1.0], :x2 => [0.5, -0.5])
+
+# Equivalent table approach
+table_spec = DataFrame(
+    x1 = [0.0, 0.0, 1.0, 1.0],
+    x2 = [0.5, -0.5, 0.5, -0.5]
+)
+
+# These produce identical results
+result1 = profile_margins(model, data; at=dict_spec, type=:effects, vars=[:x1])
+result2 = profile_margins(model, data, table_spec; type=:effects, vars=[:x1])
+```
+
+### Current Limitations
+
+- **Continuous variables only**: Table-based approach currently supports only continuous marginal effects
+- **No categorical contrasts**: Categorical variable effects not yet implemented for table-based specification
+- **No grouping**: Same limitation as Dict-based approach for `over`/`by` parameters
+
+## Choosing Between Approaches
+
+**Use Dict-based specification when:**
+- Creating regular grids (Cartesian products)
+- Using summary statistics (means, quantiles)
+- Working with simple factorial designs
+- Need categorical variable contrasts
+
+**Use table-based specification when:**
+- Requiring exact control over covariate combinations
+- Working with irregular or unbalanced designs
+- Importing scenarios from external sources
+- Analyzing complex interaction patterns
+- Need to exclude specific covariate combinations
 
 This unified reference grid system provides the flexibility to specify complex evaluation scenarios while maintaining consistent, predictable behavior across all profile-based computations.

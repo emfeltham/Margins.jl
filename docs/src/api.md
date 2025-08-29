@@ -1,25 +1,22 @@
-# Core functions
+# Core API Functions
 
-## Average marginal effects (AME)
+Margins.jl provides a clean two-function API for marginal effects analysis:
 
-```@docs
-margins
-```
+## Population Margins
 
 ```@docs
-contrast
+population_margins
 ```
+
+## Profile Margins
 
 ```@docs
-contrast_levels
+profile_margins
 ```
 
-## Average predictions at the mean (APM)
+The package supports two approaches for profile-based analysis:
 
-```@docs
-effects2!
-```
+1. **Dict-based specification**: Use the `at` parameter with various Dict formats
+2. **Table-based specification**: Pass a DataFrame directly for maximum control
 
-```@docs
-effectsΔyΔx
-```
+See [Reference Grid Specification](reference_grids.md) for comprehensive documentation on both approaches.
