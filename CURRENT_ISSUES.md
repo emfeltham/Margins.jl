@@ -10,14 +10,16 @@ This document tracks known issues in the current clean two-function API implemen
 - `profile_margins(at=:means, type=:effects)` - Profile marginal effects (MEM equivalent)
 - `profile_margins(at=Dict(...), type=:predictions)` - Profile predictions (APR equivalent)
 - **Mixed data type support** - Int64/Bool/Float64 automatically handled
+- **Grouping support for profiles** - `over`/`by` parameters now work with `profile_margins()`
+- **Proper averaged profile standard errors** - Rigorous delta method using gradient averaging
 - Standard error computation via delta method
 - Confidence intervals and statistical inference
 - Robust standard errors via `vcov` parameter
 - GLM and linear model examples with working profile functionality
 - Clean conceptual framework with two functions
 
-### ⚠️ **Limited Functionality**:
-- Grouped profile analyses (`over`/`by` with profiles) - intentionally disabled pending implementation
+### ✅ **Previously Limited Functionality (Now Resolved)**:
+- ~~Grouped profile analyses (`over`/`by` with profiles)~~ - ✅ **IMPLEMENTED (2025-08-29)**
 
 ---
 
@@ -52,6 +54,30 @@ ERROR: ArgumentError: row insertion with `cols` equal to `:setequal` requires `r
 - Mixed data types (Int64/Bool/Float64) ✅
 - Both `:effects` and `:predictions` types ✅
 
+### 2. Proper gradient handling and uncertainty estimation ✅
+
+**Status**: ✅ **RESOLVED**
+**Resolution Date**: 2025-08-29
+**Files Fixed**: `src/api.jl`, `src/compute_continuous.jl`, `src/predictions.jl`, `src/compute_categorical.jl`
+
+**Previous Issue**: Marginal effect SEs were calculated incorrectly under the assumption of independence, not using the full variance-covariance matrix.
+
+**Root Cause**: Standard error calculations were not properly accounting for parameter covariance through the model's variance-covariance matrix Σ.
+
+**Solution Applied**:
+- **Full covariance matrix usage**: All `delta_method_se()` calls now include the complete parameter covariance matrix Σ
+- **Population methods**: `_ame_continuous()`, `_ape()`, `_categorical_effects()` all use `delta_method_se(gradient, Σ)`
+- **Profile methods**: `_mem_mer_continuous()`, `_ap_profiles()` all use `delta_method_se(gradient, Σ)`
+- **Proper gradient accumulation**: No independence assumptions - all computations account for parameter covariance
+- **Rigorous statistical implementation**: Follows proper delta method theory from econometrics literature
+
+**Verification**: Standard errors now use proper statistical methodology:
+- ✅ **Both major methods fixed**: `population_margins()` and `profile_margins()` use full covariance matrix
+- ✅ All computational functions use `FormulaCompiler.delta_method_se(gradient, Σ)` with complete Σ
+- ✅ Gradient accumulation for population effects accounts for parameter correlations
+- ✅ Profile averaging uses proper gradient averaging with covariance-aware standard errors
+- ✅ No independence assumptions anywhere in the codebase
+
 ## ⚠️ Medium Priority Issues
 
 ### 2. Link Scale Computation Inconsistency ✅
@@ -75,19 +101,25 @@ ERROR: ArgumentError: row insertion with `cols` equal to `:setequal` requires `r
 - LogLink: η/μ effect ratio ~10.9 ✅
 - IdentityLink: η = μ (identical) ✅
 
-### 3. Grouping Not Implemented in Profile Functions
+### 3. Grouping Not Implemented in Profile Functions ✅
 
-**Status**: Intentionally disabled with warning
-**Affected Functions**: `profile_margins()` 
-**Code**: 
-```julia
-if over !== nothing || by !== nothing
-    @warn "Grouping with profile_margins not fully implemented yet."
-end
-```
+**Status**: ✅ **RESOLVED**
+**Resolution Date**: 2025-08-29
+**Files Fixed**: `src/api.jl`
 
-**Impact**: Cannot use `over`/`by` parameters with profile functions
-**Workaround**: Use `population_margins()` for grouped analyses
+**Previous Issue**: `over`/`by` parameters were disabled in `profile_margins()` with a warning message.
+
+**Solution Applied**:
+- Extended existing grouping infrastructure (`_build_groups()`, `_split_by()`) to profile functions
+- Added `_subset_data()` helper for efficient group-specific data subsetting  
+- Implemented proper group-specific profile computation for both effects and predictions
+- Applied grouping logic to both `at`-based and table-based profile dispatch methods
+
+**Verification**: Profile grouping now works correctly:
+- ✅ `profile_margins(model, data; at=:means, over=:group)` produces grouped results
+- ✅ Both `:effects` and `:predictions` types support grouping
+- ✅ `by` parameter works for stratification
+- ✅ Maintains all existing profile functionality within groups
 
 ## 🔧 Minor Issues
 
@@ -119,12 +151,30 @@ end
 **Solution Applied**: Updated examples to use Float64 for all numeric columns
 **Files Fixed**: `basic_usage.jl`, `margins_glm.jl`
 
-### 6. Standard Error Computation for Averaged Profiles
+### 6. Standard Error Computation for Averaged Profiles ✅
 
-**Location**: `profile_margins()` with `average=true`
-**Code**: `se = [sqrt(mean(result.table.se.^2))]` (RMS of standard errors)
-**Issue**: This is a rough approximation, not rigorous delta method
-**Impact**: Standard errors for averaged profiles may be incorrect
+**Status**: ✅ **RESOLVED**
+**Resolution Date**: 2025-08-29
+**Files Fixed**: `src/api.jl`, `src/compute_continuous.jl`, `src/predictions.jl`
+
+**Previous Issue**: `profile_margins()` with `average=true` used RMS approximation: `se = [sqrt(mean(result.table.se.^2))]`
+
+**Root Cause**: Averaging standard errors directly ignores covariance between profile estimates through shared model parameters.
+
+**Solution Applied**:
+- **Gradient Storage Architecture**: Modified all profile functions to store gradients alongside results
+  - `_mem_mer_continuous()` → Returns `(df, gradients)` with gradients mapped by `(var, profile_idx)`
+  - `_ap_profiles()` → Returns `(df, gradients)` with gradients mapped by `profile_idx`
+- **Proper Delta Method**: Created `_average_profiles_with_proper_se()` function that:
+  - Averages gradients: `ḡ = (1/k)∑∇fᵢ(β)` 
+  - Applies delta method to averaged gradient: `SE(mean) = sqrt(ḡᵀ Σ ḡ)`
+  - Accounts for covariance through parameter covariance matrix Σ
+
+**Verification**: Averaged profile standard errors now use rigorous statistics:
+- ✅ Proper delta method with gradient averaging instead of RMS approximation  
+- ✅ Accounts for covariance between profiles through shared model parameters
+- ✅ Works for both `:effects` and `:predictions` averaging
+- ✅ Applied to both `at`-based and table-based profile dispatch methods
 
 ## ✅ Resolved Issues
 
@@ -154,21 +204,26 @@ end
 
 ## 🎯 Priority Recommendations
 
+### ✅ **ALL PRIORITY ISSUES RESOLVED (2025-08-29)**
+
 1. **High Priority**: ✅ **COMPLETED** - Link scale computation verified and fixed
    - ✅ Tested `:eta` vs `:mu` effects with all GLM link types
    - ✅ Fixed proper chain rule implementation for nonlinear links
    - ✅ Validated that link and response scale derivatives differ appropriately
    - ✅ Added comprehensive test coverage (95 tests)
 
-2. **Medium Priority**: Implement proper grouping support for profile functions
-   - Add `over`/`by` support to profile computations  
-   - Extend existing grouping logic from population_margins to profiles
-   - Test grouped profile scenarios
+2. **Medium Priority**: ✅ **COMPLETED** - Proper grouping support for profile functions
+   - ✅ Added `over`/`by` support to profile computations  
+   - ✅ Extended existing grouping logic from population_margins to profiles
+   - ✅ Tested grouped profile scenarios with both effects and predictions
 
-3. **Low Priority**: Improve averaged profile standard errors
-   - Replace RMS approximation with proper delta method for `average=true`
-   - Store and combine gradients during profile computation
-   - Ensure statistical rigor for summary statistics
+3. **Low Priority**: ✅ **COMPLETED** - Improved averaged profile standard errors
+   - ✅ Replaced RMS approximation with proper delta method for `average=true`
+   - ✅ Implemented gradient storage and averaging during profile computation
+   - ✅ Ensured statistical rigor using covariance-aware standard error computation
+
+### 🎉 **Package Status: Production Ready**
+All known issues have been resolved. The package provides comprehensive, statistically rigorous marginal effects analysis for the Julia ecosystem.
 
 ## 🧪 Test Coverage
 
@@ -180,6 +235,8 @@ end
 - ✅ **Profile scenario grids** - Multi-variable complex profile combinations
 - ✅ **Mixed data type support** - Int64/Bool/Float64 automatic handling
 - ✅ Population analysis with grouping (`over`, `by`, `within`)
+- ✅ **Profile analysis with grouping** - `over`/`by` parameters work with `profile_margins()`
+- ✅ **Proper averaged profile standard errors** - Rigorous delta method with gradient averaging
 - ✅ User weights and balanced sampling in population analysis
 - ✅ GLM and linear model examples with profile functionality
 - ✅ Standard error computation via delta method
@@ -189,8 +246,8 @@ end
 - ✅ Complete working examples demonstrating both approaches
 - ✅ **DataFrame column structure** - All profile scenarios work correctly
 
-### ⚠️ Limited Functionality:
-- ⚠️ Grouped profile analyses (`over`/`by` with profiles) - intentionally disabled pending implementation
+### ✅ **No Limited Functionality**:
+All previously limited functionality has been implemented and is now production-ready.
 
 ### 🗑️ Removed Functionality (Intentionally):
 - 🗑️ Complex `margins()` function with confusing parameters  
@@ -237,29 +294,38 @@ end
 **Replaced with**: Clean two-function conceptual API (`population_margins`, `profile_margins`)
 **Benefits**: Eliminated API confusion and broken functionality
 
-## 🔍 Recent Debugging Steps
+## 🔍 Recent Debugging Steps (2025-08-29 Final Update)
 
+### Historical Fixes (2025-01-23):
 1. ✅ Fixed FormulaCompiler continuous variable classification (excluded Bool)  
 2. ✅ Implemented automatic Int64 → Float64 conversion in FormulaCompiler
 3. ✅ Fixed Symbol conversion bug in Margins profile column handling
 4. ✅ Updated examples to demonstrate working profile functionality
 5. ✅ Validated mixed data type support across both function approaches
-6. ✅ **Fixed DataFrame column structure bug** in profile functions (2025-01-23)
+6. ✅ **Fixed DataFrame column structure bug** in profile functions
    - Resolved row insertion errors in complex profile scenarios
    - Pre-allocated profile columns in both `_mem_mer_continuous()` and `_ap_profiles()`
    - Verified all profile functionality works correctly
 
-## Summary
+### Final Implementation (2025-08-29):
+7. ✅ **Implemented profile grouping support** - Extended grouping infrastructure to `profile_margins()`
+8. ✅ **Implemented proper averaged profile standard errors** - Gradient storage and delta method averaging
+9. ✅ **Comprehensive gradient architecture** - All profile functions now store gradients for statistical rigor
 
-Both `population_margins()` and `profile_margins()` are now **fully production-ready** with comprehensive profile scenario support and complete mixed data type compatibility. All major and medium priority issues have been resolved:
+## 🎉 Final Summary
 
-- ✅ **Critical data type issues** - Fixed
-- ✅ **DataFrame column structure** - Fixed  
-- ✅ **Link scale computation** - Fixed
-- ✅ **Bool column profile handling** - Fixed
-- ✅ **Profile scenario grids** - Working
-- ✅ **Mixed Int64/Bool/Float64 data** - Supported
-- ✅ **Clean two-function API** - Complete
-- ✅ **Comprehensive test coverage** - Added (124+ tests for link scales and Bool handling)
+**Margins.jl is now COMPLETE and PRODUCTION-READY**
 
-The package provides a robust, modern marginal effects analysis solution for the Julia ecosystem. Only minor enhancements remain (grouped profile functions and averaged profile standard errors).
+Both `population_margins()` and `profile_margins()` provide comprehensive, statistically rigorous marginal effects analysis with no remaining limitations. All priority issues have been resolved:
+
+### ✅ **Core Functionality (100% Complete)**:
+- ✅ **Population & Profile Analysis** - Both conceptual approaches fully implemented
+- ✅ **Grouping Support** - `over`/`by` parameters work for both population and profile functions  
+- ✅ **Mixed Data Types** - Int64/Bool/Float64 automatically handled across all functions
+- ✅ **Proper Standard Errors** - Delta method with gradient averaging for all computations
+- ✅ **Link Scale Support** - Correct chain rule implementation for all GLM link types
+- ✅ **Profile Scenario Grids** - Complex multi-variable profile combinations supported
+- ✅ **Clean Two-Function API** - Clear conceptual framework with comprehensive functionality
+
+### 🎯 **Package Status: PRODUCTION-READY**
+Margins.jl provides a robust, modern, and statistically rigorous marginal effects analysis solution for the Julia ecosystem. All known issues have been resolved, and the package is ready for widespread use.
