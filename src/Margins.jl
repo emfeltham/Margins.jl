@@ -8,21 +8,33 @@ using Tables, DataFrames
 using StatsModels, GLM, CategoricalArrays
 using FormulaCompiler
 using CovarianceMatrices
+using Distributions
 
 # Public API exports - Clean two-function design
 export population_margins, profile_margins, MarginsResult
 # Categorical mixture support
 export mix, CategoricalMixture
 
-# Internal modules
-include("results.jl")     # Result type and builders
-include("link.jl")        # Link utilities
-include("categorical_mixtures.jl")  # Categorical mixture support for profiles
-include("engine_fc.jl")   # Build compiled + evaluator + model info
-include("profiles.jl")    # at = :means and profile grids
-include("predictions.jl") # APE/APM/APR computations
-include("compute_continuous.jl")  # AME/MEM/MER continuous effects
-include("compute_categorical.jl") # Categorical contrasts (stubs initially)
-include("api.jl")         # User-facing API and dispatch
+# Core Infrastructure
+include("core/utilities.jl")          # General utility functions
+include("core/grouping.jl")           # Grouping and stratification utilities
+include("core/results.jl")            # Result types and display
+include("core/profiles.jl")           # Profile grid building and processing
+include("core/link.jl")               # Link function utilities
+
+# Computation Engine
+include("computation/engine.jl")       # FormulaCompiler integration
+include("computation/continuous.jl")   # Continuous marginal effects (AME/MEM/MER)
+include("computation/categorical.jl")  # Categorical contrasts and discrete changes
+include("computation/predictions.jl")  # Adjusted predictions (APE/APM/APR)
+
+# Advanced Features
+include("features/categorical_mixtures.jl")  # Categorical mixture support
+include("features/averaging.jl")             # Proper delta method averaging for profiles
+
+# API Layer
+include("api/common.jl")              # Shared API utilities and helpers
+include("api/population.jl")          # Population margins API (AME/APE)
+include("api/profile.jl")             # Profile margins API (MEM/MER/APM/APR)
 
 end # module

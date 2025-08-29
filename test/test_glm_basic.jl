@@ -41,26 +41,26 @@ using Margins
     # Grouping: over and by
     over_res = population_margins(m, df; type=:effects, vars=[:x], target=:mu, over=:g)
     @test nrow(over_res.table) == length(levels(df.g))
-    @test haskey(over_res.table, :g)
+    @test "g" in names(over_res.table)
 
     by_res = population_margins(m, df; type=:effects, vars=[:x], target=:mu, by=:g)
     @test nrow(by_res.table) == length(levels(df.g))
-    @test haskey(by_res.table, :g)
+    @test "g" in names(by_res.table)
 
-    # Weights and asbalanced
+    # Weights and balance
     w = rand(n)
-    ame_w = ame(m, df; dydx=[:x], target=:mu, weights=w)
+    ame_w = population_margins(m, df; type=:effects, vars=[:x], target=:mu, weights=w)
     @test nrow(ame_w.table) == 1
-    ame_bal = ame(m, df; dydx=[:x], target=:mu, asbalanced=true)
+    ame_bal = population_margins(m, df; type=:effects, vars=[:x], target=:mu, balance=:all)
     @test nrow(ame_bal.table) == 1
-    # asbalanced over subset (only g)
-    ame_bal_g = ame(m, df; dydx=[:x], target=:mu, asbalanced=[:g])
+    # balance over subset (only g)
+    ame_bal_g = population_margins(m, df; type=:effects, vars=[:x], target=:mu, balance=[:g])
     @test nrow(ame_bal_g.table) == 1
 
     # vcov overrides (matrix and function) should not change point estimates
     Σ = vcov(m)
-    ame_vΣ = ame(m, df; dydx=[:x], target=:mu, vcov=Σ)
-    ame_vf = ame(m, df; dydx=[:x], target=:mu, vcov = m->vcov(m))
+    ame_vΣ = population_margins(m, df; type=:effects, vars=[:x], target=:mu, vcov=Σ)
+    ame_vf = population_margins(m, df; type=:effects, vars=[:x], target=:mu, vcov = m->vcov(m))
     @test isapprox(ame_vΣ.table.dydx[1], ame_vf.table.dydx[1]; rtol=1e-12)
 end
 
