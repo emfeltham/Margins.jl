@@ -3,31 +3,31 @@ using Random
 using DataFrames, CategoricalArrays, GLM
 using Margins
 
-@testset "Profiles (at) semantics" begin
+@testset "Profile margins (at) semantics" begin
     Random.seed!(123)
     n = 200
     df = DataFrame(
         y = randn(n),
-        x = randn(n),
-        z = randn(n),
+        x = Float64.(randn(n)),  # Ensure Float64 for compatibility
+        z = Float64.(randn(n)),  # Ensure Float64 for compatibility
         g = categorical(rand(["A","B","C"], n))
     )
     m = lm(@formula(y ~ x + z + g), df)
 
-    # at=:means vs at=Dict(:all=>:mean)
-    apm1 = apm(m, df)  # uses at=:means
-    apm2 = apr(m, df; at=Dict(:all=>:mean))
-    @test nrow(apm1.table) == 1
-    @test nrow(apm2.table) == 1
+    # Profile predictions at means
+    profile1 = profile_margins(m, df; type=:predictions, at=:means)
+    profile2 = profile_margins(m, df; type=:predictions, at=Dict(:all=>:mean))
+    @test nrow(profile1.table) == 1
+    @test nrow(profile2.table) == 1
 
     # general→specific precedence: :all then x override
     atspec = Dict(:all=>:mean, :x=>[-1.0, 0.0, 1.0])
-    apr_spec = apr(m, df; at=atspec)
-    @test nrow(apr_spec.table) == 3
-    @test haskey(apr_spec.table, Symbol("at_", :x))
+    profile_spec = profile_margins(m, df; type=:predictions, at=atspec)
+    @test nrow(profile_spec.table) == 3
+    @test haskey(profile_spec.table, Symbol("at_", :x))
 
     # numlist parsing e.g., "-2(2)2" becomes [-2,0,2]
-    apr_num = apr(m, df; at=Dict(:x=>"-2(2)2"))
+    profile_num = profile_margins(m, df; type=:predictions, at=Dict(:x=>"-2(2)2"))
     @test nrow(apr_num.table) == 3
 
     # multiple at blocks concatenation
