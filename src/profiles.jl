@@ -68,10 +68,21 @@ function _build_profiles(at, data_nt::NamedTuple)
 end
 
 function _expand_at_values(data_nt::NamedTuple, var::Symbol, spec)
-    if spec isa AbstractVector
+    if spec isa CategoricalMixture
+        # Validate mixture against actual data
+        col = getproperty(data_nt, var)
+        _validate_mixture_against_data(spec, col, var)
+        return [spec]  # Return mixture object directly for special handling
+    elseif spec isa AbstractVector
         return collect(spec)
     elseif spec isa AbstractString
-        return _parse_numlist(spec)
+        # Check if this is a categorical variable - if so, treat string as categorical level
+        col = getproperty(data_nt, var)
+        if col isa CategoricalArray || eltype(col) <: AbstractString
+            return [spec]  # Categorical level string, don't parse as number
+        else
+            return _parse_numlist(spec)  # Numeric string for continuous variables
+        end
     elseif spec isa Symbol
         col = getproperty(data_nt, var)
         if spec === :mean

@@ -76,7 +76,8 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         acc_gβ = zeros(Float64, length(compiled))
         n = 0
         for prof in profiles
-            scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+            processed_prof = _process_profile_for_scenario(prof, data_nt)
+            scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
             η = _predict_eta!(xbuf, compiled, scen.data, 1, β)
             if target === :mu
                 μ = GLM.linkinv(link, η)
@@ -95,7 +96,8 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         return out
     end
     for prof in profiles
-        scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+        processed_prof = _process_profile_for_scenario(prof, data_nt)
+        scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
         η = _predict_eta!(xbuf, compiled, scen.data, 1, β)  # single-row synthetic; value drawn from profile
         # Create row with profile columns
         if target === :mu

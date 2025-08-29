@@ -10,6 +10,34 @@ As it stands, marginal effect calculations, and AME calculations in particular, 
 
 Note that this package is similar in spirit to [Effects.jl](https://github.com/beacon-biosignals/Effects.jl), and borrows directly from it for the APM calculations. Ultimately, the design of this package refers heavily to Stata's ["margins"](https://www.stata.com/manuals/cmmargins.pdf) commands.
 
+## Key Features
+
+- **Population vs Profile Framework**: Clean conceptual separation between population-average effects and effects at specific representative scenarios
+- **High Performance**: Zero-allocation evaluation using FormulaCompiler.jl for production-scale analysis
+- **Categorical Mixtures**: Specify population composition scenarios for policy analysis and counterfactual modeling
+- **Flexible Reference Grids**: Both Dict-based and table-based approaches for complex scenario specification  
+- **Comprehensive Standard Errors**: Delta-method standard errors with robust/clustered options
+
+## Quick Example
+
+```julia
+using Margins, GLM, DataFrames
+
+# Fit model
+model = lm(@formula(outcome ~ education + age + income), data)
+
+# Population-average effects (AME-style)  
+population_results = population_margins(model, data; type=:effects)
+
+# Profile analysis with categorical mixtures
+scenarios = Dict(
+    :education => mix("high_school" => 0.4, "college" => 0.4, "graduate" => 0.2),
+    :age => [25, 50, 65],
+    :income => :mean
+)
+profile_results = profile_margins(model, data; at=scenarios, type=:predictions)
+```
+
 ## Resources
 
 Williams, R. (2012). Using the margins command to estimate and interpret adjusted predictions and marginal effects. The Stata Journal, 12(2), 308–331. [https://www.stata-journal.com/article.html?article=st0260](https://www.stata-journal.com/article.html?article=st0260)

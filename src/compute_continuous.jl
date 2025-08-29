@@ -115,7 +115,8 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for var in vars
         for prof in profiles
-            scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+            processed_prof = _process_profile_for_scenario(prof, data_nt)
+            scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
             # Value
             g_row = Vector{Float64}(undef, length(vars))
             if target === :eta
@@ -185,7 +186,8 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for v in vars
         for prof in profiles
-            scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+            processed_prof = _process_profile_for_scenario(prof, data_nt)
+            scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
             # Value
             g_row = Vector{Float64}(undef, length(vars))
             if target === :eta

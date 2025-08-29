@@ -67,7 +67,8 @@ function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contra
                 # Profiles: compute per profile (row=1 equivalent)
                 profiles = _build_profiles(at, data_nt)
                 for prof in profiles
-                    scen = FormulaCompiler.create_scenario("profile", data_nt, Dict{Symbol,Any}(prof))
+                    processed_prof = _process_profile_for_scenario(prof, data_nt)
+                    scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
                     FormulaCompiler.contrast_modelrow!(Δ, compiled, scen.data, 1; var=var, from=from, to=to)
                     if target === :eta
                         val = dot(β, Δ)

@@ -124,6 +124,113 @@ at = Dict(
 
 This allows modeling scenarios with different population compositions rather than just individual-level contrasts.
 
+### Categorical Mixtures
+
+For categorical variables, Margins.jl supports **categorical mixtures** that specify population composition scenarios using the `mix()` function. This extends fractional specification beyond boolean variables to multi-level categorical variables.
+
+#### Basic Categorical Mixture Syntax
+
+```julia
+# Specify population composition for education levels
+edu_mix = mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2)
+
+at = Dict(
+    :education => edu_mix,
+    :age => [25, 50, 65],
+    :income => :mean
+)
+
+result = profile_margins(model, data; at=at, type=:predictions)
+```
+
+#### Key Features
+
+- **Sum-to-1 validation**: Mixture weights must sum to 1.0 (throws `ArgumentError` if not)
+- **Level validation**: All mixture levels must exist in the original categorical variable
+- **Weighted contrasts**: Uses true weighted combination of contrast matrix rows, not approximations
+- **Integration**: Works seamlessly with existing numeric profile specifications
+
+#### Multiple Categorical Mixtures
+
+Combine multiple categorical mixtures in the same scenario:
+
+```julia
+# Population composition for multiple categorical variables
+scenarios = Dict(
+    :education => mix("high_school" => 0.4, "college" => 0.4, "graduate" => 0.2),
+    :region => mix("urban" => 0.65, "rural" => 0.35),
+    :employed => mix(true => 0.75, false => 0.25),  # Boolean mixture
+    :age => 40,  # Fixed continuous value
+    :income => 50000
+)
+
+result = profile_margins(model, data; at=scenarios, type=:predictions)
+```
+
+#### Mathematical Foundation
+
+Categorical mixtures compute **true weighted combinations** of contrast matrix rows rather than using single discrete levels:
+
+```julia
+# Standard categorical specification (single level)
+at = Dict(:education => "college")  # Uses one contrast matrix row
+
+# Categorical mixture (weighted combination)  
+at = Dict(:education => mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2))
+# Computes: 0.3 * contrast_matrix[hs_row, :] + 0.5 * contrast_matrix[col_row, :] + 0.2 * contrast_matrix[grad_row, :]
+```
+
+This enables population-level analysis where you want to understand effects or predictions for a **mixed population** with specific demographic composition, rather than just individual-level scenarios.
+
+#### Boolean Mixtures
+
+Boolean variables support mixture specification using either boolean values or strings:
+
+```julia
+# Both equivalent for boolean variables
+employment_mix1 = mix(true => 0.7, false => 0.3)          # 70% employed
+employment_mix2 = mix("true" => 0.7, "false" => 0.3)      # Same result
+
+# Usage in profiles
+at = Dict(:employed => employment_mix1, :age => :mean)
+```
+
+#### Use Cases
+
+1. **Population Policy Analysis**: Model effects of policies on populations with specific demographic compositions
+2. **Counterfactual Analysis**: "What if our customer base was 40% college-educated instead of 60%?"
+3. **Market Research**: Predictions for target demographics with known composition
+4. **Clinical Trials**: Effects in populations with specific comorbidity patterns
+
+#### Error Handling
+
+```julia
+# These will throw ArgumentError
+mix("high_school" => 0.3, "college" => 0.8)    # Weights don't sum to 1.0
+mix("high_school" => 0.3, "phd" => 0.7)        # "phd" not in data levels
+mix()                                           # Empty mixture
+```
+
+#### Validation and Accuracy
+
+Categorical mixtures are mathematically validated to ensure exact weighted combinations:
+
+```julia
+# Manual verification
+hs_pred = profile_margins(model, data; at=Dict(:education => "high_school"), type=:predictions)
+col_pred = profile_margins(model, data; at=Dict(:education => "college"), type=:predictions)  
+grad_pred = profile_margins(model, data; at=Dict(:education => "graduate"), type=:predictions)
+
+expected = 0.3 * hs_pred + 0.5 * col_pred + 0.2 * grad_pred
+
+# Mixture computation
+edu_mix = mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2)
+actual = profile_margins(model, data; at=Dict(:education => edu_mix), type=:predictions)
+
+# Results are identical within floating-point precision
+@assert abs(expected - actual) < 1e-12
+```
+
 ### Mixed Specifications
 
 Combine different methods within a single specification:

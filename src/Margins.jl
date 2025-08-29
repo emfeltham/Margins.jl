@@ -11,10 +11,13 @@ using CovarianceMatrices
 
 # Public API exports - Clean two-function design
 export population_margins, profile_margins, MarginsResult
+# Categorical mixture support
+export mix, CategoricalMixture
 
 # Internal modules
 include("results.jl")     # Result type and builders
 include("link.jl")        # Link utilities
+include("categorical_mixtures.jl")  # Categorical mixture support for profiles
 include("engine_fc.jl")   # Build compiled + evaluator + model info
 include("profiles.jl")    # at = :means and profile grids
 include("predictions.jl") # APE/APM/APR computations
