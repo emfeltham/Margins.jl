@@ -17,6 +17,7 @@ where effects/predictions are evaluated at explicit covariate combinations.
 - `vars = :continuous`: Variables for marginal effects (ignored for predictions)
 - `target::Symbol = :mu`: `:mu` (response scale) or `:eta` (link scale) for effects
 - `scale::Symbol = :response`: `:response` or `:link` for predictions
+- `measure::Symbol = :effect`: Effect measure - `:effect` (marginal effect), `:elasticity` (elasticity), `:semielasticity_x` (x semi-elasticity), `:semielasticity_y` (y semi-elasticity)
 - `average::Bool = false`: Collapse profile grid to single summary row
 - `over = nothing`: Grouping variables for within-group analysis
 - `by = nothing`: Stratification variables
@@ -30,6 +31,9 @@ where effects/predictions are evaluated at explicit covariate combinations.
 ```julia
 # Effects at sample means (MEM)
 profile_margins(model, df; at = :means, type = :effects, vars = [:x, :z])
+
+# Elasticities at sample means
+profile_margins(model, df; at = :means, type = :effects, vars = [:x, :z], measure = :elasticity)
 
 # Predictions at specific profiles (APR-style)
 profile_margins(
@@ -53,6 +57,7 @@ function profile_margins(
     vars = :continuous,
     target::Symbol = :mu,
     scale::Symbol = :response,
+    measure::Symbol = :effect,
     average::Bool = false,
     over = nothing,
     by = nothing,
@@ -66,7 +71,13 @@ function profile_margins(
     type in (:effects, :predictions) || throw(ArgumentError("type must be :effects or :predictions"))
     target in (:mu, :eta) || throw(ArgumentError("target must be :mu or :eta"))
     scale in (:response, :link) || throw(ArgumentError("scale must be :response or :link"))
+    measure in (:effect, :elasticity, :semielasticity_x, :semielasticity_y) || throw(ArgumentError("measure must be :effect, :elasticity, :semielasticity_x, or :semielasticity_y"))
     at !== :none || throw(ArgumentError("profile_margins requires at ≠ :none. Use population_margins for population-averaged analysis."))
+    
+    # Measure parameter only applies to effects, not predictions
+    if type === :predictions && measure !== :effect
+        throw(ArgumentError("measure parameter only applies when type = :effects"))
+    end
     
     # Build computational engine
     engine = _build_engine(model, data, vars, target)
@@ -86,7 +97,7 @@ function profile_margins(
         
         if !isempty(cont_vars)
             eng_cont = (; engine..., vars=cont_vars)
-            df_cont, gradients_cont = _mem_mer_continuous(model, data_nt, eng_cont, at; target=target, backend=backend)
+            df_cont, gradients_cont = _mem_mer_continuous(model, data_nt, eng_cont, at; target=target, backend=backend, measure=measure)
             push!(df_parts, df_cont)
             merge!(gradients_for_averaging, gradients_cont)
         end
@@ -128,7 +139,7 @@ function profile_margins(
                     
                     if !isempty(cont_vars)
                         eng_cont = (; group_engine..., vars=cont_vars)
-                        df_group_cont, gradients_group_cont = _mem_mer_continuous(model, group_data_nt, eng_cont, at; target=target, backend=backend)
+                        df_group_cont, gradients_group_cont = _mem_mer_continuous(model, group_data_nt, eng_cont, at; target=target, backend=backend, measure=measure)
                         push!(group_df_parts, df_group_cont)
                     end
                     if !isempty(cat_vars)
@@ -213,6 +224,7 @@ bypassing the `at` parameter parsing entirely.
 - `vars = :continuous`: Variables for marginal effects (ignored for predictions)
 - `target::Symbol = :mu`: `:mu` (response scale) or `:eta` (link scale) for effects
 - `scale::Symbol = :response`: `:response` or `:link` for predictions
+- `measure::Symbol = :effect`: Effect measure - `:effect` (marginal effect), `:elasticity` (elasticity), `:semielasticity_x` (x semi-elasticity), `:semielasticity_y` (y semi-elasticity)
 - `average::Bool = false`: Collapse reference grid to single summary row
 - `vcov = :model`: Covariance specification (`:model`, matrix, function, or estimator)
 - `backend::Symbol = :ad`: Computational backend (`:ad` recommended for profiles)
@@ -247,6 +259,7 @@ function profile_margins(
     vars = :continuous,
     target::Symbol = :mu,
     scale::Symbol = :response,
+    measure::Symbol = :effect,
     average::Bool = false,
     vcov = :model,
     backend::Symbol = :ad,
@@ -258,6 +271,12 @@ function profile_margins(
     type in (:effects, :predictions) || throw(ArgumentError("type must be :effects or :predictions"))
     target in (:mu, :eta) || throw(ArgumentError("target must be :mu or :eta"))
     scale in (:response, :link) || throw(ArgumentError("scale must be :response or :link"))
+    measure in (:effect, :elasticity, :semielasticity_x, :semielasticity_y) || throw(ArgumentError("measure must be :effect, :elasticity, :semielasticity_x, or :semielasticity_y"))
+    
+    # Measure parameter only applies to effects, not predictions
+    if type === :predictions && measure !== :effect
+        throw(ArgumentError("measure parameter only applies when type = :effects"))
+    end
     
     # Validate reference_grid
     nrow(reference_grid) > 0 || throw(ArgumentError("reference_grid must have at least one row"))
@@ -289,7 +308,7 @@ function profile_margins(
         if !isempty(cont_vars)
             eng_cont = (; engine..., vars=cont_vars)
             # Use existing function but pass profiles directly as the 'at' parameter
-            df_table_cont, gradients_table_cont = _mem_mer_continuous_from_profiles(model, data_nt, eng_cont, profs; target=target, backend=backend)
+            df_table_cont, gradients_table_cont = _mem_mer_continuous_from_profiles(model, data_nt, eng_cont, profs; target=target, backend=backend, measure=measure)
             push!(df_parts, df_table_cont)
             merge!(gradients_table_for_averaging, gradients_table_cont)
         end

@@ -15,7 +15,8 @@ where effects/predictions are calculated for each observation and then averaged.
 - `type::Symbol = :effects`: `:effects` (derivatives/slopes) or `:predictions` (levels/values)
 - `vars = :continuous`: Variables for marginal effects (ignored for predictions)
 - `target::Symbol = :mu`: `:mu` (response scale) or `:eta` (link scale) for effects
-- `scale::Symbol = :response`: `:response` or `:link` for predictions 
+- `scale::Symbol = :response`: `:response` or `:link` for predictions
+- `measure::Symbol = :effect`: Effect measure - `:effect` (marginal effect), `:elasticity` (elasticity), `:semielasticity_x` (x semi-elasticity), `:semielasticity_y` (y semi-elasticity) 
 - `weights = nothing`: Observation weights (vector or column name)
 - `balance = :none`: Balance factor distributions (`:none`, `:all`, or `Vector{Symbol}`)
 - `over = nothing`: Grouping variables for within-group analysis
@@ -33,6 +34,9 @@ where effects/predictions are calculated for each observation and then averaged.
 # Population average marginal effects (AME)
 population_margins(model, df; type = :effects, vars = [:x, :z], target = :mu)
 
+# Population average elasticities  
+population_margins(model, df; type = :effects, vars = [:x, :z], measure = :elasticity)
+
 # Population average predictions  
 population_margins(model, df; type = :predictions, scale = :response)
 
@@ -48,6 +52,7 @@ function population_margins(
     vars = :continuous, 
     target::Symbol = :mu,
     scale::Symbol = :response,
+    measure::Symbol = :effect,
     weights = nothing,
     balance = :none,
     over = nothing,
@@ -64,6 +69,12 @@ function population_margins(
     type in (:effects, :predictions) || throw(ArgumentError("type must be :effects or :predictions"))
     target in (:mu, :eta) || throw(ArgumentError("target must be :mu or :eta"))
     scale in (:response, :link) || throw(ArgumentError("scale must be :response or :link"))
+    measure in (:effect, :elasticity, :semielasticity_x, :semielasticity_y) || throw(ArgumentError("measure must be :effect, :elasticity, :semielasticity_x, or :semielasticity_y"))
+    
+    # Measure parameter only applies to effects, not predictions
+    if type === :predictions && measure !== :effect
+        throw(ArgumentError("measure parameter only applies when type = :effects"))
+    end
     
     # Build computational engine
     engine = _build_engine(model, data, vars, target)
@@ -89,7 +100,7 @@ function population_margins(
                 ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
                 bw = balance === :none ? nothing : _balanced_weights(data_nt, row_idxs, ab_subset)
                 w_final = _merge_weights(weights, bw, data_nt, row_idxs)
-                push!(df_parts, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=row_idxs, weights=w_final))
+                push!(df_parts, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=row_idxs, measure=measure, weights=w_final))
             end
             if !isempty(cat_vars)
                 eng_cat = (; engine..., vars=cat_vars)
@@ -109,7 +120,7 @@ function population_margins(
                         ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
                         bw = balance === :none ? nothing : _balanced_weights(data_nt, idxs, ab_subset)
                         w_final = _merge_weights(weights, bw, data_nt, idxs)
-                        df_group = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=idxs, weights=w_final)
+                        df_group = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=idxs, measure=measure, weights=w_final)
                         # Add group columns
                         for (k, v) in pairs(bylabels)
                             df_group[!, k] = fill(v, nrow(df_group))

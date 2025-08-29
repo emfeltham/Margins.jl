@@ -166,13 +166,13 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
 end
 
 """
-    _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target=:mu, backend=:ad)
+    _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target=:mu, backend=:ad, measure=:effect)
 
 Compute continuous effects from pre-built profiles (bypassing _build_profiles step).
 Used by the table-based profile_margins dispatch.
 Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => gradient vector.
 """
-function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad)
+function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
     gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
@@ -207,6 +207,22 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
             se = FormulaCompiler.delta_method_se(gβ, Σ)
             # Store gradient for proper averaging
             gradients[(v, prof_idx)] = copy(gβ)
+            
+            # Elasticities
+            if measure != :effect
+                xcol = getproperty(scen.data, v)
+                x̄ = float(xcol[1])
+                xbuf = Vector{Float64}(undef, length(compiled))
+                η = _predict_eta!(xbuf, compiled, scen.data, 1, β)
+                ȳ = target === :mu ? GLM.linkinv(link, η) : η
+                if measure === :elasticity
+                    val = (x̄ / ȳ) * val
+                elseif measure === :semielasticity_x
+                    val = x̄ * val
+                elseif measure === :semielasticity_y
+                    val = (1 / ȳ) * val
+                end
+            end
             
             # Create row data
             row_data = Dict{Symbol,Any}()
