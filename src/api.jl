@@ -57,7 +57,7 @@ function _try_dof_residual(model)
     end
 end
 
-# New Profile/Population API
+# Profile/Population API
 
 """
     population_margins(model, data; kwargs...) -> MarginsResult
@@ -413,7 +413,7 @@ function profile_margins(
         append!(groupcols, over isa Symbol ? [over] : collect(over))
     end
     # Include profile columns in grouping for CI computation
-    append!(groupcols, [c for c in names(df) if startswith(String(c), "at_")])
+    append!(groupcols, [Symbol(c) for c in names(df) if startswith(String(c), "at_")])
     _add_ci!(df; level=ci_level, dof=dof, mcompare=mcompare, groupcols=groupcols)
     
     # Build result metadata

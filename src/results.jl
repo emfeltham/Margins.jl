@@ -3,12 +3,17 @@
 struct MarginsResult
     table::DataFrame
     metadata::NamedTuple
+    # Optional gradient storage for post-calculation efficiency
+    gradients::Union{Nothing, NamedTuple}
 end
+
+# Backward compatibility constructor
+MarginsResult(table::DataFrame, metadata::NamedTuple) = MarginsResult(table, metadata, nothing)
 
 function Base.show(io::IO, res::MarginsResult)
     println(io, "MarginsResult:")
     md = res.metadata
-    keys_to_show = (:mode, :dydx, :target, :at, :backend, :vcov, :n, :link, :dof)
+    keys_to_show = (:type, :vars, :target, :scale, :at, :backend, :vcov, :n, :link, :dof)
     parts = String[]
     for k in keys_to_show
         if hasproperty(md, k)
@@ -30,9 +35,9 @@ function Base.show(io::IO, res::MarginsResult)
     end
 end
 
-function _new_result(table::DataFrame; kwargs...)
+function _new_result(table::DataFrame; gradients=nothing, kwargs...)
     md = (; kwargs...)
-    return MarginsResult(table, md)
+    return MarginsResult(table, md, gradients)
 end
 
 function _add_ci!(df::DataFrame; level::Real=0.95, dof::Union{Nothing,Real}=nothing, mcompare::Symbol=:noadjust, groupcols::Vector{Symbol}=Symbol[])

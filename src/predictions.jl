@@ -95,8 +95,12 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         end
         # attach profile columns
         for (k,v) in prof
-            out[!, Symbol("at_", k)] = get(out, Symbol("at_", k), fill(v, nrow(out)))
-            out[end, Symbol("at_", k)] = v
+            col_name = Symbol("at_", k)
+            if !(col_name in names(out))
+                out[!, col_name] = fill(v, nrow(out))
+            else
+                out[end, col_name] = v
+            end
         end
     end
     return out
