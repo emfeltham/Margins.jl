@@ -110,59 +110,179 @@ function population_margins(
             end
             if !isempty(cat_vars)
                 eng_cat = (; engine..., vars=cat_vars)
-                # TODO: Update categorical to return (df, G) format
-                cat_df = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=row_idxs)
-                push!(df_parts, cat_df)
-                # For now, create empty gradient matrix for categorical (placeholder)
-                push!(G_parts, Matrix{Float64}(undef, nrow(cat_df), length(engine.β)))
+                df_cat, G_cat = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=row_idxs, at=:none)
+                push!(df_parts, df_cat)
+                push!(G_parts, G_cat)
             end
             
             # Stack df and G in identical row order
-            df = isempty(df_parts) ? DataFrame(term=String[], estimate=Float64[], se=Float64[]) : reduce(vcat, df_parts)
+            df = isempty(df_parts) ? DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[]) : reduce(vcat, df_parts)
             G_all = isempty(G_parts) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(G_parts...)
         else
-            # Grouped computation
-            all_dfs = DataFrame[]
-            row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
-            strata_list = strata === nothing ? [(NamedTuple(), row_idxs)] : strata
-            for (bylabels, sidxs) in strata_list
-                local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, within, sidxs)
-                for (labels, idxs) in local_groups
+            # Grouped computation - now supported with (df, G) format
+            df_parts = DataFrame[]
+            G_parts = Matrix{Float64}[]
+            
+            # Handle stratification (by)
+            if strata !== nothing
+                for (stratum_key, stratum_idxs) in strata
+                    # For each stratum, compute over groups within that stratum
+                    stratum_groups = groups === nothing ? [(NamedTuple(), stratum_idxs)] : 
+                                   [(group_key, intersect(group_idxs, stratum_idxs)) for (group_key, group_idxs) in groups]
+                    
+                    for (group_key, group_idxs) in stratum_groups
+                        if isempty(group_idxs)
+                            continue  # Skip empty groups
+                        end
+                        
+                        # Combine stratum and group keys
+                        combined_key = merge(stratum_key, group_key)
+                        
+                        # Compute effects for this group
+                        if !isempty(cont_vars)
+                            eng_cont = (; engine..., vars=cont_vars)
+                            ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
+                            bw = balance === :none ? nothing : _balanced_weights(data_nt, group_idxs, ab_subset)
+                            w_final = _merge_weights(weights, bw, data_nt, group_idxs)
+                            df_cont, G_cont = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=group_idxs, measure=measure, weights=w_final)
+                            
+                            # Add group columns to df_cont
+                            for (k, v) in pairs(combined_key)
+                                df_cont[!, k] = fill(v, nrow(df_cont))
+                            end
+                            
+                            push!(df_parts, df_cont)
+                            push!(G_parts, G_cont)
+                        end
+                        if !isempty(cat_vars)
+                            eng_cat = (; engine..., vars=cat_vars)
+                            df_cat, G_cat = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=group_idxs, at=:none)
+                            
+                            # Add group columns to df_cat
+                            for (k, v) in pairs(combined_key)
+                                df_cat[!, k] = fill(v, nrow(df_cat))
+                            end
+                            
+                            push!(df_parts, df_cat)
+                            push!(G_parts, G_cat)
+                        end
+                    end
+                end
+            else
+                # Just grouping, no stratification
+                for (group_key, group_idxs) in groups
+                    if isempty(group_idxs)
+                        continue  # Skip empty groups
+                    end
+                    
+                    # Compute effects for this group
                     if !isempty(cont_vars)
                         eng_cont = (; engine..., vars=cont_vars)
                         ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
-                        bw = balance === :none ? nothing : _balanced_weights(data_nt, idxs, ab_subset)
-                        w_final = _merge_weights(weights, bw, data_nt, idxs)
-                        df_group = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=idxs, measure=measure, weights=w_final)
-                        # Add group columns
-                        for (k, v) in pairs(bylabels)
-                            df_group[!, k] = fill(v, nrow(df_group))
+                        bw = balance === :none ? nothing : _balanced_weights(data_nt, group_idxs, ab_subset)
+                        w_final = _merge_weights(weights, bw, data_nt, group_idxs)
+                        df_cont, G_cont = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=group_idxs, measure=measure, weights=w_final)
+                        
+                        # Add group columns to df_cont
+                        for (k, v) in pairs(group_key)
+                            df_cont[!, k] = fill(v, nrow(df_cont))
                         end
-                        for (k, v) in pairs(labels)
-                            df_group[!, k] = fill(v, nrow(df_group))
-                        end
-                        push!(all_dfs, df_group)
+                        
+                        push!(df_parts, df_cont)
+                        push!(G_parts, G_cont)
                     end
                     if !isempty(cat_vars)
                         eng_cat = (; engine..., vars=cat_vars)
-                        df_group = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=idxs)
-                        # Add group columns
-                        for (k, v) in pairs(bylabels)
-                            df_group[!, k] = fill(v, nrow(df_group))
+                        df_cat, G_cat = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=group_idxs, at=:none)
+                        
+                        # Add group columns to df_cat
+                        for (k, v) in pairs(group_key)
+                            df_cat[!, k] = fill(v, nrow(df_cat))
                         end
-                        for (k, v) in pairs(labels)
-                            df_group[!, k] = fill(v, nrow(df_group))
-                        end
-                        push!(all_dfs, df_group)
+                        
+                        push!(df_parts, df_cat)
+                        push!(G_parts, G_cat)
                     end
                 end
             end
-            # TODO: Update grouped computation later
-            error("Grouped computation not yet implemented in Phase 1")
+            
+            # Stack df and G in identical row order
+            df = isempty(df_parts) ? DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[]) : reduce(vcat, df_parts)
+            G_all = isempty(G_parts) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(G_parts...)
         end
     else  # :predictions
-        # TODO: Update predictions later  
-        error("Predictions not yet implemented in Phase 1")
+        # Population predictions (APE) - now supported with (df, G) format
+        if groups === nothing && strata === nothing
+            # No grouping - compute once
+            row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
+            target_pred = scale === :response ? :mu : :eta
+            ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
+            bw = balance === :none ? nothing : _balanced_weights(data_nt, row_idxs, ab_subset)
+            w_final = _merge_weights(weights, bw, data_nt, row_idxs)
+            df, G_all = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=row_idxs, weights=w_final)
+        else
+            # Grouped computation - now supported with (df, G) format
+            df_parts = DataFrame[]
+            G_parts = Matrix{Float64}[]
+            target_pred = scale === :response ? :mu : :eta
+            
+            # Handle stratification (by)
+            if strata !== nothing
+                for (stratum_key, stratum_idxs) in strata
+                    # For each stratum, compute over groups within that stratum
+                    stratum_groups = groups === nothing ? [(NamedTuple(), stratum_idxs)] : 
+                                   [(group_key, intersect(group_idxs, stratum_idxs)) for (group_key, group_idxs) in groups]
+                    
+                    for (group_key, group_idxs) in stratum_groups
+                        if isempty(group_idxs)
+                            continue  # Skip empty groups
+                        end
+                        
+                        # Combine stratum and group keys
+                        combined_key = merge(stratum_key, group_key)
+                        
+                        # Compute predictions for this group
+                        ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
+                        bw = balance === :none ? nothing : _balanced_weights(data_nt, group_idxs, ab_subset)
+                        w_final = _merge_weights(weights, bw, data_nt, group_idxs)
+                        df_pred, G_pred = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=group_idxs, weights=w_final)
+                        
+                        # Add group columns to df_pred
+                        for (k, v) in pairs(combined_key)
+                            df_pred[!, k] = fill(v, nrow(df_pred))
+                        end
+                        
+                        push!(df_parts, df_pred)
+                        push!(G_parts, G_pred)
+                    end
+                end
+            else
+                # Just grouping, no stratification
+                for (group_key, group_idxs) in groups
+                    if isempty(group_idxs)
+                        continue  # Skip empty groups
+                    end
+                    
+                    # Compute predictions for this group
+                    ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
+                    bw = balance === :none ? nothing : _balanced_weights(data_nt, group_idxs, ab_subset)
+                    w_final = _merge_weights(weights, bw, data_nt, group_idxs)
+                    df_pred, G_pred = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=group_idxs, weights=w_final)
+                    
+                    # Add group columns to df_pred
+                    for (k, v) in pairs(group_key)
+                        df_pred[!, k] = fill(v, nrow(df_pred))
+                    end
+                    
+                    push!(df_parts, df_pred)
+                    push!(G_parts, G_pred)
+                end
+            end
+            
+            # Stack df and G in identical row order
+            df = isempty(df_parts) ? DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[]) : reduce(vcat, df_parts)
+            G_all = isempty(G_parts) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(G_parts...)
+        end
     end
     
     # Add confidence intervals (update column names)
@@ -191,10 +311,16 @@ function population_margins(
     end
     
     # Build result metadata
+    target_used = if type === :effects 
+        target 
+    else 
+        scale === :response ? :mu : :eta  # For predictions, target is determined by scale
+    end
+    
     md = (; 
         mode = type === :effects ? :effects : :predictions,
         dydx = vars, 
-        target = target, 
+        target = target_used, 
         scale = scale,
         at = :none,  # Population approach
         backend = backend, 
@@ -211,5 +337,5 @@ function population_margins(
     βnames = Symbol.(StatsModels.coefnames(model))  # Convert to symbols
     computation_type = :population
     
-    return _new_result(df, G_all, βnames, computation_type, target, backend; md...)
+    return _new_result(df, G_all, βnames, computation_type, target_used, backend; md...)
 end

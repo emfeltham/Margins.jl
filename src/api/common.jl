@@ -57,10 +57,10 @@ function _new_result(df::DataFrame, G::Matrix{Float64}, βnames::Vector{Symbol},
         unique_profiles = unique(eachrow(select(df, at_cols)))
         
         for profile_row in unique_profiles
-            values = [profile_row[col] for col in at_cols]
+            values = [profile_row[String(col)] for col in at_cols]
             profile = ProfileSpec(profile_keys, values)
             push!(profiles, profile)
-            profile_lookup[NamedTuple(col => profile_row[col] for col in at_cols)] = length(profiles)
+            profile_lookup[NamedTuple(Symbol(string(col)[4:end]) => profile_row[String(col)] for col in at_cols)] = length(profiles)
         end
     end
     
@@ -71,10 +71,16 @@ function _new_result(df::DataFrame, G::Matrix{Float64}, βnames::Vector{Symbol},
     groups = NamedTuple[]
     group_lookup = Dict{NamedTuple, Int}()
     
-    # For Phase 1, skip complex grouping - just handle the simple case
+    # Handle grouping columns properly
     if !isempty(group_cols)
-        @warn "Grouping columns detected but not yet fully implemented in Phase 1: $group_cols"
-        # TODO: Implement proper grouping support
+        # Build unique groups from the data
+        for i in 1:N
+            group_key = NamedTuple(Symbol(col) => df[i, col] for col in group_cols)
+            if !haskey(group_lookup, group_key)
+                push!(groups, group_key)
+                group_lookup[group_key] = length(groups)
+            end
+        end
     end
     
     # Build row index vectors
@@ -83,13 +89,13 @@ function _new_result(df::DataFrame, G::Matrix{Float64}, βnames::Vector{Symbol},
     row_profile = if isempty(at_cols)
         zeros(Int, N)
     else
-        [profile_lookup[NamedTuple(col => df[i, col] for col in at_cols)] for i in 1:N]
+        [profile_lookup[NamedTuple(Symbol(string(col)[4:end]) => df[i, String(col)] for col in at_cols)] for i in 1:N]
     end
     
     row_group = if isempty(group_cols)
         zeros(Int, N)
     else
-        [group_lookup[NamedTuple(col => df[i, col] for col in group_cols)] for i in 1:N]
+        [group_lookup[NamedTuple(Symbol(col) => df[i, col] for col in group_cols)] for i in 1:N]
     end
     
     # Build metadata

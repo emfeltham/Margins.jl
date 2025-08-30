@@ -191,6 +191,31 @@ function _process_profile_for_scenario(prof::Dict, data_nt::NamedTuple)
             
             # Pass mixture with original levels info
             processed_prof[k] = MixtureWithLevels(v, original_levels)
+        elseif haskey(data_nt, k) && isa(v, AbstractString)
+            # Handle regular categorical String values - convert to proper categorical values
+            col = getproperty(data_nt, k)
+            if (Base.find_package("CategoricalArrays") !== nothing) && (col isa CategoricalArrays.CategoricalArray)
+                # Convert String level to CategoricalValue
+                levels_list = CategoricalArrays.levels(col)
+                if string(v) in string.(levels_list)
+                    temp_cat = CategoricalArrays.categorical([v], levels=levels_list, ordered=CategoricalArrays.isordered(col))
+                    processed_prof[k] = temp_cat[1]
+                else
+                    throw(ArgumentError("Level '$v' not found in categorical variable :$k. Available levels: $(levels_list)"))
+                end
+            elseif eltype(col) <: Bool
+                # Handle Bool values
+                if v in ["true", "false"] 
+                    processed_prof[k] = parse(Bool, v)
+                elseif v isa Bool
+                    processed_prof[k] = v
+                else
+                    throw(ArgumentError("Bool variable :$k expects 'true'/'false' or Bool values, got: $v"))
+                end
+            else
+                # For other types, pass through but ensure type compatibility
+                processed_prof[k] = v
+            end
         else
             processed_prof[k] = v
         end

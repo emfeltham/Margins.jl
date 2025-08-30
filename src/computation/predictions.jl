@@ -11,9 +11,9 @@ function _predict_eta!(xbuf::Vector{Float64}, compiled, data_like, row::Int, β:
 end
 
 """
-    _ape(ap, se; target, engine)
+    _ape(model, data_nt, compiled, β, Σ; target, link, rows, weights)
 
-Average predictions across rows; returns (value, se).
+Average predictions across rows; returns (df, G) where df has one row and G has one row.
 """
 function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_link(model), rows=:all, weights=nothing)
     idxs = rows === :all ? (1:_nrows(data_nt)) : rows
@@ -46,18 +46,21 @@ function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_l
     val = w === nothing ? (acc_val / n) : acc_val
     gβ = w === nothing ? (acc_gβ / n) : acc_gβ
     se = FormulaCompiler.delta_method_se(gβ, Σ)
-    return val, se
+    
+    # Build single-row DataFrame and gradient matrix
+    df = DataFrame(term=["prediction"], estimate=[val], se=[se])
+    G = reshape(gβ, 1, :)  # 1x(num_coeffs) matrix 
+    return (df, G)
 end
 
 """
     _ap_profiles(model, data_nt, compiled, β, Σ, profiles; target)
 
 Compute adjusted predictions at each profile dict.
-Returns (df, gradients) where gradients is a Dict mapping profile_idx => gradient vector.
+Returns (df, G) where df has columns term, estimate, se, at_* and G is row-aligned gradient matrix.
 """
 function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
     xbuf = Vector{Float64}(undef, length(compiled))
-    gradients = Dict{Int, Vector{Float64}}()
     
     # Pre-allocate all columns including profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -67,8 +70,8 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         end
     end
     
-    # Initialize DataFrame with all required columns
-    out = DataFrame(dydx=Float64[], se=Float64[])
+    # Initialize DataFrame with all required columns (term, estimate, se, at_*)
+    out = DataFrame(term=String[], estimate=Float64[], se=Float64[])
     for col_name in all_profile_keys
         out[!, col_name] = Union{Missing,Any}[]
     end
@@ -94,26 +97,32 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         val = n > 0 ? acc_val / n : acc_val
         gβ = n > 0 ? acc_gβ / n : acc_gβ
         se = FormulaCompiler.delta_method_se(gβ, Σ)
-        out = DataFrame(dydx=[val], se=[se])
-        gradients[1] = copy(gβ)  # Store averaged gradient
-        return (out, gradients)
+        
+        # Build single-row DataFrame and gradient matrix
+        out = DataFrame(term=["prediction"], estimate=[val], se=[se])
+        G = reshape(gβ, 1, :)  # 1x(num_coeffs) matrix 
+        return (out, G)
     end
+    # Build gradient matrix row by row
+    G = Matrix{Float64}(undef, length(profiles), length(compiled))
+    
     for (prof_idx, prof) in enumerate(profiles)
         processed_prof = _process_profile_for_scenario(prof, data_nt)
         scen = FormulaCompiler.create_scenario("profile", data_nt, processed_prof)
         η = _predict_eta!(xbuf, compiled, scen.data, 1, β)  # single-row synthetic; value drawn from profile
+        
         # Create row with profile columns
         if target === :mu
             μ = GLM.linkinv(link, η)
             gβ = _dmu_deta_local(link, η) .* xbuf
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            gradients[prof_idx] = copy(gβ)
-            row_data = Dict{Symbol,Any}(:dydx => μ, :se => se)
+            G[prof_idx, :] = gβ  # Store gradient in matrix
+            row_data = Dict{Symbol,Any}(:term => "prediction", :estimate => μ, :se => se)
         else
-            gβ = xbuf
+            gβ = copy(xbuf)  # Copy to avoid mutation
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            gradients[prof_idx] = copy(gβ)
-            row_data = Dict{Symbol,Any}(:dydx => η, :se => se)
+            G[prof_idx, :] = gβ  # Store gradient in matrix
+            row_data = Dict{Symbol,Any}(:term => "prediction", :estimate => η, :se => se)
         end
         
         # Add profile columns to row
@@ -129,5 +138,5 @@ function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}
         end
         push!(out, row_data)
     end
-    return (out, gradients)
+    return (out, G)
 end

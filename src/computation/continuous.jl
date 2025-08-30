@@ -10,7 +10,7 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
     
     # Skip if no continuous variables (de would be nothing)
     if de === nothing
-        empty_df = DataFrame(term=String[], estimate=Float64[], se=Float64[])
+        empty_df = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
         empty_G = Matrix{Float64}(undef, 0, length(β))
         return (empty_df, empty_G)
     end
@@ -25,7 +25,7 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
     gη = Vector{Float64}(undef, length(vars))
     gβ = Vector{Float64}(undef, length(compiled))
     gβ_sum = Vector{Float64}(undef, length(compiled))
-    out = DataFrame(term=String[], estimate=Float64[], se=Float64[])
+    out = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
     # Build gradient matrix - one row per variable
     G = Matrix{Float64}(undef, length(vars), length(β))
     
@@ -104,7 +104,7 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
                 val = (1 / ȳ) * ame_val
             end
         end
-        push!(out, (term=string(var), estimate=val, se=se))
+        push!(out, (term=string(var), estimate=val, se=se, level_from="", level_to=""))
     end
     
     return (out, G)
@@ -114,14 +114,16 @@ end
     _mem_mer_continuous(model, data_nt, engine, at; target=:mu, backend=:ad, measure=:effect)
 
 Compute MEM (at=:means) or MER (profiles Dict/Vector{Dict}) for continuous vars.
-Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => gradient vector.
+Returns (df, G) where G is a Matrix{Float64} with one row per result row.
 """
 function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
     
     # Skip if no continuous variables (de would be nothing)
     if de === nothing
-        return DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+        empty_df = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
+        empty_G = Matrix{Float64}(undef, 0, length(β))
+        return (empty_df, empty_G)
     end
     
     # Filter vars to only continuous variables (that are in de.vars)
@@ -129,8 +131,7 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
     vars = filter(v -> v in continuous_vars, vars)
     
     profiles = _build_profiles(at, data_nt)
-    out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
-    gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
+    out = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
     
     # Pre-allocate all profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -143,7 +144,12 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
         out[!, col_name] = Union{Missing,Any}[]
     end
     
+    # Build gradient matrix - one row per (var, profile) combination
+    n_rows = length(vars) * length(profiles)
+    G = Matrix{Float64}(undef, n_rows, length(β))
+    
     gβ = Vector{Float64}(undef, length(compiled))
+    row_idx = 1
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for var in vars
         for (prof_idx, prof) in enumerate(profiles)
@@ -160,8 +166,8 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
             end
             val = g_row[findfirst(==(var), vars)]
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            # Store gradient for proper averaging
-            gradients[(var, prof_idx)] = copy(gβ)
+            # Store gradient in matrix - row_idx maps to this result row
+            G[row_idx, :] = gβ
             # Elasticities
             if measure != :effect
                 xcol = getproperty(scen.data, var)
@@ -178,7 +184,7 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
                 end
             end
             # Create row with profile columns
-            row_data = Dict{Symbol,Any}(:term => var, :dydx => val, :se => se)
+            row_data = Dict{Symbol,Any}(:term => string(var), :estimate => val, :se => se, :level_from => "", :level_to => "")
             for (k,v) in prof
                 col_name = Symbol("at_", k)
                 row_data[col_name] = v
@@ -190,9 +196,10 @@ function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, bac
                 end
             end
             push!(out, row_data)
+            row_idx += 1
         end
     end
-    return (out, gradients)
+    return (out, G)
 end
 
 """
@@ -200,22 +207,23 @@ end
 
 Compute continuous effects from pre-built profiles (bypassing _build_profiles step).
 Used by the table-based profile_margins dispatch.
-Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => gradient vector.
+Returns (df, G) where G is a Matrix{Float64} with one row per result row.
 """
 function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
     
     # Skip if no continuous variables (de would be nothing)
     if de === nothing
-        return (DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]), Dict{Tuple{Symbol,Int}, Vector{Float64}}())
+        empty_df = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
+        empty_G = Matrix{Float64}(undef, 0, length(β))
+        return (empty_df, empty_G)
     end
     
     # Filter vars to only continuous variables (that are in de.vars)
     continuous_vars = de.vars
     vars = filter(v -> v in continuous_vars, vars)
     
-    out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
-    gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
+    out = DataFrame(term=String[], estimate=Float64[], se=Float64[], level_from=String[], level_to=String[])
     
     # Pre-allocate all profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -228,7 +236,12 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
         out[!, col_name] = Union{Missing,Any}[]
     end
     
+    # Build gradient matrix - one row per (var, profile) combination
+    n_rows = length(vars) * length(profiles)
+    G = Matrix{Float64}(undef, n_rows, length(β))
+    
     gβ = Vector{Float64}(undef, length(compiled))
+    row_idx = 1
     # Use row=1 on scenario with overrides to emulate profile evaluation
     for v in vars
         for (prof_idx, prof) in enumerate(profiles)
@@ -245,8 +258,8 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
             end
             val = g_row[findfirst(==(v), vars)]
             se = FormulaCompiler.delta_method_se(gβ, Σ)
-            # Store gradient for proper averaging
-            gradients[(v, prof_idx)] = copy(gβ)
+            # Store gradient in matrix - row_idx maps to this result row
+            G[row_idx, :] = gβ
             
             # Elasticities
             if measure != :effect
@@ -266,9 +279,11 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
             
             # Create row data
             row_data = Dict{Symbol,Any}()
-            row_data[:term] = v
-            row_data[:dydx] = val
+            row_data[:term] = string(v)
+            row_data[:estimate] = val
             row_data[:se] = se
+            row_data[:level_from] = ""
+            row_data[:level_to] = ""
             
             # Add profile information
             for (k, pv) in pairs(prof)
@@ -283,8 +298,9 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
             end
             
             push!(out, row_data)
+            row_idx += 1
         end
     end
     
-    return (out, gradients)
+    return (out, G)
 end

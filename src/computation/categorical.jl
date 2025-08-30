@@ -7,15 +7,51 @@ Compute discrete-change effects for categorical variables in `engine.vars`.
 When `at=:none`, computes average discrete change over `rows` (AME-style for categoricals).
 When `at` specifies profiles, computes per-profile contrasts (no averaging).
 Supports `:pairwise` (all pairs) and `:baseline` (vs first level).
+Returns (df, G) where G is a Matrix{Float64} with one row per result row.
 """
 function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contrasts::Symbol=:pairwise, rows=:all, at=:none)
     (; compiled, vars, β, Σ, link) = engine
     idxs = rows === :all ? (1:_nrows(data_nt)) : rows
-    out = DataFrame(term=Symbol[], level_from=String[], level_to=String[], dydx=Float64[], se=Float64[])
+    
+    # Count the number of contrasts to pre-allocate
+    n_contrasts = 0
+    n_profiles = at === :none ? 1 : length(_build_profiles(at, data_nt))
+    
+    for var in vars
+        col = getproperty(data_nt, var)
+        levels = if Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
+            string.(CategoricalArrays.levels(col))
+        elseif eltype(col) <: Bool
+            string.([false, true])
+        else
+            unique!(string.(collect(col)))
+        end
+        pairs = if contrasts === :baseline
+            [(levels[1], lev) for lev in levels if lev != levels[1]]
+        else
+            [(levels[i], levels[j]) for i in 1:length(levels) for j in (i+1):length(levels)]
+        end
+        n_contrasts += length(pairs)
+    end
+    
+    n_result_rows = n_contrasts * n_profiles
+    
+    # Skip if no categorical variables
+    if n_result_rows == 0
+        empty_df = DataFrame(term=String[], level_from=String[], level_to=String[], estimate=Float64[], se=Float64[])
+        empty_G = Matrix{Float64}(undef, 0, length(β))
+        return (empty_df, empty_G)
+    end
+    
+    out = DataFrame(term=String[], level_from=String[], level_to=String[], estimate=Float64[], se=Float64[])
+    G = Matrix{Float64}(undef, n_result_rows, length(β))
+    
     # Buffers
     X_to = Vector{Float64}(undef, length(compiled))
     X_from = Vector{Float64}(undef, length(compiled))
     Δ = Vector{Float64}(undef, length(compiled))
+    
+    row_idx = 1
     for var in vars
         col = getproperty(data_nt, var)
         levels = if Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
@@ -75,10 +111,26 @@ function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contra
                 val = acc_val / length(idxs)
                 gβ_mean = acc_gβ ./ length(idxs)
                 se = FormulaCompiler.delta_method_se(gβ_mean, Σ)
-                push!(out, (term=var, level_from=from, level_to=to, dydx=val, se=se))
+                
+                # Store averaged gradient
+                G[row_idx, :] = gβ_mean
+                push!(out, (term=string(var), level_from=from, level_to=to, estimate=val, se=se))
+                row_idx += 1
             else
                 # Profiles: compute per profile using scenario-based approach
                 profiles = _build_profiles(at, data_nt)
+                
+                # Pre-allocate profile columns
+                all_profile_keys = Set{Symbol}()
+                for prof in profiles
+                    for k in keys(prof)
+                        push!(all_profile_keys, Symbol("at_", k))
+                    end
+                end
+                for col_name in all_profile_keys
+                    out[!, col_name] = Union{Missing,Any}[]
+                end
+                
                 for prof in profiles
                     # Create two scenarios for the contrast: one with 'from' level, one with 'to' level
                     prof_from = copy(prof)
@@ -93,14 +145,12 @@ function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contra
                     scen_to = FormulaCompiler.create_scenario("to", data_nt, processed_prof_to)
                     
                     # Evaluate at both scenarios and compute contrast
-                    X_from = Vector{Float64}(undef, length(compiled))
-                    X_to = Vector{Float64}(undef, length(compiled))
                     compiled(X_from, scen_from.data, 1)
                     compiled(X_to, scen_to.data, 1)
                     Δ .= X_to .- X_from
                     if target === :eta
                         val = dot(β, Δ)
-                        gβ = Δ
+                        gβ = copy(Δ)
                     else
                         # For μ target: compute response-scale contrast using link inverse
                         η_from = dot(β, X_from)
@@ -111,18 +161,38 @@ function _categorical_effects(model, data_nt, engine; target::Symbol=:mu, contra
                         gβ = _dmu_deta_local(link, η_to) .* X_to .- _dmu_deta_local(link, η_from) .* X_from
                     end
                     se = FormulaCompiler.delta_method_se(gβ, Σ)
-                    row = (term=var, level_from=from, level_to=to, dydx=val, se=se)
-                    push!(out, row)
-                    # attach profile columns
-                    for (k,v) in prof
-                        out[!, Symbol("at_", k)] = get(out, Symbol("at_", k), fill(v, nrow(out)))
-                        out[end, Symbol("at_", k)] = v
+                    
+                    # Store gradient in matrix
+                    G[row_idx, :] = gβ
+                    
+                    # Create row data
+                    row_data = Dict{Symbol,Any}(
+                        :term => string(var), 
+                        :level_from => from, 
+                        :level_to => to, 
+                        :estimate => val, 
+                        :se => se
+                    )
+                    
+                    # Add profile information
+                    for (k, v) in prof
+                        row_data[Symbol("at_", k)] = v
                     end
+                    
+                    # Fill missing profile columns with missing
+                    for col_name in all_profile_keys
+                        if !haskey(row_data, col_name)
+                            row_data[col_name] = missing
+                        end
+                    end
+                    
+                    push!(out, row_data)
+                    row_idx += 1
                 end
             end
         end
     end
-    return out
+    return (out, G)
 end
 
 """
@@ -130,12 +200,42 @@ end
 
 Compute discrete-change effects for categorical variables using pre-built profiles.
 This is used by table-based profile dispatch where profiles are built from DataFrame rows.
-Returns (df, gradients) where gradients is a Dict mapping (var_contrast, profile_idx) => gradient vector.
+Returns (df, G) where G is a Matrix{Float64} with one row per result row.
 """
 function _categorical_effects_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, contrasts::Symbol=:pairwise)
     (; compiled, vars, β, Σ, link) = engine
-    out = DataFrame(term=Symbol[], level_from=String[], level_to=String[], dydx=Float64[], se=Float64[])
-    gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
+    
+    # Count the number of contrasts to pre-allocate
+    n_contrasts = 0
+    for var in vars
+        col = getproperty(data_nt, var)
+        levels = if Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
+            string.(CategoricalArrays.levels(col))
+        elseif eltype(col) <: Bool
+            string.([false, true])
+        else
+            unique!(string.(collect(col)))
+        end
+        
+        pairs = if contrasts === :baseline
+            [(levels[1], lev) for lev in levels if lev != levels[1]]
+        else
+            [(levels[i], levels[j]) for i in 1:length(levels) for j in (i+1):length(levels)]
+        end
+        n_contrasts += length(pairs)
+    end
+    
+    n_result_rows = n_contrasts * length(profiles)
+    
+    # Skip if no categorical variables
+    if n_result_rows == 0
+        empty_df = DataFrame(term=String[], level_from=String[], level_to=String[], estimate=Float64[], se=Float64[])
+        empty_G = Matrix{Float64}(undef, 0, length(β))
+        return (empty_df, empty_G)
+    end
+    
+    out = DataFrame(term=String[], level_from=String[], level_to=String[], estimate=Float64[], se=Float64[])
+    G = Matrix{Float64}(undef, n_result_rows, length(β))
     
     # Pre-allocate all profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()
@@ -153,6 +253,7 @@ function _categorical_effects_from_profiles(model, data_nt, engine, profiles; ta
     X_from = Vector{Float64}(undef, length(compiled))
     Δ = Vector{Float64}(undef, length(compiled))
     
+    row_idx = 1
     for var in vars
         col = getproperty(data_nt, var)
         levels = if Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
@@ -184,8 +285,6 @@ function _categorical_effects_from_profiles(model, data_nt, engine, profiles; ta
                 scen_to = FormulaCompiler.create_scenario("to", data_nt, processed_prof_to)
                 
                 # Evaluate at both scenarios and compute contrast
-                X_from = Vector{Float64}(undef, length(compiled))
-                X_to = Vector{Float64}(undef, length(compiled))
                 compiled(X_from, scen_from.data, 1)
                 compiled(X_to, scen_to.data, 1)
                 Δ .= X_to .- X_from
@@ -205,16 +304,15 @@ function _categorical_effects_from_profiles(model, data_nt, engine, profiles; ta
                 
                 se = FormulaCompiler.delta_method_se(gβ, Σ)
                 
-                # Store gradient with contrast-specific key for averaging support
-                contrast_key = Symbol("$(var)_$(from)_to_$(to)")
-                gradients[(contrast_key, prof_idx)] = copy(gβ)
+                # Store gradient in matrix
+                G[row_idx, :] = gβ
                 
                 # Create row data
                 row_data = Dict{Symbol,Any}()
-                row_data[:term] = var
+                row_data[:term] = string(var)
                 row_data[:level_from] = from  
                 row_data[:level_to] = to
-                row_data[:dydx] = val
+                row_data[:estimate] = val
                 row_data[:se] = se
                 
                 # Add profile columns
@@ -230,9 +328,10 @@ function _categorical_effects_from_profiles(model, data_nt, engine, profiles; ta
                 end
                 
                 push!(out, row_data)
+                row_idx += 1
             end
         end
     end
     
-    return (out, gradients)
+    return (out, G)
 end

@@ -14,6 +14,8 @@ using Distributions
 export population_margins, profile_margins, MarginsResult
 # Categorical mixture support
 export mix, CategoricalMixture
+# Gradient utilities
+export get_gradients, contrast, bootstrap_effects, effect_heterogeneity, gradient_summary
 
 # Core Infrastructure
 include("core/utilities.jl")          # General utility functions
@@ -36,5 +38,8 @@ include("features/averaging.jl")             # Proper delta method averaging for
 include("api/common.jl")              # Shared API utilities and helpers
 include("api/population.jl")          # Population margins API (AME/APE)
 include("api/profile.jl")             # Profile margins API (MEM/MER/APM/APR)
+
+# Gradient Utilities
+include("gradient_utils.jl")          # Post-calculation utilities for GradientMatrix
 
 end # module
