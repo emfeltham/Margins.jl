@@ -10,7 +10,9 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
     
     # Skip if no continuous variables (de would be nothing)
     if de === nothing
-        return DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+        empty_df = DataFrame(term=String[], estimate=Float64[], se=Float64[])
+        empty_G = Matrix{Float64}(undef, 0, length(β))
+        return (empty_df, empty_G)
     end
     
     # Filter vars to only continuous variables (that are in de.vars)
@@ -23,10 +25,13 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
     gη = Vector{Float64}(undef, length(vars))
     gβ = Vector{Float64}(undef, length(compiled))
     gβ_sum = Vector{Float64}(undef, length(compiled))
-    out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    out = DataFrame(term=String[], estimate=Float64[], se=Float64[])
+    # Build gradient matrix - one row per variable
+    G = Matrix{Float64}(undef, length(vars), length(β))
+    
     # For μ target, we still compute gradient wrt β via accumulate_ame_gradient! (μ chain rule inside)
     w = _resolve_weights(weights, data_nt, idxs)
-    for var in vars
+    for (var_idx, var) in enumerate(vars)
         fill!(gβ_sum, 0.0)
         acc_val = 0.0
         if w === nothing
@@ -47,9 +52,11 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
             end
             ame_val = acc_val / n
             se = FormulaCompiler.delta_method_se(gβ_sum ./ n, Σ)
+            # Store averaged gradient
+            G[var_idx, :] = gβ_sum ./ n
         else
             # Weighted average: accumulate per-row gradient and value with weights
-            gβ_temp = Vector{Float64}(undef, length(compiled))
+            gβ_temp = Vector{Float64}(undef, length(β))
             g_row = Vector{Float64}(undef, length(vars))
             for (j, row) in enumerate(idxs)
                 if target === :eta
@@ -64,6 +71,8 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
             end
             ame_val = acc_val
             se = FormulaCompiler.delta_method_se(gβ_sum, Σ)
+            # Store weighted gradient
+            G[var_idx, :] = gβ_sum
         end
         val = ame_val
         # Elasticity & semi-elasticities transformations
@@ -95,9 +104,10 @@ function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Sy
                 val = (1 / ȳ) * ame_val
             end
         end
-        push!(out, (term=var, dydx=val, se=se))
+        push!(out, (term=string(var), estimate=val, se=se))
     end
-    return out
+    
+    return (out, G)
 end
 
 """

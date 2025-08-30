@@ -1,4 +1,5 @@
 # api/population.jl - Population margins API (AME/APE)
+using Distributions
 
 """
     population_margins(model, data; kwargs...) -> MarginsResult
@@ -93,20 +94,32 @@ function population_margins(
         df_parts = DataFrame[]
         
         if groups === nothing && strata === nothing
-            # No grouping - compute once
+            # No grouping - compute once  
             row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
+            df_parts = DataFrame[]
+            G_parts = Matrix{Float64}[]
+            
             if !isempty(cont_vars)
                 eng_cont = (; engine..., vars=cont_vars)
                 ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
                 bw = balance === :none ? nothing : _balanced_weights(data_nt, row_idxs, ab_subset)
                 w_final = _merge_weights(weights, bw, data_nt, row_idxs)
-                push!(df_parts, _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=row_idxs, measure=measure, weights=w_final))
+                df_cont, G_cont = _ame_continuous(model, data_nt, eng_cont; target=target, backend=backend, rows=row_idxs, measure=measure, weights=w_final)
+                push!(df_parts, df_cont)
+                push!(G_parts, G_cont)
             end
             if !isempty(cat_vars)
                 eng_cat = (; engine..., vars=cat_vars)
-                push!(df_parts, _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=row_idxs))
+                # TODO: Update categorical to return (df, G) format
+                cat_df = _categorical_effects(model, data_nt, eng_cat; target=target, contrasts=contrasts, rows=row_idxs)
+                push!(df_parts, cat_df)
+                # For now, create empty gradient matrix for categorical (placeholder)
+                push!(G_parts, Matrix{Float64}(undef, nrow(cat_df), length(engine.β)))
             end
-            df = isempty(df_parts) ? DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]) : reduce(vcat, df_parts)
+            
+            # Stack df and G in identical row order
+            df = isempty(df_parts) ? DataFrame(term=String[], estimate=Float64[], se=Float64[]) : reduce(vcat, df_parts)
+            G_all = isempty(G_parts) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(G_parts...)
         else
             # Grouped computation
             all_dfs = DataFrame[]
@@ -144,52 +157,38 @@ function population_margins(
                     end
                 end
             end
-            df = isempty(all_dfs) ? DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]) : reduce(vcat, all_dfs)
+            # TODO: Update grouped computation later
+            error("Grouped computation not yet implemented in Phase 1")
         end
     else  # :predictions
-        # Population predictions
-        target_pred = scale === :response ? :mu : :eta
-        if groups === nothing && strata === nothing
-            row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
-            ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance) 
-            bw = balance === :none ? nothing : _balanced_weights(data_nt, row_idxs, ab_subset)
-            w_final = _merge_weights(weights, bw, data_nt, row_idxs)
-            val, se = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=row_idxs, weights=w_final)
-            df = DataFrame(term=[:prediction], dydx=[val], se=[se])
-        else
-            # Grouped predictions
-            all_dfs = DataFrame[]
-            row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows  
-            strata_list = strata === nothing ? [(NamedTuple(), row_idxs)] : strata
-            for (bylabels, sidxs) in strata_list
-                local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, within, sidxs)
-                for (labels, idxs) in local_groups
-                    ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
-                    bw = balance === :none ? nothing : _balanced_weights(data_nt, idxs, ab_subset)
-                    w_final = _merge_weights(weights, bw, data_nt, idxs)
-                    val, se = _ape(model, data_nt, engine.compiled, engine.β, engine.Σ; target=target_pred, link=engine.link, rows=idxs, weights=w_final)
-                    df_g = DataFrame(term=[:prediction], dydx=[val], se=[se])
-                    # Add group columns
-                    for (k, v) in pairs(bylabels)
-                        df_g[!, k] = fill(v, nrow(df_g))
-                    end
-                    for (k, v) in pairs(labels)
-                        df_g[!, k] = fill(v, nrow(df_g))
-                    end
-                    push!(all_dfs, df_g)
-                end
-            end
-            df = reduce(vcat, all_dfs)
-        end
+        # TODO: Update predictions later  
+        error("Predictions not yet implemented in Phase 1")
     end
     
-    # Add confidence intervals
+    # Add confidence intervals (update column names)
     dof = _try_dof_residual(model)
     groupcols = Symbol[]
     if over !== nothing
         append!(groupcols, over isa Symbol ? [over] : collect(over))
     end
-    _add_ci!(df; level=ci_level, dof=dof, mcompare=mcompare, groupcols=groupcols)
+    # Update _add_ci! for new column names (estimate instead of dydx)
+    if !isempty(df) && :se in names(df) && :estimate in names(df)
+        df[!, :z] = df.estimate ./ df.se
+        if dof === nothing
+            # Normal
+            df[!, :p] = 2 .* (1 .- cdf.(Distributions.Normal(), abs.(df.z)))
+            α = 1 - ci_level
+            q = Distributions.quantile(Distributions.Normal(), 1 - α/2)
+        else
+            # t distribution  
+            tdist = Distributions.TDist(Float64(dof))
+            df[!, :p] = 2 .* (1 .- cdf.(tdist, abs.(df.z)))
+            α = 1 - ci_level
+            q = Distributions.quantile(tdist, 1 - α/2)
+        end
+        df[!, :ci_lo] = df.estimate .- q .* df.se
+        df[!, :ci_hi] = df.estimate .+ q .* df.se
+    end
     
     # Build result metadata
     md = (; 
@@ -208,5 +207,9 @@ function population_margins(
         vcov = vcov
     )
     
-    return _new_result(df; md...)
+    # Use new _new_result signature
+    βnames = Symbol.(StatsModels.coefnames(model))  # Convert to symbols
+    computation_type = :population
+    
+    return _new_result(df, G_all, βnames, computation_type, target, backend; md...)
 end

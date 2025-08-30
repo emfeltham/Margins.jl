@@ -9,13 +9,93 @@ function _try_dof_residual(model)
 end
 
 """
-    _new_result(table; gradients, kwargs...)
+    _new_result(df, G, βnames, computation_type, target, backend; kwargs...)
 
-Create a new MarginsResult with table and metadata.
+Create a new MarginsResult with axis-based storage from DataFrame and gradient matrix.
 """
-function _new_result(table::DataFrame; gradients=nothing, kwargs...)
+function _new_result(df::DataFrame, G::Matrix{Float64}, βnames::Vector{Symbol}, 
+                    computation_type::Symbol, target::Symbol, backend::Symbol; kwargs...)
+    N = nrow(df)
+    
+    # Build GradientMatrix
+    gradients = GradientMatrix(G, βnames, computation_type, target, backend)
+    
+    # Extract estimates and SEs (updated column names)
+    estimate = df.estimate
+    se = hasproperty(df, :se) ? df.se : nothing
+    
+    # Build terms from unique term values
+    unique_terms = unique(df.term)
+    terms = AbstractTerm[]
+    term_lookup = Dict{String, Int}()
+    
+    for (i, term_str) in enumerate(unique_terms)
+        if term_str == "prediction"
+            term = PredictionTerm()
+        elseif contains(term_str, " → ")
+            # Contrast term: "var: from → to"
+            parts = split(term_str, ": ")
+            var = Symbol(parts[1])
+            contrast_parts = split(parts[2], " → ")
+            term = ContrastTerm(var, contrast_parts[1], contrast_parts[2])
+        else
+            # Continuous term
+            term = ContinuousTerm(Symbol(term_str))
+        end
+        push!(terms, term)
+        term_lookup[term_str] = i
+    end
+    
+    # Build profiles from at_* columns
+    at_cols = filter(name -> startswith(string(name), "at_"), names(df))
+    profiles = ProfileSpec[]
+    profile_lookup = Dict{NamedTuple, Int}()
+    
+    if !isempty(at_cols)
+        # Group by unique profile combinations
+        profile_keys = Symbol[Symbol(string(col)[4:end]) for col in at_cols] # Remove "at_" prefix
+        unique_profiles = unique(eachrow(select(df, at_cols)))
+        
+        for profile_row in unique_profiles
+            values = [profile_row[col] for col in at_cols]
+            profile = ProfileSpec(profile_keys, values)
+            push!(profiles, profile)
+            profile_lookup[NamedTuple(col => profile_row[col] for col in at_cols)] = length(profiles)
+        end
+    end
+    
+    # Build groups from remaining columns (excluding term, estimate, se, at_*)
+    # Note: names(df) returns strings, but at_cols contains symbols
+    excluded_cols = ["term", "estimate", "se", string.(at_cols)...]
+    group_cols = setdiff(names(df), excluded_cols)
+    groups = NamedTuple[]
+    group_lookup = Dict{NamedTuple, Int}()
+    
+    # For Phase 1, skip complex grouping - just handle the simple case
+    if !isempty(group_cols)
+        @warn "Grouping columns detected but not yet fully implemented in Phase 1: $group_cols"
+        # TODO: Implement proper grouping support
+    end
+    
+    # Build row index vectors
+    row_term = [term_lookup[df.term[i]] for i in 1:N]
+    
+    row_profile = if isempty(at_cols)
+        zeros(Int, N)
+    else
+        [profile_lookup[NamedTuple(col => df[i, col] for col in at_cols)] for i in 1:N]
+    end
+    
+    row_group = if isempty(group_cols)
+        zeros(Int, N)
+    else
+        [group_lookup[NamedTuple(col => df[i, col] for col in group_cols)] for i in 1:N]
+    end
+    
+    # Build metadata
     md = (; kwargs...)
-    return MarginsResult(table, md, gradients)
+    
+    return MarginsResult(estimate, se, terms, profiles, groups, row_term, row_profile, row_group, gradients, md)
 end
 
 """
