@@ -7,6 +7,16 @@ Compute AME for continuous vars with delta-method SEs.
 """
 function _ame_continuous(model, data_nt, engine; target::Symbol=:mu, backend::Symbol=:ad, rows=:all, measure::Symbol=:effect, weights=nothing)
     (; compiled, de, vars, β, Σ, link) = engine
+    
+    # Skip if no continuous variables (de would be nothing)
+    if de === nothing
+        return DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    end
+    
+    # Filter vars to only continuous variables (that are in de.vars)
+    continuous_vars = de.vars
+    vars = filter(v -> v in continuous_vars, vars)
+    
     n = rows === :all ? _nrows(data_nt) : length(rows)
     idxs = rows === :all ? (1:_nrows(data_nt)) : rows
     # Buffers
@@ -98,6 +108,16 @@ Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => 
 """
 function _mem_mer_continuous(model, data_nt, engine, at; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
+    
+    # Skip if no continuous variables (de would be nothing)
+    if de === nothing
+        return DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
+    end
+    
+    # Filter vars to only continuous variables (that are in de.vars)
+    continuous_vars = de.vars
+    vars = filter(v -> v in continuous_vars, vars)
+    
     profiles = _build_profiles(at, data_nt)
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
     gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
@@ -174,6 +194,16 @@ Returns (df, gradients) where gradients is a Dict mapping (var, profile_idx) => 
 """
 function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
     (; compiled, de, vars, β, Σ, link) = engine
+    
+    # Skip if no continuous variables (de would be nothing)
+    if de === nothing
+        return (DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]), Dict{Tuple{Symbol,Int}, Vector{Float64}}())
+    end
+    
+    # Filter vars to only continuous variables (that are in de.vars)
+    continuous_vars = de.vars
+    vars = filter(v -> v in continuous_vars, vars)
+    
     out = DataFrame(term=Symbol[], dydx=Float64[], se=Float64[])
     gradients = Dict{Tuple{Symbol,Int}, Vector{Float64}}()
     

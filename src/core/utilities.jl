@@ -18,13 +18,24 @@ end
 """
     _vcov_model(model, p)
 
-Fetch `vcov(model)` or return an identity fallback if unavailable.
+Fetch `vcov(model)` - ERRORS if unavailable (no fallbacks).
 """
 function _vcov_model(model, p::Integer)
     try
-        return StatsBase.vcov(model)
-    catch
-        return Matrix{Float64}(I, p, p)
+        vcov_matrix = StatsBase.vcov(model)
+        return vcov_matrix
+    catch e
+        error("""Failed to extract covariance matrix from model: $(typeof(e)): $e
+
+This is required for computing standard errors, confidence intervals, and p-values.
+
+Solutions:
+• Ensure your model was fitted properly and supports vcov()
+• Provide explicit covariance matrix: vcov=your_covariance_matrix  
+• Use robust covariance estimator via CovarianceMatrices.jl
+• Check model type compatibility with StatsBase.vcov()
+
+""")
     end
 end
 

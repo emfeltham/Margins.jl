@@ -87,7 +87,7 @@ function profile_margins(
     
     # Build profiles
     profs = _build_profiles(at, data_nt)
-    gradients_for_averaging = Dict()  # Store gradients for proper averaging
+    gradients_for_averaging = Dict{Any, Vector{Float64}}()  # Store gradients for proper averaging
     
     if type === :effects
         # Profile effects - call MEM/MER computational path
@@ -121,6 +121,9 @@ function profile_margins(
         groups = _build_groups(data_nt, over, nothing)  # within not used in profiles
         strata = _split_by(data_nt, by)
         
+        # Clear original gradients since we'll collect group-specific ones
+        empty!(gradients_for_averaging)
+        
         # Rebuild computation with grouping
         grouped_dfs = DataFrame[]
         strata_list = strata === nothing ? [(NamedTuple(), 1:_nrows(data_nt))] : strata
@@ -128,6 +131,9 @@ function profile_margins(
         for (bylabels, sidxs) in strata_list
             local_groups = groups === nothing ? [(NamedTuple(), sidxs)] : _build_groups(data_nt, over, nothing, sidxs)
             for (labels, idxs) in local_groups
+                # Create group identifier for gradient mapping
+                group_key = (; bylabels..., labels...)
+                
                 # Create group-specific data subset for profile computation
                 group_data_nt = _subset_data(data_nt, idxs)
                 group_engine = (; engine..., data_nt=group_data_nt)
@@ -141,6 +147,11 @@ function profile_margins(
                         eng_cont = (; group_engine..., vars=cont_vars)
                         df_group_cont, gradients_group_cont = _mem_mer_continuous(model, group_data_nt, eng_cont, at; target=target, backend=backend, measure=measure)
                         push!(group_df_parts, df_group_cont)
+                        # Store gradients with group-aware keys: (term, group_key, profile_idx) => gradient
+                        for ((term, prof_idx), grad) in gradients_group_cont
+                            group_grad_key = (term, group_key, prof_idx)
+                            gradients_for_averaging[group_grad_key] = grad
+                        end
                     end
                     if !isempty(cat_vars)
                         eng_cat = (; group_engine..., vars=cat_vars)
@@ -153,6 +164,11 @@ function profile_margins(
                     group_profs = _build_profiles(at, group_data_nt)
                     group_df, gradients_group_pred = _ap_profiles(model, group_data_nt, group_engine.compiled, group_engine.β, group_engine.Σ, group_profs; target=target_pred, link=group_engine.link)
                     group_df[!, :term] = fill(:prediction, nrow(group_df))
+                    # Store gradients with group-aware keys for predictions
+                    for (prof_idx, grad) in gradients_group_pred
+                        group_grad_key = (:prediction, group_key, prof_idx)
+                        gradients_for_averaging[group_grad_key] = grad
+                    end
                 end
                 
                 # Add group columns to results
@@ -173,7 +189,7 @@ function profile_margins(
     # Handle averaging if requested
     if average && nrow(df) > 1
         profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
-        group_cols = setdiff(names(df), ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
+        group_cols = setdiff(names(df), ["term", "dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
         df = _average_profiles_with_proper_se(df, gradients_for_averaging, engine.Σ; group_cols=String.(group_cols))
     end
     
@@ -297,7 +313,7 @@ function profile_margins(
         push!(profs, prof_dict)
     end
     
-    gradients_table_for_averaging = Dict()  # Store gradients for proper averaging
+    gradients_table_for_averaging = Dict{Any, Vector{Float64}}()  # Store gradients for proper averaging
     
     if type === :effects
         # Profile effects - use existing computational paths but with direct profiles
@@ -313,8 +329,10 @@ function profile_margins(
             merge!(gradients_table_for_averaging, gradients_table_cont)
         end
         if !isempty(cat_vars)
-            # For now, categorical effects with table-based profiles not yet implemented
-            @warn "Categorical effects with table-based reference grids not yet implemented. Only continuous effects supported."
+            eng_cat = (; engine..., vars=cat_vars)
+            df_table_cat, gradients_table_cat = _categorical_effects_from_profiles(model, data_nt, eng_cat, profs; target=target, contrasts=contrasts)
+            push!(df_parts, df_table_cat)
+            merge!(gradients_table_for_averaging, gradients_table_cat)
         end
         
         df = isempty(df_parts) ? DataFrame(term=Symbol[], dydx=Float64[], se=Float64[]) : reduce(vcat, df_parts)
@@ -329,7 +347,7 @@ function profile_margins(
     # Handle averaging if requested
     if average && nrow(df) > 1
         profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
-        group_cols = setdiff(names(df), ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
+        group_cols = setdiff(names(df), ["term", "dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols)
         df = _average_profiles_with_proper_se(df, gradients_table_for_averaging, engine.Σ; group_cols=String.(group_cols))
     end
     

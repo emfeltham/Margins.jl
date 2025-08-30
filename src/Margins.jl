@@ -5,7 +5,7 @@ module Margins
 using Statistics
 using LinearAlgebra
 using Tables, DataFrames
-using StatsModels, GLM, CategoricalArrays
+using StatsModels, StatsBase, GLM, CategoricalArrays
 using FormulaCompiler
 using CovarianceMatrices
 using Distributions

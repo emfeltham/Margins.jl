@@ -94,9 +94,9 @@ function population_margins(
         
         if groups === nothing && strata === nothing
             # No grouping - compute once
+            row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
             if !isempty(cont_vars)
                 eng_cont = (; engine..., vars=cont_vars)
-                row_idxs = rows === :all ? collect(1:_nrows(data_nt)) : rows
                 ab_subset = balance === :none ? nothing : (balance === :all ? nothing : balance)
                 bw = balance === :none ? nothing : _balanced_weights(data_nt, row_idxs, ab_subset)
                 w_final = _merge_weights(weights, bw, data_nt, row_idxs)
