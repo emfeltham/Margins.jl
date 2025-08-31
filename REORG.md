@@ -1049,12 +1049,13 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
    - [x] **Day 1-2**: Implement new `population.jl` with clean Julia-style API
    - [x] **Day 3-4**: Implement new `profile.jl` with unified profile building
    - [x] **Day 5**: Single, efficient profile specification system (no duplicates)
+   - [x] Fix categorical typical values to use frequency-weighted mixtures instead of first-levet default (e.g., when left unspecified in the reference grid)
    - **Validation**: All current functionality works, performance benchmarks show improvement
 
-- [ ] **Phase 3 (Week 4)**: Radical Simplification
-   - [ ] **Day 1-2**: Delete old file structure, move logic to new organized architecture
-   - [ ] **Day 3-4**: Aggressive API cleanup - remove complex exports and features
-   - [ ] **Day 5**: Update `Margins.jl` module with minimal, clean exports
+- [x] **Phase 3 (Week 4)**: Radical Simplification
+   - [x] **Day 1-2**: Delete old file structure, move logic to new organized architecture
+   - [x] **Day 3-4**: Aggressive API cleanup - remove complex exports and features
+   - [x] **Day 5**: Update `Margins.jl` module with minimal, clean exports
    - **Validation**: Test suite passes, package loads cleanly
 
 - [ ] **Phase 4 (Week 5)**: Performance Optimization & Validation
