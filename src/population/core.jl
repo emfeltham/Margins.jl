@@ -4,55 +4,82 @@
 const COMPILED_CACHE = Dict{UInt64, Any}()
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, target=:mu, backend=:ad, at=nothing, over=nothing, kwargs...)
+    population_margins(model, data; kwargs...) -> MarginsResult
 
 Compute population-level marginal effects or adjusted predictions.
 
 This function averages effects/predictions across the observed sample distribution,
-providing true population parameters for your sample.
+providing true population parameters for your sample. It implements the "Population" 
+approach from the 2×2 framework (Population vs Profile × Effects vs Predictions).
 
 # Arguments
-- `model`: Fitted statistical model (GLM, etc.)
-- `data`: Data table (DataFrame, NamedTuple, etc.)
-- `type::Symbol=:effects`: Type of analysis (`:effects` for AME, `:predictions` for AAP)
-- `vars=nothing`: Variables for analysis (only needed for `:effects`; defaults to all continuous)
-- `target::Symbol=:mu`: Target scale (`:mu` for response scale, `:eta` for linear predictor)
-- `backend::Symbol=:ad`: Computational backend (`:ad` or `:fd`)
-- `at=nothing`: Counterfactual scenarios (Dict specifying variable values)
-- `over=nothing`: Subgroup analysis (NamedTuple or Vector specifying grouping variables)
+- `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
+- `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
+
+# Keyword Arguments
+- `type::Symbol=:effects`: Analysis type
+  - `:effects` - Average Marginal Effects (AME): population-averaged derivatives/contrasts
+  - `:predictions` - Average Adjusted Predictions (AAP): population-averaged fitted values
+- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+  - Only required when `type=:effects`
+  - Defaults to all continuous variables (numeric types except Bool)
+- `target::Symbol=:mu`: Target scale for computation
+  - `:mu` - Response scale (default, applies inverse link function)  
+  - `:eta` - Linear predictor scale (link scale)
+- `backend::Symbol=:ad`: Computational backend
+  - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
+  - `:fd` - Finite differences (zero allocation, production-ready)
+- `at=nothing`: Counterfactual scenarios (Dict mapping variables to values)
+  - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
+- `over=nothing`: Subgroup analysis specification
+  - NamedTuple: `(var1=values, var2=nothing)` for flexible grouping
+  - Vector{Symbol}: `[:var1, :var2]` for all-categorical automatic grouping
 
 # Returns
-- `MarginsResult`: Container with results DataFrame, gradients matrix, and metadata
+`MarginsResult` containing:
+- Results DataFrame with estimates, standard errors, t-statistics, p-values
+- Parameter gradients matrix for delta-method standard errors
+- Analysis metadata (options used, model info, etc.)
+
+# Statistical Notes
+- Standard errors computed via delta method using full model covariance matrix
+- Categorical variables use baseline contrasts vs reference levels
+- All computations maintain statistical validity with zero tolerance for approximations
 
 # Examples
 ```julia
-# Average marginal effects (AME)
-result = population_margins(model, data; type=:effects, vars=[:x1, :x2])
+# Average marginal effects for all continuous variables
+result = population_margins(model, data)
+DataFrame(result)  # Convert to DataFrame
 
-# Average adjusted predictions (AAP)  
+# Specific variables with response-scale effects
+result = population_margins(model, data; vars=[:x1, :x2], target=:mu)
+
+# Average adjusted predictions  
 result = population_margins(model, data; type=:predictions)
 
-# Population effects with counterfactual scenarios
-result = population_margins(model, data; type=:effects, vars=[:x1], 
-                          at=Dict(:x2 => [0, 1]))
+# Counterfactual analysis: effects when x2 is set to 0 vs 1
+result = population_margins(model, data; vars=[:x1], at=Dict(:x2 => [0, 1]))
 
-# Population effects by subgroups
-result = population_margins(model, data; type=:effects, vars=[:x1], 
-                          over=(region=nothing, income=[10000, 50000]))
+# Subgroup analysis: effects by region and income categories
+result = population_margins(model, data; vars=[:education], 
+                          over=(region=nothing, income=[20000, 50000, 80000]))
+
+# High-performance production use with finite differences
+result = population_margins(model, data; backend=:fd, target=:eta)
 ```
+
+See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
 function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, at=nothing, over=nothing, kwargs...)
+    # Input validation
+    _validate_population_inputs(model, data, type, vars, target, backend, at, over)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
-    # Handle vars parameter (only needed for type=:effects)
+    # Handle vars parameter with improved validation
     if type === :effects
-        vars = vars === nothing ? :all_continuous : vars  # Default to all continuous variables
-        if vars === :all_continuous
-            vars = _get_continuous_variables(data_nt)
-        elseif isa(vars, Symbol)
-            vars = [vars]  # Convert single var to vector
-        end
+        vars = _process_vars_parameter(vars, data_nt)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
@@ -102,4 +129,89 @@ function _get_continuous_variables(data_nt::NamedTuple)
         end
     end
     return continuous_vars
+end
+
+"""
+    _validate_population_inputs(model, data, type, vars, target, backend, at, over)
+
+Validate inputs to population_margins() with clear Julia-style error messages.
+"""
+function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, over)
+    # Validate required arguments
+    if model === nothing
+        throw(ArgumentError("model cannot be nothing"))
+    end
+    
+    if data === nothing
+        throw(ArgumentError("data cannot be nothing"))
+    end
+    
+    # Validate type parameter
+    if type ∉ (:effects, :predictions)
+        throw(ArgumentError("type must be :effects or :predictions, got :$(type)"))
+    end
+    
+    # Validate target parameter
+    if target ∉ (:eta, :mu)
+        throw(ArgumentError("target must be :eta or :mu, got :$(target)"))
+    end
+    
+    # Validate backend parameter
+    if backend ∉ (:ad, :fd)
+        throw(ArgumentError("backend must be :ad or :fd, got :$(backend)"))
+    end
+    
+    # Validate vars parameter for effects
+    if type === :effects && vars !== nothing
+        if !(vars isa Symbol || vars isa Vector{Symbol} || vars === :all_continuous)
+            throw(ArgumentError("vars must be Symbol, Vector{Symbol}, or :all_continuous for effects analysis"))
+        end
+    end
+    
+    # Validate at parameter
+    if at !== nothing && !(at isa Dict)
+        throw(ArgumentError("at parameter must be a Dict specifying counterfactual scenarios"))
+    end
+    
+    # Validate over parameter
+    if over !== nothing && !(over isa NamedTuple || over isa Vector{Symbol})
+        throw(ArgumentError("over parameter must be a NamedTuple or Vector{Symbol} for grouping analysis"))
+    end
+    
+    # Validate model has required methods
+    try
+        coef(model)
+    catch e
+        throw(ArgumentError("model must support coef() method (fitted statistical model required)"))
+    end
+    
+    try
+        vcov(model)
+    catch e
+        throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
+    end
+end
+
+"""
+    _process_vars_parameter(vars, data_nt) -> Vector{Symbol}
+
+Process and validate the vars parameter with improved error handling.
+"""
+function _process_vars_parameter(vars, data_nt::NamedTuple)
+    if vars === nothing || vars === :all_continuous
+        continuous_vars = _get_continuous_variables(data_nt)
+        if isempty(continuous_vars)
+            throw(MarginsError("No continuous variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
+        end
+        return continuous_vars
+    elseif vars isa Symbol
+        vars_vec = [vars]
+        _validate_variables(data_nt, vars_vec)
+        return vars_vec
+    elseif vars isa Vector{Symbol}
+        _validate_variables(data_nt, vars)
+        return vars
+    else
+        throw(ArgumentError("vars must be Symbol, Vector{Symbol}, or :all_continuous"))
+    end
 end

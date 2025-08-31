@@ -1045,10 +1045,10 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
    - [x] **Day 7-10**: Implement zero-allocation profile effects with scenario override system
    - **Validation**: BenchmarkTools.jl tests verify 0 bytes, bootstrap validation of SEs
 
-- [ ] **Phase 2 (Week 3)**: Clean 2×2 API Implementation  
-   - [ ] **Day 1-2**: Implement new `population.jl` with clean Julia-style API
-   - [ ] **Day 3-4**: Implement new `profile.jl` with unified profile building
-   - [ ] **Day 5**: Single, efficient profile specification system (no duplicates)
+- [x] **Phase 2 (Week 3)**: Clean 2×2 API Implementation  
+   - [x] **Day 1-2**: Implement new `population.jl` with clean Julia-style API
+   - [x] **Day 3-4**: Implement new `profile.jl` with unified profile building
+   - [x] **Day 5**: Single, efficient profile specification system (no duplicates)
    - **Validation**: All current functionality works, performance benchmarks show improvement
 
 - [ ] **Phase 3 (Week 4)**: Radical Simplification

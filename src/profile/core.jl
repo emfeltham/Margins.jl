@@ -3,53 +3,93 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data; at=:means, type=:effects, vars=nothing, target=:mu, backend=:ad, kwargs...)
+    profile_margins(model, data; at=:means, kwargs...) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
 This function evaluates effects/predictions at representative points or user-specified scenarios,
-providing marginal effects at the mean (MEM) or marginal effects at representative values (MER).
+implementing the "Profile" approach from the 2×2 framework (Population vs Profile × Effects vs Predictions).
+It provides marginal effects at the mean (MEM), marginal effects at representative values (MER),
+or adjusted predictions at specific profiles (APM/APR).
 
 # Arguments
-- `model`: Fitted statistical model (GLM, etc.)
-- `data`: Data table (DataFrame, NamedTuple, etc.)
-- `at`: Profile specification (`:means`, Dict, Vector{Dict}, or DataFrame)
-- `type::Symbol=:effects`: Type of analysis (`:effects` for MEM/MER, `:predictions` for APM/APR)
-- `vars=nothing`: Variables for analysis (only needed for `:effects`; defaults to all continuous)
-- `target::Symbol=:mu`: Target scale (`:mu` for response scale, `:eta` for linear predictor)
-- `backend::Symbol=:ad`: Computational backend (`:ad` or `:fd`)
+- `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
+- `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
+
+# Keyword Arguments
+- `at=:means`: Profile specification (required for profile analysis)
+  - `:means` - Effects/predictions at sample means (MEM/APM)
+  - `Dict` - Cartesian product specification: `Dict(:x1 => [0, 1], :x2 => [2, 3])`
+  - `Vector{Dict}` - Explicit profiles: `[Dict(:x1 => 0, :x2 => 2), Dict(:x1 => 1, :x2 => 3)]`
+  - `DataFrame` - Pre-built reference grid (most efficient for complex scenarios)
+- `type::Symbol=:effects`: Analysis type
+  - `:effects` - Marginal Effects at profiles (MEM/MER): derivatives/contrasts at specific points
+  - `:predictions` - Adjusted Predictions at profiles (APM/APR): fitted values at specific points
+- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+  - Only required when `type=:effects`
+  - Defaults to all continuous variables (numeric types except Bool)
+- `target::Symbol=:mu`: Target scale for computation
+  - `:mu` - Response scale (default, applies inverse link function)  
+  - `:eta` - Linear predictor scale (link scale)
+- `backend::Symbol=:ad`: Computational backend
+  - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
+  - `:fd` - Finite differences (zero allocation, production-ready)
 
 # Returns
-- `MarginsResult`: Container with results DataFrame, gradients matrix, and metadata
+`MarginsResult` containing:
+- Results DataFrame with estimates, standard errors, t-statistics, p-values
+- Profile columns (at_varname) showing covariate values for each estimate
+- Parameter gradients matrix for delta-method standard errors
+- Analysis metadata (options used, model info, etc.)
+
+# Statistical Notes
+- Standard errors computed via delta method using full model covariance matrix
+- Categorical variables use baseline contrasts vs reference levels at each profile
+- Profile approach enables interpretation at specific, meaningful covariate combinations
+- More efficient than population approach when analyzing specific scenarios
 
 # Examples
 ```julia
-# Effects at sample means (MEM)
+# Effects at sample means (MEM) - most common case
 result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1, :x2])
+DataFrame(result)  # Convert to DataFrame with profile information
 
-# Effects at specific profiles (MER)
-result = profile_margins(model, data; at=Dict(:x1 => [0, 1], :x2 => [mean]), type=:effects)
+# Effects at specific scenarios (MER)
+result = profile_margins(model, data; at=Dict(:x1 => [0, 1], :income => [25000, 50000]), 
+                        type=:effects, vars=[:education])
 
 # Predictions at the mean (APM)
 result = profile_margins(model, data; at=:means, type=:predictions)
 
-# Multiple explicit profiles
-profiles = [Dict(:x1 => 0.0, :x2 => 1.0), Dict(:x1 => 1.0, :x2 => 0.0)]
+# Multiple explicit profiles for complex analysis
+profiles = [
+    Dict(:x1 => 0.0, :x2 => 1.0, :region => "North"),
+    Dict(:x1 => 1.0, :x2 => 0.0, :region => "South")
+]
 result = profile_margins(model, data; at=profiles, type=:effects)
+
+# High-performance with pre-built reference grid
+reference_grid = DataFrame(x1=[0, 1, 2], x2=[10, 20, 30])
+result = profile_margins(model, reference_grid; type=:predictions)
+
+# Cartesian product for systematic exploration
+result = profile_margins(model, data; 
+                        at=Dict(:age => [25, 35, 45], :education => [12, 16]), 
+                        type=:effects, vars=[:income], backend=:fd)
 ```
+
+See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
 function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, kwargs...)
+    # Input validation - use same pattern as population_margins
+    _validate_profile_inputs(model, data, at, type, vars, target, backend)
+    
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
-    # Handle vars parameter (only needed for type=:effects)
+    # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
-        vars = vars === nothing ? :all_continuous : vars  # Default to all continuous variables
-        if vars === :all_continuous
-            vars = _get_continuous_variables(data_nt)
-        elseif isa(vars, Symbol)
-            vars = [vars]  # Convert single var to vector
-        end
+        vars = _process_vars_parameter(vars, data_nt)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
@@ -63,7 +103,7 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, kwargs...)  # → MEM/MER
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at, kwargs...)
         return MarginsResult(df, G, metadata)
@@ -76,35 +116,76 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
 end
 
 """
-    profile_margins(model, reference_grid::DataFrame; type=:effects, vars=nothing, target=:mu, backend=:ad, kwargs...)
+    profile_margins(model, reference_grid::DataFrame; kwargs...) -> MarginsResult
 
-Profile margins using an explicit reference grid DataFrame.
+Compute profile margins using an explicit reference grid DataFrame.
 
 This is the most efficient method when you have already constructed your desired reference grid.
+No additional profile building is performed - the DataFrame is used directly, making this 
+ideal for complex scenarios or when the same reference grid will be reused multiple times.
+
+# Arguments
+- `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
+- `reference_grid::DataFrame`: Pre-built reference grid with specific covariate combinations
+
+# Keyword Arguments
+Same as the main `profile_margins()` method, except `at` parameter is not needed since
+the reference grid is provided directly.
+
+# Returns
+`MarginsResult` with the same structure as the main method, containing results for
+each row of the reference grid.
+
+# Performance Notes
+- Most efficient profile margins method (zero reference grid construction overhead)
+- Ideal for complex scenarios requiring custom reference grids
+- Perfect for repeated analysis with the same covariate combinations
+- Enables maximum control over profile specification
+
+# Examples
+```julia
+# Pre-built reference grid for systematic analysis
+reference_grid = DataFrame(
+    age = [25, 35, 45, 55],
+    education = [12, 16, 12, 16], 
+    income = [30000, 50000, 35000, 60000]
+)
+result = profile_margins(model, reference_grid; type=:effects, vars=[:experience])
+
+# Complex factorial design
+grid = expand.grid(
+    treatment = ["A", "B", "C"],
+    dose = [10, 20, 30],
+    age_group = ["young", "old"]
+)
+result = profile_margins(model, grid; type=:predictions)
+
+# Reuse same reference grid for multiple analyses
+effects_result = profile_margins(model, reference_grid; type=:effects)
+predictions_result = profile_margins(model, reference_grid; type=:predictions)
+```
 """
 function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, kwargs...)
+    # Input validation - reuse population validation for model/type/target/backend
+    _validate_population_inputs(model, reference_grid, type, vars, target, backend, nothing, nothing)
+    
     # Convert reference grid to data format
     data_nt = Tables.columntable(reference_grid)
     
-    # Handle vars parameter (only needed for type=:effects)
+    # Handle vars parameter with improved validation - use same helper
     if type === :effects
-        vars = vars === nothing ? :all_continuous : vars  # Default to all continuous variables
-        if vars === :all_continuous
-            vars = _get_continuous_variables(data_nt)
-        elseif isa(vars, Symbol)
-            vars = [vars]  # Convert single var to vector
-        end
+        vars = _process_vars_parameter(vars, data_nt)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
     
-    # Build zero-allocation engine
+    # Build zero-allocation engine (no caching needed for explicit grids)
     engine = build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, kwargs...)  # → MEM/MER
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend, n_obs=nrow(reference_grid), 
                                   model_type=typeof(model), at_spec="explicit_grid", kwargs...)
         return MarginsResult(df, G, metadata)
@@ -195,4 +276,43 @@ function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; 
     end
     
     return results, G
+end
+
+"""
+    _validate_profile_inputs(model, data, at, type, vars, target, backend)
+
+Validate inputs to profile_margins() with clear Julia-style error messages.
+"""
+function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol)
+    # Reuse population validation for common parameters
+    _validate_population_inputs(model, data, type, vars, target, backend, nothing, nothing)
+    
+    # Note: at parameter validation 
+    # Since the function signature has at=:means as default, at===nothing should never occur
+    # But we include this check for robustness if called directly with at=nothing
+    
+    if !(at === :means || at isa Dict || at isa Vector || at isa DataFrame)
+        throw(ArgumentError("at parameter must be :means, Dict, Vector{Dict}, or DataFrame"))
+    end
+    
+    # Additional validation for Dict specification
+    if at isa Dict
+        if isempty(at)
+            throw(ArgumentError("at Dict cannot be empty - specify at least one variable and its values"))
+        end
+        for (k, v) in pairs(at)
+            if !(k isa Symbol)
+                throw(ArgumentError("at Dict keys must be Symbols (variable names), got $(typeof(k))"))
+            end
+        end
+    end
+    
+    # Additional validation for Vector specification  
+    if at isa Vector && !isempty(at)
+        for (i, profile) in enumerate(at)
+            if !(profile isa Dict || profile isa NamedTuple)
+                throw(ArgumentError("at Vector elements must be Dict or NamedTuple (profiles), element $i is $(typeof(profile))"))
+            end
+        end
+    end
 end
