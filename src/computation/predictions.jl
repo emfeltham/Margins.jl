@@ -54,13 +54,20 @@ function _ape(model, data_nt, compiled, β, Σ; target::Symbol=:mu, link=_auto_l
 end
 
 """
-    _ap_profiles(model, data_nt, compiled, β, Σ, profiles; target)
+    _ap_profiles(model, data_nt, compiled, β, Σ, profiles_source; target)
 
-Compute adjusted predictions at each profile dict.
+Compute adjusted predictions from a streaming profiles source.
 Returns (df, G) where df has columns term, estimate, se, at_* and G is row-aligned gradient matrix.
+
+# Arguments
+- `profiles_source`: Either a Vector{<:Dict} or any iterable that yields profile dictionaries
 """
-function _ap_profiles(model, data_nt, compiled, β, Σ, profiles::Vector{<:Dict}; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
+function _ap_profiles(model, data_nt, compiled, β, Σ, profiles_source; target::Symbol=:mu, link=_auto_link(model), average_profiles::Bool=false)
     xbuf = Vector{Float64}(undef, length(compiled))
+    
+    # For streaming sources, we need to collect first to determine all profile keys
+    # This maintains the row order while collecting metadata
+    profiles = collect(profiles_source)
     
     # Pre-allocate all columns including profile columns to avoid column count mismatch
     all_profile_keys = Set{Symbol}()

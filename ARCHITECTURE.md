@@ -12,6 +12,8 @@ This creates a clear documentation flow from conceptual design → strategic
 planning → detailed implementation, with proper cross-references so users
 can navigate between the documents easily!
 
+N.B., Rewrite existing functions and directories to this plan's spec.
+
 ## Overview
 
 Margins.jl implements a clean **2×2 framework** for marginal effects computation, built on FormulaCompiler.jl's zero-allocation foundation. The architecture prioritizes statistical correctness, performance, Julian style, and proper FormulaCompiler integration.

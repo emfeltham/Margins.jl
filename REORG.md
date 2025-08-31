@@ -1039,33 +1039,33 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
 
 *Breaking changes acceptable - focus on correctness, performance, and proper FormulaCompiler integration*
 
-### **Phase 1 (Week 1-2)**: Zero-Allocation Engine Foundation
-- **Day 1-3**: Design and implement `MarginsEngine` struct with pre-allocated buffers
-- **Day 4-6**: Build zero-allocation population effects functions using FormulaCompiler properly
-- **Day 7-10**: Implement zero-allocation profile effects with scenario override system
-- **Validation**: BenchmarkTools.jl tests verify 0 bytes, bootstrap validation of SEs
+- [x] **Phase 1 (Week 1-2)**: Zero-Allocation Engine Foundation
+   - [x] **Day 1-3**: Design and implement `MarginsEngine` struct with pre-allocated buffers
+   - [x] **Day 4-6**: Build zero-allocation population effects functions using FormulaCompiler properly
+   - [x] **Day 7-10**: Implement zero-allocation profile effects with scenario override system
+   - **Validation**: BenchmarkTools.jl tests verify 0 bytes, bootstrap validation of SEs
 
-### **Phase 2 (Week 3)**: Clean 2×2 API Implementation  
-- **Day 1-2**: Implement new `population.jl` with clean Julia-style API
-- **Day 3-4**: Implement new `profile.jl` with unified profile building
-- **Day 5**: Single, efficient profile specification system (no duplicates)
-- **Validation**: All current functionality works, performance benchmarks show improvement
+- [ ] **Phase 2 (Week 3)**: Clean 2×2 API Implementation  
+   - [ ] **Day 1-2**: Implement new `population.jl` with clean Julia-style API
+   - [ ] **Day 3-4**: Implement new `profile.jl` with unified profile building
+   - [ ] **Day 5**: Single, efficient profile specification system (no duplicates)
+   - **Validation**: All current functionality works, performance benchmarks show improvement
 
-### **Phase 3 (Week 4)**: Radical Simplification
-- **Day 1-2**: Delete old file structure, move logic to new organized architecture
-- **Day 3-4**: Aggressive API cleanup - remove complex exports and features
-- **Day 5**: Update `Margins.jl` module with minimal, clean exports
-- **Validation**: Test suite passes, package loads cleanly
+- [ ] **Phase 3 (Week 4)**: Radical Simplification
+   - [ ] **Day 1-2**: Delete old file structure, move logic to new organized architecture
+   - [ ] **Day 3-4**: Aggressive API cleanup - remove complex exports and features
+   - [ ] **Day 5**: Update `Margins.jl` module with minimal, clean exports
+   - **Validation**: Test suite passes, package loads cleanly
 
-### **Phase 4 (Week 5)**: Performance Optimization & Validation
-- **Day 1-3**: Achieve target performance (<100ns per row, <1μs per profile)
-- **Day 4-5**: Comprehensive statistical validation and benchmarking
-- **Validation**: Performance targets met, statistical correctness verified
+- [ ] **Phase 4 (Week 5)**: Performance Optimization & Validation
+   - [ ] **Day 1-3**: Achieve target performance (<100ns per row, <1μs per profile)
+   - [ ] **Day 4-5**: Comprehensive statistical validation and benchmarking
+   - **Validation**: Performance targets met, statistical correctness verified
 
-### **Phase 5 (Week 6)**: Documentation & Polish
-- **Day 1-3**: Update documentation to reflect simplified API
-- **Day 4-5**: Final testing, edge cases, error handling
-- **Validation**: Ready for production use
+- [ ] **Phase 5 (Week 6)**: Documentation & Polish
+   - [ ] **Day 1-3**: Update documentation to reflect simplified API
+   - [ ] **Day 4-5**: Final testing, edge cases, error handling
+   - [ ] **Validation**: Ready for production use
 
 ## 🎯 **How to Start**
 

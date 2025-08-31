@@ -335,3 +335,14 @@ function _categorical_effects_from_profiles(model, data_nt, engine, profiles; ta
     
     return (out, G)
 end
+
+"""
+    _categorical_effects_from_profiles_streaming(model, data_nt, engine, profiles; target=:mu, contrasts=:pairwise)
+
+Phase 2: Streaming version that accepts Vector{<:Dict} profiles (already collected from streaming source).
+This is identical to _categorical_effects_from_profiles but with explicit "streaming" naming for Phase 2.
+"""
+function _categorical_effects_from_profiles_streaming(model, data_nt, engine, profiles; target::Symbol=:mu, contrasts::Symbol=:pairwise)
+    # Delegate to existing implementation - already handles Vector{<:Dict} correctly
+    return _categorical_effects_from_profiles(model, data_nt, engine, profiles; target=target, contrasts=contrasts)
+end

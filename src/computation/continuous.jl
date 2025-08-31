@@ -304,3 +304,14 @@ function _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; tar
     
     return (out, G)
 end
+
+"""
+    _mem_mer_continuous_from_profiles_streaming(model, data_nt, engine, profiles; target=:mu, backend=:ad, measure=:effect)
+
+Phase 2: Streaming version that accepts Vector{<:Dict} profiles (already collected from streaming source).
+This is identical to _mem_mer_continuous_from_profiles but with explicit "streaming" naming for Phase 2.
+"""
+function _mem_mer_continuous_from_profiles_streaming(model, data_nt, engine, profiles; target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect)
+    # Delegate to existing implementation - already handles Vector{<:Dict} correctly
+    return _mem_mer_continuous_from_profiles(model, data_nt, engine, profiles; target=target, backend=backend, measure=measure)
+end

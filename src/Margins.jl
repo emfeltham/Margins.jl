@@ -1,45 +1,31 @@
-# Margins.jl
-
 module Margins
 
-using Statistics
-using LinearAlgebra
-using Tables, DataFrames
-using StatsModels, StatsBase, GLM, CategoricalArrays
+# Dependencies
+using Tables, DataFrames, StatsModels, GLM
 using FormulaCompiler
-using CovarianceMatrices
-using Distributions
+using LinearAlgebra: dot
+using Statistics: mean
+using CategoricalArrays
 
-# Public API exports - Clean two-function design
+# Version info
+const VERSION = v"2.0.0"
+
+# Main exports - Clean 2×2 framework
 export population_margins, profile_margins, MarginsResult
-# Categorical mixture support
-export mix, CategoricalMixture
-# Gradient utilities
-export get_gradients, contrast, bootstrap_effects, effect_heterogeneity, gradient_summary
 
-# Core Infrastructure
-include("core/utilities.jl")          # General utility functions
-include("core/grouping.jl")           # Grouping and stratification utilities
-include("core/results.jl")            # Result types and display
-include("core/profiles.jl")           # Profile grid building and processing
-include("core/link.jl")               # Link function utilities
+# Advanced exports (future)
+export population_margins!, profile_margins!  # In-place versions
 
-# Computation Engine
-include("computation/engine.jl")       # FormulaCompiler integration
-include("computation/continuous.jl")   # Continuous marginal effects (AME/MEM/MER)
-include("computation/categorical.jl")  # Categorical contrasts and discrete changes
-include("computation/predictions.jl")  # Adjusted predictions (APE/APM/APR)
-
-# Advanced Features
-include("features/categorical_mixtures.jl")  # Categorical mixture support
-include("features/averaging.jl")             # Proper delta method averaging for profiles
-
-# API Layer
-include("api/common.jl")              # Shared API utilities and helpers
-include("api/population.jl")          # Population margins API (AME/APE)
-include("api/profile.jl")             # Profile margins API (MEM/MER/APM/APR)
-
-# Gradient Utilities
-include("gradient_utils.jl")          # Post-calculation utilities for GradientMatrix
+# Include all submodules in dependency order
+include("types.jl")
+include("engine/core.jl")
+include("engine/utilities.jl")
+include("engine/caching.jl")
+include("population/core.jl")
+include("population/contexts.jl")
+include("population/effects.jl")
+include("profile/core.jl")
+include("profile/refgrids.jl")
+include("profile/contrasts.jl")
 
 end # module

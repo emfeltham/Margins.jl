@@ -117,3 +117,90 @@ function _parse_numlist(s::AbstractString)
     parts = split(replace(s, ',' => ' '))
     return [parse(Float64, p) for p in parts if !isempty(strip(p))]
 end
+
+# ========================================================================================
+# Phase 1: Streaming Profile Source Infrastructure
+# ========================================================================================
+
+"""
+    to_profile_iterator(at::NamedTuple, data_nt::NamedTuple)
+
+Create a streaming iterator over profile rows in nested key order without materializing a DataFrame.
+Keys are iterated in the order they appear in the NamedTuple.
+"""
+function to_profile_iterator(at::NamedTuple, data_nt::NamedTuple)
+    # Build expanded values for each key in NamedTuple order
+    keys_vec = collect(keys(at))
+    vals_vec = [_expand_at_values(data_nt, k, getproperty(at, k)) for k in keys_vec]
+    
+    # Return iterator that yields Dict for each combination
+    return (Dict{Symbol,Any}(k => combo[i] for (i, k) in enumerate(keys_vec)) 
+            for combo in Iterators.product(vals_vec...))
+end
+
+"""
+    to_profile_iterator(at::Vector{Pair{Symbol,<:Any}}, data_nt::NamedTuple)
+
+Create a streaming iterator respecting pair order.
+"""
+function to_profile_iterator(at::Vector{Pair{Symbol,<:Any}}, data_nt::NamedTuple)
+    keys_vec = [pair.first for pair in at]
+    vals_vec = [_expand_at_values(data_nt, pair.first, pair.second) for pair in at]
+    
+    return (Dict{Symbol,Any}(k => combo[i] for (i, k) in enumerate(keys_vec)) 
+            for combo in Iterators.product(vals_vec...))
+end
+
+"""
+    to_profile_iterator(at::Dict{Symbol,<:Any}, data_nt::NamedTuple)
+
+Create a streaming iterator using documented stable key order.
+Uses sorted key order for deterministic behavior when Dict order is not guaranteed.
+"""
+function to_profile_iterator(at::Dict{Symbol,<:Any}, data_nt::NamedTuple)
+    # Reject bare Dict for ordered grids - suggest alternatives
+    error("Use NamedTuple or Vector{Pair} for ordered profile grids instead of Dict. " *
+          "For deterministic behavior, try: (x=[...], z=[...]) or [:x => [...], :z => [...]]")
+end
+
+"""
+    to_profile_iterator(at::Symbol, data_nt::NamedTuple)
+
+Handle special symbols like :means.
+"""
+function to_profile_iterator(at::Symbol, data_nt::NamedTuple)
+    if at === :means
+        prof = Dict{Symbol,Any}()
+        for (k, col) in pairs(data_nt)
+            if eltype(col) <: Real && !(eltype(col) <: Bool)
+                prof[k] = mean(col)
+            elseif Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
+                prof[k] = levels(col)[1]
+            elseif eltype(col) <: Bool
+                prof[k] = false
+            end
+        end
+        return (prof for _ in 1:1)  # Single-item iterator
+    else
+        error("Unknown symbol specification: $at")
+    end
+end
+
+"""
+    to_profile_iterator(reference_grid::AbstractDataFrame)
+
+Stream rows of user-provided table, preserving input row order.
+"""
+function to_profile_iterator(reference_grid::AbstractDataFrame)
+    return (Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(row)) 
+            for row in Tables.rows(reference_grid))
+end
+
+"""
+    to_profile_iterator(profiles::Vector{<:Dict})
+
+Pass-through for pre-enumerated profiles, preserving row order.
+"""
+function to_profile_iterator(profiles::Vector{<:Dict})
+    return (prof for prof in profiles)
+end
