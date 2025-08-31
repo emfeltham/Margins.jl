@@ -93,7 +93,7 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, at=nothing, over=nothing, measure::Symbol=:effect, kwargs...)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, at=nothing, over=nothing, measure::Symbol=:effect, kwargs...)
     # Input validation
     _validate_population_inputs(model, data, type, vars, target, backend, at, over, measure)
     # Single data conversion (consistent format throughout)
@@ -106,16 +106,20 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
         vars = nothing  # Not needed for predictions
     end
     
+    # Proper backend selection
+    # Population margins default to :fd for zero allocations across many rows
+    recommended_backend = backend === :auto ? :fd : backend
+    
     # Build zero-allocation engine with caching
     engine = _get_or_build_engine(model, data_nt, vars)
     
     # Handle at/over parameters for population contexts
     if at !== nothing || over !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, at, over; type, target, backend, kwargs...)
+        return _population_margins_with_contexts(engine, data_nt, vars, at, over; type, target, backend=recommended_backend, kwargs...)
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend, measure, kwargs...)  # → AME (both continuous and categorical)
+        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure, kwargs...)  # → AME (both continuous and categorical)
         metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
@@ -178,9 +182,9 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
         throw(ArgumentError("target must be :eta or :mu, got :$(target)"))
     end
     
-    # Validate backend parameter
-    if backend ∉ (:ad, :fd)
-        throw(ArgumentError("backend must be :ad or :fd, got :$(backend)"))
+    # Validate backend parameter (including :auto for automatic selection)
+    if backend ∉ (:ad, :fd, :auto)
+        throw(ArgumentError("backend must be :ad, :fd, or :auto, got :$(backend)"))
     end
     
     # Validate measure parameter
