@@ -76,6 +76,22 @@ function _get_baseline_level(model, var::Symbol)
         end
     end
     
+    # Fallback: For CategoricalArrays in GLM, the first level is typically the baseline
+    # Extract the variable from the original data to get its levels
+    if hasfield(typeof(model), :mf) && hasfield(typeof(model.mf), :data)
+        data = model.mf.data
+        if haskey(data, var)
+            col = data[var]
+            if isa(col, CategoricalVector) || isa(col, CategoricalArray)
+                # First level is the baseline by GLM convention
+                levels_list = levels(col)
+                if !isempty(levels_list)
+                    return levels_list[1]
+                end
+            end
+        end
+    end
+    
     throw(MarginsError("Could not determine baseline level for variable $var from model contrasts. " *
                       "Please ensure the model has proper contrast coding information."))
 end
@@ -126,7 +142,7 @@ Implements REORG.md lines 290-348 with graceful fallbacks and batch operations.
 df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTuple; target=:mu, backend=:ad)
+function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect)
     engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
@@ -179,7 +195,42 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
             end
             ame_val /= length(rows)
             
-            push!(results, (term=string(var), estimate=ame_val, se=se))
+            # Apply elasticity transformations if requested (Phase 3)
+            final_val = ame_val
+            if measure !== :effect && engine.de !== nothing
+                # Compute average x and y for elasticity measures
+                x_acc = 0.0
+                y_acc = 0.0
+                xcol = getproperty(data_nt, var)
+                
+                # Use FormulaCompiler's proper pattern: compiled_base + dot(β, X_row)
+                for row in rows
+                    x_acc += float(xcol[row])
+                    
+                    # Get design matrix row and compute linear predictor (following FC pattern)
+                    engine.compiled(engine.de.xrow_buffer, data_nt, row)  # Fill design matrix row  
+                    η = dot(engine.β, engine.de.xrow_buffer)              # Compute η = Xβ
+                    
+                    if target === :mu
+                        y_acc += GLM.linkinv(engine.link, η)     # Transform to μ scale
+                    else
+                        y_acc += η                               # Use η scale directly
+                    end
+                end
+                x̄ = x_acc / length(rows)
+                ȳ = y_acc / length(rows)
+                
+                # Apply transformation based on measure type
+                if measure === :elasticity
+                    final_val = (x̄ / ȳ) * ame_val
+                elseif measure === :semielasticity_x
+                    final_val = x̄ * ame_val
+                elseif measure === :semielasticity_y
+                    final_val = (1 / ȳ) * ame_val
+                end
+            end
+            
+            push!(results, (term=string(var), estimate=final_val, se=se))
             G[cont_idx, :] = gβ_avg
             cont_idx += 1
             
@@ -218,26 +269,40 @@ profiles = [Dict(:x1 => 0.0, :region => "North")]
 df, G = _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad)
 ```
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector; target=:mu, backend=:ad)
-    engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
+function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector; target=:mu, backend=:ad, measure=:effect)
+    # Handle the case where we have only categorical variables (engine.de === nothing)
+    # or mixed continuous/categorical variables
     
     results = DataFrame(term=String[], estimate=Float64[], se=Float64[])
     n_profiles = length(profiles)
-    n_vars = length(engine.de.vars)
-    G = Matrix{Float64}(undef, n_profiles * n_vars, length(engine.β))
     
-    # Auto-detect variable types
+    # Auto-detect variable types from the compiled formula and requested variables
     continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, engine.data_nt)
+    
+    # Determine which variables we're actually processing
+    requested_vars = engine.vars  # Variables requested by user
+    continuous_requested = [v for v in requested_vars if v ∈ continuous_vars]
+    categorical_requested = [v for v in requested_vars if v ∉ continuous_vars]
+    
+    # Calculate total number of terms (for gradient matrix sizing)
+    total_terms = n_profiles * length(requested_vars)
+    G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
     row_idx = 1
     for profile in profiles
         # Build minimal synthetic reference grid data (FormulaCompiler guide recommendation)
         refgrid_data = _build_refgrid_data(profile, engine.data_nt)
         refgrid_compiled = FormulaCompiler.compile_formula(engine.model, refgrid_data)
-        refgrid_de = FormulaCompiler.build_derivative_evaluator(refgrid_compiled, refgrid_data; 
-                                                               vars=engine.de.vars)
         
-        for (var_idx, var) in enumerate(engine.de.vars)
+        # Build derivative evaluator only if we have continuous variables
+        refgrid_de = nothing
+        if !isempty(continuous_requested) && engine.de !== nothing
+            refgrid_de = FormulaCompiler.build_derivative_evaluator(refgrid_compiled, refgrid_data; 
+                                                                   vars=continuous_requested)
+        end
+        
+        # Process all requested variables (both continuous and categorical)
+        for var in requested_vars
             if var ∈ continuous_vars
                 # Continuous variable: compute derivative using FormulaCompiler
                 if target === :mu
@@ -247,7 +312,9 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
                     FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, engine.β, 1;
                                                          backend=backend)
                 end
-                effect_val = engine.g_buf[var_idx]
+                # Find the index of this variable in the continuous variables for the gradient buffer
+                continuous_var_idx = findfirst(==(var), continuous_requested)
+                effect_val = engine.g_buf[continuous_var_idx]
             else
                 # Categorical variable: compute row-specific baseline contrast
                 # Novel approach: contrast this row's category vs baseline at this profile
@@ -268,6 +335,32 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
             end
             se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
             
+            # Apply elasticity transformations for continuous variables if requested (Phase 3)
+            final_val = effect_val
+            if var ∈ continuous_vars && measure !== :effect && engine.de !== nothing
+                # Get x and y values at this specific profile
+                x_val = float(profile[var])
+                
+                # Use FormulaCompiler's proper pattern for prediction
+                refgrid_de.compiled_base(refgrid_de.xrow_buffer, refgrid_data, 1)  # Fill design matrix row
+                η = dot(engine.β, refgrid_de.xrow_buffer)                          # Compute η = Xβ
+                
+                if target === :mu
+                    y_val = GLM.linkinv(engine.link, η)                # Transform to μ scale
+                else
+                    y_val = η                                          # Use η scale directly
+                end
+                
+                # Apply transformation based on measure type
+                if measure === :elasticity
+                    final_val = (x_val / y_val) * effect_val
+                elseif measure === :semielasticity_x
+                    final_val = x_val * effect_val
+                elseif measure === :semielasticity_y
+                    final_val = (1 / y_val) * effect_val
+                end
+            end
+            
             # Build profile description
             profile_desc = join(["$(k)=$(v)" for (k,v) in pairs(profile)], ", ")
             if var ∈ continuous_vars
@@ -279,7 +372,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
             end
             
-            push!(results, (term=term_name, estimate=effect_val, se=se))
+            push!(results, (term=term_name, estimate=final_val, se=se))
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
         end
@@ -332,14 +425,61 @@ function _get_typical_value(col)
     if _is_continuous_variable(col)
         return mean(col)
     elseif col isa CategoricalArray
-        return levels(col)[1]  # First level as typical
+        return _create_frequency_mixture(col)  # Use frequency-weighted mixture
     elseif eltype(col) <: Bool  
-        return mode(col)  # Most common boolean value
+        return _create_frequency_mixture(col)  # Use frequency-weighted mixture for consistency
     elseif eltype(col) <: AbstractString
-        return mode(col)  # Most common string
+        return mode(col)  # Simple mode for string categoricals (not the main use case)
     else
         return first(col)  # Fallback to first value
     end
+end
+
+"""
+    _create_frequency_mixture(col) -> CategoricalMixture or Float64
+
+Create a frequency-weighted categorical mixture from data column.
+This represents the actual population composition in the data, providing
+a statistically principled "typical value" for categorical variables.
+
+Special handling for Bool: returns probability of `true` as Float64.
+
+# Arguments
+- `col`: Data column (Vector of any categorical type)
+
+# Returns
+- `CategoricalMixture`: Mixture with levels and frequencies as weights
+- `Float64`: For Bool columns, returns P(true)
+
+# Examples
+```julia
+# For data: ["A", "A", "B", "A"] 
+# Returns: mix("A" => 0.75, "B" => 0.25)
+
+# For data: [true, false, true, true]  
+# Returns: 0.75  (probability of true)
+```
+"""
+function _create_frequency_mixture(col)
+    # Special handling for Bool: return probability of true
+    if eltype(col) <: Bool
+        p_true = mean(col)  # Proportion of true values
+        return p_true
+    end
+    
+    # General categorical handling
+    level_counts = Dict()
+    total_count = length(col)
+    
+    for value in col
+        level_counts[value] = get(level_counts, value, 0) + 1
+    end
+    
+    # Convert to levels and weights
+    levels = collect(keys(level_counts))
+    weights = [level_counts[level] / total_count for level in levels]
+    
+    return CategoricalMixture(levels, weights)
 end
 
 """
@@ -415,39 +555,25 @@ end
 """
     _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, target, backend) -> Float64
 
-Compute row-specific baseline contrast (novel approach from REORG.md lines 444-463).
+Compute row-specific baseline contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
 function _compute_row_specific_baseline_contrast(engine::MarginsEngine, refgrid_de, profile::Dict, var::Symbol, target::Symbol, backend::Symbol)
-    baseline_level = _get_baseline_level(engine.model, var)
-    current_level = profile[var]
-    
-    # If this row already has baseline level, contrast is 0
-    if current_level == baseline_level
-        return 0.0
-    end
-    
-    # Compute prediction at current profile using FormulaCompiler
-    current_pred = _predict_with_formulacompiler(engine, profile, target)
-    
-    # Compute prediction at baseline profile (same covariates, baseline category)
-    baseline_profile = copy(profile)
-    baseline_profile[var] = baseline_level
-    baseline_pred = _predict_with_formulacompiler(engine, baseline_profile, target)
-    
-    # Return contrast
-    return current_pred - baseline_pred
+    # Use the new profile contrasts implementation
+    effect, _ = compute_profile_categorical_contrast(engine, profile, var, target; backend)
+    return effect
 end
 
 """
     _row_specific_contrast_grad_beta!(gβ_buffer, engine, refgrid_de, profile, var, target)
 
-Compute gradient for row-specific categorical contrast.
+Compute gradient for row-specific categorical contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
 function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine, refgrid_de, profile::Dict, var::Symbol, target::Symbol)
-    # Placeholder - would compute gradient of the contrast with respect to β
-    fill!(gβ_buffer, 0.0)  # Placeholder
+    # Use the new profile contrasts implementation  
+    _, gradient = compute_profile_categorical_contrast(engine, profile, var, target; backend=:ad)
+    copyto!(gβ_buffer, gradient)
 end
 
 """

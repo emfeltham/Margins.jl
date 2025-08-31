@@ -34,6 +34,11 @@ or adjusted predictions at specific profiles (APM/APR).
 - `backend::Symbol=:ad`: Computational backend
   - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
   - `:fd` - Finite differences (zero allocation, production-ready)
+- `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
+  - `:effect` - Marginal effects (default, current behavior)
+  - `:elasticity` - Elasticities (percent change in y for percent change in x)
+  - `:semielasticity_x` - Semi-elasticities w.r.t. x (percent change in y for unit change in x)
+  - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
 
 # Returns
 `MarginsResult` containing:
@@ -54,9 +59,16 @@ or adjusted predictions at specific profiles (APM/APR).
 result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1, :x2])
 DataFrame(result)  # Convert to DataFrame with profile information
 
+# Elasticities at sample means (NEW in Phase 3)
+result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1], measure=:elasticity)
+
 # Effects at specific scenarios (MER)
 result = profile_margins(model, data; at=Dict(:x1 => [0, 1], :income => [25000, 50000]), 
                         type=:effects, vars=[:education])
+
+# Semi-elasticities at specific profiles (NEW in Phase 3)
+result = profile_margins(model, data; at=Dict(:x1 => [-1, 0, 1]), 
+                        type=:effects, vars=[:x2], measure=:semielasticity_x)
 
 # Predictions at the mean (APM)
 result = profile_margins(model, data; at=:means, type=:predictions)
@@ -78,11 +90,30 @@ result = profile_margins(model, data;
                         type=:effects, vars=[:income], backend=:fd)
 ```
 
+# Frequency-Weighted Categorical Defaults
+Unspecified categorical variables use actual data composition:
+```julia
+# Your data: region = 75% Urban, 25% Rural
+#           treated = 60% true, 40% false
+
+# Effects "at means" now uses realistic population profile
+result = profile_margins(model, data; at=:means, type=:effects)
+# → income: sample mean
+# → region: frequency-weighted (75% urban, 25% rural) 
+# → treated: 0.6 (actual treatment rate)
+# → Not arbitrary first levels!
+
+# Override when needed for scenario analysis
+result = profile_margins(model, data; 
+    at=Dict(:treated => 1.0),  # 100% treatment scenario
+    type=:effects)
+```
+
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, kwargs...)
+function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect, kwargs...)
     # Input validation - use same pattern as population_margins
-    _validate_profile_inputs(model, data, at, type, vars, target, backend)
+    _validate_profile_inputs(model, data, at, type, vars, target, backend, measure)
     
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
@@ -103,8 +134,8 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend, n_obs=length(first(data_nt)), 
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at, kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
@@ -165,9 +196,9 @@ effects_result = profile_margins(model, reference_grid; type=:effects)
 predictions_result = profile_margins(model, reference_grid; type=:predictions)
 ```
 """
-function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, kwargs...)
+function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect, kwargs...)
     # Input validation - reuse population validation for model/type/target/backend
-    _validate_population_inputs(model, reference_grid, type, vars, target, backend, nothing, nothing)
+    _validate_population_inputs(model, reference_grid, type, vars, target, backend, nothing, nothing, measure)
     
     # Convert reference grid to data format
     data_nt = Tables.columntable(reference_grid)
@@ -185,8 +216,8 @@ function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend, n_obs=nrow(reference_grid), 
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=nrow(reference_grid), 
                                   model_type=typeof(model), at_spec="explicit_grid", kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
@@ -279,13 +310,13 @@ function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; 
 end
 
 """
-    _validate_profile_inputs(model, data, at, type, vars, target, backend)
+    _validate_profile_inputs(model, data, at, type, vars, target, backend, measure)
 
 Validate inputs to profile_margins() with clear Julia-style error messages.
 """
-function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol)
+function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol)
     # Reuse population validation for common parameters
-    _validate_population_inputs(model, data, type, vars, target, backend, nothing, nothing)
+    _validate_population_inputs(model, data, type, vars, target, backend, nothing, nothing, measure)
     
     # Note: at parameter validation 
     # Since the function signature has at=:means as default, at===nothing should never occur

@@ -29,6 +29,11 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `backend::Symbol=:ad`: Computational backend
   - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
   - `:fd` - Finite differences (zero allocation, production-ready)
+- `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
+  - `:effect` - Marginal effects (default, current behavior)
+  - `:elasticity` - Elasticities (percent change in y for percent change in x)
+  - `:semielasticity_x` - Semi-elasticities w.r.t. x (percent change in y for unit change in x)
+  - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
 - `at=nothing`: Counterfactual scenarios (Dict mapping variables to values)
   - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
 - `over=nothing`: Subgroup analysis specification
@@ -55,6 +60,12 @@ DataFrame(result)  # Convert to DataFrame
 # Specific variables with response-scale effects
 result = population_margins(model, data; vars=[:x1, :x2], target=:mu)
 
+# Average elasticities (NEW in Phase 3)
+result = population_margins(model, data; vars=[:x1, :x2], measure=:elasticity)
+
+# Semi-elasticities (NEW in Phase 3)
+result = population_margins(model, data; vars=[:x1], measure=:semielasticity_x)
+
 # Average adjusted predictions  
 result = population_margins(model, data; type=:predictions)
 
@@ -69,11 +80,22 @@ result = population_margins(model, data; vars=[:education],
 result = population_margins(model, data; backend=:fd, target=:eta)
 ```
 
+# Frequency-Weighted Categorical Handling
+Unspecified categorical variables automatically use population frequencies:
+```julia
+# Your data: education = 40% HS, 45% College, 15% Graduate
+#           treated = 67% true, 33% false
+
+result = population_margins(model, data; type=:effects)
+# → Averages effects across actual population composition
+# → Not arbitrary first levels or 50-50 assumptions
+```
+
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, at=nothing, over=nothing, kwargs...)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, at=nothing, over=nothing, measure::Symbol=:effect, kwargs...)
     # Input validation
-    _validate_population_inputs(model, data, type, vars, target, backend, at, over)
+    _validate_population_inputs(model, data, type, vars, target, backend, at, over, measure)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -93,8 +115,8 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend, kwargs...)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, target, backend, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
+        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend, measure, kwargs...)  # → AME (both continuous and categorical)
+        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; target, kwargs...)  # → AAP
@@ -132,11 +154,11 @@ function _get_continuous_variables(data_nt::NamedTuple)
 end
 
 """
-    _validate_population_inputs(model, data, type, vars, target, backend, at, over)
+    _validate_population_inputs(model, data, type, vars, target, backend, at, over, measure)
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, over)
+function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, over, measure::Symbol)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -159,6 +181,16 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
     # Validate backend parameter
     if backend ∉ (:ad, :fd)
         throw(ArgumentError("backend must be :ad or :fd, got :$(backend)"))
+    end
+    
+    # Validate measure parameter
+    if measure ∉ (:effect, :elasticity, :semielasticity_x, :semielasticity_y)
+        throw(ArgumentError("measure must be :effect, :elasticity, :semielasticity_x, or :semielasticity_y, got :$(measure)"))
+    end
+    
+    # Measure parameter only applies to effects, not predictions
+    if type === :predictions && measure !== :effect
+        throw(ArgumentError("measure parameter only applies when type = :effects"))
     end
     
     # Validate vars parameter for effects

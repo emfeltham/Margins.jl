@@ -135,7 +135,7 @@ Delegates to the main _get_typical_value() function for consistency.
 
 This ensures consistent typical value computation across all reference grid methods
 and eliminates code duplication. Uses caching to avoid recomputing typical values
-for the same data.
+for the same data. Converts CategoricalMixture objects to scenario values.
 """
 function _get_typical_values_dict(data_nt::NamedTuple)
     # Create cache key based on data structure and content hash
@@ -149,7 +149,17 @@ function _get_typical_values_dict(data_nt::NamedTuple)
     # Compute typical values
     typical_values = Dict{Symbol, Any}()
     for (name, col) in pairs(data_nt)
-        typical_values[name] = _get_typical_value(col)
+        typical_val = _get_typical_value(col)
+        
+        # Convert CategoricalMixture to scenario value for FormulaCompiler compatibility
+        if typical_val isa CategoricalMixture
+            typical_values[name] = _mixture_to_scenario_value(typical_val, col)
+        elseif eltype(col) <: Bool && typical_val isa Float64
+            # For Bool columns, typical_val is already P(true) - use directly
+            typical_values[name] = typical_val
+        else
+            typical_values[name] = typical_val
+        end
     end
     
     # Cache result for future use
