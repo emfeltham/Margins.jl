@@ -1,5 +1,17 @@
 # ARCHITECTURE.md: Margins.jl System Design
 
+Document Hierarchy:
+
+1. ARCHITECTURE.md - High-level system design and 2×2 framework
+2. REORG.md - Problem analysis, design decisions, and reorganization
+strategy
+3. FILE_PLAN.md - Detailed implementation blueprint with exact
+specifications
+
+This creates a clear documentation flow from conceptual design → strategic
+planning → detailed implementation, with proper cross-references so users
+can navigate between the documents easily!
+
 ## Overview
 
 Margins.jl implements a clean **2×2 framework** for marginal effects computation, built on FormulaCompiler.jl's zero-allocation foundation. The architecture prioritizes statistical correctness, performance, Julian style, and proper FormulaCompiler integration.
@@ -22,28 +34,47 @@ Profile            │  MEM          │  APM
 ```
 
 **Acronym Definitions:**
-- **AME**: Average Marginal Effect (derivative for continuous, contrast for categorical/bool)
+- **AME**: Average Marginal Effect (derivative for continuous, baseline contrast for categorical/bool)
 - **AAP**: Average Adjusted Prediction (population average of fitted values)
-- **MEM**: Marginal Effect at the Mean (effect at representative point)  
+- **MEM**: Marginal Effect at the Mean (derivative for continuous, row-specific baseline contrast for categorical)  
 - **APM**: Adjusted Prediction at the Mean (fitted value at representative point)
 
 **User Interface:**
-- `population_margins(model, data; type=:effects)` → **AME**
-- `population_margins(model, data; type=:predictions)` → **AAP**
-- `profile_margins(model, data; at=:means, type=:effects)` → **MEM**  
-- `profile_margins(model, data; at=:means, type=:predictions)` → **APM**
+- `population_margins(model, data; type=:effects, vars=[:x1, :x2])` → **AME**
+- `population_margins(model, data; type=:effects, vars=[:x1], over=[:region])` → **AME stratified by region**
+- `population_margins(model, data; type=:effects, vars=[:x1], over=Dict(:x2 => [1, 2, 3]))` → **AME at specific x2 values**
+- `population_margins(model, data; type=:predictions)` → **AAP** (vars not needed)
+- `profile_margins(model, reference_grid; type=:effects, vars=[:x1, :x2])` → **MEM** (derivatives/row-specific contrasts at each reference point)
+- `profile_margins(model, reference_grid, data; type=:effects, vars=[:x1])` → **MEM** (smart: fills missing vars, row-specific contrasts for categorical)
+- `profile_margins(model, reference_grid; type=:predictions)` → **APM** (fitted values at each reference point)
 
-### **File Organization (4 Files Only)**
+**Future Extensions:**
+- `profile_contrasts(model, reference_grid; vars=[:x1])` → **Pairwise contrasts between reference points**
+- `profile_contrasts(model, reference_grid; vars=[:catvar], contrast=:pairwise)` → **All pairwise categorical contrasts**
+
+### **File Organization (Organized Subdirectories)**
 
 ```
 src/
-├── Margins.jl        # Module definition, exports, MarginsResult type
-├── engine.jl         # FormulaCompiler integration, MarginsEngine struct
-├── population.jl     # population_margins() implementation (AME/APE)
-└── profile.jl        # profile_margins() implementation (MER/MEM)
+├── Margins.jl              # Module definition, exports
+├── types.jl                 # MarginsResult, error types  
+├── engine/
+│   ├── core.jl             # MarginsEngine, construction
+│   ├── utilities.jl        # Shared utilities, validation
+│   └── caching.jl          # Compilation caching
+├── population/
+│   ├── core.jl             # Main population_margins()
+│   ├── contexts.jl         # at/over parameter handling
+│   └── effects.jl          # AME computation
+└── profile/
+    ├── core.jl             # Main profile_margins()
+    ├── refgrids.jl         # Reference grid builders
+    └── contrasts.jl        # Row-specific baseline contrasts
 ```
 
-**Design Principle**: Radical simplification from 17+ files to 4 essential files.
+**Design Principle**: Organized simplification from 17+ files to 12 well-structured files with logical grouping.
+
+**📋 Detailed Implementation**: See **[FILE_PLAN.md](FILE_PLAN.md)** for complete function specifications, implementation timeline, and success metrics.
 
 ## 🔧 **Core Components**
 
@@ -76,42 +107,95 @@ end
 
 ### **Population Effects (population.jl)**
 
-**Core Function:** `_ame_continuous(engine, data_nt; target, backend)` → **AME**
+**Core Functions:** 
+- `_ame_continuous_and_categorical(engine, data_nt; target, backend)` → **AME for both variable types**
+  - Continuous: derivatives (∂y/∂x)
+  - Categorical: traditional baseline contrasts (ŷ|level - ŷ|baseline)
+- `_mem_continuous_and_categorical(engine, profiles; target, backend)` → **MEM for both variable types**
+  - Continuous: derivatives at each profile
+  - Categorical: novel row-specific baseline contrasts
 
 **Strategy:**
-- Use **FormulaCompiler's built-in AME gradient accumulation**
+- **Continuous vars**: FormulaCompiler's built-in AME gradient accumulation
+- **Categorical vars (Population)**: Traditional baseline contrasts (ŷ|level - ŷ|baseline across sample)
+- **Categorical vars (Profile)**: Novel row-specific baseline contrasts (respects reference grid exactly)
 - **Zero allocation** with `:fd` backend for large datasets
+- **Auto-detection** of variable types using `FormulaCompiler.continuous_variables()`
+- **Reference grid philosophy**: Each row specifies complete evaluation context
 - **Graceful fallbacks** from `:ad` to `:fd` on failure
 
 **Key APIs Used:**
 ```julia
+# Continuous variables
 FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, rows, var; link, backend)
 FormulaCompiler.marginal_effects_eta!(g_buf, de, β, row; backend)
+
+# Variable type detection
+FormulaCompiler.continuous_variables(compiled, data_nt)
+
+# Standard errors (both types)
 FormulaCompiler.delta_method_se(gradient, Σ)
 ```
 
 ### **Profile Effects (profile.jl)**
 
-**Core Function:** `_mem_continuous(engine, profiles; target, backend)` → **MEM**
+**Core Function:** `profile_margins(model, reference_grid::DataFrame; ...)` → **MEM/APM**
 
 **Strategy:**
-- Use **reference grids** (FormulaCompiler MARGINS_GUIDE.md recommendation)
-- Build **minimal synthetic data** for clean evaluation points  
-- **Per-profile compilation** for maximum accuracy
+- **User provides reference grid directly** (most efficient approach)
+- **Single compilation** per reference grid structure  
+- **Auto-detection** of variable types (continuous vs categorical)
+- **Mixed variable support** in single call
+- **Multiple dispatch** for convenience methods that build reference grids
 
-**Key Pattern:**
+**Core Implementation:**
 ```julia
-# Build minimal reference grid (not scenario overrides)
-refgrid_data = _build_refgrid_data(profile, original_data)
-refgrid_compiled = FormulaCompiler.compile_formula(model, refgrid_data)
+# Primary method - user provides complete reference grid (most efficient)
+function profile_margins(model, reference_grid::DataFrame; type=:effects, vars=[:x1], ...)
+    data_nt = Tables.columntable(reference_grid)
+    engine = build_engine(model, data_nt, vars)  # Single compilation
+    
+    # Auto-detect variable types
+    continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, data_nt)
+    
+    # Evaluate at each row of reference grid
+    for row in 1:nrows(reference_grid)
+        for var in vars
+            if var ∈ continuous_vars
+                # Marginal effect (derivative)
+                FormulaCompiler.marginal_effects_eta!(engine.g_buf, engine.de, engine.β, row; backend)
+            else
+                # Row-specific baseline contrast: this row's category vs baseline at this profile
+                _compute_row_specific_baseline_contrast!(engine.g_buf, engine, row, var)
+            end
+        end
+    end
+end
 
-# Evaluate at synthetic reference point
-FormulaCompiler.marginal_effects_eta!(g_buf, refgrid_de, β, 1; backend)
+# Smart convenience method - handles both partial and complete reference grids
+function profile_margins(model, reference_grid::DataFrame, data::DataFrame; kwargs...)
+    # Auto-fills missing variables with typical values if needed
+    complete_reference_grid = _ensure_complete_reference_grid(reference_grid, data, model)
+    return profile_margins(model, complete_reference_grid; kwargs...)
+end
+
+# Other convenience methods build reference grids, then call primary method
+function profile_margins(model, data::DataFrame; at=:means, kwargs...)
+    reference_grid = _build_means_refgrid(data)
+    return profile_margins(model, reference_grid; kwargs...)
+end
+
+function profile_margins(model, data::DataFrame; at::Dict, kwargs...)
+    reference_grid = _build_cartesian_refgrid(at, data)  # Dict(:x => [1,2], :y => [3])
+    return profile_margins(model, reference_grid; kwargs...)
+end
 ```
 
 ## 📊 **Data Flow Architecture**
 
 ### **Population Margins Flow (AME/AAP)**
+
+**Simple Population Margins:**
 ```
 population_margins(model, data; type=:effects)  # AME
     ↓
@@ -126,24 +210,87 @@ FormulaCompiler.delta_method_se()           # Standard errors
 MarginsResult(df, G, metadata)   # Return structured result
 ```
 
-### **Profile Margins Flow (MEM/APM)**
+**Population Margins with `at` (Counterfactual):**
 ```
-profile_margins(model, data; at=:means, type=:effects)  # MEM
+population_margins(model, data; type=:effects, at=Dict(:income => [30k, 50k]))
     ↓
-Tables.columntable(data)         # Single conversion  
+For each at specification:
+    Override specified variables for entire population
     ↓
-build_engine(model, data_nt)     # Compilation + caching
+    Compute AME on modified population
     ↓
-_build_profiles(at, data_nt)     # Profile specification
+Combine results with at identifiers
     ↓
-For each profile:
-    _build_refgrid_data()        # Minimal synthetic data
+MarginsResult(df, G, metadata)
+```
+
+**Population Margins with `over` (Subgroup Analysis):**
+```
+population_margins(model, data; type=:effects, over=(:age => [30, 50, 70], :region))
     ↓
-    compile_formula(refgrid)     # Per-profile compilation
+Parse over specification:
+    Continuous vars: create subgroups around specified values
+    Categorical vars: use specified/all observed levels
     ↓
-    marginal_effects_eta!()      # Zero-alloc evaluation
+For each var in vars:
+    Filter over spec (ignore if var appears in over)
+    ↓
+    Create subgroup combinations
+    ↓
+    Compute AME within each subgroup using actual data
+    ↓
+Combine results with group identifiers
+    ↓
+MarginsResult(df, G, metadata)
+```
+
+**Population Margins with Both `at` and `over`:**
+```
+population_margins(model, data; over=[:region], at=Dict(:income => [30k, 50k]))
+    ↓
+Create evaluation contexts: subgroups × counterfactual scenarios
+    ↓
+For each region × income combination:
+    Take regional subgroup, override income, compute AME
+    ↓
+Combine results
+```
+
+### **Profile Margins Flow (MEM/APM)**
+
+**Option 1: User provides complete reference grid (most efficient)**
+```
+profile_margins(model, reference_grid; type=:effects, vars=[:x1])  # MEM
+    ↓
+Tables.columntable(reference_grid)  # Single conversion
+    ↓
+build_engine(model, reference_data)  # Single compilation
+    ↓
+For each row in reference_grid:
+    Auto-detect variable type (continuous vs categorical)
+    ↓
+    If continuous: marginal_effects_eta!(g_buf, de, β, row; backend)
+    If categorical: compute_row_specific_baseline_contrast!(g_buf, engine, row, var)
     ↓
 MarginsResult(df, G, metadata)   # Return structured result
+```
+
+**Option 2: Smart convenience method (reference grid + data)**
+```
+profile_margins(model, partial_grid, data; type=:effects, vars=[:x1])  # MEM
+    ↓
+_ensure_complete_reference_grid(partial_grid, data, model)  # Auto-fill missing vars
+    ↓
+profile_margins(model, complete_reference_grid; ...)  # Call primary method
+```
+
+**Option 3: Convenience method builds reference grid**
+```
+profile_margins(model, data; at=Dict(:x => [1,2], :y => [3]), type=:effects)  # MEM
+    ↓
+_build_cartesian_refgrid(at, data)   # Build reference grid from Dict + typical values
+    ↓
+profile_margins(model, reference_grid, data; ...)  # Call smart convenience method
 ```
 
 ### **Buffer Management**
@@ -202,14 +349,19 @@ scenario = create_scenario("policy", data; treatment=true, income=median)
 ```julia
 FormulaCompiler.compile_formula(model, data_nt)
 FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars)
-FormulaCompiler.continuous_variables(compiled, data_nt)
+FormulaCompiler.continuous_variables(compiled, data_nt)  # Variable type detection
 ```
 
 **Zero-Allocation Evaluation:**
 ```julia
+# Continuous variables
 FormulaCompiler.marginal_effects_eta!(g_buf, de, β, row; backend)
 FormulaCompiler.marginal_effects_mu!(g_buf, de, β, row; link, backend)
 FormulaCompiler.accumulate_ame_gradient!(gβ_sum, de, β, rows, var; link, backend)
+
+# Categorical variables (custom implementation)
+_compute_row_specific_baseline_contrast!(g_buf, engine, row, var)  # Novel row-specific approach
+_accumulate_categorical_baseline_ame!(gβ_sum, engine, rows, var)
 ```
 
 **Gradient Computation:**
@@ -318,23 +470,134 @@ profile_margins!(df, G, engine, profiles; type=:effects)
 
 ### **Parameter Consistency**
 ```julia
-# Both functions share parameter semantics
-population_margins(model, data; type, vars, target, backend, vcov, ...)
-profile_margins(model, data; at, type, vars, target, backend, vcov, ...)
-#                              ↑ only difference
+# Both functions share core parameter semantics
+population_margins(model, data; type, vars, target, backend, at, over, vcov, ...)
+profile_margins(model, reference_grid; type, vars, target, backend, vcov, ...)
+#                     ↑ at/over for counterfactuals/subgroups    ↑ reference_grid for evaluation points
+
+# Convenience methods for profile_margins:
+profile_margins(model, data; type, vars, target, backend, vcov, ...)           # at defaults to :means
+profile_margins(model, data; at=:means, type, vars, target, backend, vcov, ...)
+profile_margins(model, data; at=Dict(...), type, vars, target, backend, vcov, ...)
+```
+
+### **`at` vs `over` Parameters for Population Margins**
+
+**Key Distinction (Following Stata's `margins` Command):**
+- **`at`**: Counterfactual scenarios - override variable values for entire population
+- **`over`**: Subgroup analysis - stratify by observed data groups
+
+#### **`at` Parameter - Counterfactual Analysis (Stata's `at()` Option):**
+```julia
+# Equivalent to Stata: margins, dydx(education) at(income=(30000 50000))
+population_margins(model, data; vars=[:education], at=Dict(:income => [30000, 50000]))
+# "AME of education IF everyone had income=30k, IF everyone had income=50k"
+```
+
+**Process:**
+1. Set **everyone's** income to 30,000
+2. Compute education AME across full population with this override
+3. Set **everyone's** income to 50,000  
+4. Compute education AME across full population with this override
+
+#### **`over` Parameter - Subgroup Analysis (Stata's `over()` Option):**
+
+**Simple Categorical Stratification:**
+```julia
+# Equivalent to Stata: margins, dydx(education) over(region)
+population_margins(model, data; vars=[:education], over=[:region])
+# "AME of education within each observed region group"
+```
+
+**Enhanced Flexible Specification:**
+```julia
+# Hybrid syntax with precise control
+population_margins(model, data; vars=[:education], 
+                  over=(:age => [25, 45, 65],           # Continuous: specify subgroup centers
+                       :gender => ["Man", "Woman"],     # Categorical: specify subset
+                       :region))                         # Categorical: all observed levels
+```
+
+**Rules for Enhanced `over`:**
+- **Continuous variables**: Must specify values (creates subgroups around those values)
+- **Categorical variables**: 
+  - Specified → use those levels only
+  - Unspecified → use all observed levels
+- **Error**: Continuous variables without specified values
+
+#### **Combined Usage:**
+```julia
+population_margins(model, data; vars=[:education], 
+                  over=[:region],                    # Subgroups: within each region
+                  at=Dict(:income => [30k, 50k]))   # Counterfactual: at these income levels
+# "AME of education within each region, at income=30k and at income=50k"
+```
+
+#### **Conflict Resolution:**
+When a variable appears in both `vars` and `at`/`over`, the specification for that variable is ignored:
+```julia
+population_margins(model, data; vars=[:education, :income], at=Dict(:income => [30k, 50k]))
+# education AME: computed at income = 30k, 50k
+# income AME: computed across full sample (at[:income] ignored for income's own effect)
+```
+
+### **vars Parameter Usage**
+```julia
+# vars only needed for type=:effects (computing derivatives/contrasts)
+population_margins(model, data; type=:effects, vars=[:x1, :catvar])  # ✅ Need vars (mixed types supported)
+population_margins(model, data; type=:predictions)                  # ✅ No vars needed
+
+profile_margins(model, refgrid; type=:effects, vars=[:x1, :catvar])  # ✅ Need vars (baseline contrasts for categorical)
+profile_margins(model, refgrid; type=:predictions)                  # ✅ No vars needed
+```
+
+### **Categorical Variable Behavior**
+
+**(Novel) Row-Specific Baseline Contrasts:**
+```julia
+# Reference grid specifies both covariate values AND categorical levels
+reference_grid = DataFrame(
+    x = [1, 2, 3],
+    catvar = ["A", "B", "C"],  # A is baseline
+    z = [10, 20, 30]
+)
+
+profile_margins(model, reference_grid; type=:effects, vars=[:catvar])
+# Returns row-specific contrasts:
+# Row 1: "catvar=A vs baseline at (x=1, z=10)" → 0.0 (A vs A)
+# Row 2: "catvar=B vs baseline at (x=2, z=20)" → ŷ(x=2,catvar=B,z=20) - ŷ(x=2,catvar=A,z=20)
+# Row 3: "catvar=C vs baseline at (x=3, z=30)" → ŷ(x=3,catvar=C,z=30) - ŷ(x=3,catvar=A,z=30)
+```
+
+**Key Innovation**: Each categorical effect is computed as the contrast between **that row's categorical value** and the **baseline**, evaluated at **that row's exact covariate profile**.
+
+**Population Baseline Contrasts (Traditional):**
+```julia
+# Population margins use traditional baseline contrasts across sample
+population_margins(model, data; type=:effects, vars=[:catvar]) 
+# Returns average baseline contrasts: E[ŷ|catvar=level] - E[ŷ|catvar=baseline]
+```
+
+**Advanced Contrasts (Future Extensions):**
+```julia
+# For all pairwise contrasts at each reference point:
+profile_contrasts(model, refgrid; vars=[:catvar], contrast=:pairwise)
+# Would return: all possible pairwise comparisons at each row
+
+# For traditional "one contrast per level" at each reference point:
+profile_contrasts(model, refgrid; vars=[:catvar], contrast=:baseline_each_row)
+# Would return: B vs A, C vs A at row 1; B vs A, C vs A at row 2; etc.
 ```
 
 ### **Error Handling Strategy**
 
 **Input Validation (Early):**
 ```julia
-function _validate_variables(data_nt, vars)
+function _validate_variables(data_nt, vars, continuous_vars)
     for var in vars
         haskey(data_nt, var) || error("Variable $var not found")
-        col = getproperty(data_nt, var)
-        if col isa CategoricalArray && vars !== :continuous
-            @warn "Variable $var is categorical. Use contrasts for categorical effects."
-        end
+        # Auto-detection determines if continuous (derivative) or categorical (baseline contrast)
+        # Both types supported in unified API
     end
 end
 ```
