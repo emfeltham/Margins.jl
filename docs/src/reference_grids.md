@@ -308,7 +308,7 @@ reference_grid = DataFrame(
 results = profile_margins(model, data, reference_grid; type=:effects, vars=[:x1])
 
 # Compute predictions at these exact combinations
-predictions = profile_margins(model, data, reference_grid; type=:predictions, scale=:response)
+predictions = profile_margins(model, data, reference_grid; type=:predictions, target=:mu)
 ```
 
 ### Advanced Table-Based Examples
