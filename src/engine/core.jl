@@ -136,19 +136,47 @@ link = _auto_link(other_model)  # Returns IdentityLink() fallback
 ```
 """
 function _auto_link(model)
-    # Try to extract link from GLM.jl models
-    if hasfield(typeof(model), :model) && hasfield(typeof(model.model), :rr)
-        # GLM with response distribution
-        if hasfield(typeof(model.model.rr), :d)
-            return model.model.rr.d.link  # GLM.jl pattern for generalized models
-        else
-            return GLM.IdentityLink()  # Linear models (LmResp) don't have a distribution
+    # Try to extract link from GLM.jl and MixedModels.jl using official APIs
+    try
+        # Use GLM.Link() function for proper link extraction
+        if hasmethod(GLM.Link, (typeof(model),))
+            return GLM.Link(model)
+        elseif hasfield(typeof(model), :model) && hasmethod(GLM.Link, (typeof(model.model),))
+            # Handle wrapped models (TableRegressionModel)
+            return GLM.Link(model.model)
         end
-    elseif hasfield(typeof(model), :link)
-        return model.link  # Direct link field
-    else
-        return GLM.IdentityLink()  # Safe fallback for non-GLM models
+    catch e
+        error("Failed to extract link function from model: $e. " *
+              "Statistical correctness cannot be guaranteed without proper link function.")
     end
+    
+    # Handle MixedModels.jl models
+    if isdefined(Main, :MixedModels)  # Check if MixedModels is available
+        # LinearMixedModel: Always uses IdentityLink (like linear regression)
+        if model isa Main.MixedModels.LinearMixedModel
+            return GLM.IdentityLink()
+        end
+        
+        # GeneralizedLinearMixedModel: Extract from resp.link field
+        if model isa Main.MixedModels.GeneralizedLinearMixedModel
+            if hasfield(typeof(model), :resp) && hasfield(typeof(model.resp), :link)
+                return model.resp.link
+            end
+        end
+    end
+    
+    # Check for linear models (IdentityLink is correct for these)
+    if hasfield(typeof(model), :model) && hasfield(typeof(model.model), :rr)
+        # Linear models (LmResp) don't have a distribution, only GLM models do
+        if typeof(model.model.rr) <: GLM.LmResp
+            return GLM.IdentityLink()  # Linear models use identity link
+        end
+    end
+    
+    # Error for unknown model types - statistical correctness first
+    error("Cannot determine link function for model type $(typeof(model)). " *
+          "Statistical correctness cannot be guaranteed without proper link function. " *
+          "Supported: GLM.jl models (lm, glm) and MixedModels.jl (LinearMixedModel, GeneralizedLinearMixedModel).")
 end
 
 # Forward declaration - _validate_variables will be implemented in utilities.jl
