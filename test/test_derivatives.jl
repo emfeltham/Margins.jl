@@ -129,11 +129,11 @@ println("  ∂/∂x: analytical=$(round(analytical_dx, digits=6)), numerical=$(r
 println("  ∂/∂z: analytical=$(round(analytical_dz, digits=6)), numerical=$(round(numerical_dz, digits=6)), error=$(round(dz_error, digits=10))")
 
 if dx_error < 1e-10 && dz_error < 1e-10
-    println("✅ Analytical derivatives match numerical within tolerance!")
+    println("Analytical derivatives match numerical within tolerance!")
 else
-    println("⚠ Analytical derivatives may have accuracy issues")
+    println("Analytical derivatives may have accuracy issues")
 end
 
 println("\n=== Derivative Compilation System Test Complete ===")
-println("✅ All core functionality working!")
-println("📊 Ready for high-performance marginal effects computation")
+println("All core functionality working!")
+println("Ready for high-performance marginal effects computation")
