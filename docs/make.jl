@@ -9,16 +9,22 @@ makedocs(;
     prettyurls = get(ENV, "CI", "false") == "true",
     repolink = "https://github.com/emfeltham/Margins.jl",
     # canonical = "https://github.com/emfeltham/Margins.jl/stable",
-    assets = String[]),
+    assets = String[]
+  ),
   pages = [
     "Introduction" => "index.md",
-    "API" => "api.md",
-    "Developer" => Any[
-      "Performance" => "dev/performance.md",
+    "Mathematical Foundation" => "mathematical_foundation.md",
+    "User Guide" => [
+      "Reference Grids" => "reference_grids.md",
+      "Profile Analysis" => "profile_margins.md", 
+      "Performance Guide" => "performance.md",
+      "Advanced Features" => "advanced.md"
     ],
+    "API Reference" => "api.md",
+    "Examples" => "examples.md"
   ],
-  doctest    = false, # do not test docs
-  checkdocs  = :none # ignore missing docstrings
+  doctest = true,    # Enable doctest validation
+  checkdocs = :none    # Skip docstring checking for now
 )
 
 deploydocs(;
