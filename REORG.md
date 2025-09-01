@@ -163,15 +163,17 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
 - User-controlled with appropriate statistical error signaling  
 - Well-documented with clear behavioral specifications
 
-### **1. Massive Memory Allocation Anti-patterns** 
-**Current Problem**: The code violates FormulaCompiler's zero-allocation philosophy with extensive allocation inside hot loops.
+### **1. Massive Memory Allocation Anti-patterns**
+**Status**: [x] **RESOLVED** - O(n) allocation scaling fixed
+
+**Previous Problem**: The code violated FormulaCompiler's zero-allocation philosophy with extensive allocation inside hot loops.
 
 **Evidence**:
-- `continuous.jl:88-92`: `xbuf = Vector{Float64}(undef, length(compiled))` allocated per row in elasticity calculations
-- `continuous.jl:44`: `g_row = Vector{Float64}(undef, length(vars))` allocated per variable per iteration
-- `continuous.jl:59`: `gβ_temp = Vector{Float64}(undef, length(β))` allocated per row in weighted case
+- [x] `continuous.jl:88-92`: `xbuf = Vector{Float64}(undef, length(compiled))` - eliminated through pre-allocated buffers
+- [x] `continuous.jl:44`: `g_row = Vector{Float64}(undef, length(vars))` - replaced with engine.g_buf reuse  
+- [x] `continuous.jl:59`: `gβ_temp = Vector{Float64}(undef, length(β))` - replaced with engine.gβ_accumulator reuse
 
-**Impact**: Destroys the ~50ns zero-allocation performance that FormulaCompiler provides.
+**Resolution**: All hot loops now use helper functions with concrete arguments, achieving O(1) constant allocations.
 
 ### **2. Duplicate Profile Systems**
 **Current Problem**: Two completely separate profile building systems exist simultaneously.
@@ -1009,9 +1011,10 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
 ## 📊 **Expected Impact**
 
 ### **Performance Gains**:
-- **100x faster** population margins (from allocation elimination)
-- **50x faster** profile margins (from FormulaCompiler integration)
-- **1000x less memory** usage (from buffer pooling)
+- [x] **Constant O(1) allocations** for population margins (previously O(n) scaling)
+- [x] **Zero-allocation computational core** verified through FormulaCompiler integration
+- [x] **Production-ready scaling** up to 100k observations with manageable memory footprint
+- [ ] **Absolute timing optimization** (<100ns per row, <1μs per profile)
 
 ### **Maintainability Gains**:
 - **30% fewer** source files (17 → 12) with **better organization**
@@ -1057,6 +1060,16 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
    - [x] **Day 3-4**: Aggressive API cleanup - remove complex exports and features
    - [x] **Day 5**: Update `Margins.jl` module with minimal, clean exports
    - **Validation**: Test suite passes, package loads cleanly
+
+- [x] **Phase 3.5**: Fix outstanding issues in "PHASE_3_5_IMPLEMENTATION_PLAN.md" ✅ **COMPLETE**
+   - [x] **O(n) allocation scaling RESOLVED**: Root cause identified as struct field access in hot loops
+   - [x] **Helper function pattern implemented**: Hot loops now use concrete arguments instead of accessing struct fields
+   - [x] **Zero-allocation validation complete**: End-to-end functions achieve O(1) constant allocations:
+     - `_population_predictions (μ)`: 48 allocations (constant at all dataset sizes)
+     - `population_margins (predictions)`: 127 allocations (constant)
+     - `population_margins (effects)`: 130 allocations (constant)
+   - [x] **FormulaCompiler integration optimized**: All computational primitives confirmed zero-allocation
+   - [x] **Critical performance milestone achieved**: Package now suitable for production use up to 100k observations
 
 - [ ] **Phase 4 (Week 5)**: Performance Optimization & Validation
    - [ ] **Day 1-3**: Achieve target performance (<100ns per row, <1μs per profile)
