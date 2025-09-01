@@ -38,7 +38,7 @@
 
 [x] **Completed:** Deliver incremental, verifiable phases with asserts and tests guarding the 1:1 row↔G invariant.
 
-[x] **Completed:** Decouple storage from presentation: no DataFrame in core; Tables.jl interface materializes tidy views on demand.
+[x] **Completed:** Decouple storage from presentation: no DataFrame in core; Tables.jl interface materializes DataFrame views on demand.
 
 ## Non‑Negotiables **All Achieved**
 - [x] Statistical validity: Delta‑method SEs with full Σ; no approximations.
@@ -195,7 +195,7 @@ end
 ## Dependencies **ALL WORKING**
 - [x] FormulaCompiler.jl exposes compiled evaluators, derivative evaluators, and `delta_method_se`.
 - [x] GLM.jl links; covariance via StatsBase/CovarianceMatrices.
-- [x] DataFrames/Tables for tidy view; computation does not depend on DataFrame internals.
+- [x] DataFrames/Tables for DataFrame conversion; computation does not depend on DataFrame internals.
 
 ## Future Directions (Phase 4 and Beyond)
 
