@@ -1,0 +1,46 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+🔎 Validating allocations with clean, warmed benchmarks…
+[TEST] modelrow! loop
+  Small n=2000: allocs=3489, per-row=1.7445
+  Large n=10000: allocs=19489, per-row=1.9489
+  Scaling ratio: 5.586 (dataset 5.0x larger)
+
+[TEST] modelrow! loop (optimized locals)
+  Small n=2000: allocs=3489, per-row=1.7445
+  Large n=10000: allocs=19489, per-row=1.9489
+  Scaling ratio: 5.586 (dataset 5.0x larger)
+
+[TEST] modelrow! loop (pure locals)
+  Small n=2000: allocs=0, per-row=0.0
+  Large n=10000: allocs=0, per-row=0.0
+  Scaling ratio: 0.0 (dataset 5.0x larger)
+
+[TEST] marginal_effects_eta! loop
+  Small n=2000: allocs=1489, per-row=0.7445
+  Large n=10000: allocs=9489, per-row=0.9489
+  Scaling ratio: 6.373 (dataset 5.0x larger)
+
+[TEST] marginal_effects_eta! loop (optimized locals)
+  Small n=2000: allocs=1489, per-row=0.7445
+  Large n=10000: allocs=9489, per-row=0.9489
+  Scaling ratio: 6.373 (dataset 5.0x larger)
+
+[PROD] _population_predictions (μ)
+  Small n=2000: allocs=48, per-row=0.024
+  Large n=10000: allocs=48, per-row=0.0048
+  Scaling ratio: 1.0 (dataset 5.0x larger)
+
+[PROD] population_margins (predictions)
+  Small n=2000: allocs=127, per-row=0.0635
+  Large n=10000: allocs=127, per-row=0.0127
+  Scaling ratio: 1.0 (dataset 5.0x larger)
+
+[PROD] population_margins (effects)
+  Small n=2000: allocs=130, per-row=0.065
+  Large n=10000: allocs=130, per-row=0.013
+  Scaling ratio: 1.0 (dataset 5.0x larger)
+
