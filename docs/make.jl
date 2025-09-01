@@ -10,7 +10,13 @@ makedocs(;
     repolink = "https://github.com/emfeltham/Margins.jl",
     # canonical = "https://github.com/emfeltham/Margins.jl/stable",
     assets = String[]),
-  pages = ["Introduction" => "index.md", "API" => "api.md"],
+  pages = [
+    "Introduction" => "index.md",
+    "API" => "api.md",
+    "Developer" => Any[
+      "Performance" => "dev/performance.md",
+    ],
+  ],
   doctest    = false, # do not test docs
   checkdocs  = :none # ignore missing docstrings
 )
