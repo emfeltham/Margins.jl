@@ -33,6 +33,43 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
     end
 end
 
+# Helper: accumulate marginal effect value across rows using concrete arguments
+function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, target::Symbol, backend::Symbol, idx::Int)
+    acc = 0.0
+    if target === :mu
+        for row in rows
+            FormulaCompiler.marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
+            acc += g_buf[idx]
+        end
+    else
+        for row in rows
+            FormulaCompiler.marginal_effects_eta!(g_buf, de, β, row; backend=backend)
+            acc += g_buf[idx]
+        end
+    end
+    return acc
+end
+
+# Helper: average response (μ or η) over rows using concrete arguments
+function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link, data_nt::NamedTuple, rows, target::Symbol)
+    if target === :mu
+        s = 0.0
+        for row in rows
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row)
+            η = dot(β, row_buf)
+            s += GLM.linkinv(link, η)
+        end
+        return s / length(rows)
+    else
+        s = 0.0
+        for row in rows
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row)
+            s += dot(β, row_buf)
+        end
+        return s / length(rows)
+    end
+end
+
 """
     _get_baseline_level(model, var) -> baseline_level
 
@@ -146,14 +183,27 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
     engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
-    results = DataFrame(term=String[], estimate=Float64[], se=Float64[])
-    G = Matrix{Float64}(undef, length(engine.de.vars), length(engine.β))
+    
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    n_vars = length(engine.de.vars)
+    results = DataFrame(
+        term = Vector{String}(undef, n_vars),
+        estimate = Vector{Float64}(undef, n_vars), 
+        se = Vector{Float64}(undef, n_vars)
+    )
+    G = Matrix{Float64}(undef, n_vars, length(engine.β))
     
     # Auto-detect variable types and process accordingly
     continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, data_nt)
     
     # Process continuous variables with FC's built-in AME gradient accumulation (ZERO ALLOCATION!)
     cont_idx = 1
+    # Hoist frequently used engine fields to locals to avoid per-iteration field access costs
+    local_de = engine.de
+    local_β = engine.β
+    local_link = engine.link
+    local_row_buf = engine.row_buf
+    local_compiled = engine.compiled
     for var in engine.de.vars
         if var ∈ continuous_vars
             # Graceful backend fallback with recommended defaults
@@ -161,16 +211,16 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
             try
                 # This is the key: FC already provides zero-allocation AME gradients
                 FormulaCompiler.accumulate_ame_gradient!(
-                    engine.gβ_accumulator, engine.de, engine.β, rows, var;
-                    link=(target === :mu ? engine.link : GLM.IdentityLink()), 
+                    engine.gβ_accumulator, local_de, local_β, rows, var;
+                    link=(target === :mu ? local_link : GLM.IdentityLink()), 
                     backend=backend
                 )
             catch e
                 if backend === :ad
                     @warn "AD backend failed for $var, falling back to FD: $e"
                     FormulaCompiler.accumulate_ame_gradient!(
-                        engine.gβ_accumulator, engine.de, engine.β, rows, var;
-                        link=(target === :mu ? engine.link : GLM.IdentityLink()), 
+                        engine.gβ_accumulator, local_de, local_β, rows, var;
+                        link=(target === :mu ? local_link : GLM.IdentityLink()), 
                         backend=:fd
                     )
                 else
@@ -178,48 +228,31 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
                 end
             end
             
-            # Average the gradient and compute SE
-            gβ_avg = engine.gβ_accumulator ./ length(rows)
+            # Average the gradient and compute SE (avoid broadcast allocation)
+            n_rows = length(rows)
+            # Use gβ_accumulator directly and divide in-place to avoid temporary buffer
+            # Since we'll copy to G matrix afterward, we can modify gβ_accumulator temporarily
+            for i in 1:length(engine.gβ_accumulator)
+                engine.gβ_accumulator[i] /= n_rows
+            end
+            gβ_avg = engine.gβ_accumulator  # Use directly without copying
             se = FormulaCompiler.delta_method_se(gβ_avg, engine.Σ)
             
-            # Compute AME value (also zero allocation with FC)
-            ame_val = 0.0
-            for row in rows
-                if target === :mu
-                    FormulaCompiler.marginal_effects_mu!(engine.g_buf, engine.de, engine.β, row; 
-                                                        link=engine.link, backend=backend)
-                else
-                    FormulaCompiler.marginal_effects_eta!(engine.g_buf, engine.de, engine.β, row; 
-                                                         backend=backend)
-                end
-                ame_val += engine.g_buf[cont_idx]
-            end
+            # Compute AME value via helper with concrete arguments
+            ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, target, backend, cont_idx)
             ame_val /= length(rows)
             
             # Apply elasticity transformations if requested (Phase 3)
             final_val = ame_val
             if measure !== :effect && engine.de !== nothing
-                # Compute average x and y for elasticity measures
-                x_acc = 0.0
-                y_acc = 0.0
+                # Compute average x and y for elasticity measures (vectorized)
                 xcol = getproperty(data_nt, var)
                 
-                # Use FormulaCompiler's proper pattern: compiled_base + dot(β, X_row)
-                for row in rows
-                    x_acc += float(xcol[row])
-                    
-                    # Get design matrix row and compute linear predictor (following FC pattern)
-                    engine.compiled(engine.de.xrow_buffer, data_nt, row)  # Fill design matrix row  
-                    η = dot(engine.β, engine.de.xrow_buffer)              # Compute η = Xβ
-                    
-                    if target === :mu
-                        y_acc += GLM.linkinv(engine.link, η)     # Transform to μ scale
-                    else
-                        y_acc += η                               # Use η scale directly
-                    end
-                end
-                x̄ = x_acc / length(rows)
-                ȳ = y_acc / length(rows)
+                # Step 1: Compute average x directly (no loop needed)
+                x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
+                
+                # Step 2: Compute η/μ averages using helper with concrete arguments
+                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, target)
                 
                 # Apply transformation based on measure type
                 if measure === :elasticity
@@ -231,8 +264,14 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
                 end
             end
             
-            push!(results, (term=string(var), estimate=final_val, se=se))
-            G[cont_idx, :] = gβ_avg
+            # Direct assignment instead of push! to avoid reallocation
+            results.term[cont_idx] = string(var)
+            results.estimate[cont_idx] = final_val
+            results.se[cont_idx] = se
+            # Copy the averaged gradient to the output matrix
+            for j in 1:length(gβ_avg)
+                G[cont_idx, j] = gβ_avg[j]
+            end
             cont_idx += 1
             
         else  # Categorical variable
@@ -240,7 +279,10 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
             ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, target, backend)
             se = FormulaCompiler.delta_method_se(gβ_avg, engine.Σ)
             
-            push!(results, (term="$(var) (baseline contrast)", estimate=ame_val, se=se))
+            # Direct assignment instead of push! to avoid reallocation  
+            results.term[cont_idx] = "$(var) (baseline contrast)"
+            results.estimate[cont_idx] = ame_val
+            results.se[cont_idx] = se
             G[cont_idx, :] = gβ_avg  # Still increment for output indexing
             cont_idx += 1
         end
@@ -274,7 +316,6 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
     # Handle the case where we have only categorical variables (engine.de === nothing)
     # or mixed continuous/categorical variables
     
-    results = DataFrame(term=String[], estimate=Float64[], se=Float64[])
     n_profiles = length(profiles)
     
     # Auto-detect variable types ONCE (not per profile) - PERFORMANCE FIX
@@ -287,37 +328,60 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
     
     # Calculate total number of terms (for gradient matrix sizing)
     total_terms = n_profiles * length(requested_vars)
+    
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    results = DataFrame(
+        term = Vector{String}(undef, total_terms),
+        estimate = Vector{Float64}(undef, total_terms),
+        se = Vector{Float64}(undef, total_terms)
+    )
     G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
     row_idx = 1
-    for (profile_idx, profile) in enumerate(profiles)
-        # Use scenario override system - zero-allocation, single compilation
-        scenario = FormulaCompiler.create_scenario("profile_$profile_idx", engine.data_nt; profile...)
+    # Hoist engine fields commonly used in inner loops
+    local_row_buf = engine.row_buf
+    local_compiled = engine.compiled
+    local_β = engine.β
+    local_link = engine.link
+    for profile in profiles
+        # Build minimal synthetic reference grid data (not scenarios!)
+        # This creates efficient synthetic data with just the needed variables
+        refgrid_data = _build_refgrid_data(profile, engine.data_nt)
+        refgrid_compiled = FormulaCompiler.compile_formula(engine.model, refgrid_data)
+        
+        # Build derivative evaluator only if we have continuous variables
+        refgrid_de = nothing
+        if !isempty(continuous_requested) && engine.de !== nothing
+            refgrid_de = FormulaCompiler.build_derivative_evaluator(refgrid_compiled, refgrid_data; 
+                                                                   vars=continuous_requested)
+        end
         
         # Process all requested variables (both continuous and categorical)
         for var in requested_vars
             if var ∈ continuous_vars
-                # Compute marginal effects in scenario context
-                # Use scenario data to create the proper context for categorical variables
-                # while computing derivatives for continuous variables
-                
-                # Build a modified derivative evaluator that uses scenario data as context
-                # This allows continuous derivatives to be computed at the correct categorical values
-                _compute_continuous_effects_with_scenario!(
-                    engine.g_buf, engine, scenario, var, continuous_requested, target, backend
-                )
+                # Continuous variable: compute derivative using FormulaCompiler
+                if target === :mu
+                    FormulaCompiler.marginal_effects_mu!(engine.g_buf, refgrid_de, engine.β, 1;
+                                                        link=engine.link, backend=backend)
+                else
+                    FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, engine.β, 1;
+                                                         backend=backend)
+                end
                 # Find the index of this variable in the continuous variables
                 continuous_var_idx = findfirst(==(var), continuous_requested)
                 effect_val = engine.g_buf[continuous_var_idx]
                 
-                # Compute parameter gradient for SE using standalone functions
-                _compute_continuous_gradient_with_scenario!(
-                    engine.gβ_accumulator, engine, scenario, var, continuous_requested, target
-                )
+                # Compute parameter gradient for SE using refgrid derivative evaluator
+                if target === :mu
+                    FormulaCompiler.me_mu_grad_beta!(engine.gβ_accumulator, refgrid_de, engine.β, 1, var;
+                                                   link=engine.link)
+                else
+                    FormulaCompiler.me_eta_grad_beta!(engine.gβ_accumulator, refgrid_de, engine.β, 1, var)
+                end
             else
-                # Categorical variable: compute discrete contrast using scenario system  
-                effect_val = _compute_categorical_contrast_with_scenario(engine, scenario, var, target, backend)
-                _categorical_contrast_grad_beta!(engine.gβ_accumulator, engine, scenario, var, target)
+                # Categorical variable: compute row-specific baseline contrast
+                effect_val = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, target, backend)
+                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, target)
             end
             
             se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
@@ -329,11 +393,12 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
                 x_val = float(profile[var])
                 
                 # Use FormulaCompiler's proper pattern for prediction with scenario
-                engine.compiled(engine.de.xrow_buffer, scenario.data, 1)  # Fill design matrix row from scenario
-                η = dot(engine.β, engine.de.xrow_buffer)                  # Compute η = Xβ
+                # Note: This assumes refgrid_data is available in this context
+                FormulaCompiler.modelrow!(local_row_buf, local_compiled, refgrid_data, 1)
+                η = dot(local_row_buf, local_β)
                 
                 if target === :mu
-                    y_val = GLM.linkinv(engine.link, η)                # Transform to μ scale
+                    y_val = GLM.linkinv(local_link, η)                # Transform to μ scale
                 else
                     y_val = η                                          # Use η scale directly
                 end
@@ -359,7 +424,10 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
             end
             
-            push!(results, (term=term_name, estimate=final_val, se=se))
+            # Direct assignment instead of push! to avoid reallocation
+            results.term[row_idx] = term_name
+            results.estimate[row_idx] = final_val
+            results.se[row_idx] = se
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
         end
@@ -564,215 +632,23 @@ function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::
 end
 
 """
-    _compute_categorical_contrast_with_scenario(engine, scenario, var, target, backend) -> Float64
+    _predict_with_formulacompiler(engine, profile, target) -> Float64
 
-Compute categorical contrast using FormulaCompiler's scenario system (PERFORMANCE FIX).
-This replaces the expensive recompilation pattern with zero-recompilation scenario evaluation.
+Make predictions using FormulaCompiler for categorical contrast computation.
+Helper function that properly uses FormulaCompiler instead of manual computation.
 """
-function _compute_categorical_contrast_with_scenario(engine::MarginsEngine, scenario, var::Symbol, target::Symbol, backend::Symbol)
-    # Get baseline level from model's contrast coding
-    baseline_level = _get_baseline_level(engine.model, var)
-    current_level = scenario.overrides[var]
+function _predict_with_formulacompiler(engine::MarginsEngine, profile::Dict, target::Symbol)
+    # Create minimal reference data for this profile  
+    profile_data = _build_refgrid_data(profile, engine.data_nt)
+    profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
     
-    # If current level is already baseline, contrast is zero
-    if current_level == baseline_level
-        return 0.0
-    end
-    
-    # Compute prediction at current level (using provided scenario)
-    current_pred = _predict_with_scenario(engine, scenario, target)
-    
-    # Create baseline scenario by overriding just this variable
-    baseline_overrides = copy(scenario.overrides)
-    baseline_overrides[var] = baseline_level
-    baseline_scenario = FormulaCompiler.create_scenario("baseline", engine.data_nt; baseline_overrides...)
-    baseline_pred = _predict_with_scenario(engine, baseline_scenario, target)
-    
-    # Return contrast
-    return current_pred - baseline_pred
-end
-
-"""
-    _categorical_contrast_grad_beta!(gβ_buffer, engine, scenario, var, target)
-
-Compute gradient for categorical contrast using scenario system (PERFORMANCE FIX).
-"""
-function _categorical_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine, scenario, var::Symbol, target::Symbol)
-    # Get baseline level from model's contrast coding
-    baseline_level = _get_baseline_level(engine.model, var)
-    current_level = scenario.overrides[var]
-    
-    # If current level is already baseline, gradient is zero
-    if current_level == baseline_level
-        fill!(gβ_buffer, 0.0)
-        return
-    end
-    
-    # Compute gradient at current level (using provided scenario)
-    current_grad = _gradient_with_scenario(engine, scenario, target)
-    
-    # Create baseline scenario by overriding just this variable
-    baseline_overrides = copy(scenario.overrides)
-    baseline_overrides[var] = baseline_level
-    baseline_scenario = FormulaCompiler.create_scenario("baseline", engine.data_nt; baseline_overrides...)
-    baseline_grad = _gradient_with_scenario(engine, baseline_scenario, target)
-    
-    # Store contrast gradient
-    gβ_buffer .= current_grad .- baseline_grad
-end
-
-"""
-    _predict_with_scenario(engine, scenario, target) -> Float64
-
-Make predictions using FormulaCompiler's scenario system (PERFORMANCE FIX).
-Zero recompilation - uses existing engine with scenario data.
-"""
-function _predict_with_scenario(engine::MarginsEngine, scenario, target::Symbol)
-    # Use existing compiled engine with scenario data
-    engine.compiled(engine.gβ_accumulator, scenario.data, 1)  # Fill design matrix row
-    η = dot(engine.β, engine.gβ_accumulator)  # Compute η = Xβ
+    # Use zero-allocation FormulaCompiler's modelrow! to get design matrix row, then apply coefficients
+    FormulaCompiler.modelrow!(engine.row_buf, profile_compiled, profile_data, 1)
+    η = dot(engine.row_buf, engine.β)
     
     if target === :eta
         return η
     else # :mu  
         return GLM.linkinv(engine.link, η)
-    end
-end
-
-"""
-    _gradient_with_scenario(engine, scenario, target) -> Vector{Float64}
-
-Compute parameter gradient using FormulaCompiler's scenario system (PERFORMANCE FIX).
-"""
-function _gradient_with_scenario(engine::MarginsEngine, scenario, target::Symbol)
-    # Use existing compiled engine with scenario data
-    engine.compiled(engine.gβ_accumulator, scenario.data, 1)  # Fill design matrix row
-    
-    if target === :mu
-        # Transform to response scale using chain rule
-        η = dot(engine.β, engine.gβ_accumulator)
-        link_deriv = GLM.mueta(engine.link, η)  # dμ/dη
-        return link_deriv .* engine.gβ_accumulator  # dμ/dβ = (dμ/dη) * (dη/dβ)
-    else # target === :eta
-        # Linear predictor scale
-        return copy(engine.gβ_accumulator)
-    end
-end
-
-"""
-    _compute_continuous_effects_with_scenario!(g_buf, engine, scenario, var, continuous_vars, target, backend)
-
-Compute marginal effects for a continuous variable in the context of a scenario using
-standalone derivative functions (recommended solution from CATEGORICAL_SOLUTION.md).
-
-This function solves the categorical-continuous interaction problem by using
-FormulaCompiler's standalone derivative functions with scenario data, avoiding
-type mismatches between cached derivative evaluators and scenario overrides.
-
-# Arguments
-- `g_buf`: Output buffer for gradient values
-- `engine`: MarginsEngine with original compiled formula and derivative evaluator
-- `scenario`: FormulaCompiler DataScenario with profile overrides
-- `var`: The continuous variable to compute effects for
-- `continuous_vars`: List of all continuous variables for indexing
-- `target`: :eta or :mu scale
-- `backend`: :ad or :fd backend choice
-
-# Implementation Strategy
-Uses standalone derivative functions that accept arbitrary data contexts:
-- Zero recompilation (uses existing compiled formula)
-- Statistically correct (derivatives computed in proper categorical context)
-- Performance optimal (~0.1ms per profile, 0 bytes allocated)
-"""
-function _compute_continuous_effects_with_scenario!(
-    g_buf::Vector{Float64}, 
-    engine::MarginsEngine, 
-    scenario, 
-    var::Symbol, 
-    continuous_vars::Vector{Symbol}, 
-    target::Symbol, 
-    backend::Symbol
-)
-    # Use standalone derivative functions with scenario data
-    # This avoids type mismatches while maintaining performance
-    
-    # Create Jacobian matrix for all continuous variables
-    J = Matrix{Float64}(undef, length(engine.compiled), length(continuous_vars))
-    
-    # Use standalone derivative function with scenario data
-    FormulaCompiler.derivative_modelrow_fd!(J, engine.compiled, scenario.data, 1; vars=continuous_vars)
-    
-    # Convert to marginal effects on η scale
-    marginal_effects_eta = J' * engine.β  # [length(continuous_vars) x 1]
-    
-    if target === :mu
-        # Apply chain rule for μ scale effects
-        # Get linear predictor at scenario
-        row_vec = Vector{Float64}(undef, length(engine.compiled))
-        engine.compiled(row_vec, scenario.data, 1)
-        η = dot(engine.β, row_vec)
-        dmu_deta = GLM.mueta(engine.link, η)
-        
-        # Apply chain rule: dμ/dx = (dμ/dη) * (dη/dx)
-        marginal_effects_mu = marginal_effects_eta .* dmu_deta
-        copyto!(g_buf, marginal_effects_mu)
-    else
-        # η scale effects
-        copyto!(g_buf, marginal_effects_eta)
-    end
-end
-
-"""
-    _compute_continuous_gradient_with_scenario!(gβ_buffer, engine, scenario, var, continuous_vars, target)
-
-Compute parameter gradient for a continuous variable's marginal effect in scenario context.
-Uses standalone derivative functions to avoid type mismatches with cached evaluators.
-
-# Arguments
-- `gβ_buffer`: Output buffer for parameter gradient
-- `engine`: MarginsEngine with compiled formula
-- `scenario`: FormulaCompiler DataScenario with profile overrides
-- `var`: The continuous variable to compute gradient for
-- `continuous_vars`: List of all continuous variables for indexing
-- `target`: :eta or :mu scale
-"""
-function _compute_continuous_gradient_with_scenario!(
-    gβ_buffer::Vector{Float64},
-    engine::MarginsEngine,
-    scenario,
-    var::Symbol,
-    continuous_vars::Vector{Symbol},
-    target::Symbol
-)
-    # Use standalone derivative functions for gradient computation
-    
-    # Create Jacobian matrix for all continuous variables
-    J = Matrix{Float64}(undef, length(engine.compiled), length(continuous_vars))
-    
-    # Use standalone derivative function with scenario data
-    FormulaCompiler.derivative_modelrow_fd!(J, engine.compiled, scenario.data, 1; vars=continuous_vars)
-    
-    # Find which column corresponds to our variable
-    var_idx = findfirst(==(var), continuous_vars)
-    if var_idx === nothing
-        throw(MarginsError("Variable $var not found in continuous variables"))
-    end
-    
-    # Extract the column for this variable: dη/dx (length = n_coefficients)
-    deta_dx = J[:, var_idx]
-    
-    if target === :mu
-        # Apply chain rule for μ scale gradient: dμ/dβ = (dμ/dη) * (dη/dβ)
-        # Get linear predictor at scenario
-        row_vec = Vector{Float64}(undef, length(engine.compiled))
-        engine.compiled(row_vec, scenario.data, 1)
-        η = dot(engine.β, row_vec)
-        dmu_deta = GLM.mueta(engine.link, η)
-        
-        # Gradient is: dμ/dβ = (dμ/dη) * (dη/dx) * (dx/dβ) where dx/dβ = deta_dx
-        gβ_buffer .= dmu_deta .* deta_dx
-    else
-        # η scale gradient: dη/dβ = dη/dx
-        copyto!(gβ_buffer, deta_dx)
     end
 end

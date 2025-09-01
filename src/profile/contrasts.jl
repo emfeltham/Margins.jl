@@ -110,10 +110,14 @@ function compute_multiple_profile_contrasts(
     n_profiles = length(profiles)
     n_params = length(engine.β)
     
-    # Preallocate results
-    effects = Vector{Float64}(undef, n_profiles)
+    # Safely use η_buf for effects if large enough
+    if length(engine.η_buf) >= n_profiles
+        effects = view(engine.η_buf, 1:n_profiles)  # Reuse η_buf if large enough
+    else
+        effects = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
+    end
     gradients = Matrix{Float64}(undef, n_profiles, n_params)
-    terms = Vector{String}(undef, n_profiles)
+    terms = Vector{String}(undef, n_profiles)  # Keep this allocation as it's String, not Float64
     
     baseline_level = _get_baseline_level(engine.model, var)
     
@@ -130,8 +134,12 @@ function compute_multiple_profile_contrasts(
         terms[i] = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
     end
     
-    # Compute standard errors using delta method
-    ses = Vector{Float64}(undef, n_profiles)
+    # Safely use g_buf for SE computation if large enough
+    if length(engine.g_buf) >= n_profiles
+        ses = view(engine.g_buf, 1:n_profiles)  # Reuse g_buf if large enough
+    else
+        ses = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
+    end
     for i in 1:n_profiles
         ses[i] = sqrt(dot(gradients[i, :], engine.Σ, gradients[i, :]))
     end
@@ -172,7 +180,11 @@ function _profile_prediction_with_gradient(
         # Transform to response scale and compute gradient via chain rule  
         μ = GLM.linkinv(engine.link, η)
         link_deriv = GLM.mueta(engine.link, η)  # dμ/dη
-        gradient = link_deriv .* engine.gβ_accumulator  # dμ/dβ = (dμ/dη) * (dη/dβ)
+        # Avoid broadcast allocation: manual scalar multiplication
+        gradient = similar(engine.gβ_accumulator)
+        for j in 1:length(engine.gβ_accumulator)
+            gradient[j] = link_deriv * engine.gβ_accumulator[j]
+        end
         return (μ, gradient)
     else # target === :eta
         # Linear predictor scale

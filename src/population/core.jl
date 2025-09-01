@@ -1,7 +1,8 @@
 # population/core.jl - Main population_margins() function with compilation caching
 
 # Global cache for compiled formulas (MARGINS_GUIDE.md pattern)
-const COMPILED_CACHE = Dict{UInt64, Any}()
+# Unified caching system (see engine/caching.jl)
+# Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
     population_margins(model, data; kwargs...) -> MarginsResult
@@ -129,16 +130,10 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     end
 end
 
-# Compilation caching (MARGINS_GUIDE.md pattern)
+# Use unified caching system
 function _get_or_build_engine(model, data_nt::NamedTuple, vars)
-    cache_key = hash((model, keys(data_nt), vars))  # Include vars in cache key
-    if haskey(COMPILED_CACHE, cache_key)
-        return COMPILED_CACHE[cache_key]
-    else
-        engine = build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
-        COMPILED_CACHE[cache_key] = engine
-        return engine
-    end
+    # Use unified caching system from engine/caching.jl
+    return get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
 end
 
 """

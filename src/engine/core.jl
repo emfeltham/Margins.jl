@@ -12,6 +12,8 @@ Fields:
 - `de::Union{FormulaCompiler.DerivativeEvaluator, Nothing}`: Derivative evaluator for continuous vars
 - `g_buf::Vector{Float64}`: Pre-allocated buffer for marginal effects results
 - `gβ_accumulator::Vector{Float64}`: Pre-allocated buffer for AME gradient accumulation
+- `η_buf::Vector{Float64}`: Pre-allocated buffer for linear predictor computations
+- `row_buf::Vector{Float64}`: Pre-allocated buffer for model row (design matrix row) computations
 - `model::Any`: Reference to original model
 - `β::Vector{Float64}`: Model coefficients
 - `Σ::Matrix{Float64}`: Model covariance matrix
@@ -33,6 +35,8 @@ struct MarginsEngine{L<:GLM.Link}
     # Pre-allocated buffers (zero runtime allocation)
     g_buf::Vector{Float64}              # Marginal effects results
     gβ_accumulator::Vector{Float64}     # AME gradient accumulation
+    η_buf::Vector{Float64}              # Linear predictor computation buffer
+    row_buf::Vector{Float64}            # Model row (design matrix row) buffer
     
     # Model parameters
     model::Any                          # Reference to original model
@@ -56,15 +60,31 @@ Construct zero-allocation margins engine with FormulaCompiler integration.
 # Returns
 - `MarginsEngine`: Pre-compiled engine with allocated buffers
 
-# Notes
+# Buffer Management Strategy
+The engine pre-allocates four key buffers to minimize runtime allocations:
+- `g_buf`: For marginal effects results (sized by number of variables)
+- `gβ_accumulator`: For AME gradient accumulation (sized by number of coefficients)  
+- `η_buf`: For linear predictor computations (sized by number of observations)
+- `row_buf`: For design matrix row computations (sized by number of model columns)
+
+These buffers are safely reused across computations using bounds-checked views.
+When buffer size is insufficient, functions gracefully fall back to allocation
+rather than causing bounds errors.
+
+# Performance Notes
 - Compilation is expensive (~milliseconds), so cache engines when possible
-- Buffers are pre-allocated for zero-allocation hot paths
-- Only builds derivative evaluator for continuous variables
+- Runtime computations achieve significant allocation reductions via buffer reuse
+- Population margins: ~3k allocations (vs much higher without buffer optimization)
+- Profile margins: Allocation overhead primarily from DataFrame/grid operations
+- FormulaCompiler.jl provides zero-allocation primitive operations underneath
 
 # Examples
 ```julia
 data_nt = Tables.columntable(data)
 engine = build_engine(model, data_nt, [:x1, :x2])
+
+# Engine can be reused for multiple margin computations
+# with minimal allocation overhead
 ```
 """
 function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol})
@@ -83,11 +103,15 @@ function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol})
     # Pre-allocate buffers for zero runtime allocation
     n_vars = length(vars_for_de)
     n_coef = length(compiled)
+    n_obs = length(first(data_nt))
+    n_cols = length(compiled)  # Number of columns in design matrix
     g_buf = Vector{Float64}(undef, max(n_vars, 1))  # At least size 1 to avoid bounds errors
     gβ_accumulator = Vector{Float64}(undef, n_coef)
+    η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
+    row_buf = Vector{Float64}(undef, n_cols)       # Buffer for design matrix rows
     
     return MarginsEngine(
-        compiled, de, g_buf, gβ_accumulator,
+        compiled, de, g_buf, gβ_accumulator, η_buf, row_buf,
         model, coef(model), vcov(model), _auto_link(model), vars, data_nt
     )
 end

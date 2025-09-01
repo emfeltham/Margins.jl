@@ -1,4 +1,5 @@
-# profile/core.jl - Main profile_margins() function with reference grid approach
+# profile/core.jl
+# Main profile_margins() function with reference grid approach
 
 using Distributions: Normal, cdf
 
@@ -111,7 +112,7 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect, kwargs...)
+function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
     # Input validation - use same pattern as population_margins
     _validate_profile_inputs(model, data, at, type, vars, target, backend, measure)
     
@@ -125,6 +126,10 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
         vars = nothing  # Not needed for predictions
     end
     
+    # Proper backend selection:
+    # Profile margins default to :ad for speed/accuracy at specific points
+    recommended_backend = backend === :auto ? :ad : backend
+    
     # Build zero-allocation engine with caching
     engine = _get_or_build_engine_for_profiles(model, data_nt, vars)
     
@@ -134,13 +139,13 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, measure)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=length(first(data_nt)), 
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend=recommended_backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at, kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
         df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend, n_obs=length(first(data_nt)), 
+        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at, kwargs...)
         return MarginsResult(df, G, metadata)
     end
@@ -196,7 +201,7 @@ effects_result = profile_margins(model, reference_grid; type=:effects)
 predictions_result = profile_margins(model, reference_grid; type=:predictions)
 ```
 """
-function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:ad, measure::Symbol=:effect, kwargs...)
+function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
     # Input validation - reuse population validation for model/type/target/backend
     _validate_population_inputs(model, reference_grid, type, vars, target, backend, nothing, nothing, measure)
     
@@ -210,19 +215,23 @@ function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects
         vars = nothing  # Not needed for predictions
     end
     
+    # Proper backend selection
+    # Profile margins default to :ad for speed/accuracy at specific points
+    recommended_backend = backend === :auto ? :ad : backend
+    
     # Build zero-allocation engine (no caching needed for explicit grids)
     engine = build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend, measure)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=nrow(reference_grid), 
+        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend=recommended_backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=nrow(reference_grid), 
                                   model_type=typeof(model), at_spec="explicit_grid", kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
         df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend, n_obs=nrow(reference_grid), 
+        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=nrow(reference_grid), 
                                   model_type=typeof(model), at_spec="explicit_grid", kwargs...)
         return MarginsResult(df, G, metadata)
     end
@@ -231,19 +240,11 @@ end
 """
     _get_or_build_engine_for_profiles(model, data_nt, vars)
 
-Get or build engine with caching for profile computations.
-Uses same cache as population margins but ensures compatibility.
+Get or build engine with caching for profile computations. Uses unified caching system.
 """
 function _get_or_build_engine_for_profiles(model, data_nt::NamedTuple, vars)
-    # Use same caching mechanism as population margins
-    cache_key = hash((model, keys(data_nt), vars, :profiles))  # Add :profiles to differentiate
-    if haskey(COMPILED_CACHE, cache_key)
-        return COMPILED_CACHE[cache_key]
-    else
-        engine = build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
-        COMPILED_CACHE[cache_key] = engine
-        return engine
-    end
+    # Use unified caching system from engine/caching.jl
+    return get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
 end
 
 """
@@ -258,37 +259,23 @@ function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; 
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     
-    # Preallocate arrays
-    predictions = Vector{Float64}(undef, n_profiles)
+    # Reuse η_buf for predictions if possible
+    predictions = length(engine.η_buf) >= n_profiles ? view(engine.η_buf, 1:n_profiles) : Vector{Float64}(undef, n_profiles)
     G = zeros(n_profiles, n_params)  # One row per profile
     
     # Convert reference grid to NamedTuple format for FormulaCompiler
     data_nt = Tables.columntable(reference_grid)
     
-    # Compute predictions and gradients for each profile
-    for i in 1:n_profiles
-        # Use FormulaCompiler modelrow to get design matrix row for profile i
-        X_row = FormulaCompiler.modelrow(engine.compiled, data_nt, i)
-        eta_i = dot(X_row, engine.β)
-        
-        if target === :mu
-            # Transform to response scale
-            predictions[i] = GLM.linkinv(engine.link, eta_i)
-            
-            # Compute gradient with chain rule: d/dβ[linkinv(Xβ)] = linkinv'(Xβ) * X
-            link_deriv = GLM.mueta(engine.link, eta_i)
-            G[i, :] = link_deriv .* X_row
-        else # target === :eta
-            # Keep on link scale
-            predictions[i] = eta_i
-            
-            # Gradient is just the design matrix row
-            G[i, :] = X_row
-        end
-    end
+    # Single pass over profiles via helper that takes only concrete arguments
+    _profile_predictions_impl!(predictions, G, engine.compiled, engine.row_buf,
+                               engine.β, engine.link, data_nt, target)
     
-    # Compute delta-method SEs for each profile
-    se_vals = Vector{Float64}(undef, n_profiles)
+    # Safely use g_buf for SE computation if large enough  
+    if length(engine.g_buf) >= n_profiles
+        se_vals = view(engine.g_buf, 1:n_profiles)  # Reuse g_buf if large enough
+    else
+        se_vals = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
+    end
     for i in 1:n_profiles
         se_vals[i] = sqrt((G[i:i, :] * engine.Σ * G[i:i, :]')[1, 1])
     end
@@ -307,6 +294,39 @@ function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; 
     end
     
     return results, G
+end
+
+function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
+                                    G::AbstractMatrix{<:Float64},
+                                    compiled,
+                                    row_buf::Vector{Float64},
+                                    β::Vector{Float64},
+                                    link,
+                                    data_nt::NamedTuple,
+                                    target::Symbol)
+    n_profiles = length(predictions)
+    if target === :mu
+        for i in 1:n_profiles
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
+            η = dot(row_buf, β)
+            μ = GLM.linkinv(link, η)
+            dμ_dη = GLM.mueta(link, η)
+            predictions[i] = μ
+            @inbounds for j in 1:length(row_buf)
+                G[i, j] = dμ_dη * row_buf[j]
+            end
+        end
+    else
+        for i in 1:n_profiles
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
+            η = dot(row_buf, β)
+            predictions[i] = η
+            @inbounds for j in 1:length(row_buf)
+                G[i, j] = row_buf[j]
+            end
+        end
+    end
+    return nothing
 end
 
 """

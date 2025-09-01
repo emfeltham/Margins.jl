@@ -14,36 +14,15 @@ function _population_predictions(engine::MarginsEngine, data_nt::NamedTuple; tar
     n_obs = length(first(data_nt))
     n_params = length(engine.β)
     
-    # Preallocate arrays
-    predictions = Vector{Float64}(undef, n_obs)
+    # Use pre-allocated η_buf as working buffer; size to n_obs
+    work = view(engine.η_buf, 1:n_obs)
     G = zeros(1, n_params)  # Single row for population average
+
+    # Delegate hot loop to a helper with concrete arguments to ensure zero allocations
+    mean_prediction = _population_predictions_impl!(G, work, engine.compiled, engine.row_buf,
+                                                    engine.β, engine.link, data_nt, target)
     
-    # Compute predictions and gradients
-    for i in 1:n_obs
-        # Use FormulaCompiler modelrow to get design matrix row for row i
-        X_row = FormulaCompiler.modelrow(engine.compiled, data_nt, i)
-        eta_i = dot(X_row, engine.β)
-        
-        if target === :mu
-            # Transform to response scale
-            predictions[i] = GLM.linkinv(engine.link, eta_i)
-            
-            # Compute gradient with chain rule: d/dβ[linkinv(Xβ)] = linkinv'(Xβ) * X
-            link_deriv = GLM.mueta(engine.link, eta_i)
-            G .+= (link_deriv .* X_row') ./ n_obs
-        else # target === :eta
-            # Keep on link scale
-            predictions[i] = eta_i
-            
-            # Gradient is just the design matrix row
-            G .+= X_row' ./ n_obs
-        end
-    end
-    
-    # Compute population average
-    mean_prediction = mean(predictions)
-    
-    # Compute delta-method SE (G is 1 x p, Σ is p x p)
+    # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])
     
     # Create results DataFrame
@@ -56,4 +35,35 @@ function _population_predictions(engine::MarginsEngine, data_nt::NamedTuple; tar
     )
     
     return df, G
+end
+
+# Helper with concrete arguments to enable full specialization and avoid per-iteration allocations
+function _population_predictions_impl!(G::AbstractMatrix{<:Float64}, work, compiled, row_buf::Vector{Float64},
+                                       β::Vector{Float64}, link, data_nt::NamedTuple, target::Symbol)
+    n_obs = length(first(data_nt))
+    mean_acc = 0.0
+    if target === :mu
+        for i in 1:n_obs
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
+            η = dot(row_buf, β)
+            μ = GLM.linkinv(link, η)
+            dμ_dη = GLM.mueta(link, η)
+            mean_acc += μ
+            @inbounds for j in 1:length(row_buf)
+                G[1, j] += (dμ_dη * row_buf[j]) / n_obs
+            end
+            work[i] = μ
+        end
+    else
+        for i in 1:n_obs
+            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
+            η = dot(row_buf, β)
+            mean_acc += η
+            @inbounds for j in 1:length(row_buf)
+                G[1, j] += row_buf[j] / n_obs
+            end
+            work[i] = η
+        end
+    end
+    return mean_acc / n_obs
 end
