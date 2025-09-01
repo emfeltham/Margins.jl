@@ -112,12 +112,23 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
+# Single method to handle both cases: data with 'at' specification and explicit reference grids  
 function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
-    # Input validation - use same pattern as population_margins
-    _validate_profile_inputs(model, data, at, type, vars, target, backend, measure)
-    
-    # Single data conversion (consistent format throughout)
+    # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
+    
+    # Call internal implementation with NamedTuple (no more DataFrame dispatch issues)
+    return _profile_margins_impl(model, data_nt, at, type, vars, target, backend, measure, kwargs...)
+end
+
+# Internal implementation that works with NamedTuple to avoid dispatch confusion
+function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, kwargs...)
+    # Input validation
+    _validate_profile_inputs(model, data_nt, at, type, vars, target, backend, measure)
+    
+    # Build reference grid from at specification  
+    reference_grid = _build_reference_grid(at, data_nt)
+    at_spec = at
     
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
@@ -133,20 +144,17 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     # Build zero-allocation engine with caching
     engine = _get_or_build_engine_for_profiles(model, data_nt, vars)
     
-    # Build reference grid from at specification
-    reference_grid = _build_reference_grid(at, data_nt)
-    
     if type === :effects
         # Convert reference grid to profiles for processing
         profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
         df, G = _mem_continuous_and_categorical(engine, profiles; target, backend=recommended_backend, measure)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at, kwargs...)
+                                  model_type=typeof(model), at_spec=at_spec, kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
         df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at, kwargs...)
+                                  model_type=typeof(model), at_spec=at_spec, kwargs...)
         return MarginsResult(df, G, metadata)
     end
 end
@@ -201,41 +209,8 @@ effects_result = profile_margins(model, reference_grid; type=:effects)
 predictions_result = profile_margins(model, reference_grid; type=:predictions)
 ```
 """
-function profile_margins(model, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
-    # Input validation - reuse population validation for model/type/target/backend
-    _validate_population_inputs(model, reference_grid, type, vars, target, backend, nothing, nothing, measure)
-    
-    # Convert reference grid to data format
-    data_nt = Tables.columntable(reference_grid)
-    
-    # Handle vars parameter with improved validation - use same helper
-    if type === :effects
-        vars = _process_vars_parameter(vars, data_nt)
-    else # type === :predictions
-        vars = nothing  # Not needed for predictions
-    end
-    
-    # Proper backend selection
-    # Profile margins default to :ad for speed/accuracy at specific points
-    recommended_backend = backend === :auto ? :ad : backend
-    
-    # Build zero-allocation engine (no caching needed for explicit grids)
-    engine = build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
-    
-    if type === :effects
-        # Convert reference grid to profiles for processing
-        profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend=recommended_backend, measure)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=nrow(reference_grid), 
-                                  model_type=typeof(model), at_spec="explicit_grid", kwargs...)
-        return MarginsResult(df, G, metadata)
-    else # :predictions  
-        df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=nrow(reference_grid), 
-                                  model_type=typeof(model), at_spec="explicit_grid", kwargs...)
-        return MarginsResult(df, G, metadata)
-    end
-end
+# Note: DataFrame method removed to avoid dispatch ambiguity
+# Both use cases (data with 'at' and explicit reference_grid) now handled by single method above
 
 """
     _get_or_build_engine_for_profiles(model, data_nt, vars)
