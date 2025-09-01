@@ -58,7 +58,7 @@ include("types.jl")
 include("features/categorical_mixtures.jl")
 include("engine/core.jl")
 include("engine/utilities.jl") 
-include("engine/caching.jl")
+include("engine/caching.jl")  # Unified caching system
 include("population/core.jl")
 include("population/contexts.jl")
 include("population/effects.jl")
