@@ -39,7 +39,7 @@ ame(...); mem(...); mer(...)
 ape(...); apm(...); apr(...)
 ```
 
-Results return a `MarginsResult` with a tidy DataFrame table and metadata (Σ source, link, dof, etc.).
+Results return a `MarginsResult` with DataFrame conversion support and metadata (Σ source, link, dof, etc.).
 
 ## Examples
 
