@@ -108,7 +108,7 @@ Designed for production use with large datasets:
 - Vectorized operations where possible
 """
 function compute_predictions_batch!(
-    results::Vector{T}, gradients::Matrix{Float64},
+    results::AbstractVector{T}, gradients::Matrix{Float64},
     compiled, data_nt, β::Vector{Float64}, link, target::Symbol,
     row_buf::Vector{Float64}
 ) where T<:Real
@@ -190,7 +190,7 @@ not gradients. Use when standard errors are not needed.
 - Ideal for counterfactual analysis without SEs
 """
 function compute_predictions_only!(
-    results::Vector{T}, compiled, data_nt, β::Vector{Float64}, 
+    results::AbstractVector{T}, compiled, data_nt, β::Vector{Float64}, 
     link, target::Symbol, row_buf::Vector{Float64}
 ) where T<:Real
     

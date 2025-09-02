@@ -3,6 +3,7 @@
 
 using Distributions: Normal, cdf
 using ..Validation: validate_profile_parameters
+using ..Predictions: compute_predictions_batch!
 
 """
     profile_margins(model, data; at=:means, kwargs...) -> MarginsResult
@@ -275,28 +276,8 @@ function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
                                     link,
                                     data_nt::NamedTuple,
                                     target::Symbol)
-    n_profiles = length(predictions)
-    if target === :mu
-        for i in 1:n_profiles
-            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
-            η = dot(row_buf, β)
-            μ = GLM.linkinv(link, η)
-            dμ_dη = GLM.mueta(link, η)
-            predictions[i] = μ
-            @inbounds for j in 1:length(row_buf)
-                G[i, j] = dμ_dη * row_buf[j]
-            end
-        end
-    else
-        for i in 1:n_profiles
-            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
-            η = dot(row_buf, β)
-            predictions[i] = η
-            @inbounds for j in 1:length(row_buf)
-                G[i, j] = row_buf[j]
-            end
-        end
-    end
+    # Use centralized batch prediction computation (zero allocation)
+    compute_predictions_batch!(predictions, G, compiled, data_nt, β, link, target, row_buf)
     return nothing
 end
 
