@@ -22,6 +22,7 @@ makedocs(;
       "Performance Guide" => "performance.md",
       "Advanced Features" => "advanced.md"
     ],
+    "Package Comparison" => "comparison.md",
     "API Reference" => "api.md",
     "Examples" => "examples.md"
   ],

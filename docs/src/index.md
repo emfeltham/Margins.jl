@@ -93,16 +93,6 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 - **Flexible grouping**: Subgroup analysis via `over` parameter
 - *See [Advanced Features](advanced.md) for detailed coverage of elasticities and robust inference*
 
-### **Stata Migration**  
-Direct command equivalency for economists:
-
-| Stata | Margins.jl |
-|-------|------------|
-| `margins, dydx(*)` | `population_margins(model, data; type=:effects)` |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data; at=:means, type=:effects)` |
-| `margins, at(x=0 1 2)` | `profile_margins(model, data; at=Dict(:x=>[0,1,2]), type=:effects)` |
-| `margins` | `population_margins(model, data; type=:predictions)` |
-
 ## Advanced Usage
 
 ### Profile Specification
@@ -221,7 +211,7 @@ scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 p
 - **Documentation**: Complete API reference and mathematical foundation
 - **Examples**: Executable workflows in `examples/` directory
 - **Issues**: Report bugs at [GitHub Issues](https://github.com/emfeltham/Margins.jl/issues)
-- **Migration**: Stata compatibility guide for economists
+- **Migration**: Comparison to other packages
 
 ## Installation
 
