@@ -112,7 +112,6 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-# Single method to handle both cases: data with 'at' specification and explicit reference grids  
 function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
