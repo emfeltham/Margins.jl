@@ -12,6 +12,7 @@ include("test_grouping.jl")
 include("test_contrasts.jl")
 include("test_vcov.jl")
 include("test_errors.jl")
+include("test_automatic_variable_detection.jl")
 try
     include("test_mixedmodels.jl")
 catch e
