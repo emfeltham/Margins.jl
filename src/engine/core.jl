@@ -68,8 +68,8 @@ The engine pre-allocates four key buffers to minimize runtime allocations:
 - `row_buf`: For design matrix row computations (sized by number of model columns)
 
 These buffers are safely reused across computations using bounds-checked views.
-When buffer size is insufficient, functions gracefully fall back to allocation
-rather than causing bounds errors.
+When buffer size is insufficient, functions allocate additional memory
+to prevent bounds errors while maintaining correctness.
 
 # Performance Notes
 - Compilation is expensive (~milliseconds), so cache engines when possible

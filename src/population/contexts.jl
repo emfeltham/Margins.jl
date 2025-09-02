@@ -135,8 +135,11 @@ function _parse_over_specification(over, data_nt)
             contexts = new_contexts
         end
         return contexts
+    elseif over isa Symbol
+        # Single variable syntax - convert to vector and recurse
+        return _parse_over_specification([over], data_nt)
     else
-        error("over parameter must be a NamedTuple or Vector")
+        error("over parameter must be a NamedTuple, Vector, or Symbol")
     end
 end
 

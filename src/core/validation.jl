@@ -63,11 +63,11 @@ end
     validate_vars_parameter(vars, type::Symbol)
 
 Validate the `vars` parameter for variable selection.
-Issues warning if vars is specified for predictions (where it's ignored).
+Throws error if vars is specified for predictions (where it's invalid).
 """
 function validate_vars_parameter(vars, type::Symbol)
     if vars !== nothing && type === :predictions
-        @warn "vars parameter ignored when type=:predictions"
+        throw(ArgumentError("vars parameter is incompatible with type=:predictions. Remove vars parameter or change type to :effects."))
     end
 end
 

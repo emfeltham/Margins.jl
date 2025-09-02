@@ -166,7 +166,7 @@ end
     _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrame, Matrix)
 
 Zero-allocation population effects (AME) using FormulaCompiler's built-in APIs.
-Implements REORG.md lines 290-348 with graceful fallbacks and batch operations.
+Implements REORG.md lines 290-348 with explicit backend selection and batch operations.
 
 # Arguments
 - `engine::MarginsEngine`: Pre-built margins engine
@@ -209,27 +209,13 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
     local_compiled = engine.compiled
     for var in engine.de.vars
         if var ∈ continuous_vars
-            # Graceful backend fallback with recommended defaults
-            # Population margins use :fd for zero allocations, graceful :ad fallback
-            try
-                # This is the key: FC already provides zero-allocation AME gradients
-                FormulaCompiler.accumulate_ame_gradient!(
-                    engine.gβ_accumulator, local_de, local_β, rows, var;
-                    link=(target === :mu ? local_link : GLM.IdentityLink()), 
-                    backend=backend
-                )
-            catch e
-                if backend === :ad
-                    @warn "AD backend failed for $var, falling back to FD: $e"
-                    FormulaCompiler.accumulate_ame_gradient!(
-                        engine.gβ_accumulator, local_de, local_β, rows, var;
-                        link=(target === :mu ? local_link : GLM.IdentityLink()), 
-                        backend=:fd
-                    )
-                else
-                    rethrow(e)
-                end
-            end
+            # Direct computation with explicit backend - no fallbacks
+            # Users must choose backend explicitly based on their accuracy/performance needs
+            FormulaCompiler.accumulate_ame_gradient!(
+                engine.gβ_accumulator, local_de, local_β, rows, var;
+                link=(target === :mu ? local_link : GLM.IdentityLink()), 
+                backend=backend
+            )
             
             # Note: accumulate_ame_gradient! already averages the gradient
             gβ_avg = engine.gβ_accumulator  # Use directly without copying

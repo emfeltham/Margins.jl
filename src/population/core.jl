@@ -39,9 +39,6 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
 - `at=nothing`: Counterfactual scenarios (Dict mapping variables to values)
   - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
-- `over=nothing`: Subgroup analysis specification
-  - NamedTuple: `(var1=values, var2=nothing)` for flexible grouping
-  - Vector{Symbol}: `[:var1, :var2]` for all-categorical automatic grouping
 
 # Returns
 `MarginsResult` containing:
@@ -75,10 +72,6 @@ result = population_margins(model, data; type=:predictions)
 # Counterfactual analysis: effects when x2 is set to 0 vs 1
 result = population_margins(model, data; vars=[:x1], at=Dict(:x2 => [0, 1]))
 
-# Subgroup analysis: effects by region and income categories
-result = population_margins(model, data; vars=[:education], 
-                          over=(region=nothing, income=[20000, 50000, 80000]))
-
 # High-performance production use with finite differences
 result = population_margins(model, data; backend=:ad, target=:eta)
 ```
@@ -96,9 +89,9 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, at=nothing, over=nothing, measure::Symbol=:effect, kwargs...)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, at=nothing, measure::Symbol=:effect, kwargs...)
     # Input validation
-    _validate_population_inputs(model, data, type, vars, target, backend, at, over, measure)
+    _validate_population_inputs(model, data, type, vars, target, backend, at, measure)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -116,9 +109,9 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     # Build zero-allocation engine with caching
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
-    # Handle at/over parameters for population contexts
-    if at !== nothing || over !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, at, over; type, target, backend=recommended_backend, kwargs...)
+    # Handle at parameter for counterfactual scenarios
+    if at !== nothing
+        return _population_margins_with_contexts(engine, data_nt, vars, at, nothing; type, target, backend=recommended_backend, kwargs...)
     end
     
     if type === :effects
@@ -162,7 +155,7 @@ end
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, over, measure::Symbol)
+function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, measure::Symbol)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -187,10 +180,7 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
         throw(ArgumentError("at parameter must be a Dict specifying counterfactual scenarios"))
     end
     
-    # Validate over parameter
-    if over !== nothing && !(over isa NamedTuple || over isa Vector{Symbol})
-        throw(ArgumentError("over parameter must be a NamedTuple or Vector{Symbol} for grouping analysis"))
-    end
+    # The 'over' and 'by' parameters have been removed in the current API design
     
     # Validate model has required methods
     try
