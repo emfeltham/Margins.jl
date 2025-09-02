@@ -22,12 +22,9 @@ end
 # Statistical Validation Suite
 @testset "Statistical Correctness" begin
     @info "Starting comprehensive statistical validation framework..."
-    
     # Core statistical correctness validation
     include("statistical_validation/statistical_validation.jl")
-    
     # Backend consistency validation (essential)
     include("statistical_validation/backend_consistency.jl")
-    
     @info "Statistical validation framework completed successfully ✓"
 end
