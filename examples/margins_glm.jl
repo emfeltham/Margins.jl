@@ -25,19 +25,19 @@ println("=== POPULATION APPROACH ===")
 # Population marginal effects (AME) on response scale
 println("1. Population marginal effects (AME) - response scale:")
 pop_ame = population_margins(m, df; type=:effects, vars=[:x, :z], target=:mu)
-println(pop_ame.table)
+println(DataFrame(pop_ame))
 println()
 
 # Population marginal effects on link scale (linear predictor)
 println("2. Population marginal effects - link scale (η):")
 pop_ame_eta = population_margins(m, df; type=:effects, vars=[:x, :z], target=:eta)
-println(pop_ame_eta.table)
+println(DataFrame(pop_ame_eta))
 println()
 
 # Population predictions
 println("3. Population average predictions:")
 pop_pred = population_margins(m, df; type=:predictions, scale=:response)
-println(pop_pred.table)
+println(DataFrame(pop_pred))
 println()
 
 println("=== PROFILE APPROACH ===")
@@ -59,7 +59,7 @@ println("=== API DEMONSTRATION ===")
 println("7. Clean two-function API in action:")
 println("   population_margins() for true population effects:")
 pop_demo = population_margins(m, df; type=:effects, vars=[:x])
-println("   Effect of x: ", round(pop_demo.table.dydx[1], digits=5))
+println("   Effect of x: ", round(DataFrame(pop_demo).dydx[1], digits=5))
 
 println("   
    profile_margins() would show effects at specific covariate values
@@ -71,7 +71,7 @@ println("=== FRAMEWORK COMPARISON ===")
 println("Population approach gives you the TRUE average effect across your sample.")
 println("Profile approach evaluates at specific 'representative' cases.")
 println()
-println("For GLM example - Population AME: ", round(pop_ame.table.dydx[1], digits=5))
+println("For GLM example - Population AME: ", round(DataFrame(pop_ame).dydx[1], digits=5))
 println("For linear models: Population ≈ Profile (small differences)")
 println("For nonlinear models: Can differ substantially!")
 
@@ -87,4 +87,4 @@ println("=== ROBUST STANDARD ERRORS ===")
 println("# For robust SEs, use the vcov parameter:")
 println("# using CovarianceMatrices")
 println("# robust_result = population_margins(m, df; type=:effects, vars=[:x], vcov=HC1())")
-println("# println(robust_result.table)")
+println("# println(DataFrame(robust_result))")
