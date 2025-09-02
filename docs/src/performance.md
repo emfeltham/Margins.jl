@@ -65,20 +65,21 @@ Population margins scale linearly with optimized per-row costs:
 
 ### Backend Selection by Use Case
 
-| Use Case | Recommended Backend | Rationale |
-|----------|-------------------|-----------|
-| **Production analysis** | `:fd` | Zero allocation, consistent performance |
-| **Development/testing** | `:ad` | Higher accuracy, small allocation cost acceptable |
-| **Large datasets (>100k)** | `:fd` | Memory efficiency critical |
-| **High-accuracy needs** | `:ad` | Automatic differentiation precision |
-| **Batch processing** | `:fd` | Allocation consistency across runs |
+For detailed backend selection guidance including domain-sensitive functions and reliability considerations, see **[Backend Selection Guide](backend_selection.md)**.
+
+**Quick summary:**
+- **`:ad`** - Required for log(), sqrt(), 1/x functions; higher reliability
+- **`:fd`** - Zero allocation, optimal for production and large datasets
 
 ```julia
-# Production configuration
+# Production configuration (memory-optimized)
 population_margins(model, data; backend=:fd, target=:eta)
 
-# Development configuration  
+# Development/high-reliability configuration  
 profile_margins(model, data; at=:means, backend=:ad, target=:mu)
+
+# Domain-sensitive functions (log, sqrt) - AD required
+population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)
 ```
 
 ## Optimization Principles

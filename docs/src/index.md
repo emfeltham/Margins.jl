@@ -234,4 +234,4 @@ Pkg.add("Margins")
 
 ---
 
-*For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For performance optimization, see [Performance Guide](performance.md). For comprehensive function reference, see [API Reference](api.md).*
+*For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For backend selection guidance, see [Backend Selection](backend_selection.md). For performance optimization, see [Performance Guide](performance.md). For comprehensive function reference, see [API Reference](api.md).*

@@ -17,6 +17,7 @@ makedocs(;
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
       "Profile Analysis" => "profile_margins.md", 
+      "Backend Selection" => "backend_selection.md",
       "Performance Guide" => "performance.md",
       "Advanced Features" => "advanced.md"
     ],
