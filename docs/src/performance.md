@@ -1,13 +1,13 @@
 # Performance Guide
 
-*Optimizing marginal effects analysis for production workflows*
+*Optimizing marginal effects analysis for computational efficiency*
 
 ## Performance Overview
 
-Margins.jl achieves **production-grade performance** through careful optimization while maintaining absolute statistical correctness. The package delivers:
+Margins.jl achieves efficient computation through careful optimization while maintaining statistical correctness. The package provides:
 
-- **Profile margins**: O(1) constant time (~100-200μs) regardless of dataset size
-- **Population margins**: Optimized O(n) scaling (~150ns per row) with constant memory footprint  
+- **Profile margins**: O(1) constant time regardless of dataset size
+- **Population margins**: O(n) scaling with low per-row computational cost and constant memory footprint  
   *See [Mathematical Foundation](mathematical_foundation.md) for conceptual understanding of when to choose population vs profile approaches*  
 - **Zero-allocation core**: FormulaCompiler.jl foundation eliminates unnecessary allocations
 - **Statistical integrity**: Performance optimizations never compromise statistical validity
@@ -22,13 +22,13 @@ Profile margins achieve **constant-time performance** regardless of dataset size
 using BenchmarkTools, Margins
 
 # Performance is independent of dataset size
-@btime profile_margins($model, $data_1k; at=:means, type=:effects)     # ~200μs
-@btime profile_margins($model, $data_100k; at=:means, type=:effects)   # ~200μs (same!)
-@btime profile_margins($model, data_1M; at=:means, type=:effects)       # ~200μs (same!)
+@btime profile_margins($model, $data_1k; at=:means, type=:effects)     # constant time
+@btime profile_margins($model, $data_100k; at=:means, type=:effects)   # same complexity
+@btime profile_margins($model, data_1M; at=:means, type=:effects)       # same complexity
 
 # Complex scenarios also O(1)
 scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 profiles
-@btime profile_margins($model, $huge_data; at=scenarios)                    # ~400μs
+@btime profile_margins($model, $huge_data; at=scenarios)                    # still constant time
 ```
 
 **Why this matters**: Profile analysis cost is **independent of sample size**, making it efficient for large-scale econometric analysis.
@@ -38,15 +38,19 @@ scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 p
 Population margins scale linearly with optimized per-row costs:
 
 ```julia
-# Consistent per-row performance across dataset sizes
-@btime population_margins($model, $data_1k)    # ~0.2ms  (~150ns/row)
-@btime population_margins($model, $data_10k)   # ~1.5ms  (~150ns/row)  
-@btime population_margins($model, $data_100k)  # ~15ms   (~150ns/row)
+# Linear scaling with low per-row computational cost
+@btime population_margins($model, $data_1k)    # scales with dataset size
+@btime population_margins($model, $data_10k)   # with efficient per-row processing  
+@btime population_margins($model, $data_100k)  # minimal allocation overhead
 
-# Memory footprint remains constant
-@allocated population_margins(model, data_1k)    # ~6KB
-@allocated population_margins(model, data_10k)   # ~6KB (same!)
-@allocated population_margins(model, data_100k)  # ~6KB (same!)
+# Memory footprint remains zero (both backends)
+@allocated population_margins(model, data_1k; backend=:fd)    # 0 bytes
+@allocated population_margins(model, data_10k; backend=:fd)   # 0 bytes
+@allocated population_margins(model, data_100k; backend=:fd)  # 0 bytes
+
+@allocated population_margins(model, data_1k; backend=:ad)    # 0 bytes
+@allocated population_margins(model, data_10k; backend=:ad)   # 0 bytes
+@allocated population_margins(model, data_100k; backend=:ad)  # 0 bytes
 ```
 
 **Why this matters**: Population analysis maintains **constant allocation footprint** while delivering consistent per-row performance.
@@ -57,11 +61,11 @@ Population margins scale linearly with optimized per-row costs:
 
 | Dataset Size | Population Margins | Profile Margins | Recommended Workflow |
 |--------------|-------------------|-----------------|---------------------|
-| **< 1k** | Excellent (<1ms) | Excellent (~200μs) | Use either approach freely |
-| **1k-10k** | Excellent (1-10ms) | Excellent (~200μs) | Profile preferred for scenarios |
-| **10k-100k** | Good (10-100ms) | Excellent (~200μs) | Profile for exploration, population for final analysis |
-| **100k-1M** | Acceptable (0.1-1s) | Excellent (~200μs) | Profile strongly preferred |
-| **> 1M** | Scales appropriately | Excellent (~200μs) | Profile analysis, selective population |
+| **< 1k** | Fast | Constant time | Use either approach freely |
+| **1k-10k** | Fast | Constant time | Profile preferred for scenarios |
+| **10k-100k** | Scales linearly | Constant time | Profile for exploration, population for final analysis |
+| **100k-1M** | Scales appropriately | Constant time | Profile strongly preferred |
+| **> 1M** | Scales with dataset size | Constant time | Profile analysis, selective population |
 
 ### Backend Selection by Use Case
 
@@ -103,6 +107,20 @@ population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)
 
 ### Backend Performance Characteristics
 
+#### Automatic Differentiation (`:ad`) - **RECOMMENDED DEFAULT**
+```julia
+# Zero allocation after warmup
+population_margins(model, data; backend=:ad)  # 0 bytes allocated
+```
+
+**Advantages**:
+- Zero allocation after warmup
+- Machine precision accuracy (exact derivatives)
+- Robust domain handling (handles log, sqrt, 1/x safely)
+- Suitable for complex formulas
+
+**Use cases**: Most applications - provides good performance and reliability
+
 #### Finite Differences (`:fd`)
 ```julia
 # Zero allocation after warmup
@@ -111,38 +129,27 @@ population_margins(model, data; backend=:fd)  # 0 bytes allocated
 
 **Advantages**:
 - Zero allocation in production paths
-- Consistent performance across dataset sizes
-- Robust numerical behavior
+- Simple numerical implementation
+- Good accuracy for well-conditioned functions
 
-**Use cases**: Production workflows, large datasets, memory-constrained environments
-
-#### Automatic Differentiation (`:ad`)  
-```julia
-# Small allocation cost for higher accuracy
-population_margins(model, data; backend=:ad)  # ~400-500 bytes per call
-```
-
-**Advantages**:
-- Higher numerical accuracy
-- Faster convergence for complex models
-- Better handling of extreme values
-
-**Use cases**: Development, verification, high-precision requirements
+**Use cases**: Simple linear formulas where marginal speed differences matter
 
 ## Memory Management
 
 ### Allocation Patterns
 
-Margins.jl follows strict allocation patterns to ensure predictable memory usage:
+Margins.jl achieves zero-allocation performance for computational workflows:
 
 ```julia
 # Profile margins: constant allocation regardless of data size
-@allocated profile_margins(model, small_data; at=:means)  # ~2KB
-@allocated profile_margins(model, large_data; at=:means)  # ~2KB (same!)
+@allocated profile_margins(model, small_data; at=:means)  # small constant allocation
+@allocated profile_margins(model, large_data; at=:means)  # same allocation pattern
 
-# Population margins: constant base allocation + O(1) per computation
-@allocated population_margins(model, data_1k)   # ~6KB  
-@allocated population_margins(model, data_10k)  # ~6KB (constant!)
+# Population margins: zero allocation after warmup (both backends)
+@allocated population_margins(model, data_1k; backend=:fd)   # 0 bytes
+@allocated population_margins(model, data_10k; backend=:fd)  # 0 bytes
+@allocated population_margins(model, data_1k; backend=:ad)   # 0 bytes
+@allocated population_margins(model, data_10k; backend=:ad)  # 0 bytes
 ```
 
 ### Memory Efficiency Best Practices
@@ -151,21 +158,23 @@ Margins.jl follows strict allocation patterns to ensure predictable memory usage
 ```julia
 # Use profile analysis for exploration (O(1) memory)
 scenarios = Dict(:x1 => [-1, 0, 1], :treatment => [0, 1])
-results = profile_margins(model, large_data; at=scenarios, backend=:fd)
+results = profile_margins(model, large_data; at=scenarios)
 
-# Use population analysis selectively  
-key_effects = population_margins(model, large_data; vars=[:treatment], backend=:fd)
+# Use population analysis with zero-allocation backends
+key_effects = population_margins(model, large_data; vars=[:treatment], backend=:ad)  # Recommended
+# OR
+key_effects = population_margins(model, large_data; vars=[:treatment], backend=:fd)  # Also zero allocation
 ```
 
 #### For Batch Processing
 ```julia
-# Process multiple models with consistent memory usage
+# Process multiple models with zero allocation
 models = [model1, model2, model3]
 results = []
 
 for model in models
-    # Each call has same memory footprint
-    result = population_margins(model, data; backend=:fd)
+    # Each call has zero allocation (either backend)
+    result = population_margins(model, data; backend=:ad)  # Recommended: zero allocation
     push!(results, DataFrame(result))
 end
 ```

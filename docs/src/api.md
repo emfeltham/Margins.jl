@@ -20,7 +20,7 @@ This function averages effects/predictions across the observed sample distributi
 - When sample heterogeneity is important
 - Broad applications affecting diverse groups
 
-**Performance**: ~150ns per row for effects, ~10ns per row for predictions (O(n) scaling)
+**Performance**: Low per-row computational cost for effects and predictions (O(n) scaling)
 *For performance comparison with profile margins and optimization strategies, see [Performance Guide](performance.md)*
 
 ### Profile Analysis
@@ -37,7 +37,7 @@ This function evaluates effects/predictions at specific covariate scenarios, pro
 - Policy targeting specific demographics
 - Communication to non-technical audiences
 
-**Performance**: ~100-200μs regardless of dataset size (O(1) constant time)
+**Performance**: Constant time regardless of dataset size (O(1) scaling)
 *For detailed performance characteristics and memory management, see [Performance Guide](performance.md)*
 
 ## Result Types

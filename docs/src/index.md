@@ -1,16 +1,16 @@
 # Margins.jl
 
-*Production-ready marginal effects for Julia with Stata-like functionality and superior performance*
+*Marginal effects for Julia with Stata-like functionality and efficient computation*
 
 ## Overview
 
-Margins.jl provides **publication-grade marginal effects computation** for the JuliaStats ecosystem, featuring:
+Margins.jl provides marginal effects computation for the JuliaStats ecosystem, featuring:
 
 - **Clean 2×2 Framework**: Population vs Profile × Effects vs Predictions
-- **Superior Performance**: 250-500x speedup with O(1) constant-time profile analysis  
+- **Efficient Performance**: O(1) constant-time profile analysis  
 - **Statistical Rigor**: Zero-tolerance policy for statistical errors with delta-method standard errors
 - **Stata Compatibility**: Direct migration path for economists familiar with Stata's `margins` command
-- **Production Ready**: Handles datasets from 1k to 1M+ observations seamlessly
+- **Scalability**: Tested on datasets from 1k to 1M+ observations
 
 Built on the JuliaStats foundation:
 - [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification
@@ -72,20 +72,20 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 
 ## Key Features
 
-### **🚀 Superior Performance**
-- **Profile margins**: O(1) constant time regardless of dataset size (~100-200μs)
-- **Population margins**: Optimized O(n) scaling (~150ns per row for effects)  
-- **Zero-allocation core**: FormulaCompiler.jl foundation for maximum efficiency
-- **Production scaling**: 1k to 1M+ observations supported
+### **Performance**
+- **Profile margins**: O(1) constant time regardless of dataset size
+- **Population margins**: O(n) scaling with low per-row computational cost  
+- **Zero-allocation core**: FormulaCompiler.jl foundation for efficient computation
+- **Scalability**: Tested on datasets from 1k to 1M+ observations
 - *See [Performance Guide](performance.md) for detailed benchmarks and optimization strategies*
 
-### **📊 Statistical Correctness**
+### **Statistical Correctness**
 - **Zero-tolerance policy**: Error rather than approximate when statistical validity compromised
 - **Delta-method standard errors**: Full covariance matrix integration
 - **Bootstrap validated**: All computations verified against bootstrap estimates
-- **Publication grade**: Ready for econometric research and academic publication
+- **Academic standards**: Suitable for econometric research and academic publication
 
-### **🔧 Advanced Features**  
+### **Advanced Features**  
 - **Elasticities**: Full support via `measure` parameter (`:elasticity`, `:semielasticity_x`, `:semielasticity_y`)
 - **Categorical mixtures**: Realistic population composition for policy analysis
 - **Profile scenarios**: Complex scenario specification with Dict-based and table-based approaches  
@@ -93,7 +93,7 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 - **Flexible grouping**: Subgroup analysis via `over` parameter
 - *See [Advanced Features](advanced.md) for detailed coverage of elasticities and robust inference*
 
-### **🔄 Stata Migration**  
+### **Stata Migration**  
 Direct command equivalency for economists:
 
 | Stata | Margins.jl |
@@ -162,11 +162,11 @@ population_margins(model, data; type=:effects, over=[:region, :income_quartile])
 
 Margins.jl follows **zero-tolerance principles** for statistical correctness:
 
-✅ **Delta-method standard errors** use full covariance matrix integration  
-✅ **No independence assumptions** unless theoretically justified  
-✅ **Error-first policy**: Package errors rather than providing invalid results  
-✅ **Bootstrap validation**: All statistical computations verified  
-✅ **Publication standards**: Ready for econometric research and academic work  
+- **Delta-method standard errors** use full covariance matrix integration  
+- **No independence assumptions** unless theoretically justified  
+- **Error-first policy**: Package errors rather than providing invalid results  
+- **Bootstrap validation**: All statistical computations verified  
+- **Academic standards**: Suitable for econometric research and academic work  
 
 ## Integration with JuliaStats
 
@@ -200,20 +200,20 @@ population_margins(cluster_model, data)
 ### Constant-Time Profile Analysis
 ```julia
 # Profile margins scale O(1) - same time regardless of dataset size
-@time profile_margins(model, small_data; at=:means)    # ~200μs
-@time profile_margins(model, large_data; at=:means)    # ~200μs (same!)
+@time profile_margins(model, small_data; at=:means)    # constant time
+@time profile_margins(model, large_data; at=:means)    # same time complexity
 
 # Complex scenarios also O(1)
 scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 profiles
-@time profile_margins(model, huge_data; at=scenarios)  # ~400μs
+@time profile_margins(model, huge_data; at=scenarios)  # still constant time
 ```
 
 ### Optimized Population Analysis
 ```julia
-# Population margins scale O(n) with optimized per-row cost
-@time population_margins(model, data_1k)    # ~0.2ms  (~150ns/row)
-@time population_margins(model, data_10k)   # ~1.5ms  (~150ns/row)  
-@time population_margins(model, data_100k)  # ~15ms   (~150ns/row)
+# Population margins scale O(n) with low per-row computational cost
+@time population_margins(model, data_1k)    # scales linearly with dataset size
+@time population_margins(model, data_10k)   # with efficient per-row processing
+@time population_margins(model, data_100k)  # minimal allocation overhead
 ```
 
 ## Getting Help
