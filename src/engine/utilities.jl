@@ -230,13 +230,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
                 end
             end
             
-            # Average the gradient and compute SE (avoid broadcast allocation)
-            n_rows = length(rows)
-            # Use gβ_accumulator directly and divide in-place to avoid temporary buffer
-            # Since we'll copy to G matrix afterward, we can modify gβ_accumulator temporarily
-            for i in 1:length(engine.gβ_accumulator)
-                engine.gβ_accumulator[i] /= n_rows
-            end
+            # Note: accumulate_ame_gradient! already averages the gradient
             gβ_avg = engine.gβ_accumulator  # Use directly without copying
             se = FormulaCompiler.delta_method_se(gβ_avg, engine.Σ)
             
