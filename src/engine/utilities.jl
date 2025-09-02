@@ -755,14 +755,21 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine, referenc
                         error("Unsupported measure: $measure")
                     end
                     
+                    # Compute parameter gradient for SE using refgrid derivative evaluator
+                    if target === :mu
+                        FormulaCompiler.me_mu_grad_beta!(engine.gβ_accumulator, refgrid_de, local_β, profile_idx, var;
+                                                       link=local_link)
+                    else
+                        FormulaCompiler.me_eta_grad_beta!(engine.gβ_accumulator, refgrid_de, local_β, profile_idx, var)
+                    end
+                    
+                    se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
+                    
                     # Store results
                     results.term[row_idx] = string(var)
                     results.estimate[row_idx] = estimate
-                    
-                    # Delta method standard error (simplified for this implementation)
-                    # TODO: Implement proper gradient computation for standard errors
-                    results.se[row_idx] = 0.0  # Placeholder
-                    G[row_idx, :] .= 0.0  # Placeholder
+                    results.se[row_idx] = se
+                    G[row_idx, :] = engine.gβ_accumulator
                     
                     row_idx += 1
                 end

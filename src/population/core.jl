@@ -102,7 +102,7 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     
     # Handle vars parameter with improved validation
     if type === :effects
-        vars = _process_vars_parameter(vars, data_nt)
+        vars = _process_vars_parameter(model, vars, data_nt)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
@@ -137,13 +137,21 @@ function _get_or_build_engine(model, data_nt::NamedTuple, vars)
 end
 
 """
-    _get_continuous_variables(data_nt) -> Vector{Symbol}
+    _get_continuous_variables(model, data_nt) -> Vector{Symbol}
 
-Extract continuous variables from data, filtering out categorical types.
+Extract continuous explanatory variables from data, filtering out categorical types and the dependent variable.
 """
-function _get_continuous_variables(data_nt::NamedTuple)
+function _get_continuous_variables(model, data_nt::NamedTuple)
+    # Get dependent variable from model formula
+    dependent_var = Symbol(model.mf.f.lhs)
+    
     continuous_vars = Symbol[]
     for (name, col) in pairs(data_nt)
+        # Skip dependent variable - we only want explanatory variables for marginal effects
+        if name == dependent_var
+            continue
+        end
+        
         # Continuous: numeric types except Bool
         if eltype(col) <: Real && !(eltype(col) <: Bool)
             push!(continuous_vars, name)
@@ -224,15 +232,15 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
 end
 
 """
-    _process_vars_parameter(vars, data_nt) -> Vector{Symbol}
+    _process_vars_parameter(model, vars, data_nt) -> Vector{Symbol}
 
-Process and validate the vars parameter with improved error handling.
+Process and validate the vars parameter with model awareness to exclude dependent variable.
 """
-function _process_vars_parameter(vars, data_nt::NamedTuple)
+function _process_vars_parameter(model, vars, data_nt::NamedTuple)
     if vars === nothing || vars === :all_continuous
-        continuous_vars = _get_continuous_variables(data_nt)
+        continuous_vars = _get_continuous_variables(model, data_nt)
         if isempty(continuous_vars)
-            throw(MarginsError("No continuous variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
+            throw(MarginsError("No continuous explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
         end
         return continuous_vars
     elseif vars isa Symbol

@@ -132,7 +132,7 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
-        vars = _process_vars_parameter(vars, data_nt)
+        vars = _process_vars_parameter(model, vars, data_nt)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
