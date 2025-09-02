@@ -145,8 +145,8 @@ result = profile_margins(model, data; at=at, type=:predictions)
 
 #### Key Features
 
-- **Sum-to-1 validation**: Mixture weights must sum to 1.0 (throws `ArgumentError` if not)
-- **Level validation**: All mixture levels must exist in the original categorical variable
+- **Sum-to-1 validation**: Mixture weights sum to 1.0 (throws `ArgumentError` if not)
+- **Level validation**: Mixture levels should exist in the original categorical variable
 - **Weighted contrasts**: Uses true weighted combination of contrast matrix rows, not approximations
 - **Integration**: Works seamlessly with existing numeric profile specifications
 

@@ -4,7 +4,7 @@
 
 ## The 2×2 Framework for Marginal Analysis
 
-Margins.jl is built around a clean **2×2 conceptual framework** that resolves the terminology confusion plaguing marginal effects across disciplines. Rather than memorizing acronyms like MEM, AME, APE, MER, etc., the framework organizes all approaches around two fundamental choices:
+Margins.jl is built around a clean **2×2 conceptual framework** that resolves the terminology confusion plaguing marginal effects across disciplines. Rather than memorizing acronyms like MEM, AME, APE, MER, etc., the framework organizes all approaches around two key choices:
 
 1. **Where to evaluate**: Profile (specific scenarios) vs Population (across sample distribution)
 2. **What to compute**: Effects (derivatives) vs Predictions (levels)
@@ -16,7 +16,7 @@ Margins.jl is built around a clean **2×2 conceptual framework** that resolves t
 | **Profile**        | Marginal Effects at Representative Points | Adjusted Predictions at Representative Points |
 | **Population**     | Average Marginal Effects | Average Adjusted Predictions |
 
-*The fundamental question: Do you want inference for a typical case or across your entire population?*
+*The key question: Do you want inference for a typical case or across your entire population?*
 
 ## Terminology Mapping
 
@@ -95,13 +95,13 @@ The 2×2 framework applies equally to both descriptive and causal analysis. The 
 
 ## When Profile ≠ Population
 
-The choice between profile and population approaches matters most in nonlinear models:
+The choice between profile and population approaches matters most when the link function is non-identity:
 
-### Linear Models
+### Linear Models with Identity Link
 - **Profile = Population**: MEM = AME for effects (predictions differ only by constants)
 - **Practical implication**: Choice mainly affects interpretation, not numerical results
 
-### Nonlinear Models (GLMs, etc.)
+### GLMs with Non-Identity Links
 - **Profile ≠ Population**: All quantities can differ substantially
 - **With interactions**: Profile vs Population can yield opposite conclusions  
 - **Heterogeneous samples**: Larger differences between approaches
@@ -114,7 +114,7 @@ Consider education effects on probability of employment in a logistic model:
 
 The difference arises because the logistic function is nonlinear, so the derivative at the mean differs from the mean of derivatives.
 
-*Note: Profile margins maintain O(1) constant-time performance regardless of sample size, while population margins scale O(n) with dataset size. See [Performance Guide](performance.md) for computational implications of this choice.*
+*For the computational implications of this choice, see [Computational Architecture](computational_architecture.md) and [Performance Guide](performance.md).*
 
 ## Elasticities and Semi-Elasticities
 
@@ -129,7 +129,7 @@ Elasticities are transformations of marginal effects that follow the same 2×2 f
 - **Profile elasticities**: Calculate (∂Y/∂X) × (X̄/Ȳ) at representative values
 - **Population elasticities**: Average (∂Y/∂X) × (Xᵢ/Yᵢ) across sample observations
 
-In nonlinear models, profile elasticity ≠ average elasticity, following the same logic as marginal effects.
+In GLMs with non-identity links, profile elasticity ≠ average elasticity, following the same logic as marginal effects.
 
 *For detailed elasticity examples and applications to policy analysis, see [Advanced Features](advanced.md).*
 
@@ -183,4 +183,4 @@ profile_margins(model, data; at=:means, type=:predictions)
 
 ---
 
-*This mathematical foundation anchors all marginal analysis in Margins.jl. For implementation details, see [API Reference](api.md). For performance implications of the framework choices, see [Performance Guide](performance.md). For advanced applications including elasticities and robust inference, see [Advanced Features](advanced.md).*
+*This mathematical foundation anchors all marginal analysis in Margins.jl. For implementation details, see [API Reference](api.md). For computational architecture and performance implications, see [Computational Architecture](computational_architecture.md) and [Performance Guide](performance.md). For advanced applications including elasticities and robust inference, see [Advanced Features](advanced.md).*

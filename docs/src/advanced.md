@@ -92,7 +92,7 @@ println("Education semi-elasticity: ", DataFrame(edu_semielast))
 
 ### When Profile ≠ Population for Elasticities
 
-In **nonlinear models**, population and profile elasticities can differ substantially:
+In **GLMs with non-identity links**, population and profile elasticities can differ substantially:
 
 ```julia
 # Logistic model example

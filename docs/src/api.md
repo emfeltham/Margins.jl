@@ -180,7 +180,7 @@ DataFrame(ame)
 # Maximum performance configuration
 fast_result = population_margins(model, data; backend=:fd, target=:eta)
 
-# Profile analysis is always O(1) - use liberally
+# Profile analysis is O(1) - efficient regardless of data size
 scenarios = Dict(:var1 => [-2,-1,0,1,2], :var2 => ["A","B","C"])  # 15 scenarios
 profile_result = profile_margins(model, huge_data; at=scenarios)  # ~300μs regardless of data size
 ```

@@ -9,6 +9,8 @@ Margins.jl offers two computational backends for derivative calculation, each op
 - **`:ad`** (Automatic Differentiation) - Zero allocation, higher reliability, handles domain-sensitive functions
 - **`:fd`** (Finite Differences) - Zero allocation, efficient for simple formulas
 
+**N.B.**: For the most part, Finite Differences essentially has legacy status at this point, developed before efficient AD was implemented. The AD backend now provides superior performance, reliability, and maintains zero allocation.
+
 **Summary**: Use **`:ad`** for most applications. Zero allocation with comprehensive type support and robust domain handling.
 
 ## Quick Decision Tree

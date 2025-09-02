@@ -14,6 +14,7 @@ makedocs(;
   pages = [
     "Introduction" => "index.md",
     "Mathematical Foundation" => "mathematical_foundation.md",
+    "Computational Architecture" => "computational_architecture.md",
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
       "Profile Analysis" => "profile_margins.md", 

@@ -8,7 +8,7 @@ Margins.jl provides marginal effects computation for the JuliaStats ecosystem, f
 
 - **Clean 2×2 Framework**: Population vs Profile × Effects vs Predictions
 - **Efficient Performance**: O(1) constant-time profile analysis  
-- **Statistical Rigor**: Zero-tolerance policy for statistical errors with delta-method standard errors
+- **Statistical Rigor**: Comprehensive testing for statistical correctness with delta-method standard errors
 - **Stata Compatibility**: Direct migration path for economists familiar with Stata's `margins` command
 - **Scalability**: Tested on datasets from 1k to 1M+ observations
 
@@ -80,7 +80,7 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 - *See [Performance Guide](performance.md) for detailed benchmarks and optimization strategies*
 
 ### **Statistical Correctness**
-- **Zero-tolerance policy**: Error rather than approximate when statistical validity compromised
+- **Rigorous validation**: Error rather than approximate when statistical validity compromised
 - **Delta-method standard errors**: Full covariance matrix integration
 - **Bootstrap validated**: All computations verified against bootstrap estimates
 - **Academic standards**: Suitable for econometric research and academic publication
@@ -160,7 +160,7 @@ population_margins(model, data; type=:effects, over=[:region, :income_quartile])
 
 ## Statistical Guarantees
 
-Margins.jl follows **zero-tolerance principles** for statistical correctness:
+Margins.jl follows **rigorous principles** for statistical correctness:
 
 - **Delta-method standard errors** use full covariance matrix integration  
 - **No independence assumptions** unless theoretically justified  

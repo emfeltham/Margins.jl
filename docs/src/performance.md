@@ -10,7 +10,7 @@ Margins.jl achieves efficient computation through careful optimization while mai
 - **Population margins**: O(n) scaling with low per-row computational cost and constant memory footprint  
   *See [Mathematical Foundation](mathematical_foundation.md) for conceptual understanding of when to choose population vs profile approaches*  
 - **Zero-allocation core**: FormulaCompiler.jl foundation eliminates unnecessary allocations
-- **Statistical integrity**: Performance optimizations never compromise statistical validity
+- **Statistical integrity**: Performance optimizations maintain statistical validity
 
 ## Performance Characteristics
 
@@ -90,7 +90,7 @@ population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)
 
 ### Core Performance Philosophy
 
-**Statistical Correctness First**: Performance optimizations never compromise statistical validity
+**Statistical Correctness First**: Performance optimizations maintain statistical validity
 - Delta-method standard errors use full covariance matrix
 - All gradient computations maintain mathematical precision
 - Bootstrap validation ensures statistical accuracy
