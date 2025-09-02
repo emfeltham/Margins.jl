@@ -175,7 +175,24 @@ function _process_profile_for_scenario(prof::Dict, data_nt::NamedTuple)
     processed_prof = Dict{Symbol,Any}()
     
     for (k, v) in prof
-        if v isa CategoricalMixture
+        if v isa Tuple && length(v) == 2 && v[1] === :MIXTURE_PLACEHOLDER
+            # Handle mixture placeholder from :means processing
+            mixture = v[2]::CategoricalMixture
+            col = getproperty(data_nt, k)
+            _validate_mixture_against_data(mixture, col, k)
+            
+            # Get original categorical levels
+            original_levels = if Base.find_package("CategoricalArrays") !== nothing && (col isa CategoricalArrays.CategoricalArray)
+                string.(CategoricalArrays.levels(col))
+            elseif eltype(col) <: Bool
+                string.([false, true])
+            else
+                unique(string.(col))
+            end
+            
+            # Pass mixture with original levels info
+            processed_prof[k] = MixtureWithLevels(mixture, original_levels)
+        elseif v isa CategoricalMixture
             # Validate mixture against data and get original levels
             col = getproperty(data_nt, k)
             _validate_mixture_against_data(v, col, k)

@@ -154,9 +154,9 @@ function _get_typical_values_dict(data_nt::NamedTuple)
     for (name, col) in pairs(data_nt)
         typical_val = _get_typical_value_optimized(col)
         
-        # Convert CategoricalMixture to scenario value for FormulaCompiler compatibility
+        # Store CategoricalMixture objects for later processing into override vectors
         if typical_val isa CategoricalMixture
-            typical_values[name] = _mixture_to_scenario_value(typical_val, col)
+            typical_values[name] = typical_val
         elseif eltype(col) <: Bool && typical_val isa Float64
             # For Bool columns, typical_val is already P(true) - use directly
             typical_values[name] = typical_val

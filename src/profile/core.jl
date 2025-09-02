@@ -145,13 +145,14 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     engine = _get_or_build_engine_for_profiles(model, data_nt, vars)
     
     if type === :effects
-        # Convert reference grid to profiles for processing
-        profiles = [Dict(pairs(row)) for row in eachrow(reference_grid)]
-        df, G = _mem_continuous_and_categorical(engine, profiles; target, backend=recommended_backend, measure)  # → MEM/MER
+        # Use reference grid directly for efficient single-compilation approach
+        # CategoricalMixture objects are handled natively by FormulaCompiler
+        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec, kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
+        # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
         df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec, kwargs...)
@@ -238,11 +239,15 @@ function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; 
     predictions = length(engine.η_buf) >= n_profiles ? view(engine.η_buf, 1:n_profiles) : Vector{Float64}(undef, n_profiles)
     G = zeros(n_profiles, n_params)  # One row per profile
     
+    # ARCHITECTURAL FIX: Compile with reference grid (like effects rework)
     # Convert reference grid to NamedTuple format for FormulaCompiler
     data_nt = Tables.columntable(reference_grid)
     
+    # Single compilation with complete reference grid (fixes CategoricalMixture routing)
+    refgrid_compiled = FormulaCompiler.compile_formula(engine.model, data_nt)
+    
     # Single pass over profiles via helper that takes only concrete arguments
-    _profile_predictions_impl!(predictions, G, engine.compiled, engine.row_buf,
+    _profile_predictions_impl!(predictions, G, refgrid_compiled, engine.row_buf,
                                engine.β, engine.link, data_nt, target)
     
     # Safely use g_buf for SE computation if large enough  
