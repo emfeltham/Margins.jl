@@ -151,14 +151,64 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
         df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec, kwargs...)
-        return MarginsResult(df, G, metadata)
+        
+        # Add analysis_type for format auto-detection
+        metadata[:analysis_type] = :profile
+        metadata[:n_profiles] = nrow(reference_grid)
+        
+        # Extract raw components from DataFrame  
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        # Extract profile values from reference grid - expand to match result length
+        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        
+        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
         df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec, kwargs...)
-        return MarginsResult(df, G, metadata)
+        
+        # Add analysis_type for format auto-detection  
+        metadata[:analysis_type] = :profile
+        metadata[:n_profiles] = nrow(reference_grid)
+        
+        # Extract raw components from DataFrame
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        # Extract profile values from reference grid - expand to match result length
+        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        
+        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     end
+end
+
+"""
+    _extract_profile_values(reference_grid::DataFrame, result_length::Int) -> NamedTuple
+
+Extract profile values from reference grid and expand to match the result length.
+Each profile can generate multiple results (one per variable), so we need to repeat
+each profile row for each variable it generates.
+"""
+function _extract_profile_values(reference_grid::DataFrame, result_length::Int)
+    n_profiles = nrow(reference_grid)
+    vars_per_profile = result_length ÷ n_profiles
+    
+    # Convert to named tuple with expanded values
+    profile_dict = Dict{Symbol, Vector}()
+    
+    for col_name in names(reference_grid)
+        col_data = reference_grid[!, col_name]
+        # Repeat each profile value vars_per_profile times
+        expanded_data = repeat(col_data, inner=vars_per_profile)
+        profile_dict[Symbol(col_name)] = expanded_data
+    end
+    
+    return NamedTuple(profile_dict)
 end
 
 """

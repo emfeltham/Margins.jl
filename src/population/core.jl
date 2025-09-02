@@ -117,11 +117,29 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     if type === :effects
         df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure, kwargs...)  # → AME (both continuous and categorical)
         metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
-        return MarginsResult(df, G, metadata)
+        
+        # Add analysis_type for format auto-detection
+        metadata[:analysis_type] = :population
+        
+        # Extract raw components from DataFrame
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; target, kwargs...)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
-        return MarginsResult(df, G, metadata)
+        
+        # Add analysis_type for format auto-detection
+        metadata[:analysis_type] = :population
+        
+        # Extract raw components from DataFrame
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     end
 end
 

@@ -60,7 +60,41 @@ function _population_margins_with_contexts(engine, data_nt, vars, at, over; type
     metadata = _build_metadata(; type, vars, target, backend, n_obs=length(first(data_nt)), 
                               model_type=typeof(engine.model), has_contexts=true, kwargs...)
     
-    return MarginsResult(results, G, metadata)
+    # Add analysis_type for format auto-detection
+    metadata[:analysis_type] = :population  # This is still population-level, just with contexts
+    
+    # Extract raw components from DataFrame
+    estimates = results.estimate
+    standard_errors = results.se
+    terms = results.term
+    
+    # Extract profile values from at_ columns (if any)
+    profile_values = _extract_context_profile_values(results)
+    
+    return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+end
+
+"""
+    _extract_context_profile_values(results::DataFrame) -> Union{Nothing, NamedTuple}
+
+Extract profile values from at_ columns in results DataFrame.
+Returns Nothing if no at_ columns exist.
+"""
+function _extract_context_profile_values(results::DataFrame)
+    at_cols = [col for col in names(results) if startswith(String(col), "at_")]
+    
+    if isempty(at_cols)
+        return nothing
+    end
+    
+    # Extract the profile data, removing the "at_" prefix
+    profile_dict = Dict{Symbol, Vector}()
+    for col in at_cols
+        var_name = Symbol(String(col)[4:end])  # Remove "at_" prefix
+        profile_dict[var_name] = results[!, col]
+    end
+    
+    return NamedTuple(profile_dict)
 end
 
 """

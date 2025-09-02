@@ -46,6 +46,8 @@ using FormulaCompiler
 using LinearAlgebra: dot
 using Statistics: mean
 using CategoricalArrays
+using Distributions: Normal, cdf, quantile
+using Printf: @sprintf
 
 # Version info
 const VERSION = v"2.0.0"
