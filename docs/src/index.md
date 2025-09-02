@@ -1,10 +1,10 @@
 # Margins.jl
 
-*Marginal effects for Julia with Stata-like functionality and efficient computation*
+*Marginal effects for Julia*
 
 ## Overview
 
-Margins.jl provides marginal effects computation for the JuliaStats ecosystem, featuring:
+Margins.jl provides marginal effects computation, featuring:
 
 - **Clean 2×2 Framework**: Population vs Profile × Effects vs Predictions
 - **Efficient Performance**: O(1) constant-time profile analysis  
@@ -12,11 +12,12 @@ Margins.jl provides marginal effects computation for the JuliaStats ecosystem, f
 - **Stata Compatibility**: Direct migration path for economists familiar with Stata's `margins` command
 - **Scalability**: Tested on datasets from 1k to 1M+ observations
 
-Built on the JuliaStats foundation:
+Built for compatibility with JuliaStats foundation:
 - [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification
 - [GLM.jl](https://github.com/JuliaStats/GLM.jl) for generalized linear models  
-- [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) for zero-allocation evaluation
 - [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard errors
+
+Build on top of [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) for efficient and flexible marginal effect computation.
 
 ## Quick Start
 
@@ -46,7 +47,7 @@ DataFrame(mem_result)
 
 ## The 2×2 Framework
 
-Margins.jl uses a **conceptually clean framework** that eliminates statistical acronym confusion:
+Margins.jl uses a conceptually clean framework that attempts to minimize terminological confusion:
 
 ### Two Fundamental Choices
 
@@ -72,26 +73,26 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 
 ## Key Features
 
-### **Performance**
+### Performance
 - **Profile margins**: O(1) constant time regardless of dataset size
 - **Population margins**: O(n) scaling with low per-row computational cost  
 - **Zero-allocation core**: FormulaCompiler.jl foundation for efficient computation
 - **Scalability**: Tested on datasets from 1k to 1M+ observations
-- *See [Performance Guide](performance.md) for detailed benchmarks and optimization strategies*
+- See [Performance Guide](performance.md) for more information
 
-### **Statistical Correctness**
+### Statistical Correctness
 - **Rigorous validation**: Error rather than approximate when statistical validity compromised
 - **Delta-method standard errors**: Full covariance matrix integration
 - **Bootstrap validated**: All computations verified against bootstrap estimates
 - **Academic standards**: Suitable for econometric research and academic publication
 
-### **Advanced Features**  
+### Advanced Features
 - **Elasticities**: Full support via `measure` parameter (`:elasticity`, `:semielasticity_x`, `:semielasticity_y`)
 - **Categorical mixtures**: Realistic population composition for policy analysis
 - **Profile scenarios**: Complex scenario specification with Dict-based and table-based approaches  
 - **Robust standard errors**: CovarianceMatrices.jl integration for robust/clustered SEs
 - **Flexible grouping**: Subgroup analysis via `over` parameter
-- *See [Advanced Features](advanced.md) for detailed coverage of elasticities and robust inference*
+- See [Advanced Features](advanced.md) for coverage of elasticities and robust inference
 
 ## Advanced Usage
 
@@ -150,26 +151,28 @@ population_margins(model, data; type=:effects, over=[:region, :income_quartile])
 
 ## Statistical Guarantees
 
-Margins.jl follows **rigorous principles** for statistical correctness:
+Margins.jl follows uses:
 
-- **Delta-method standard errors** use full covariance matrix integration  
-- **No independence assumptions** unless theoretically justified  
-- **Error-first policy**: Package errors rather than providing invalid results  
-- **Bootstrap validation**: All statistical computations verified  
-- **Academic standards**: Suitable for econometric research and academic work  
+- Delta-method standard errors: use full covariance matrix integration  
+- Error-first policy: Package errors rather than providing invalid results  
+- Validation: All statistical computations verified  
+- Academic standards: Inteded to be suitable for econometric research and academic work  
 
 ## Integration with JuliaStats
 
 ### Model Compatibility
-Works with any StatsModels.jl-compatible model:
-- **GLM.jl**: Linear models, logistic regression, Poisson models, etc.
-- **MixedModels.jl**: Linear and generalized linear mixed models  
+
+Works with StatsModels.jl-compatible models:
+
+- GLM.jl: Linear models, logistic regression, Poisson models, etc.
+- MixedModels.jl: Linear and generalized linear mixed models  
 - Custom model types supporting `coef()` and `vcov()` methods
 
 ### Data Integration
-- **Tables.jl interface**: Works with DataFrames, CSV files, database results
-- **MarginsResult type**: Implements Tables.jl for seamless DataFrame conversion
-- **Flexible input**: Accepts any Tables.jl-compatible data source
+
+- Tables.jl interface: Works with DataFrames, CSV files, database results
+- `MarginsResult` type: Implements Tables.jl for seamless DataFrame conversion
+- Flexible input: Accepts any Tables.jl-compatible data source
 
 ### Robust Standard Errors
 ```julia
@@ -215,13 +218,15 @@ scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 p
 
 ## Installation
 
+Since Margins.jl is not yet registered, install directly from GitHub:
+
 ```julia
 using Pkg
-Pkg.add("Margins")
+Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 ```
 
 **Requirements**: Julia ≥ 1.9
 
 ---
 
-*For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For backend selection guidance, see [Backend Selection](backend_selection.md). For performance optimization, see [Performance Guide](performance.md). For comprehensive function reference, see [API Reference](api.md).*
+*For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For comprehensive function reference, see [API Reference](api.md).*
