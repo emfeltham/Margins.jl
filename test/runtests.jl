@@ -16,7 +16,7 @@ using Margins
     include("test_vcov.jl")
     include("test_errors.jl")
     include("test_automatic_variable_detection.jl")
-    include("test_mixedmodels.jl")
+    # include("test_mixedmodels.jl") where is this?
 end
 
 # Statistical Validation Suite

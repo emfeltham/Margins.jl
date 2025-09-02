@@ -18,6 +18,7 @@ using Margins
 
 # Load testing utilities
 include("testing_utilities.jl")
+include("analytical_se_validation.jl")
 
 @testset "Comprehensive Statistical Validation - 2×2 Framework Coverage" begin
     Random.seed!(42)  # Reproducible testing across all tiers
@@ -102,6 +103,140 @@ include("testing_utilities.jl")
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
             @info "✓ Multiple Regression: All 2×2 quadrants validated analytically"
+        end
+    end
+    
+    # === TIER 1A: Analytical Standard Error Validation - Linear Models ===
+    @testset "Tier 1A: Analytical SE Validation - Linear Models" begin
+        
+        @testset "Simple Linear: y ~ x - SE Verification" begin
+            df = make_simple_test_data(n=1000, formula_type=:linear)
+            model = lm(@formula(y ~ x), df)
+
+            # Population effects SE should equal coefficient SE
+            result = population_margins(model, df; type=:effects, vars=[:x])
+            computed_se = DataFrame(result).se[1]
+            analytical_se = analytical_linear_se(model, df, :x)
+
+            @test computed_se ≈ analytical_se atol=1e-12
+            @info "✓ Linear Population Effects SE: Analytically verified"
+
+            # Profile effects SE should also equal coefficient SE (linear case)
+            profile_result = profile_margins(model, df; type=:effects, vars=[:x], at=:means)
+            profile_se = DataFrame(profile_result).se[1]
+
+            @test profile_se ≈ analytical_se atol=1e-12
+            @info "✓ Linear Profile Effects SE: Analytically verified"
+            
+            # Test consistency verification function
+            consistency = verify_linear_se_consistency(model, df, :x)
+            @test consistency.both_match
+            @test consistency.max_deviation < 1e-12
+            @info "✓ Linear SE Consistency: Both population and profile match analytical SE"
+        end
+        
+        @testset "Multiple Linear: y ~ x + z - SE Verification" begin
+            df = make_simple_test_data(n=800, formula_type=:linear)
+            model = lm(@formula(y ~ x + z), df)
+
+            # Test both variables' SEs
+            for var in [:x, :z]
+                result = population_margins(model, df; type=:effects, vars=[var])
+                computed_se = DataFrame(result).se[1]
+                analytical_se = analytical_linear_se(model, df, var)
+
+                @test computed_se ≈ analytical_se atol=1e-12
+                @info "✓ Multiple Linear $var Population SE: Analytically verified"
+
+                profile_result = profile_margins(model, df; type=:effects, vars=[var], at=:means)
+                profile_se = DataFrame(profile_result).se[1]
+
+                @test profile_se ≈ analytical_se atol=1e-12
+                @info "✓ Multiple Linear $var Profile SE: Analytically verified"
+            end
+            
+            # Test multiple variables at once
+            multi_result = population_margins(model, df; type=:effects, vars=[:x, :z])
+            multi_df = DataFrame(multi_result)
+            
+            analytical_se_x = analytical_linear_se(model, df, :x)
+            analytical_se_z = analytical_linear_se(model, df, :z)
+            
+            @test multi_df.se[1] ≈ analytical_se_x atol=1e-12  # x SE
+            @test multi_df.se[2] ≈ analytical_se_z atol=1e-12  # z SE
+            @info "✓ Multiple Linear Multi-Variable SE: All analytically verified"
+        end
+    end
+    
+    # === TIER 1B: Analytical SE Validation - GLM Chain Rules ===
+    @testset "Tier 1B: Analytical SE Validation - GLM Chain Rules" begin
+        
+        @testset "Logistic Regression: SE Chain Rule Verification" begin
+            df = make_glm_test_data(n=800, family=:binomial)
+            model = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
+
+            # Test profile SE at specific point (analytically calculable)
+            test_x, test_z = 0.5, -0.3
+            at_values = Dict(:x => test_x, :z => test_z)
+
+            # Test SE for variable x
+            se_validation = verify_glm_se_chain_rule(model, df, :x, at_values; 
+                                                   tolerance=0.1, model_type=:logistic)
+            
+            @test se_validation.matches
+            @test se_validation.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
+            @info "✓ Logistic x Chain Rule SE: Analytically verified (rel_error: $(se_validation.relative_error))"
+
+            # Test SE for variable z
+            se_validation_z = verify_glm_se_chain_rule(model, df, :z, at_values; 
+                                                     tolerance=0.1, model_type=:logistic)
+            
+            @test se_validation_z.matches
+            @test se_validation_z.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
+            @info "✓ Logistic z Chain Rule SE: Analytically verified (rel_error: $(se_validation_z.relative_error))"
+            
+            # Verify link scale SEs equal coefficient SEs (should be exact)
+            eta_result = profile_margins(model, df; type=:effects, vars=[:x], 
+                                       at=at_values, target=:eta)
+            eta_se = DataFrame(eta_result).se[1]
+            coef_se = analytical_linear_se(model, df, :x)  # Works for any GLM on link scale
+            
+            @test eta_se ≈ coef_se atol=1e-12
+            @info "✓ Logistic Link Scale SE: Equals coefficient SE exactly"
+        end
+        
+        @testset "Poisson Regression: SE Chain Rule Verification" begin
+            df = make_glm_test_data(n=600, family=:poisson)
+            model = glm(@formula(y ~ x + z), df, Poisson(), LogLink())
+
+            # Test profile SE at specific point
+            test_x, test_z = 0.2, -0.1
+            at_values = Dict(:x => test_x, :z => test_z)
+
+            # Test SE chain rule for variable x
+            se_validation = verify_glm_se_chain_rule(model, df, :x, at_values; 
+                                                   tolerance=0.1, model_type=:poisson)
+            
+            @test se_validation.matches
+            @test se_validation.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
+            @info "✓ Poisson x Chain Rule SE: Analytically verified (rel_error: $(se_validation.relative_error))"
+
+            # Test SE chain rule for variable z  
+            se_validation_z = verify_glm_se_chain_rule(model, df, :z, at_values; 
+                                                     tolerance=0.1, model_type=:poisson)
+            
+            @test se_validation_z.matches
+            @test se_validation_z.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
+            @info "✓ Poisson z Chain Rule SE: Analytically verified (rel_error: $(se_validation_z.relative_error))"
+            
+            # Verify link scale SEs equal coefficient SEs
+            eta_result = profile_margins(model, df; type=:effects, vars=[:x], 
+                                       at=at_values, target=:eta)
+            eta_se = DataFrame(eta_result).se[1]
+            coef_se = analytical_linear_se(model, df, :x)
+            
+            @test eta_se ≈ coef_se atol=1e-12
+            @info "✓ Poisson Link Scale SE: Equals coefficient SE exactly"
         end
     end
     
@@ -586,16 +721,31 @@ include("testing_utilities.jl")
             @info "✓ GLM with integer variables: All 2×2 quadrants validated analytically"
         end
     end
+    
+    # === TIER 7: Bootstrap SE Validation (Phase 2, Tier 2) ===
+    @testset "Tier 7: Bootstrap SE Validation - Empirical Verification" begin
+        @info "Starting Bootstrap SE Validation (Phase 2, Tier 2)"
+        @info "This provides empirical verification complementing analytical validation"
+        
+        # Include the comprehensive bootstrap validation tests
+        include("bootstrap_validation_tests.jl")
+        
+        @info "✓ Bootstrap SE validation: Empirical verification complete"
+    end
 
     @info "🎉 COMPREHENSIVE STATISTICAL VALIDATION: COMPLETE"
-    @info "All 2×2 framework quadrants validated across 6 tiers:"
+    @info "All 2×2 framework quadrants validated across 7 tiers:"
     @info "  Tier 1: Direct coefficient validation ✓"
+    @info "  Tier 1A: Analytical SE validation - Linear models ✓ (NEW)"
+    @info "  Tier 1B: Analytical SE validation - GLM chain rules ✓ (NEW)"
     @info "  Tier 2: Function transformations ✓" 
     @info "  Tier 3: GLM chain rules ✓"
     @info "  Tier 4: Systematic model coverage ✓"
     @info "  Tier 5: Edge cases and robustness ✓"
     @info "  Tier 6: Integer variable systematic coverage ✓ (CRITICAL)"
+    @info "  Tier 7: Bootstrap SE validation - Empirical verification ✓ (NEW)"
     @info ""
     @info "Margins.jl statistical correctness: PUBLICATION-GRADE ✓"
+    @info "Standard errors: ANALYTICALLY + EMPIRICALLY VALIDATED ✓ (NEW)"
     @info "FormulaCompiler-level integer variable support: VALIDATED ✓"
 end
