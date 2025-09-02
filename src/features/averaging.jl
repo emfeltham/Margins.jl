@@ -1,5 +1,7 @@
 # features/averaging.jl - Proper delta method averaging for profiles
 
+using ..StatisticalUtils: compute_se_only
+
 """
     _average_rows_with_proper_se(df, G, Σ; group_cols)
 
@@ -28,7 +30,7 @@ function _average_rows_with_proper_se(df::DataFrame, G::Matrix{Float64}, Σ::Abs
             # Average gradients and apply delta method
             G_term = G[term_row_idxs, :]  # Extract rows for this term
             avg_gradient = vec(mean(G_term, dims=1))  # Average across rows
-            se_proper = FormulaCompiler.delta_method_se(avg_gradient, Σ)
+            se_proper = compute_se_only(avg_gradient, Σ)
             
             # Create averaged result
             avg_row = DataFrame(
@@ -74,7 +76,7 @@ function _average_rows_with_proper_se(df::DataFrame, G::Matrix{Float64}, Σ::Abs
                 # Average gradients and apply delta method
                 G_term = G[term_global_idxs, :]  # Extract rows for this term×group combination
                 avg_gradient = vec(mean(G_term, dims=1))  # Average across rows
-                se_proper = FormulaCompiler.delta_method_se(avg_gradient, Σ)
+                se_proper = compute_se_only(avg_gradient, Σ)
                 
                 # Create averaged result
                 avg_group = DataFrame(
@@ -160,7 +162,7 @@ function _average_profiles_with_proper_se(df::DataFrame, gradients::Dict, Σ::Ab
             
             # Average gradients and apply delta method
             avg_gradient = mean(term_gradients)
-            se_proper = FormulaCompiler.delta_method_se(avg_gradient, Σ)
+            se_proper = compute_se_only(avg_gradient, Σ)
             
             # Create averaged result
             avg_row = DataFrame(
@@ -239,7 +241,7 @@ function _average_profiles_with_proper_se(df::DataFrame, gradients::Dict, Σ::Ab
                 
                 # Proper delta-method averaging with collected gradients
                 avg_gradient = mean(term_gradients)
-                se_proper = FormulaCompiler.delta_method_se(avg_gradient, Σ)
+                se_proper = compute_se_only(avg_gradient, Σ)
                 
                 # Create averaged result
                 avg_group = DataFrame(

@@ -57,6 +57,7 @@ export population_margins, profile_margins, MarginsResult
 include("types.jl")
 include("core/validation.jl")
 include("computation/predictions.jl")
+include("computation/statistics.jl")
 include("features/categorical_mixtures.jl")
 include("engine/core.jl")
 include("engine/utilities.jl") 

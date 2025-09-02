@@ -1,6 +1,7 @@
 # engine/utilities.jl - FormulaCompiler-based marginal effects computation
 
 using Tables  # Required for the architectural rework
+using ..StatisticalUtils: compute_se_only
 
 """
     _validate_variables(data_nt, vars)
@@ -232,7 +233,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
             
             # Note: accumulate_ame_gradient! already averages the gradient
             gβ_avg = engine.gβ_accumulator  # Use directly without copying
-            se = FormulaCompiler.delta_method_se(gβ_avg, engine.Σ)
+            se = compute_se_only(gβ_avg, engine.Σ)
             
             # Compute AME value via helper with concrete arguments
             ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, target, backend, cont_idx)
@@ -273,7 +274,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTu
         else  # Categorical variable
             # Compute traditional baseline contrasts for population margins
             ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, target, backend)
-            se = FormulaCompiler.delta_method_se(gβ_avg, engine.Σ)
+            se = compute_se_only(gβ_avg, engine.Σ)
             
             # Direct assignment instead of push! to avoid reallocation  
             results.term[cont_idx] = "$(var) (baseline contrast)"
@@ -380,7 +381,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector
                 _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, target)
             end
             
-            se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
+            se = compute_se_only(engine.gβ_accumulator, engine.Σ)
             
             # Apply elasticity transformations for continuous variables if requested (Phase 3)
             final_val = effect_val
@@ -763,7 +764,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine, referenc
                         FormulaCompiler.me_eta_grad_beta!(engine.gβ_accumulator, refgrid_de, local_β, profile_idx, var)
                     end
                     
-                    se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
+                    se = compute_se_only(engine.gβ_accumulator, engine.Σ)
                     
                     # Store results
                     results.term[row_idx] = string(var)
@@ -787,7 +788,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine, referenc
                 final_effect = marginal_effect
                 
                 # Compute standard error
-                se = FormulaCompiler.delta_method_se(engine.gβ_accumulator, engine.Σ)
+                se = compute_se_only(engine.gβ_accumulator, engine.Σ)
                 
                 # Build descriptive term name showing the specific contrast
                 current_level = profile_dict[var]
