@@ -80,7 +80,7 @@ result = population_margins(model, data; vars=[:education],
                           over=(region=nothing, income=[20000, 50000, 80000]))
 
 # High-performance production use with finite differences
-result = population_margins(model, data; backend=:fd, target=:eta)
+result = population_margins(model, data; backend=:ad, target=:eta)
 ```
 
 # Frequency-Weighted Categorical Handling
@@ -110,8 +110,8 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     end
     
     # Proper backend selection
-    # Population margins default to :fd for zero allocations across many rows
-    recommended_backend = backend === :auto ? :fd : backend
+    # Population margins default to :ad for consistency across all functions
+    recommended_backend = backend === :auto ? :ad : backend
     
     # Build zero-allocation engine with caching
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
@@ -123,11 +123,11 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     
     if type === :effects
         df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure, kwargs...)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, target, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
+        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
         return MarginsResult(df, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; target, kwargs...)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
+        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
         return MarginsResult(df, G, metadata)
     end
 end

@@ -90,7 +90,7 @@ result = profile_margins(model, reference_grid; type=:predictions)
 # Cartesian product for systematic exploration
 result = profile_margins(model, data; 
                         at=Dict(:age => [25, 35, 45], :education => [12, 16]), 
-                        type=:effects, vars=[:income], backend=:fd)
+                        type=:effects, vars=[:income], backend=:ad)
 ```
 
 # Frequency-Weighted Categorical Defaults

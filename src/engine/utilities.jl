@@ -556,7 +556,7 @@ Build metadata dictionary for MarginsResult.
 ```julia
 metadata = _build_metadata(
     type=:effects, vars=[:x1, :x2], target=:mu, 
-    backend=:fd, n_obs=1000, model_type=LinearModel
+    backend=:ad, n_obs=1000, model_type=LinearModel
 )
 ```
 """
