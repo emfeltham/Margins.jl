@@ -55,6 +55,8 @@ export population_margins, profile_margins, MarginsResult
 
 # Include all submodules in dependency order
 include("types.jl")
+include("core/validation.jl")
+include("computation/predictions.jl")
 include("features/categorical_mixtures.jl")
 include("engine/core.jl")
 include("engine/utilities.jl") 

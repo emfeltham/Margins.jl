@@ -1,0 +1,160 @@
+"""
+Centralized parameter validation for Margins.jl API functions.
+
+This module provides consistent parameter validation across the entire API,
+ensuring uniform error messages and eliminating duplicate validation code.
+All validation functions follow the principle of failing fast with clear,
+actionable error messages.
+"""
+module Validation
+
+"""
+    validate_type_parameter(type::Symbol)
+
+Validate the `type` parameter for margins functions.
+Must be either `:effects` or `:predictions`.
+"""
+function validate_type_parameter(type::Symbol)
+    type ∉ (:effects, :predictions) && 
+        throw(ArgumentError("type must be :effects or :predictions, got :$(type)"))
+end
+
+"""
+    validate_target_parameter(target::Symbol)
+
+Validate the `target` parameter for margins functions.
+Must be either `:eta` (link scale) or `:mu` (response scale).
+"""
+function validate_target_parameter(target::Symbol)  
+    target ∉ (:eta, :mu) && 
+        throw(ArgumentError("target must be :eta or :mu, got :$(target)"))
+end
+
+"""
+    validate_backend_parameter(backend::Symbol)
+
+Validate the `backend` parameter for derivative computation.
+Must be `:ad` (automatic differentiation), `:fd` (finite differences), or `:auto`.
+"""
+function validate_backend_parameter(backend::Symbol)
+    backend ∉ (:ad, :fd, :auto) && 
+        throw(ArgumentError("backend must be :ad, :fd, or :auto, got :$(backend)"))
+end
+
+"""
+    validate_measure_parameter(measure::Symbol, type::Symbol)
+
+Validate the `measure` parameter for effects computation.
+Must be one of `:effect`, `:elasticity`, `:semielasticity_x`, `:semielasticity_y`.
+Only applies when `type=:effects`.
+"""
+function validate_measure_parameter(measure::Symbol, type::Symbol)
+    valid_measures = (:effect, :elasticity, :semielasticity_x, :semielasticity_y)
+    measure ∉ valid_measures && 
+        throw(ArgumentError("measure must be one of $(valid_measures), got :$(measure)"))
+    
+    # Measure only applies to effects
+    if type === :predictions && measure !== :effect
+        throw(ArgumentError("measure parameter only applies when type=:effects"))
+    end
+end
+
+"""
+    validate_vars_parameter(vars, type::Symbol)
+
+Validate the `vars` parameter for variable selection.
+Issues warning if vars is specified for predictions (where it's ignored).
+"""
+function validate_vars_parameter(vars, type::Symbol)
+    if vars !== nothing && type === :predictions
+        @warn "vars parameter ignored when type=:predictions"
+    end
+end
+
+"""
+    validate_at_parameter(at)
+
+Validate the `at` parameter for profile specifications.
+Must be `:means`, a Dict, or Vector{Dict}.
+"""
+function validate_at_parameter(at)
+    if !(at === :means || at isa Dict || at isa Vector{Dict})
+        throw(ArgumentError("at must be :means, Dict{Symbol,Any}, or Vector{Dict{Symbol,Any}}, got $(typeof(at))"))
+    end
+end
+
+"""
+    validate_grouping_parameters(over, within, by)
+
+Validate grouping parameters for consistency.
+Ensures no conflicts between different grouping specifications.
+"""
+function validate_grouping_parameters(over, within, by)
+    # Check for mutual exclusivity where appropriate
+    if over !== nothing && within !== nothing
+        # This is actually allowed - within creates nested grouping
+        # No validation error needed
+    end
+    
+    # Validate that grouping variables are Symbols or Vector{Symbol}
+    for (name, param) in [(:over, over), (:within, within), (:by, by)]
+        if param !== nothing
+            if !(param isa Symbol || (param isa AbstractVector && all(x -> x isa Symbol, param)))
+                throw(ArgumentError("$(name) must be Symbol or Vector{Symbol}, got $(typeof(param))"))
+            end
+        end
+    end
+end
+
+"""
+    validate_common_parameters(type, target, backend, measure=:effect, vars=nothing)
+
+Validate all common API parameters in a single call.
+This is the main validation entry point for most margins functions.
+
+# Arguments
+- `type::Symbol`: Effect type (`:effects` or `:predictions`)  
+- `target::Symbol`: Target scale (`:eta` or `:mu`)
+- `backend::Symbol`: Computation backend (`:ad`, `:fd`, or `:auto`)
+- `measure::Symbol`: Effect measure (default `:effect`)
+- `vars`: Variable selection (default `nothing`)
+
+# Examples
+```julia
+# Basic validation
+validate_common_parameters(:effects, :mu, :auto)
+
+# Full validation with all parameters  
+validate_common_parameters(:effects, :eta, :fd, :elasticity, [:x1, :x2])
+```
+"""
+function validate_common_parameters(type, target, backend, measure=:effect, vars=nothing)
+    validate_type_parameter(type)
+    validate_target_parameter(target)
+    validate_backend_parameter(backend)
+    validate_measure_parameter(measure, type)
+    validate_vars_parameter(vars, type)
+end
+
+"""
+    validate_profile_parameters(at, type, target, backend, measure=:effect, vars=nothing)
+
+Validate parameters specific to profile margins functions.
+Includes all common parameter validation plus profile-specific checks.
+"""
+function validate_profile_parameters(at, type, target, backend, measure=:effect, vars=nothing)
+    validate_at_parameter(at)
+    validate_common_parameters(type, target, backend, measure, vars)
+end
+
+"""
+    validate_population_parameters(type, target, backend, measure=:effect, vars=nothing)
+
+Validate parameters specific to population margins functions.
+Currently identical to common validation but provided for API symmetry.
+"""
+function validate_population_parameters(type, target, backend, measure=:effect, vars=nothing)
+    validate_common_parameters(type, target, backend, measure, vars)
+end
+
+end # module Validation

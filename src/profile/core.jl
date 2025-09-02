@@ -2,6 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 using Distributions: Normal, cdf
+using ..Validation: validate_profile_parameters
 
 """
     profile_margins(model, data; at=:means, kwargs...) -> MarginsResult
@@ -141,7 +142,7 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     recommended_backend = backend === :auto ? :ad : backend
     
     # Build zero-allocation engine with caching
-    engine = _get_or_build_engine_for_profiles(model, data_nt, vars)
+    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach
@@ -212,15 +213,6 @@ predictions_result = profile_margins(model, reference_grid; type=:predictions)
 # Note: DataFrame method removed to avoid dispatch ambiguity
 # Both use cases (data with 'at' and explicit reference_grid) now handled by single method above
 
-"""
-    _get_or_build_engine_for_profiles(model, data_nt, vars)
-
-Get or build engine with caching for profile computations. Uses unified caching system.
-"""
-function _get_or_build_engine_for_profiles(model, data_nt::NamedTuple, vars)
-    # Use unified caching system from engine/caching.jl
-    return get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
-end
 
 """
     _profile_predictions(engine, reference_grid; target, kwargs...) -> (DataFrame, Matrix{Float64})
@@ -314,13 +306,33 @@ end
 Validate inputs to profile_margins() with clear Julia-style error messages.
 """
 function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol)
-    # Reuse population validation for common parameters
-    _validate_population_inputs(model, data, type, vars, target, backend, nothing, nothing, measure)
+    # Validate required arguments
+    if model === nothing
+        throw(ArgumentError("model cannot be nothing"))
+    end
     
-    # Note: at parameter validation 
-    # Since the function signature has at=:means as default, at===nothing should never occur
-    # But we include this check for robustness if called directly with at=nothing
+    if data === nothing
+        throw(ArgumentError("data cannot be nothing"))
+    end
     
+    # Use centralized validation for common parameters
+    validate_profile_parameters(at, type, target, backend, measure, vars)
+    
+    # Validate model has required methods
+    try
+        coef(model)
+    catch e
+        throw(ArgumentError("model must support coef() method (fitted statistical model required)"))
+    end
+    
+    try
+        vcov(model)
+    catch e
+        throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
+    end
+    
+    # Profile-specific validation for at parameter (already handled by centralized validation)
+    # Additional detailed validation for complex at specifications
     if !(at === :means || at isa Dict || at isa Vector || at isa DataFrame)
         throw(ArgumentError("at parameter must be :means, Dict, Vector{Dict}, or DataFrame"))
     end

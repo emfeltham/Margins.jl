@@ -1,5 +1,7 @@
 # population/core.jl - Main population_margins() function with compilation caching
 
+using ..Validation: validate_population_parameters
+
 # Global cache for compiled formulas (MARGINS_GUIDE.md pattern)
 # Unified caching system (see engine/caching.jl)
 # Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
@@ -112,7 +114,7 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     recommended_backend = backend === :auto ? :fd : backend
     
     # Build zero-allocation engine with caching
-    engine = _get_or_build_engine(model, data_nt, vars)
+    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
     # Handle at/over parameters for population contexts
     if at !== nothing || over !== nothing
@@ -130,11 +132,6 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     end
 end
 
-# Use unified caching system
-function _get_or_build_engine(model, data_nt::NamedTuple, vars)
-    # Use unified caching system from engine/caching.jl
-    return get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
-end
 
 """
     _get_continuous_variables(model, data_nt) -> Vector{Symbol}
@@ -175,30 +172,8 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
         throw(ArgumentError("data cannot be nothing"))
     end
     
-    # Validate type parameter
-    if type ∉ (:effects, :predictions)
-        throw(ArgumentError("type must be :effects or :predictions, got :$(type)"))
-    end
-    
-    # Validate target parameter
-    if target ∉ (:eta, :mu)
-        throw(ArgumentError("target must be :eta or :mu, got :$(target)"))
-    end
-    
-    # Validate backend parameter (including :auto for automatic selection)
-    if backend ∉ (:ad, :fd, :auto)
-        throw(ArgumentError("backend must be :ad, :fd, or :auto, got :$(backend)"))
-    end
-    
-    # Validate measure parameter
-    if measure ∉ (:effect, :elasticity, :semielasticity_x, :semielasticity_y)
-        throw(ArgumentError("measure must be :effect, :elasticity, :semielasticity_x, or :semielasticity_y, got :$(measure)"))
-    end
-    
-    # Measure parameter only applies to effects, not predictions
-    if type === :predictions && measure !== :effect
-        throw(ArgumentError("measure parameter only applies when type = :effects"))
-    end
+    # Use centralized validation for common parameters
+    validate_population_parameters(type, target, backend, measure, vars)
     
     # Validate vars parameter for effects
     if type === :effects && vars !== nothing
