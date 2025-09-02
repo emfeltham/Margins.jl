@@ -8,7 +8,7 @@ using ..StatisticalUtils: compute_se_only
 Average rows using proper delta method on row-aligned gradient matrix G.
 Each row in df corresponds to a row in G. Group by non-profile columns and average within groups.
 """
-function _average_rows_with_proper_se(df::DataFrame, G::Matrix{Float64}, Σ::AbstractMatrix; group_cols::Vector{String}=String[])
+function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix; group_cols::Vector{String}=String[])
     nrow(df) == size(G, 1) || error("Row count mismatch between df and G")
     
     profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
@@ -117,7 +117,7 @@ end
 
 Average profile results using proper delta method on averaged gradients.
 """
-function _average_profiles_with_proper_se(df::DataFrame, gradients::Dict, Σ::AbstractMatrix; group_cols::Vector{String}=String[])
+function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatrix; group_cols::Vector{String}=String[])
     profile_cols = [c for c in names(df) if startswith(String(c), "at_")]
     exclude_cols = ["dydx", "se", "z", "p", "ci_lo", "ci_hi"] ∪ profile_cols
     

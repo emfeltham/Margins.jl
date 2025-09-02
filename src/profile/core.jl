@@ -188,13 +188,13 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
 end
 
 """
-    _extract_profile_values(reference_grid::DataFrame, result_length::Int) -> NamedTuple
+    _extract_profile_values(reference_grid, result_length::Int) -> NamedTuple
 
 Extract profile values from reference grid and expand to match the result length.
 Each profile can generate multiple results (one per variable), so we need to repeat
 each profile row for each variable it generates.
 """
-function _extract_profile_values(reference_grid::DataFrame, result_length::Int)
+function _extract_profile_values(reference_grid, result_length::Int)
     n_profiles = nrow(reference_grid)
     vars_per_profile = result_length ÷ n_profiles
     
@@ -273,7 +273,7 @@ Compute adjusted predictions at profiles (APM/APR) with delta-method standard er
 This function evaluates predictions at each row of the reference grid, providing
 adjusted predictions at the mean (APM) or at representative values (APR).
 """
-function _profile_predictions(engine::MarginsEngine, reference_grid::DataFrame; target=:mu, kwargs...)
+function _profile_predictions(engine::MarginsEngine{L}, reference_grid; target=:mu, kwargs...) where L
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     

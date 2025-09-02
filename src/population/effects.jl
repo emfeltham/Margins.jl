@@ -10,7 +10,7 @@ Compute average adjusted predictions (AAP) with delta-method standard errors.
 This function computes the population average of predicted values across the sample,
 providing a measure of the expected outcome for the population.
 """
-function _population_predictions(engine::MarginsEngine, data_nt::NamedTuple; target=:mu, kwargs...)
+function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, kwargs...) where L
     n_obs = length(first(data_nt))
     n_params = length(engine.β)
     

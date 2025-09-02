@@ -75,12 +75,12 @@ function _population_margins_with_contexts(engine, data_nt, vars, at, over; type
 end
 
 """
-    _extract_context_profile_values(results::DataFrame) -> Union{Nothing, NamedTuple}
+    _extract_context_profile_values(results) -> Union{Nothing, NamedTuple}
 
 Extract profile values from at_ columns in results DataFrame.
 Returns Nothing if no at_ columns exist.
 """
-function _extract_context_profile_values(results::DataFrame)
+function _extract_context_profile_values(results)
     at_cols = [col for col in names(results) if startswith(String(col), "at_")]
     
     if isempty(at_cols)
@@ -245,7 +245,7 @@ end
 
 Compute population marginal effect for a single variable in a specific context.
 """
-function _compute_population_effect_in_context(engine::MarginsEngine, context_data::NamedTuple, var::Symbol, target::Symbol, backend::Symbol)
+function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, var::Symbol, target::Symbol, backend::Symbol) where L
     # Use existing AME computation but with context data
     n_obs = length(first(context_data))
     
@@ -268,7 +268,7 @@ end
 
 Compute population average prediction in a specific context.
 """
-function _compute_population_prediction_in_context(engine::MarginsEngine, context_data::NamedTuple, target::Symbol)
+function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, target::Symbol) where L
     # Use existing prediction computation but with context data
     n_obs = length(first(context_data))
     

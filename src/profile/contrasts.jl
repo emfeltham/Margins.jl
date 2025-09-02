@@ -52,12 +52,12 @@ effect, grad = compute_profile_categorical_contrast(engine, profile, :treated, :
 ```
 """
 function compute_profile_categorical_contrast(
-    engine::MarginsEngine, 
+    engine::MarginsEngine{L}, 
     profile::Dict, 
     var::Symbol, 
     target::Symbol; 
     backend::Symbol=:ad
-)
+) where L
     # Get baseline level from model's contrast coding
     baseline_level = _get_baseline_level(engine.model, var)
     current_level = profile[var]
@@ -101,12 +101,12 @@ Compute row-specific categorical contrasts for multiple profiles efficiently.
 This is the main function used by `profile_margins()` for categorical variables.
 """
 function compute_multiple_profile_contrasts(
-    engine::MarginsEngine,
+    engine::MarginsEngine{L},
     profiles::Vector{Dict}, 
     var::Symbol,
     target::Symbol;
     backend::Symbol=:ad
-)
+) where L
     n_profiles = length(profiles)
     n_params = length(engine.β)
     
@@ -163,11 +163,11 @@ Helper function to compute both prediction and gradient at a profile using Formu
 This function properly uses FormulaCompiler's API to avoid reinventing prediction logic.
 """
 function _profile_prediction_with_gradient(
-    engine::MarginsEngine, 
+    engine::MarginsEngine{L}, 
     profile::Dict, 
     target::Symbol, 
     backend::Symbol
-)
+) where L
     # Build minimal reference data for this profile
     profile_data = _build_refgrid_data(profile, engine.data_nt)
     profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
@@ -210,7 +210,7 @@ Validate that a categorical variable can be used for contrast computation.
 - Model has contrast information for the variable
 - Variable has multiple levels (baseline + at least one other)
 """
-function validate_contrast_specification(engine::MarginsEngine, var::Symbol)
+function validate_contrast_specification(engine::MarginsEngine{L}, var::Symbol) where L
     # Check variable exists
     if !haskey(engine.data_nt, var)
         throw(MarginsError("Variable $var not found in data"))

@@ -182,7 +182,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect)
+function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect) where L
     engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
@@ -295,7 +295,7 @@ profiles = [Dict(:x1 => 0.0, :region => "North")]
 df, G = _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad)
 ```
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine, profiles::Vector; target=:mu, backend=:ad, measure=:effect)
+function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector; target=:mu, backend=:ad, measure=:effect) where L
     # Handle the case where we have only categorical variables (engine.de === nothing)
     # or mixed continuous/categorical variables
     
@@ -582,7 +582,7 @@ using StatsBase: mode
 Compute traditional baseline contrasts for categorical variables in population margins.
 Helper function for _ame_continuous_and_categorical.
 """
-function _compute_categorical_baseline_ame(engine::MarginsEngine, var::Symbol, rows, target::Symbol, backend::Symbol)
+function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol, rows, target::Symbol, backend::Symbol) where L
     # Placeholder implementation - categorical AME computation
     # Would compute average discrete change from baseline level
     ame_val = 0.0  # Placeholder
@@ -596,7 +596,7 @@ end
 Compute row-specific baseline contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
-function _compute_row_specific_baseline_contrast(engine::MarginsEngine, refgrid_de, profile::Dict, var::Symbol, target::Symbol, backend::Symbol)
+function _compute_row_specific_baseline_contrast(engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, target::Symbol, backend::Symbol) where L
     # Use the new profile contrasts implementation
     effect, _ = compute_profile_categorical_contrast(engine, profile, var, target; backend)
     return effect
@@ -608,7 +608,7 @@ end
 Compute gradient for row-specific categorical contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
-function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine, refgrid_de, profile::Dict, var::Symbol, target::Symbol)
+function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, target::Symbol) where L
     # Use the new profile contrasts implementation  
     _, gradient = compute_profile_categorical_contrast(engine, profile, var, target; backend=:ad)
     copyto!(gβ_buffer, gradient)
@@ -620,7 +620,7 @@ end
 Make predictions using FormulaCompiler for categorical contrast computation.
 Helper function that properly uses FormulaCompiler instead of manual computation.
 """
-function _predict_with_formulacompiler(engine::MarginsEngine, profile::Dict, target::Symbol)
+function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, target::Symbol) where L
     # Create minimal reference data for this profile  
     profile_data = _build_refgrid_data(profile, engine.data_nt)
     profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
@@ -637,7 +637,7 @@ function _predict_with_formulacompiler(engine::MarginsEngine, profile::Dict, tar
 end
 
 """
-    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine, reference_grid::DataFrame; target=:mu, backend=:ad, measure=:effect) -> (DataFrame, Matrix{Float64})
+    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
 
 **Architectural Rework**: Efficient single-compilation approach for profile marginal effects.
 
@@ -662,7 +662,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 - Consistent mixture routing across all profiles
 - Memory efficient with single compiled object
 """
-function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine, reference_grid::DataFrame; target=:mu, backend=:ad, measure=:effect)
+function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L
     n_profiles = nrow(reference_grid)
     
     # Auto-detect variable types ONCE (not per profile)
