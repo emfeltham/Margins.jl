@@ -275,7 +275,7 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
    end
    ```
 
-2. **Zero-Allocation Population Effects (AME)** with graceful fallbacks and batch operations:
+2. **Zero-Allocation Population Effects (AME)** with explicit backend selection and batch operations:
    ```julia
    function _ame_continuous_and_categorical(engine::MarginsEngine, data_nt; target=:mu, backend=:ad)
        engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
@@ -926,7 +926,7 @@ FormulaCompiler.marginal_effects_eta!(g_buffer, de, β, 1; backend=:fd)  # Alway
    - Leverage compiled evaluator caching properly
    - Follow zero-allocation patterns throughout
    - Validate input variables early at API boundary
-   - Implement graceful backend fallbacks (AD → FD)
+   - Implement explicit backend selection (user chooses AD or FD)
    - Pre-allocate output matrices for batch operations
    - Use consistent `Tables.columntable()` format throughout
    - Provide dual interface: allocating and in-place versions
