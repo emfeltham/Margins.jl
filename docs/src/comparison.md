@@ -35,8 +35,8 @@ For researchers familiar with Stata's `margins` command, Margins.jl provides equ
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
 | `margins, eyex(*)` | `population_margins(model, data; type=:effects, measure=:elasticity)` | Elasticities |
-| `margins, eydx(*)` | `population_margins(model, data; measure=:semielasticity_y)` | Y semi-elasticity |
-| `margins, dyex(*)` | `population_margins(model, data; measure=:semielasticity_x)` | X semi-elasticity |
+| `margins, eydx(*)` | `population_margins(model, data; measure=:semielasticity_eydx)` | Y semi-elasticity |
+| `margins, dyex(*)` | `population_margins(model, data; measure=:semielasticity_dyex)` | X semi-elasticity |
 
 ### Conceptual Differences
 

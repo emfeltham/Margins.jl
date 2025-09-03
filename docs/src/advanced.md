@@ -28,10 +28,10 @@ profile_margins(model, data; at=:means, type=:effects, measure=:elasticity)
 
 ```julia
 # Population average semi-elasticities (X)
-population_margins(model, data; measure=:semielasticity_x)
+population_margins(model, data; measure=:semielasticity_dyex)
 
 # Semi-elasticities at specific scenarios
-profile_margins(model, data; at=Dict(:x1 => [0,1,2]), measure=:semielasticity_x)
+profile_margins(model, data; at=Dict(:x1 => [0,1,2]), measure=:semielasticity_dyex)
 ```
 
 #### Semi-Elasticity with respect to Y
@@ -41,7 +41,7 @@ profile_margins(model, data; at=Dict(:x1 => [0,1,2]), measure=:semielasticity_x)
 
 ```julia
 # Population average semi-elasticities (Y)
-population_margins(model, data; measure=:semielasticity_y)
+population_margins(model, data; measure=:semielasticity_eydx)
 ```
 
 ### Elasticity Framework Application
@@ -86,7 +86,7 @@ println(DataFrame(exp_scenarios))
 # Semi-elasticity: percent wage change per year of education
 edu_semielast = population_margins(model, df;
                                   vars=[:education],
-                                  measure=:semielasticity_x)
+                                  measure=:semielasticity_dyex)
 println("Education semi-elasticity: ", DataFrame(edu_semielast))
 ```
 

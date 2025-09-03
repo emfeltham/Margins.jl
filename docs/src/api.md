@@ -103,8 +103,8 @@ All main functions support these core parameters:
 #### Effect Measures (`measure`)
 - `:effect` - Standard marginal effects (default)
 - `:elasticity` - Elasticities (% change in Y per % change in X)
-- `:semielasticity_x` - Semi-elasticities w.r.t. X (% change in Y per unit X)
-- `:semielasticity_y` - Semi-elasticities w.r.t. Y (unit change in Y per % X)
+- `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in Y per % change in X)
+- `:semielasticity_eydx` - Semielasticity d(ln y)/dx (% change in Y per unit change in X)
 
 ### Profile-Specific Parameters
 

@@ -87,7 +87,7 @@ profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sam
 - **Academic standards**: Suitable for econometric research and academic publication
 
 ### Advanced Features
-- **Elasticities**: Full support via `measure` parameter (`:elasticity`, `:semielasticity_x`, `:semielasticity_y`)
+- **Elasticities**: Full support via `measure` parameter (`:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx`)
 - **Categorical mixtures**: Realistic population composition for policy analysis
 - **Profile scenarios**: Complex scenario specification with Dict-based and table-based approaches  
 - **Robust standard errors**: CovarianceMatrices.jl integration for robust/clustered SEs
@@ -132,8 +132,8 @@ population_margins(model, data; type=:effects, measure=:elasticity)
 profile_margins(model, data; at=:means, type=:effects, measure=:elasticity)
 
 # Semi-elasticities  
-population_margins(model, data; measure=:semielasticity_x)  # % change Y per unit X
-population_margins(model, data; measure=:semielasticity_y)  # unit change Y per % X
+population_margins(model, data; measure=:semielasticity_dyex)  # change Y per % change X
+population_margins(model, data; measure=:semielasticity_eydx)  # % change Y per unit X
 ```
 
 ### Subgroup Analysis
