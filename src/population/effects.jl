@@ -10,7 +10,7 @@ Compute average adjusted predictions (AAP) with delta-method standard errors.
 This function computes the population average of predicted values across the sample,
 providing a measure of the expected outcome for the population.
 """
-function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu) where L
+function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response) where L
     n_obs = length(first(data_nt))
     n_params = length(engine.β)
     
@@ -20,7 +20,7 @@ function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; 
 
     # Delegate hot loop to a helper with concrete arguments to ensure zero allocations
     mean_prediction = _population_predictions_impl!(G, work, engine.compiled, engine.row_buf,
-                                                    engine.β, engine.link, data_nt, target)
+                                                    engine.β, engine.link, data_nt, scale)
     
     # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])
@@ -40,10 +40,10 @@ end
 
 # Helper with concrete arguments to enable full specialization and avoid per-iteration allocations
 function _population_predictions_impl!(G::AbstractMatrix{<:Float64}, work, compiled, row_buf::Vector{Float64},
-                                       β::Vector{Float64}, link, data_nt::NamedTuple, target::Symbol)
+                                       β::Vector{Float64}, link, data_nt::NamedTuple, scale::Symbol)
     n_obs = length(first(data_nt))
     mean_acc = 0.0
-    if target === :mu
+    if scale === :response
         for i in 1:n_obs
             FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
             η = dot(row_buf, β)

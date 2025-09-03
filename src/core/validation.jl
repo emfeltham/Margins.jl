@@ -28,43 +28,7 @@ function validate_scale_parameter(scale::Symbol)
         throw(ArgumentError("scale must be :link or :response, got :$(scale)"))
 end
 
-"""
-    scale_to_target(scale::Symbol) -> Symbol
-
-Convert new scale terminology to internal target terminology.
-- `:response` → `:mu` (response scale, transformed via inverse link)
-- `:link` → `:eta` (linear predictor scale, untransformed)
-
-This maintains backward compatibility with internal FormulaCompiler.jl integration.
-"""
-function scale_to_target(scale::Symbol)
-    if scale === :response
-        return :mu
-    elseif scale === :link  
-        return :eta
-    else
-        throw(ArgumentError("Invalid scale: $scale. Use :response or :link"))
-    end
-end
-
-"""
-    target_to_scale(target::Symbol) -> Symbol
-
-Convert internal target terminology to new scale terminology.
-- `:mu` → `:response` (response scale, transformed via inverse link)
-- `:eta` → `:link` (linear predictor scale, untransformed)
-
-This is used for validation functions that need scale parameter.
-"""
-function target_to_scale(target::Symbol)
-    if target === :mu
-        return :response
-    elseif target === :eta  
-        return :link
-    else
-        throw(ArgumentError("Invalid target: $target. Use :mu or :eta"))
-    end
-end
+# Scale conversion functions removed - now using scale directly throughout
 
 # Legacy support for transition period
 """

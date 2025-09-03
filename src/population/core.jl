@@ -115,20 +115,17 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
     # Population margins default to :ad for consistency across all functions
     recommended_backend = backend === :auto ? :ad : backend
     
-    # Convert scale to internal target terminology for FormulaCompiler.jl compatibility
-    target = scale_to_target(scale)
-    
     # Build zero-allocation engine with caching (including vcov function)
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if scenarios !== nothing || groups !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend=recommended_backend)
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend=recommended_backend)
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        df, G = _ame_continuous_and_categorical(engine, data_nt; scale, backend=recommended_backend, measure)  # → AME (both continuous and categorical)
+        metadata = _build_metadata(; type, vars, scale, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -140,8 +137,8 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         
         return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     else # :predictions  
-        df, G = _population_predictions(engine, data_nt; target)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+        df, G = _population_predictions(engine, data_nt; scale)  # → AAP
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population

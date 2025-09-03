@@ -113,27 +113,24 @@ result = profile_margins(model, data;
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
 function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:auto, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_level::Float64=0.95, vcov=GLM.vcov)
-    # Convert scale to internal target terminology
-    internal_target = scale_to_target(scale)
-    
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
     # Call internal implementation with NamedTuple (no more DataFrame dispatch issues)
-    return _profile_margins_impl(model, data_nt, at, type, vars, internal_target, backend, measure, vcov)
+    return _profile_margins_impl(model, data_nt, at, type, vars, scale, backend, measure, vcov)
 end
 
 # Internal implementation that works with NamedTuple to avoid dispatch confusion
-function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
+function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation
-    _validate_profile_inputs(model, data_nt, at, type, vars, target_to_scale(target), backend, measure, vcov)
+    _validate_profile_inputs(model, data_nt, at, type, vars, scale, backend, measure, vcov)
     
     # Build reference grid from at specification  
     reference_grid = _build_reference_grid(at, data_nt)
     at_spec = at
     
     # Route to unified implementation with reference grid
-    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, at_spec)
+    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec)
 end
 
 """
@@ -161,12 +158,12 @@ function _extract_profile_values(reference_grid, result_length::Int)
 end
 
 """
-    _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, at_spec) -> MarginsResult
+    _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> MarginsResult
 
 Unified internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
+function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -184,8 +181,8 @@ function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::Da
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
-        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
+        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend=recommended_backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, scale, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection
@@ -203,8 +200,8 @@ function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::Da
         return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions(engine, reference_grid; target)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
+        df, G = _profile_predictions(engine, reference_grid; scale)  # → APM/APR
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend=recommended_backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection  
@@ -264,29 +261,25 @@ function profile_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov
 )
-    # Convert scale to internal target terminology
-    internal_target = scale_to_target(scale)
-    
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
     # Call internal implementation with the reference grid directly
-    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, internal_target, backend, measure, vcov)
+    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
 end
 
 # Internal implementation for DataFrame reference grid method
-function _profile_margins_impl_with_refgrid(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
+function _profile_margins_impl_with_refgrid(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation (similar to main method but with reference_grid)
-    _validate_profile_inputs_with_refgrid(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov)
+    _validate_profile_inputs_with_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
     
     # Route to unified implementation with reference grid directly
-    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, reference_grid)
+    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid)
 end
 
 # Additional validation function for DataFrame reference grid method
-function _validate_profile_inputs_with_refgrid(model, data, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
-    # Standard validation (convert internal target back to scale for validation)
-    scale = target_to_scale(target)
+function _validate_profile_inputs_with_refgrid(model, data, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
+    # Standard validation 
     _validate_profile_inputs(model, data, :means, type, vars, scale, backend, measure, vcov)  # Use :means as dummy for at validation
     
     # Reference grid specific validation
@@ -301,14 +294,14 @@ end
 
 
 """
-    _profile_predictions(engine, reference_grid; target) -> (DataFrame, Matrix{Float64})
+    _profile_predictions(engine, reference_grid; scale) -> (DataFrame, Matrix{Float64})
 
 Compute adjusted predictions at profiles (APM/APR) with delta-method standard errors.
 
 This function evaluates predictions at each row of the reference grid, providing
 adjusted predictions at the mean (APM) or at representative values (APR).
 """
-function _profile_predictions(engine::MarginsEngine{L}, reference_grid; target=:mu) where L
+function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:response) where L
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     
@@ -325,7 +318,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; target=:
     
     # Single pass over profiles via helper that takes only concrete arguments
     _profile_predictions_impl!(predictions, G, refgrid_compiled, engine.row_buf,
-                               engine.β, engine.link, data_nt, target)
+                               engine.β, engine.link, data_nt, scale)
     
     # Safely use g_buf for SE computation if large enough  
     if length(engine.g_buf) >= n_profiles
@@ -360,9 +353,9 @@ function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
                                     β::Vector{Float64},
                                     link,
                                     data_nt::NamedTuple,
-                                    target::Symbol)
+                                    scale::Symbol)
     # Use centralized batch prediction computation (zero allocation)
-    compute_predictions_batch!(predictions, G, compiled, data_nt, β, link, target, row_buf)
+    compute_predictions_batch!(predictions, G, compiled, data_nt, β, link, scale, row_buf)
     return nothing
 end
 

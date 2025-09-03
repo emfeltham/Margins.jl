@@ -30,7 +30,7 @@ Where:
 """
 
 """
-    compute_profile_categorical_contrast(engine, profile, var, target; backend=:ad) -> (effect, gradient)
+    compute_profile_categorical_contrast(engine, profile, var, scale; backend=:ad) -> (effect, gradient)
 
 Compute row-specific categorical contrast at a specific profile.
 
@@ -38,7 +38,7 @@ Compute row-specific categorical contrast at a specific profile.
 - `engine::MarginsEngine`: Pre-built computation engine
 - `profile::Dict`: Covariate values defining the profile  
 - `var::Symbol`: Categorical variable name
-- `target::Symbol`: `:eta` or `:mu` scale
+- `scale::Symbol`: `:link` or `:response` scale
 
 # Returns
 - `effect::Float64`: Contrast effect (current_level - baseline_level)
@@ -47,7 +47,7 @@ Compute row-specific categorical contrast at a specific profile.
 # Examples
 ```julia
 profile = Dict(:age => 45, :education => "college", :treated => true)
-effect, grad = compute_profile_categorical_contrast(engine, profile, :treated, :mu)
+effect, grad = compute_profile_categorical_contrast(engine, profile, :treated, :response)
 # Returns: effect of treated=true vs treated=false for a 45-year-old college graduate
 ```
 """
@@ -55,7 +55,7 @@ function compute_profile_categorical_contrast(
     engine::MarginsEngine{L}, 
     profile::Dict, 
     var::Symbol, 
-    target::Symbol; 
+    scale::Symbol; 
     backend::Symbol=:ad
 ) where L
     # Get baseline level from model's contrast coding
@@ -73,8 +73,8 @@ function compute_profile_categorical_contrast(
     baseline_profile[var] = baseline_level
     
     # Compute predictions at both profiles using FormulaCompiler
-    current_pred, current_grad = _profile_prediction_with_gradient(engine, current_profile, target, backend)
-    baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, target, backend)
+    current_pred, current_grad = _profile_prediction_with_gradient(engine, current_profile, scale, backend)
+    baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, scale, backend)
     
     # Contrast effect and gradient
     effect = current_pred - baseline_pred
@@ -84,7 +84,7 @@ function compute_profile_categorical_contrast(
 end
 
 """
-    compute_multiple_profile_contrasts(engine, profiles, var, target; backend=:ad) -> (DataFrame, Matrix)
+    compute_multiple_profile_contrasts(engine, profiles, var, scale; backend=:ad) -> (DataFrame, Matrix)
 
 Compute row-specific categorical contrasts for multiple profiles efficiently.
 
@@ -92,7 +92,7 @@ Compute row-specific categorical contrasts for multiple profiles efficiently.
 - `engine::MarginsEngine`: Pre-built computation engine
 - `profiles::Vector{Dict}`: Vector of profiles to analyze
 - `var::Symbol`: Categorical variable name
-- `target::Symbol`: `:eta` or `:mu` scale
+- `scale::Symbol`: `:link` or `:response` scale
 
 # Returns
 - `results::DataFrame`: Results with columns [:profile_id, :term, :estimate, :se] 
@@ -104,7 +104,7 @@ function compute_multiple_profile_contrasts(
     engine::MarginsEngine{L},
     profiles::Vector{Dict}, 
     var::Symbol,
-    target::Symbol;
+    scale::Symbol;
     backend::Symbol=:ad
 ) where L
     n_profiles = length(profiles)
@@ -123,7 +123,7 @@ function compute_multiple_profile_contrasts(
     
     # Compute contrasts for each profile
     for (i, profile) in enumerate(profiles)
-        effect, gradient = compute_profile_categorical_contrast(engine, profile, var, target; backend)
+        effect, gradient = compute_profile_categorical_contrast(engine, profile, var, scale; backend)
         
         effects[i] = effect
         gradients[i, :] = gradient
@@ -156,7 +156,7 @@ function compute_multiple_profile_contrasts(
 end
 
 """
-    _profile_prediction_with_gradient(engine, profile, target, backend) -> (prediction, gradient)
+    _profile_prediction_with_gradient(engine, profile, scale, backend) -> (prediction, gradient)
 
 Helper function to compute both prediction and gradient at a profile using FormulaCompiler.
 
@@ -165,7 +165,7 @@ This function properly uses FormulaCompiler's API to avoid reinventing predictio
 function _profile_prediction_with_gradient(
     engine::MarginsEngine{L}, 
     profile::Dict, 
-    target::Symbol, 
+    scale::Symbol, 
     backend::Symbol
 ) where L
     # Build minimal reference data for this profile
@@ -176,7 +176,7 @@ function _profile_prediction_with_gradient(
     profile_compiled(engine.gβ_accumulator, profile_data, 1)  # Use existing buffer
     η = dot(engine.β, engine.gβ_accumulator)
     
-    if target === :mu
+    if scale === :response
         # Transform to response scale and compute gradient via chain rule  
         μ = GLM.linkinv(engine.link, η)
         link_deriv = GLM.mueta(engine.link, η)  # dμ/dη
@@ -186,7 +186,7 @@ function _profile_prediction_with_gradient(
             gradient[j] = link_deriv * engine.gβ_accumulator[j]
         end
         return (μ, gradient)
-    else # target === :eta
+    else # scale === :link
         # Linear predictor scale
         return (η, copy(engine.gβ_accumulator))
     end

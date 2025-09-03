@@ -76,7 +76,7 @@ function compute_prediction_with_gradient(
 end
 
 """
-    compute_predictions_batch!(results, gradients, compiled, data_nt, β, link, target, row_buf)
+    compute_predictions_batch!(results, gradients, compiled, data_nt, β, link, scale, row_buf)
 
 Batch computation for multiple observations with optimized memory usage.
 
@@ -102,13 +102,13 @@ Designed for production use with large datasets:
 """
 function compute_predictions_batch!(
     results::AbstractVector{T}, gradients::Matrix{Float64},
-    compiled, data_nt, β::Vector{Float64}, link, target::Symbol,
+    compiled, data_nt, β::Vector{Float64}, link, scale::Symbol,
     row_buf::Vector{Float64}
 ) where T<:Real
     
     n_obs = length(results)
     
-    if target === :mu
+    if scale === :response
         # Response scale with chain rule
         for i in 1:n_obs
             FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)

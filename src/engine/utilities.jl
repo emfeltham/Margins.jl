@@ -36,9 +36,9 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
 end
 
 # Helper: accumulate marginal effect value across rows using concrete arguments
-function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, target::Symbol, backend::Symbol, idx::Int)
+function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, scale::Symbol, backend::Symbol, idx::Int)
     acc = 0.0
-    if target === :mu
+    if scale === :response
         for row in rows
             FormulaCompiler.marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
             acc += g_buf[idx]
@@ -53,8 +53,8 @@ function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, l
 end
 
 # Helper: average response (μ or η) over rows using concrete arguments
-function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link, data_nt::NamedTuple, rows, target::Symbol)
-    if target === :mu
+function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link, data_nt::NamedTuple, rows, scale::Symbol)
+    if scale === :response
         s = 0.0
         for row in rows
             FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row)
@@ -181,7 +181,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect, contrasts=:baseline) where L
+function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline) where L
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
     
@@ -231,7 +231,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             # Users must choose backend explicitly based on their accuracy/performance needs
             FormulaCompiler.accumulate_ame_gradient!(
                 engine.gβ_accumulator, local_de, local_β, rows, var;
-                link=(target === :mu ? local_link : GLM.IdentityLink()), 
+                link=(scale === :response ? local_link : GLM.IdentityLink()), 
                 backend=backend
             )
             
@@ -240,7 +240,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             se = compute_se_only(gβ_avg, engine.Σ)
             
             # Compute AME value via helper with concrete arguments
-            ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, target, backend, cont_idx)
+            ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, scale, backend, cont_idx)
             ame_val /= length(rows)
             
             # Apply elasticity transformations if requested (Phase 3)
@@ -253,7 +253,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
                 
                 # Step 2: Compute η/μ averages using helper with concrete arguments
-                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, target)
+                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale)
                 
                 # Apply transformation based on measure type
                 if measure === :elasticity
@@ -280,7 +280,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     # Process categorical variables (if any)
     for var in categorical_requested
         # Compute traditional baseline contrasts for population margins
-        ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, target, backend)
+        ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, scale, backend)
         se = compute_se_only(gβ_avg, engine.Σ)
         
         # Direct assignment instead of push! to avoid reallocation  
@@ -539,14 +539,14 @@ function _create_frequency_mixture(col)
 end
 
 """
-    _build_metadata(; type, vars, target, backend, measure, n_obs, model_type, timestamp, at_spec, has_contexts) -> Dict
+    _build_metadata(; type, vars, scale, backend, measure, n_obs, model_type, timestamp, at_spec, has_contexts) -> Dict
 
 Build metadata dictionary for MarginsResult.
 
 # Keyword Arguments
 - `type::Symbol=:unknown`: Analysis type (:effects, :predictions)
 - `vars::Vector{Symbol}=Symbol[]`: Variables analyzed
-- `target::Symbol=:mu`: Target scale (:eta, :mu)  
+- `scale::Symbol=:response`: Target scale (:link, :response)  
 - `backend::Symbol=:ad`: Computation backend (:ad, :fd)
 - `n_obs::Int=0`: Number of observations
 - `model_type=nothing`: Type of fitted model
@@ -560,7 +560,7 @@ Build metadata dictionary for MarginsResult.
 # Examples
 ```julia
 metadata = _build_metadata(
-    type=:effects, vars=[:x1, :x2], target=:mu, 
+    type=:effects, vars=[:x1, :x2], scale=:response, 
     backend=:ad, n_obs=1000, model_type=LinearModel
 )
 ```
@@ -568,7 +568,7 @@ metadata = _build_metadata(
 function _build_metadata(; 
     type=:unknown, 
     vars=Symbol[], 
-    target=:mu, 
+    scale=:response, 
     backend=:ad,
     measure=:effect,
     n_obs=0,
@@ -584,7 +584,7 @@ function _build_metadata(;
         :type => type,
         :vars => vars,
         :n_vars => vars === nothing ? 0 : length(vars),
-        :target => target,
+        :scale => scale,
         :backend => backend,
         :measure => measure,
         :n_obs => n_obs,
@@ -605,7 +605,7 @@ using StatsBase: mode
 Compute traditional baseline contrasts for categorical variables in population margins.
 This computes the average marginal effect (AME) of changing from baseline to the modal level.
 """
-function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol, rows, target::Symbol, backend::Symbol) where L
+function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol, rows, scale::Symbol, backend::Symbol) where L
     # Get the variable data
     var_col = getproperty(engine.data_nt, var)
     
@@ -644,8 +644,8 @@ function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol
         modal_profile[var] = modal_level
         
         # Compute predictions
-        baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, target, backend)
-        modal_pred, modal_grad = _profile_prediction_with_gradient(engine, modal_profile, target, backend)
+        baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, scale, backend)
+        modal_pred, modal_grad = _profile_prediction_with_gradient(engine, modal_profile, scale, backend)
         
         # Accumulate the discrete change
         ame_sum += (modal_pred - baseline_pred)
@@ -661,26 +661,26 @@ function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol
 end
 
 """
-    _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, target, backend) -> Float64
+    _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, scale, backend) -> Float64
 
 Compute row-specific baseline contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
-function _compute_row_specific_baseline_contrast(engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, target::Symbol, backend::Symbol) where L
+function _compute_row_specific_baseline_contrast(engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, scale::Symbol, backend::Symbol) where L
     # Use the new profile contrasts implementation
-    effect, _ = compute_profile_categorical_contrast(engine, profile, var, target; backend)
+    effect, _ = compute_profile_categorical_contrast(engine, profile, var, scale; backend)
     return effect
 end
 
 """
-    _row_specific_contrast_grad_beta!(gβ_buffer, engine, refgrid_de, profile, var, target)
+    _row_specific_contrast_grad_beta!(gβ_buffer, engine, refgrid_de, profile, var, scale)
 
 Compute gradient for row-specific categorical contrast using the new profile/contrasts.jl implementation.
 Helper function for _mem_continuous_and_categorical.
 """
-function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, target::Symbol) where L
+function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, scale::Symbol) where L
     # Use the new profile contrasts implementation  
-    _, gradient = compute_profile_categorical_contrast(engine, profile, var, target; backend=:ad)
+    _, gradient = compute_profile_categorical_contrast(engine, profile, var, scale; backend=:ad)
     copyto!(gβ_buffer, gradient)
 end
 
@@ -707,7 +707,7 @@ function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, 
 end
 
 """
-    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
+    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; scale=:response, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
 
 **Architectural Rework**: Efficient single-compilation approach for profile marginal effects.
 
@@ -732,7 +732,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 - Consistent mixture routing across all profiles
 - Memory efficient with single compiled object
 """
-function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L
+function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; scale=:response, backend=:ad, measure=:effect) where L
     n_profiles = nrow(reference_grid)
     
     # Auto-detect variable types ONCE (not per profile)
@@ -779,10 +779,10 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
         for var in requested_vars
             if var ∈ continuous_vars
                 # Continuous variable: compute derivative using FormulaCompiler
-                if target === :mu
+                if scale === :response
                     FormulaCompiler.marginal_effects_mu!(engine.g_buf, refgrid_de, local_β, profile_idx;
                                                         link=local_link, backend=backend)
-                else # target === :eta
+                else # scale === :link
                     FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, local_β, profile_idx; 
                                                          backend=backend)
                 end
@@ -803,9 +803,9 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                         refgrid_compiled(output, refgrid_data, profile_idx)
                         pred_value = sum(output)  # Sum of all terms gives prediction
                         
-                        if target === :mu
+                        if scale === :response
                             estimate = marginal_effect * (var_value / pred_value)
-                        else # :eta
+                        else # :link
                             estimate = marginal_effect * (var_value / pred_value)
                         end
                     else
@@ -813,7 +813,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     end
                     
                     # Compute parameter gradient for SE using refgrid derivative evaluator
-                    if target === :mu
+                    if scale === :response
                         FormulaCompiler.me_mu_grad_beta!(engine.gβ_accumulator, refgrid_de, local_β, profile_idx, var;
                                                        link=local_link)
                     else
@@ -835,8 +835,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 profile_dict = Dict(Symbol(k) => reference_grid[profile_idx, k] for k in names(reference_grid))
                 
                 # Use existing functions - same as the old per-profile system
-                marginal_effect = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile_dict, var, target, backend)
-                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile_dict, var, target)
+                marginal_effect = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile_dict, var, scale, backend)
+                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile_dict, var, scale)
                 
                 # Apply measure transformations if needed 
                 final_effect = marginal_effect
