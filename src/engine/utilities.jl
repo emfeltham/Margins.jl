@@ -162,7 +162,7 @@ function _is_continuous_variable(col)
 end
 
 """
-    _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrames.DataFrame, Matrix)
+    _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrame, Matrix)
 
 Zero-allocation population effects (AME) using FormulaCompiler's built-in APIs.
 Implements REORG.md lines 290-348 with explicit backend selection and batch operations.
@@ -174,7 +174,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
-- `(DataFrames.DataFrame, Matrix{Float64})`: Results table and gradient matrix G
+- `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
 
 # Examples
 ```julia
@@ -182,14 +182,14 @@ df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd
 ```
 """
 function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect) where L
-    engine.de === nothing && return (DataFrames.DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
+    engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
     
-    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
     n_vars = length(engine.de.vars)
-    results = DataFrames.DataFrame(
+    results = DataFrame(
         term = Vector{String}(undef, n_vars),
         estimate = Vector{Float64}(undef, n_vars), 
         se = Vector{Float64}(undef, n_vars),
@@ -276,7 +276,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
 end
 
 """
-    _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad) -> (DataFrames.DataFrame, Matrix)
+    _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad) -> (DataFrame, Matrix)
 
 Profile Effects (MEM) Using Reference Grids with FormulaCompiler's built-in APIs.
 Implements REORG.md lines 353-486 following FormulaCompiler guide.
@@ -288,7 +288,7 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
-- `(DataFrames.DataFrame, Matrix{Float64})`: Results table and gradient matrix G
+- `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
 
 # Examples
 ```julia
@@ -313,8 +313,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
     # Calculate total number of terms (for gradient matrix sizing)
     total_terms = n_profiles * length(requested_vars)
     
-    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth (PERFORMANCE FIX)
-    results = DataFrames.DataFrame(
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    results = DataFrame(
         term = String[],
         estimate = Float64[],
         se = Float64[]
@@ -638,7 +638,7 @@ function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, 
 end
 
 """
-    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrames.DataFrame, Matrix{Float64})
+    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
 
 **Architectural Rework**: Efficient single-compilation approach for profile marginal effects.
 
@@ -649,13 +649,13 @@ Replaces the problematic per-profile compilation with a single compilation appro
 
 # Arguments
 - `engine`: Pre-built MarginsEngine with original data
-- `reference_grid`: DataFrames.DataFrame containing all profiles (with potential CategoricalMixture objects)
+- `reference_grid`: DataFrame containing all profiles (with potential CategoricalMixture objects)
 - `target`: Target scale (:mu or :eta)
 - `backend`: Computational backend (:ad or :fd) 
 - `measure`: Effect measure (:effect, :elasticity, etc.)
 
 # Returns
-- `DataFrames.DataFrame`: Results with estimates, standard errors, etc.
+- `DataFrame`: Results with estimates, standard errors, etc.
 - `Matrix{Float64}`: Gradient matrix for delta-method standard errors
 
 # Performance
@@ -677,8 +677,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     # Calculate total number of terms (for gradient matrix sizing)
     total_terms = n_profiles * length(requested_vars)
     
-    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth
-    results = DataFrames.DataFrame(
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth
+    results = DataFrame(
         term = String[],
         estimate = Float64[],
         se = Float64[]

@@ -41,6 +41,7 @@ struct MarginsResult
     metadata::Dict{Symbol, Any}
 end
 
+import DataFrames: DataFrame # explicit import to extend method
 
 # Analysis-type aware format dispatch with validation
 function DataFrame(mr::MarginsResult; format::Symbol=:auto)
@@ -162,7 +163,7 @@ function _standard_table(mr::MarginsResult)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
-    df = DataFrames.DataFrame(
+    df = DataFrame(
         variable = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 

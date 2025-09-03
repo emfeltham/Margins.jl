@@ -9,7 +9,7 @@ This function implements the complex logic for counterfactual scenarios (scenari
 subgroup analysis (groups) in population margins computation.
 """
 function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend, kwargs...)
-    results = DataFrames.DataFrame()
+    results = DataFrame()
     gradients_list = Matrix{Float64}[]
     
     # Parse specifications (unified API)
@@ -512,7 +512,7 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     se = sqrt(dot(gβ_avg, engine.Σ, gβ_avg))
     
     # Create results DataFrame
-    df = DataFrames.DataFrame(
+    df = DataFrame(
         term = [string(var)],
         estimate = [ame_val],
         se = [se],
@@ -597,7 +597,7 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     se = sqrt((G * engine.Σ * G')[1, 1])
     
     # Create results DataFrame
-    df = DataFrames.DataFrame(
+    df = DataFrame(
         term = ["AAP"],
         estimate = [mean_prediction],
         se = [se],
@@ -615,7 +615,7 @@ Helper function to append DataFrames that may have different column structures.
 This is needed for complex parallel grouping where different group specifications
 create results with different at_ columns.
 """
-function _append_results_with_missing_columns(results::DataFrames.DataFrame, new_result::DataFrames.DataFrame)
+function _append_results_with_missing_columns(results::DataFrame, new_result::DataFrame)
     if nrow(results) == 0
         return new_result
     end
