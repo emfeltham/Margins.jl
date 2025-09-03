@@ -116,12 +116,6 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
-    # Call internal implementation with NamedTuple (no more DataFrame dispatch issues)
-    return _profile_margins_impl(model, data_nt, at, type, vars, scale, backend, measure, vcov)
-end
-
-# Internal implementation that works with NamedTuple to avoid dispatch confusion
-function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation
     _validate_profile_inputs(model, data_nt, at, type, vars, scale, backend, measure, vcov)
     
@@ -130,7 +124,7 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     at_spec = at
     
     # Route to unified implementation with reference grid
-    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec)
+    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec)
 end
 
 """
@@ -158,12 +152,12 @@ function _extract_profile_values(reference_grid, result_length::Int)
 end
 
 """
-    _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> MarginsResult
+    _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> MarginsResult
 
-Unified internal implementation for both profile_margins methods.
+Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
+function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -264,23 +258,8 @@ function profile_margins(
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
-    # Call internal implementation with the reference grid directly
-    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
-end
-
-# Internal implementation for DataFrame reference grid method
-function _profile_margins_impl_with_refgrid(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation (similar to main method but with reference_grid)
-    _validate_profile_inputs_with_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
-    
-    # Route to unified implementation with reference grid directly
-    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid)
-end
-
-# Additional validation function for DataFrame reference grid method
-function _validate_profile_inputs_with_refgrid(model, data, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
-    # Standard validation 
-    _validate_profile_inputs(model, data, :means, type, vars, scale, backend, measure, vcov)  # Use :means as dummy for at validation
+    _validate_profile_inputs(model, data_nt, :means, type, vars, scale, backend, measure, vcov)  # Use :means as dummy for at validation
     
     # Reference grid specific validation
     if nrow(reference_grid) == 0
@@ -290,6 +269,9 @@ function _validate_profile_inputs_with_refgrid(model, data, reference_grid::Data
     if ncol(reference_grid) == 0
         throw(ArgumentError("reference_grid must have at least one column"))
     end
+    
+    # Route to unified implementation with reference grid directly
+    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid)
 end
 
 
@@ -309,11 +291,11 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:r
     predictions = length(engine.η_buf) >= n_profiles ? view(engine.η_buf, 1:n_profiles) : Vector{Float64}(undef, n_profiles)
     G = zeros(n_profiles, n_params)  # One row per profile
     
-    # ARCHITECTURAL FIX: Compile with reference grid (like effects rework)
+    # Compile with reference grid (like effects rework)
     # Convert reference grid to NamedTuple format for FormulaCompiler
     data_nt = Tables.columntable(reference_grid)
     
-    # Single compilation with complete reference grid (fixes CategoricalMixture routing)
+    # Single compilation with complete reference grid
     refgrid_compiled = FormulaCompiler.compile_formula(engine.model, data_nt)
     
     # Single pass over profiles via helper that takes only concrete arguments
