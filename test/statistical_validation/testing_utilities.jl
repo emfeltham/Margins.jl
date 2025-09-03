@@ -263,7 +263,7 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
     # 3. Profile Effects (MEM) - only test if we have continuous variables
     if !isempty(vars)
         try
-            profile_effects = profile_margins(model, data; type=:effects, vars=vars, at=:means)
+            profile_effects = profile_margins(model, data, means_grid(data); type=:effects, vars=vars)
             prof_effects_df = DataFrame(profile_effects)
             results[:profile_effects] = (
                 success = true,
@@ -285,7 +285,7 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
     # For categorical-only models, profile predictions at :means may fail
     # We'll test this and let it error if invalid
     try
-        profile_predictions = profile_margins(model, data; type=:predictions, at=:means)
+        profile_predictions = profile_margins(model, data, means_grid(data); type=:predictions)
         prof_pred_df = DataFrame(profile_predictions)
         results[:profile_predictions] = (
             success = true,
@@ -368,11 +368,11 @@ function test_backend_consistency(model, data; vars=nothing, rtol_estimate=1e-10
                 end
             else  # profile
                 if type == :effects
-                    ad_result = profile_margins(model, data; type=type, vars=vars, at=:means, backend=:ad)
-                    fd_result = profile_margins(model, data; type=type, vars=vars, at=:means, backend=:fd)
+                    ad_result = profile_margins(model, data, means_grid(data); type=type, vars=vars, backend=:ad)
+                    fd_result = profile_margins(model, data, means_grid(data); type=type, vars=vars, backend=:fd)
                 else
-                    ad_result = profile_margins(model, data; type=type, at=:means, backend=:ad)
-                    fd_result = profile_margins(model, data; type=type, at=:means, backend=:fd)
+                    ad_result = profile_margins(model, data, means_grid(data); type=type, backend=:ad)
+                    fd_result = profile_margins(model, data, means_grid(data); type=type, backend=:fd)
                 end
             end
             

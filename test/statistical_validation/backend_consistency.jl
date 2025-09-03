@@ -102,8 +102,8 @@ include("testing_utilities.jl")
         end
         
         @testset "Profile Effects - AD vs FD" begin
-            ad_result = profile_margins(model, df; type=:effects, vars=[:x, :z], at=:means, backend=:ad)
-            fd_result = profile_margins(model, df; type=:effects, vars=[:x, :z], at=:means, backend=:fd)
+            ad_result = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x, :z], backend=:ad)
+            fd_result = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x, :z], backend=:fd)
             
             ad_df = DataFrame(ad_result)
             fd_df = DataFrame(fd_result)
@@ -116,8 +116,8 @@ include("testing_utilities.jl")
         end
         
         @testset "Profile Predictions - AD vs FD" begin
-            ad_result = profile_margins(model, df; type=:predictions, at=:means, backend=:ad)
-            fd_result = profile_margins(model, df; type=:predictions, at=:means, backend=:fd)
+            ad_result = profile_margins(model, df, means_grid(df); type=:predictions, backend=:ad)
+            fd_result = profile_margins(model, df, means_grid(df); type=:predictions, backend=:fd)
             
             ad_df = DataFrame(ad_result)
             fd_df = DataFrame(fd_result)
