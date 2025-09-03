@@ -19,11 +19,15 @@ Fields:
 result = population_margins(model, data; type=:effects, vars=[:x1, :x2])
 DataFrame(result)                     # Auto-detect format (:standard for population)
 DataFrame(result; format=:compact)    # Just estimates and SEs
-DataFrame(result; format=:confidence) # Confidence intervals
+DataFrame(result; format=:confidence) # Confidence intervals only
+
+# Confidence intervals with ci_alpha parameter
+result = population_margins(model, data; type=:effects, vars=[:x1, :x2], ci_alpha=0.05)
+DataFrame(result)                     # Includes ci_lower and ci_upper columns
 
 result.estimates      # Access raw estimates
 result.gradients      # Access parameter gradients
-result.metadata       # Access analysis metadata
+result.metadata       # Access analysis metadata (includes :alpha when ci_alpha specified)
 ```
 """
 struct MarginsResult
@@ -106,9 +110,7 @@ end
 function _show_stata_table(io::IO, mr::MarginsResult)
     # Calculate confidence intervals
     alpha = get(mr.metadata, :alpha, 0.05)
-    z = quantile(Normal(), 1 - alpha/2)
-    lower = mr.estimates .- z .* mr.standard_errors
-    upper = mr.estimates .+ z .* mr.standard_errors
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
     # Column widths for alignment
     var_width = max(8, maximum(length.(mr.terms)) + 1)
@@ -157,6 +159,14 @@ function sprintf(fmt::String, x::Float64)
     end
 end
 
+# Utility function for confidence interval calculation
+function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64)
+    z = quantile(Normal(), 1 - alpha/2)
+    lower = estimates .- z .* standard_errors
+    upper = estimates .+ z .* standard_errors
+    return lower, upper
+end
+
 # Format-specific table builders
 
 function _standard_table(mr::MarginsResult)
@@ -170,6 +180,14 @@ function _standard_table(mr::MarginsResult)
         t_stat = t_stats,
         p_value = p_values
     )
+    
+    # Add confidence intervals if alpha is specified in metadata
+    if haskey(mr.metadata, :alpha)
+        alpha = mr.metadata[:alpha]
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+        df[!, :ci_lower] = lower
+        df[!, :ci_upper] = upper
+    end
     
     # CRITICAL: Use actual subgroup sizes, never fallback to incorrect quantities
     if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
@@ -197,13 +215,13 @@ end
 
 function _confidence_table(mr::MarginsResult)
     alpha = get(mr.metadata, :alpha, 0.05)
-    z = quantile(Normal(), 1 - alpha/2)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
     df = DataFrame(
         term = mr.terms,
         estimate = mr.estimates,
-        lower = mr.estimates .- z .* mr.standard_errors,
-        upper = mr.estimates .+ z .* mr.standard_errors
+        lower = lower,
+        upper = upper
     )
     _add_structural_columns!(df, mr)
     return df
@@ -212,7 +230,7 @@ end
 function _profile_table(mr::MarginsResult)
     # Profile-first organization: reference grid with results attached
     alpha = get(mr.metadata, :alpha, 0.05)
-    z = quantile(Normal(), 1 - alpha/2)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
     df = DataFrames.DataFrame()
     
@@ -227,8 +245,8 @@ function _profile_table(mr::MarginsResult)
     df[!, :term] = mr.terms  # Clean variable names
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
-    df[!, :lower] = mr.estimates .- z .* mr.standard_errors
-    df[!, :upper] = mr.estimates .+ z .* mr.standard_errors
+    df[!, :lower] = lower
+    df[!, :upper] = upper
     
     # Add sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)

@@ -7,7 +7,7 @@
 # Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, target=:mu, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -26,9 +26,9 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
   - Defaults to all continuous variables (numeric types except Bool)
-- `target::Symbol=:mu`: Target scale for computation
-  - `:mu` - Response scale (default, applies inverse link function)  
-  - `:eta` - Linear predictor scale (link scale)
+- `scale::Symbol=:response`: Target scale for computation
+  - `:response` - Response scale (default, applies inverse link function)  
+  - `:link` - Linear predictor scale (link scale)
 - `backend::Symbol=:ad`: Computational backend
   - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
   - `:fd` - Finite differences (zero allocation, production-ready)
@@ -43,6 +43,14 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - Simple: `:education` or `[:region, :gender]` for categorical grouping
   - Continuous: `(:income, 4)` for quartiles, `(:age, [25, 50, 75])` for thresholds
   - Nested: `(main=:region, within=:gender)` for hierarchical grouping
+- `contrasts::Symbol=:baseline`: Contrast type for categorical variables
+  - `:baseline` - Compare each level to reference level
+  - `:pairwise` - All pairwise comparisons between levels  
+- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+  - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
+- `vcov=GLM.vcov`: Covariance matrix function for standard errors
+  - `GLM.vcov` - Model-based covariance matrix (default)
+  - Custom function for robust/clustered standard errors
 
 # Returns
 `MarginsResult` containing:
@@ -62,27 +70,30 @@ result = population_margins(model, data)
 DataFrame(result)  # Convert to DataFrame
 
 # Specific variables with response-scale effects
-result = population_margins(model, data; vars=[:x1, :x2], target=:mu)
+result = population_margins(model, data; vars=[:x1, :x2], scale=:response)
 
-# Average elasticities (NEW in Phase 3)
+# Average elasticities
 result = population_margins(model, data; vars=[:x1, :x2], measure=:elasticity)
 
-# Semi-elasticities (NEW in Phase 3)
+# Semi-elasticities
 result = population_margins(model, data; vars=[:x1], measure=:semielasticity_dyex)
 
 # Average adjusted predictions  
 result = population_margins(model, data; type=:predictions)
 
+# Confidence intervals (99% confidence level)
+result = population_margins(model, data; vars=[:x1], ci_alpha=0.01)
+DataFrame(result)  # Includes ci_lower and ci_upper columns
+
 # Counterfactual analysis: effects when x2 is set to 0 vs 1
 result = population_margins(model, data; vars=[:x1], scenarios=Dict(:x2 => [0, 1]))
 
-# Grouping examples (NEW unified syntax)
+# Grouping examples
 result = population_margins(model, data; groups=:education)  # By education level
 result = population_margins(model, data; groups=(:income, 4))  # By income quartiles  
-result = population_margins(model, data; groups=(main=:region, within=:gender))  # Nested
 
 # High-performance production use with finite differences
-result = population_margins(model, data; backend=:ad, target=:eta)
+result = population_margins(model, data; backend=:fd, scale=:link)
 ```
 
 # Frequency-Weighted Categorical Handling
@@ -98,7 +109,7 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_level::Float64=0.95, vcov=GLM.vcov)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov)
     # Input validation with new scale parameter
     _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov)
     # Single data conversion (consistent format throughout)
@@ -111,21 +122,20 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         vars = nothing  # Not needed for predictions
     end
     
-    # Proper backend selection
-    # Population margins default to :ad for consistency across all functions
-    recommended_backend = backend === :auto ? :ad : backend
-    
     # Build zero-allocation engine with caching (including vcov function)
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if scenarios !== nothing || groups !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend=recommended_backend)
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend)
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; scale, backend=recommended_backend, measure)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, scale, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        df, G = _ame_continuous_and_categorical(engine, data_nt; scale, backend, measure)  # → AME (both continuous and categorical)
+        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = ci_alpha
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -138,7 +148,10 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+        
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = ci_alpha
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population

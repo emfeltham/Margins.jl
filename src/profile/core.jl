@@ -29,9 +29,9 @@ or adjusted predictions at specific profiles (APM/APR).
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
   - Defaults to all continuous variables (numeric types except Bool)
-- `target::Symbol=:mu`: Target scale for computation
-  - `:mu` - Response scale (default, applies inverse link function)  
-  - `:eta` - Linear predictor scale (link scale)
+- `scale::Symbol=:response`: Target scale for computation
+  - `:response` - Response scale (default, applies inverse link function)  
+  - `:link` - Linear predictor scale (link scale)
 - `backend::Symbol=:ad`: Computational backend
   - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
   - `:fd` - Finite differences (zero allocation, production-ready)
@@ -40,6 +40,14 @@ or adjusted predictions at specific profiles (APM/APR).
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
   - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
+- `contrasts::Symbol=:baseline`: Contrast type for categorical variables
+  - `:baseline` - Compare each level to reference level
+  - `:pairwise` - All pairwise comparisons between levels
+- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+  - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
+- `vcov=GLM.vcov`: Covariance matrix function for standard errors
+  - `GLM.vcov` - Model-based covariance matrix (default)
+  - Custom function for robust/clustered standard errors
 
 # Returns
 `MarginsResult` containing:
@@ -112,7 +120,7 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:auto, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_level::Float64=0.95, vcov=GLM.vcov)
+function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov)
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
@@ -124,7 +132,7 @@ function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=not
     at_spec = at
     
     # Route to unified implementation with reference grid
-    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec)
+    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec, ci_alpha)
 end
 
 """
@@ -157,7 +165,7 @@ end
 Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
+function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -165,23 +173,22 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         vars = nothing  # Not needed for predictions
     end
     
-    # Proper backend selection:
-    # Profile margins default to :ad for speed/accuracy at specific points
-    recommended_backend = backend === :auto ? :ad : backend
-    
     # Build zero-allocation engine with caching (including vcov function)
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
-        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend=recommended_backend, measure)  # → MEM/MER
-        metadata = _build_metadata(; type, vars, scale, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
+        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend, measure)  # → MEM/MER
+        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(reference_grid)
+        
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = ci_alpha
         
         # Extract raw components from DataFrame  
         estimates = df.estimate
@@ -195,12 +202,15 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
         df, G = _profile_predictions(engine, reference_grid; scale)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend=recommended_backend, n_obs=length(first(data_nt)), 
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection  
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(reference_grid)
+        
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = ci_alpha
         
         # Extract raw components from DataFrame
         estimates = df.estimate
@@ -253,7 +263,7 @@ result = profile_margins(model, data, reference_grid; type=:predictions)
 function profile_margins(
     model, data, reference_grid::DataFrame;
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
-    backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov
+    backend::Symbol=:ad, measure::Symbol=:effect, ci_alpha::Float64=0.05, vcov=GLM.vcov
 )
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
@@ -271,7 +281,7 @@ function profile_margins(
     end
     
     # Route to unified implementation with reference grid directly
-    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid)
+    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid, ci_alpha)
 end
 
 
