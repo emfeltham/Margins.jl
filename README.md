@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
 
-**Marginal effects for Julia with Stata-like functionality and efficient computation.**
+A Julia package for computing marginal effects with Stata-compatible functionality.
 
 Built on the JuliaStats ecosystem:
 - [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) - Formulas and model specification
@@ -10,18 +10,17 @@ Built on the JuliaStats ecosystem:
 - [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) - Zero-allocation high-performance evaluation
 - [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) - Robust/clustered standard errors
 
-## Performance Highlights
+## Overview
 
-**Performance:**
-- **Profile margins**: O(1) constant time scaling
-- **Population margins**: O(n) scaling with minimal allocations
-- **Zero-allocation core**: FormulaCompiler.jl foundation provides efficient computation
-- **Scalability**: Tested on datasets from 1k to 1M+ observations
+**Computational Characteristics:**
+- Profile margins: O(1) constant time complexity
+- Population margins: O(n) linear scaling
+- Tested on datasets ranging from 1k to 1M+ observations
 
-**Statistical Correctness:**
-- Delta-method standard errors with full covariance matrix integration
-- Bootstrap-validated statistical correctness across all GLM families
-- Suitable for econometric research and academic publication
+**Statistical Properties:**
+- Delta-method standard errors using full covariance matrices
+- Bootstrap-validated estimates across GLM families
+- Designed for econometric research applications
 
 ## Quick Start
 
@@ -44,7 +43,7 @@ DataFrame(ame_result)
 
 ## Core API: Clean 2×2 Framework
 
-Margins.jl uses a **conceptually clear 2×2 framework** that replaces confusing statistical acronyms:
+Margins.jl implements a 2×2 computational framework:
 
 ### **Population vs Profile**
 - **`population_margins()`**: Effects/predictions averaged over your observed sample (AME/AAP equivalent)
@@ -62,7 +61,7 @@ profile_margins(model, data; type=:effects)         # MEM: Marginal Effects at M
 profile_margins(model, data; type=:predictions)     # APM: Adjusted Predictions at Means
 ```
 
-## Advanced Features
+## Additional Features
 
 ### **Elasticities** 
 ```julia
@@ -90,10 +89,10 @@ profile_margins(model, data; at=Dict(:group => mix("A" => 0.3, "B" => 0.7)), typ
 ### **Grouping and Stratification**
 ```julia
 # Compute effects within groups
-population_margins(model, data; type=:effects, over=:region)
+population_margins(model, data; type=:effects, groups=:region)
 
-# Nested grouping
-population_margins(model, data; type=:effects, over=[:region, :year])
+# Cross-tabulated grouping
+population_margins(model, data; type=:effects, groups=[:region, :year])
 ```
 
 ## Complete Example: Logistic Regression
@@ -142,19 +141,18 @@ treatment_effects = profile_margins(model, df;
 println(DataFrame(treatment_effects))
 ```
 
-## Statistical Correctness Guarantees
+## Statistical Implementation
 
-Margins.jl follows a **zero-tolerance policy for statistical errors**:
+Margins.jl implements standard econometric methods:
 
-- All standard errors use proper delta-method with full covariance matrix  
-- No independence assumptions unless theoretically justified  
-- Error-first policy: Package errors rather than providing invalid results  
-- Bootstrap validated: All statistical computations verified against bootstrap estimates  
-- Suitable for econometric research and academic publication  
+- Standard errors computed using the delta method with full covariance matrices
+- No independence assumptions beyond those of the underlying model
+- Statistical computations validated against bootstrap estimates
+- Designed for econometric research applications  
 
 ## JuliaStats Integration
 
-**Seamless integration with the broader ecosystem:**
+Integration with the JuliaStats ecosystem:
 - **Models**: Complete support for GLM.jl (lm, glm) and MixedModels.jl (LinearMixedModel, GeneralizedLinearMixedModel)
 - **Data**: Accepts any Tables.jl-compatible data (DataFrame, CSV, etc.)  
 - **Covariance**: Uses `vcov(model)` by default, supports CovarianceMatrices.jl for robust/clustered SEs
@@ -181,16 +179,30 @@ For users familiar with Stata's `margins` command:
 | `margins` | `population_margins(model, data; type=:predictions)` |
 | `margins, at(means)` | `profile_margins(model, data; at=:means, type=:predictions)` |
 
-## Performance Comparison
+## Performance Notes
 
-**Profile margins performance** (constant time regardless of dataset size):
-- Approximately 100-200μs per analysis across different dataset sizes
-- Substantial performance improvement over naive implementations
+**Profile margins**: Constant time complexity, approximately 100-200μs per analysis.
 
-**Population margins performance** (O(n) scaling):
-- Low per-row computational cost for effects and predictions
-- Minimal memory allocation footprint
+**Population margins**: Linear time complexity with low per-row computational cost.
+
+## Acknowledgements
+
+Margins.jl builds upon decades of research and development in marginal effects computation. I gratefully acknowledge the foundational work of:
+
+**Related Work:**
+- The Stata development team for their pioneering `margins` command, which established the conceptual framework and computational standards that inspired this package
+- Vincent Arel-Bundock and colleagues for the [`marginaleffects`](https://marginaleffects.com/) R package, whose comprehensive approach to effect computation and cross-language consistency influenced our design
+- Russell Lenth and colleagues for the [`emmeans`](https://rvlenth.github.io/emmeans/) R package, whose treatment of estimated marginal means provided valuable insights for profile-based computations
+
+**Julia Ecosystem Contributors:**
+- The maintainers of [`Effects.jl`](https://github.com/beacon-biosignals/Effects.jl) for their early work on marginal effects in Julia and establishing Julia-specific conventions
+- The [JuliaStats](https://github.com/JuliaStats) community, particularly the authors of:
+  - [`GLM.jl`](https://github.com/JuliaStats/GLM.jl) for robust GLM implementation and the prediction interface that Margins.jl extends
+  - [`MixedModels.jl`](https://github.com/JuliaData/MixedModels.jl) for comprehensive mixed-effects modeling support
+  - [`StatsModels.jl`](https://github.com/JuliaStats/StatsModels.jl) for the formula interface and model abstraction that enables seamless integration
+
+Margins.jl builds on this foundation with efficient computation and comprehensive statistical validation for the Julia ecosystem.
 
 ---
 
-*Margins.jl: Statistical rigor meets Julia performance for econometric analysis.*
+*Developed by Eric Feltham (eric.feltham@aya.yale.edu)*
