@@ -16,18 +16,18 @@ using Margins
     # Logistic regression
     m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
 
-    # Population marginal effects on eta and mu scales
-    res_eta = population_margins(m, df; type=:effects, vars=[:x], target=:eta)
-    res_mu  = population_margins(m, df; type=:effects, vars=[:x], target=:mu)
-    @test nrow(DataFrame(res_eta)) == 1
-    @test nrow(DataFrame(res_mu)) == 1
-    @test all(isfinite, DataFrame(res_eta).estimate)
-    @test all(isfinite, DataFrame(res_mu).estimate)
+    # Population marginal effects on link and response scales
+    res_link = population_margins(m, df; type=:effects, vars=[:x], scale=:link)
+    res_response  = population_margins(m, df; type=:effects, vars=[:x], scale=:response)
+    @test nrow(DataFrame(res_link)) == 1
+    @test nrow(DataFrame(res_response)) == 1
+    @test all(isfinite, DataFrame(res_link).estimate)
+    @test all(isfinite, DataFrame(res_response).estimate)
 
     # Profile effects at means
-    profile_mu = profile_margins(m, df; type=:effects, vars=[:x], target=:mu, at=:means)
-    @test nrow(DataFrame(profile_mu)) == 1
-    @test all(isfinite, DataFrame(profile_mu).estimate)
+    profile_response = profile_margins(m, df; type=:effects, vars=[:x], scale=:response, at=:means)
+    @test nrow(DataFrame(profile_response)) == 1
+    @test all(isfinite, DataFrame(profile_response).estimate)
 
     # Population and Profile predictions
     pop_pred = population_margins(m, df; type=:predictions, scale=:response)
@@ -40,20 +40,20 @@ using Margins
 
     # Test basic functionality without grouping (grouping parameters removed)
     # The current API doesn't support the 'over' and 'by' parameters as expected
-    basic_effects = population_margins(m, df; type=:effects, vars=[:x], target=:mu)
+    basic_effects = population_margins(m, df; type=:effects, vars=[:x], scale=:response)
     @test nrow(DataFrame(basic_effects)) == 1  # Single effect estimate
     @test DataFrame(basic_effects).term[1] == "x"  # Term should be string "x"
 
-    # Test different target scales
-    ame_eta = population_margins(m, df; type=:effects, vars=[:x], target=:eta)
-    @test nrow(DataFrame(ame_eta)) == 1
-    ame_mu = population_margins(m, df; type=:effects, vars=[:x], target=:mu)
-    @test nrow(DataFrame(ame_mu)) == 1
+    # Test different scales
+    ame_link = population_margins(m, df; type=:effects, vars=[:x], scale=:link)
+    @test nrow(DataFrame(ame_link)) == 1
+    ame_response = population_margins(m, df; type=:effects, vars=[:x], scale=:response)
+    @test nrow(DataFrame(ame_response)) == 1
     # Effects should be different on different scales for GLM
-    @test DataFrame(ame_eta).estimate[1] != DataFrame(ame_mu).estimate[1]
+    @test DataFrame(ame_link).estimate[1] != DataFrame(ame_response).estimate[1]
 
     # Test multiple variables
-    multi_effects = population_margins(m, df; type=:effects, vars=[:x, :z], target=:mu)
+    multi_effects = population_margins(m, df; type=:effects, vars=[:x, :z], scale=:response)
     @test nrow(DataFrame(multi_effects)) == 2  # Two variables
     @test Set(DataFrame(multi_effects).term) == Set(["x", "z"])
 end

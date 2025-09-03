@@ -718,8 +718,6 @@ include("analytical_se_validation.jl")
             framework_result = test_2x2_framework_quadrants(model, df_int; test_name="GLM with Integers")
             @test framework_result.all_successful
             @test framework_result.all_finite
-            
-            @info "✓ GLM with integer variables: All 2×2 quadrants validated analytically"
         end
     end
     
@@ -730,8 +728,6 @@ include("analytical_se_validation.jl")
         
         # Include the comprehensive bootstrap validation tests
         include("bootstrap_validation_tests.jl")
-        
-        @info "✓ Bootstrap SE validation: Empirical verification complete"
     end
     
     # === TIER 8: Robust SE Integration (Phase 3, Tier 4) ===
@@ -741,8 +737,6 @@ include("analytical_se_validation.jl")
         
         # Include the comprehensive robust SE validation tests
         include("robust_se_tests.jl")
-        
-        @info "✓ Robust SE integration: Econometric functionality complete"
     end
     
     # === TIER 9: Specialized SE Cases (Phase 4, Tier 5) ===
@@ -752,27 +746,5 @@ include("analytical_se_validation.jl")
         
         # Include the specialized SE validation tests
         include("specialized_se_tests.jl")
-        
-        @info "✓ Specialized SE cases: Advanced edge cases complete"
     end
-
-    @info "🎉 COMPREHENSIVE STATISTICAL VALIDATION: COMPLETE"
-    @info "All 2×2 framework quadrants validated across 9 tiers:"
-    @info "  Tier 1: Direct coefficient validation ✓"
-    @info "  Tier 1A: Analytical SE validation - Linear models ✓"
-    @info "  Tier 1B: Analytical SE validation - GLM chain rules ✓"
-    @info "  Tier 2: Function transformations ✓" 
-    @info "  Tier 3: GLM chain rules ✓"
-    @info "  Tier 4: Systematic model coverage ✓"
-    @info "  Tier 5: Edge cases and robustness ✓"
-    @info "  Tier 6: Integer variable systematic coverage ✓"
-    @info "  Tier 7: Bootstrap SE validation - Empirical verification ✓"
-    @info "  Tier 8: Robust SE integration - Econometric functionality ✓"
-    @info "  Tier 9: Specialized SE cases - Advanced edge cases ✓ (NEW)"
-    @info ""
-    @info "Margins.jl statistical correctness: PUBLICATION-GRADE ✓"
-    @info "Standard errors: ANALYTICAL + EMPIRICAL + ROBUST + SPECIALIZED VALIDATED ✓"
-    @info "FormulaCompiler-level integer variable support: VALIDATED ✓"
-    @info "CovarianceMatrices.jl integration: READY FOR PRODUCTION ✓"
-    @info "Phase 4 Tier 5 specialized cases: COMPLETE ✓ (NEW)"
 end

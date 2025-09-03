@@ -1,0 +1,968 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:22
+  Test threw exception
+  Expression: nrow(res_eta.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:22 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:23
+  Test threw exception
+  Expression: nrow(res_mu.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:23 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:24
+  Test threw exception
+  Expression: all(isfinite, res_eta.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:24 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:24 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:25
+  Test threw exception
+  Expression: all(isfinite, res_mu.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:25 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:25 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:29
+  Test threw exception
+  Expression: nrow(profile_mu.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:29 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:30
+  Test threw exception
+  Expression: all(isfinite, profile_mu.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:30 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:30 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:34
+  Test threw exception
+  Expression: nrow(pop_pred.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:34 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:36
+  Test threw exception
+  Expression: nrow(profile_pred.table) == 3
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:36 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:39
+  Test threw exception
+  Expression: nrow(profile_avg.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:39 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+GLM basics: Population and Profile Margins: Error During Test at /Users/emf/.julia/dev/Margins/test/test_glm_basic.jl:6
+  Got exception outside of a @test
+  ArgumentError: over parameter must be a NamedTuple or Vector{Symbol} for grouping analysis
+  Stacktrace:
+    [1] _validate_population_inputs(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Symbol, measure::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:192
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Symbol, measure::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:101
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_glm_basic.jl:42 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] top-level scope
+      @ ~/.julia/dev/Margins/test/test_glm_basic.jl:7
+    [6] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:12 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [10] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [11] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [12] _start()
+      @ Base ./client.jl:531
+Profile margins (at) semantics: Error During Test at /Users/emf/.julia/dev/Margins/test/test_profiles.jl:20
+  Test threw exception
+  Expression: nrow(profile1.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:20 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:7
+Profile margins (at) semantics: Error During Test at /Users/emf/.julia/dev/Margins/test/test_profiles.jl:21
+  Test threw exception
+  Expression: nrow(profile2.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:21 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:7
+Profile margins (at) semantics: Error During Test at /Users/emf/.julia/dev/Margins/test/test_profiles.jl:26
+  Test threw exception
+  Expression: nrow(profile_spec.table) == 3
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:26 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] top-level scope
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:7
+Profile margins (at) semantics: Error During Test at /Users/emf/.julia/dev/Margins/test/test_profiles.jl:27
+  Test threw exception
+  Expression: haskey(profile_spec.table, Symbol("at_", :x))
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:27 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:27 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] top-level scope
+     @ ~/.julia/dev/Margins/test/test_profiles.jl:7
+Profile margins (at) semantics: Error During Test at /Users/emf/.julia/dev/Margins/test/test_profiles.jl:6
+  Got exception outside of a @test
+  MethodError: Cannot `convert` an object of type String to an object of type Float64
+  The function `convert` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    convert(::Type{S}, !Matched::CategoricalValue) where S<:Union{AbstractChar, AbstractString, Number}
+     @ CategoricalArrays ~/.julia/packages/CategoricalArrays/0yLZN/src/value.jl:92
+    convert(::Type{T}, !Matched::T) where T
+     @ Base Base.jl:126
+    convert(::Type{T}, !Matched::AbstractChar) where T<:Number
+     @ Base char.jl:185
+    ...
+  
+  Stacktrace:
+    [1] execute_op
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:224 [inlined]
+    [2] execute_ops_recursive
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:181 [inlined]
+    [3] execute_ops_recursive
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:182 [inlined]
+    [4] execute_ops
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:167 [inlined]
+    [5] (::FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.MixtureContrastOp{:g, (4, 5), (1, 2, 3), (0.295, 0.33, 0.375)}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}, FormulaCompiler.CopyOp{4, 4}, FormulaCompiler.CopyOp{5, 5}}, 5, 5})(output::Vector{Float64}, data::@NamedTuple{y::Vector{Float64}, z::Vector{Float64}, g::Vector{Margins.CategoricalMixture{Any}}, x::Vector{String}}, row_idx::Int64)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:92
+    [6] modelrow!(row_vec::Vector{Float64}, compiled::FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.MixtureContrastOp{:g, (4, 5), (1, 2, 3), (0.295, 0.33, 0.375)}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}, FormulaCompiler.CopyOp{4, 4}, FormulaCompiler.CopyOp{5, 5}}, 5, 5}, data::@NamedTuple{y::Vector{Float64}, z::Vector{Float64}, g::Vector{Margins.CategoricalMixture{Any}}, x::Vector{String}}, row_idx::Int64)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/evaluation/modelrow.jl:98
+    [7] compute_predictions_batch!
+      @ ~/.julia/dev/Margins/src/computation/predictions.jl:121 [inlined]
+    [8] _profile_predictions_impl!(predictions::SubArray{Float64, 1, Vector{Float64}, Tuple{UnitRange{Int64}}, true}, G::Matrix{Float64}, compiled::FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.MixtureContrastOp{:g, (4, 5), (1, 2, 3), (0.295, 0.33, 0.375)}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}, FormulaCompiler.CopyOp{4, 4}, FormulaCompiler.CopyOp{5, 5}}, 5, 5}, row_buf::Vector{Float64}, β::Vector{Float64}, link::IdentityLink, data_nt::@NamedTuple{y::Vector{Float64}, z::Vector{Float64}, g::Vector{Margins.CategoricalMixture{Any}}, x::Vector{String}}, target::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:280
+    [9] _profile_predictions(engine::Margins.MarginsEngine{IdentityLink}, reference_grid::DataFrame; target::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:242
+   [10] _profile_margins_impl(::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, ::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, z::Vector{Float64}, g::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, ::Dict{Symbol, String}, ::Symbol, ::Nothing, ::Symbol, ::Symbol, ::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:157
+   [11] profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; at::Dict{Symbol, String}, type::Symbol, vars::Nothing, target::Symbol, backend::Symbol, measure::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:122
+   [12] macro expansion
+      @ ~/.julia/dev/Margins/test/test_profiles.jl:30 [inlined]
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [14] top-level scope
+      @ ~/.julia/dev/Margins/test/test_profiles.jl:7
+   [15] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [16] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:13 [inlined]
+   [17] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [18] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [19] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [20] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [21] _start()
+      @ Base ./client.jl:531
+Over parameter: Error During Test at /Users/emf/.julia/dev/Margins/test/test_grouping.jl:20
+  Got exception outside of a @test
+  ArgumentError: over parameter must be a NamedTuple or Vector{Symbol} for grouping analysis
+  Stacktrace:
+    [1] _validate_population_inputs(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Symbol, measure::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:192
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Symbol, measure::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:101
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:21 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:21 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:14 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+By parameter: Error During Test at /Users/emf/.julia/dev/Margins/test/test_grouping.jl:28
+  Got exception outside of a @test
+  MethodError: no method matching _ame_continuous_and_categorical(::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}; target::Symbol, backend::Symbol, measure::Symbol, by::Symbol)
+  This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+  
+  Closest candidates are:
+    _ame_continuous_and_categorical(::Margins.MarginsEngine, ::NamedTuple; target, backend, measure) got unsupported keyword argument "by"
+     @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:185
+  
+  Stacktrace:
+    [1] kwerr(::@NamedTuple{target::Symbol, backend::Symbol, measure::Symbol, by::Symbol}, ::Function, ::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}})
+      @ Base ./error.jl:165
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{by::Symbol})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:125
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:29 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:29 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:14 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Within parameter: Error During Test at /Users/emf/.julia/dev/Margins/test/test_grouping.jl:36
+  Got exception outside of a @test
+  MethodError: no method matching _ame_continuous_and_categorical(::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}; target::Symbol, backend::Symbol, measure::Symbol, within::Symbol)
+  This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+  
+  Closest candidates are:
+    _ame_continuous_and_categorical(::Margins.MarginsEngine, ::NamedTuple; target, backend, measure) got unsupported keyword argument "within"
+     @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:185
+  
+  Stacktrace:
+    [1] kwerr(::@NamedTuple{target::Symbol, backend::Symbol, measure::Symbol, within::Symbol}, ::Function, ::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}})
+      @ Base ./error.jl:165
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{within::Symbol})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:125
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:37 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:37 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:14 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Multiple grouping: Error During Test at /Users/emf/.julia/dev/Margins/test/test_grouping.jl:44
+  Got exception outside of a @test
+  MethodError: no method matching setindex!(::DataFrame, ::String, ::typeof(!), ::Symbol)
+  The function `setindex!` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    setindex!(::DataFrame, !Matched::AbstractVector, ::typeof(!), ::Union{AbstractString, Signed, Symbol, Unsigned})
+     @ DataFrames ~/.julia/packages/DataFrames/C5AEe/src/dataframe/dataframe.jl:674
+    setindex!(::DataFrame, ::Any, !Matched::Integer, ::Union{AbstractString, Signed, Symbol, Unsigned})
+     @ DataFrames ~/.julia/packages/DataFrames/C5AEe/src/dataframe/dataframe.jl:693
+    setindex!(::DataFrame, !Matched::AbstractDataFrame, ::typeof(!), !Matched::AbstractVector)
+     @ DataFrames ~/.julia/packages/DataFrames/C5AEe/src/dataframe/dataframe.jl:757
+    ...
+  
+  Stacktrace:
+    [1] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, at::Nothing, over::Vector{Symbol}; type::Symbol, target::Symbol, backend::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:36
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Vector{Symbol}, measure::Symbol, kwargs::@Kwargs{})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:121
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:45 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:45 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_grouping.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:14 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Categorical marginal effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:21
+  Test threw exception
+  Expression: nrow(cat_effects.table) >= 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:21 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:20 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Categorical marginal effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:22
+  Test threw exception
+  Expression: all(isfinite, cat_effects.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:22 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:22 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:20 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Categorical marginal effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:23
+  Test threw exception
+  Expression: "cat_var" in cat_effects.table.term
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:23 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:20 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Binary categorical effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:29
+  Test threw exception
+  Expression: nrow(binary_effects.table) >= 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:29 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:28 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+┌ Warning: Skipping robust SE test: CovarianceMatrices not available or other error: MethodError(Core.kwcall, ((target = :mu, backend = :ad, measure = :effect, vcov = HR1()), Margins._ame_continuous_and_categorical, Margins.MarginsEngine{LogitLink}(FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3}((FormulaCompiler.ConstantOp{1.0, 1}(), FormulaCompiler.LoadOp{:x, 2}(), FormulaCompiler.LoadOp{:z, 3}(), FormulaCompiler.CopyOp{1, 1}(), FormulaCompiler.CopyOp{2, 2}(), FormulaCompiler.CopyOp{3, 3}()), [1.0, -2.2432847657468735, -1.2455448957662363]), FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3, @NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.FDOverrideVector, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}(FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3}((FormulaCompiler.ConstantOp{1.0, 1}(), FormulaCompiler.LoadOp{:x, 2}(), FormulaCompiler.LoadOp{:z, 3}(), FormulaCompiler.CopyOp{1, 1}(), FormulaCompiler.CopyOp{2, 2}(), FormulaCompiler.CopyOp{3, 3}()), [1.0, -2.2432847657468735, -1.2455448957662363]), (y = Bool[0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], x = [1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432847657468735], z = [-2.0850403641529387, -1.0272903585792263, -0.7431095869972788, -1.1037593794432314, -0.014894064580039952, 0.7566400730565224, -0.34616458405033174, 0.19332616952394346, 1.7049840937947098, 0.00042222120909916807, -1.8174273737958468, -0.8893518752614951, -1.1191399165933316, 0.5270206054217899, -0.23184234148867225, 0.588556909880039, 0.6450975708496578, -1.2285869522856472, -2.6023048686185883, 0.15099695684177022, -0.6126196395352268, -0.3101570011107497, 0.3344531545767711, 0.526465719374126, 0.653236173189104, 0.5722039574533349, -0.34803343595465, 0.3739173933788274, -0.032917081695145886, 0.22279773334120231, 0.129409362664695, 0.7319850048862708, 1.0470925979815309, -0.521578332283403, -0.1679402461580042, -0.5607094673298565, 1.6332580890346107, -0.6557578417360079, -0.8247599208576163, -0.28325985706658086, -0.7410933550575428, -1.7707564173894004, -0.3213115494363777, 0.8587983612222057, -2.0882371348366555, 1.5199594882576197, 0.38779421508766926, -2.7402696158890385, 0.6912825297919843, 2.324237938322681, 0.32266006776748646, -0.15951611473447125, -0.48494862552672646, -0.7381839444160242, -0.22416008227408757, 2.330942673954756, -0.6587390464379462, -0.044212555992568216, -0.1192232560681671, -0.5829725900771651, -0.8625797283204574, -1.869956994607143, -0.6169796277477968, 1.7209113410524328, -0.02624230875763607, -1.0000614449481051, 1.5184896934567684, 1.052480248465717, -0.5962826942665881, 0.06146535298242884, 0.6160165193664607, -1.3247730127621895, 1.7277937705733566, -0.9972722983506108, 0.6596256190115635, 0.6267327220228265, 1.419091366601008, -0.4077420229984929, -1.1230576216822414, 0.19210096049873393, -1.112717832117119, 1.0869422297968119, 0.024135047824738548, 0.1779293577647506, 0.28945706317678627, 1.15385204425419, 0.2870796406518293, 1.1424421158921039, 0.5413036545417684, 1.0851668257960498, 0.7379511635253359, 1.550049059077266, 0.8716169547865161, 0.17809607306377093, 0.9754688930482432, -1.7442863235330996, 0.42689939604406196, -0.06651810133322517, -0.602104075340254, 0.6798005323037567, -0.674584767446727, -0.4513034577164329, -0.39309540622015465, -0.3098842841268254, 2.028289601224332, -1.4368362299107658, 0.28116716318317864, -0.6080693447478903, 0.2203675191081463, 0.8115744545684986, -0.32356771433549236, 0.1102486417700369, 0.7505611827159431, 0.5128713664256123, 0.17460643122515535, 0.4834315756534306, -0.2972804533772169, -0.945339618788703, 0.4240485542774693, 0.3519121731101256, -1.525572146722383, 0.06933996697282802, 0.1069705801051875, 0.36337586244944725, 0.43190628225371025, -1.3654824280514473, 1.3342877796847687, -0.34843847037570486, -2.0842606669426074, -1.054518685476339, -0.07084436389952144, 0.6950478566943733, 0.9076766555165758, -0.16078189099138232, -1.2693025762517063, 0.9366897938025077, -0.7196168493665394, -1.1334089865426886, 0.3705229964254276, -1.3059997238887813, 0.01521492849823345, -0.38864099492247567, 1.5269908620628274, 0.06034396804550971, 0.8596143344652758, -0.0069698353132489664, 0.5377004132762364, -0.23537084901573155, -0.06271720266418306, -1.2992027296833655, 0.09970228463607628, -1.3065887133096357, 0.24207181357975283, -0.19688448591525867, 0.7934772723167636, 0.6612397159674998, 1.6414177449909406, 0.39784216491907093, -0.3850236960444509, 0.24089366104987567, 0.23330351622981296, -0.27188287888957097, 1.1544784525666156, -1.2599535108862792, 0.7474735715591995, -2.5370056235268046, -1.4050912192596745, -0.848597512021804, -1.57673497597063, -2.7330072450078724, 1.344166126292757, -0.5178328414811352, -1.0368161450740632, 0.6302251132078822, -0.16948852347422474, -1.5557063207357251, 0.6725758726097119, -1.037241941478974, 1.373970295660399, -0.6846786019162496, 0.056320732867915, -0.8286561650918808, -0.1592424166932931, 0.5524194611887456, -0.08629299203093858, 0.003232210627519402, -0.02689469582205406, 0.3213025842126427, -0.5971937990063068, -1.8504001036376276, 0.17019431338164548, -0.29303242195062784, 0.39207622839295286, -0.17423191114138303, -3.0762385179991067, 0.5829794085034877, -1.797266735221523, -0.7947294121886257, 0.1756980328096011, -1.2455448957662363], cluster = CategoricalValue{Int64, UInt32}[9, 4, 2, 1, 10, 10, 3, 3, 10, 8, 10, 9, 6, 9, 7, 6, 10, 7, 6, 1, 3, 1, 3, 5, 5, 2, 6, 7, 7, 3, 3, 9, 8, 8, 5, 7, 9, 9, 8, 1, 10, 6, 5, 10, 8, 8, 7, 10, 10, 8, 1, 3, 6, 7, 10, 2, 10, 9, 8, 8, 6, 3, 10, 3, 10, 1, 2, 4, 1, 9, 6, 6, 5, 3, 10, 3, 8, 5, 10, 7, 6, 3, 2, 4, 9, 2, 10, 2, 4, 1, 1, 10, 8, 8, 5, 7, 7, 5, 3, 7, 10, 5, 3, 10, 7, 7, 8, 6, 4, 1, 1, 7, 8, 3, 2, 7, 9, 4, 9, 10, 6, 8, 1, 9, 2, 4, 3, 1, 4, 3, 9, 1, 6, 9, 9, 5, 2, 7, 8, 7, 7, 6, 2, 10, 5, 8, 10, 4, 3, 4, 3, 3, 4, 10, 2, 9, 7, 2, 1, 5, 7, 5, 10, 9, 6, 8, 8, 5, 1, 10, 9, 7, 7, 4, 3, 6, 2, 1, 9, 5, 10, 8, 6, 3, 2, 5, 2, 9, 10, 2, 6, 1, 9, 2, 1, 3, 7, 4, 8, 9]), [:x], [5.0e-324], FormulaCompiler.FDOverrideVector[[1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432983498555963]], (y = Bool[0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], x = [1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432983498555963], z = [-2.0850403641529387, -1.0272903585792263, -0.7431095869972788, -1.1037593794432314, -0.014894064580039952, 0.7566400730565224, -0.34616458405033174, 0.19332616952394346, 1.7049840937947098, 0.00042222120909916807, -1.8174273737958468, -0.8893518752614951, -1.1191399165933316, 0.5270206054217899, -0.23184234148867225, 0.588556909880039, 0.6450975708496578, -1.2285869522856472, -2.6023048686185883, 0.15099695684177022, -0.6126196395352268, -0.3101570011107497, 0.3344531545767711, 0.526465719374126, 0.653236173189104, 0.5722039574533349, -0.34803343595465, 0.3739173933788274, -0.032917081695145886, 0.22279773334120231, 0.129409362664695, 0.7319850048862708, 1.0470925979815309, -0.521578332283403, -0.1679402461580042, -0.5607094673298565, 1.6332580890346107, -0.6557578417360079, -0.8247599208576163, -0.28325985706658086, -0.7410933550575428, -1.7707564173894004, -0.3213115494363777, 0.8587983612222057, -2.0882371348366555, 1.5199594882576197, 0.38779421508766926, -2.7402696158890385, 0.6912825297919843, 2.324237938322681, 0.32266006776748646, -0.15951611473447125, -0.48494862552672646, -0.7381839444160242, -0.22416008227408757, 2.330942673954756, -0.6587390464379462, -0.044212555992568216, -0.1192232560681671, -0.5829725900771651, -0.8625797283204574, -1.869956994607143, -0.6169796277477968, 1.7209113410524328, -0.02624230875763607, -1.0000614449481051, 1.5184896934567684, 1.052480248465717, -0.5962826942665881, 0.06146535298242884, 0.6160165193664607, -1.3247730127621895, 1.7277937705733566, -0.9972722983506108, 0.6596256190115635, 0.6267327220228265, 1.419091366601008, -0.4077420229984929, -1.1230576216822414, 0.19210096049873393, -1.112717832117119, 1.0869422297968119, 0.024135047824738548, 0.1779293577647506, 0.28945706317678627, 1.15385204425419, 0.2870796406518293, 1.1424421158921039, 0.5413036545417684, 1.0851668257960498, 0.7379511635253359, 1.550049059077266, 0.8716169547865161, 0.17809607306377093, 0.9754688930482432, -1.7442863235330996, 0.42689939604406196, -0.06651810133322517, -0.602104075340254, 0.6798005323037567, -0.674584767446727, -0.4513034577164329, -0.39309540622015465, -0.3098842841268254, 2.028289601224332, -1.4368362299107658, 0.28116716318317864, -0.6080693447478903, 0.2203675191081463, 0.8115744545684986, -0.32356771433549236, 0.1102486417700369, 0.7505611827159431, 0.5128713664256123, 0.17460643122515535, 0.4834315756534306, -0.2972804533772169, -0.945339618788703, 0.4240485542774693, 0.3519121731101256, -1.525572146722383, 0.06933996697282802, 0.1069705801051875, 0.36337586244944725, 0.43190628225371025, -1.3654824280514473, 1.3342877796847687, -0.34843847037570486, -2.0842606669426074, -1.054518685476339, -0.07084436389952144, 0.6950478566943733, 0.9076766555165758, -0.16078189099138232, -1.2693025762517063, 0.9366897938025077, -0.7196168493665394, -1.1334089865426886, 0.3705229964254276, -1.3059997238887813, 0.01521492849823345, -0.38864099492247567, 1.5269908620628274, 0.06034396804550971, 0.8596143344652758, -0.0069698353132489664, 0.5377004132762364, -0.23537084901573155, -0.06271720266418306, -1.2992027296833655, 0.09970228463607628, -1.3065887133096357, 0.24207181357975283, -0.19688448591525867, 0.7934772723167636, 0.6612397159674998, 1.6414177449909406, 0.39784216491907093, -0.3850236960444509, 0.24089366104987567, 0.23330351622981296, -0.27188287888957097, 1.1544784525666156, -1.2599535108862792, 0.7474735715591995, -2.5370056235268046, -1.4050912192596745, -0.848597512021804, -1.57673497597063, -2.7330072450078724, 1.344166126292757, -0.5178328414811352, -1.0368161450740632, 0.6302251132078822, -0.16948852347422474, -1.5557063207357251, 0.6725758726097119, -1.037241941478974, 1.373970295660399, -0.6846786019162496, 0.056320732867915, -0.8286561650918808, -0.1592424166932931, 0.5524194611887456, -0.08629299203093858, 0.003232210627519402, -0.02689469582205406, 0.3213025842126427, -0.5971937990063068, -1.8504001036376276, 0.17019431338164548, -0.29303242195062784, 0.39207622839295286, -0.17423191114138303, -3.0762385179991067, 0.5829794085034877, -1.797266735221523, -0.7947294121886257, 0.1756980328096011, -1.2455448957662363], cluster = CategoricalValue{Int64, UInt32}[9, 4, 2, 1, 10, 10, 3, 3, 10, 8, 10, 9, 6, 9, 7, 6, 10, 7, 6, 1, 3, 1, 3, 5, 5, 2, 6, 7, 7, 3, 3, 9, 8, 8, 5, 7, 9, 9, 8, 1, 10, 6, 5, 10, 8, 8, 7, 10, 10, 8, 1, 3, 6, 7, 10, 2, 10, 9, 8, 8, 6, 3, 10, 3, 10, 1, 2, 4, 1, 9, 6, 6, 5, 3, 10, 3, 8, 5, 10, 7, 6, 3, 2, 4, 9, 2, 10, 2, 4, 1, 1, 10, 8, 8, 5, 7, 7, 5, 3, 7, 10, 5, 3, 10, 7, 7, 8, 6, 4, 1, 1, 7, 8, 3, 2, 7, 9, 4, 9, 10, 6, 8, 1, 9, 2, 4, 3, 1, 4, 3, 9, 1, 6, 9, 9, 5, 2, 7, 8, 7, 7, 6, 2, 10, 5, 8, 10, 4, 3, 4, 3, 3, 4, 10, 2, 9, 7, 2, 1, 5, 7, 5, 10, 9, 6, 8, 8, 5, 1, 10, 9, 7, 7, 4, 3, 6, 2, 1, 9, 5, 10, 8, 6, 3, 2, 5, 2, 9, 10, 2, 6, 1, 9, 2, 1, 3, 7, 4, 8, 9]), FormulaCompiler.DualCacheDict(Dict{DataType, FormulaCompiler.DualCache}()), FormulaCompiler.UnifiedCompiled{ForwardDiff.Dual{Nothing, Float64, 1}, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3}((FormulaCompiler.ConstantOp{1.0, 1}(), FormulaCompiler.LoadOp{:x, 2}(), FormulaCompiler.LoadOp{:z, 3}(), FormulaCompiler.CopyOp{1, 1}(), FormulaCompiler.CopyOp{2, 2}(), FormulaCompiler.CopyOp{3, 3}()), ForwardDiff.Dual{Nothing, Float64, 1}[Dual{Nothing}(1.0,0.0), Dual{Nothing}(-2.2432847657468735,1.0), Dual{Nothing}(-1.2455448957662363,0.0)]), ForwardDiff.Dual{Nothing, Float64, 1}[Dual{Nothing}(1.0,0.0), Dual{Nothing}(-2.2432847657468735,1.0), Dual{Nothing}(-1.2455448957662363,0.0)], FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}[[Dual{Nothing}(1.3786337500809231,0.0), Dual{Nothing}(1.3385142894651247,0.0), Dual{Nothing}(0.37392476794716495,0.0), Dual{Nothing}(-0.5830647026389231,0.0), Dual{Nothing}(0.041209194073643984,0.0), Dual{Nothing}(-0.8291489985507582,0.0), Dual{Nothing}(-0.7915585618239962,0.0), Dual{Nothing}(-0.4978959113162895,0.0), Dual{Nothing}(-0.532468787560903,0.0), Dual{Nothing}(2.4114705067727105,0.0), Dual{Nothing}(-0.41246442802323735,0.0), Dual{Nothing}(1.5707092208596094,0.0), Dual{Nothing}(0.9842151338910431,0.0), Dual{Nothing}(0.5756872195406343,0.0), Dual{Nothing}(-0.8874105467802021,0.0), Dual{Nothing}(0.17240234160518172,0.0), Dual{Nothing}(0.6530257090872761,0.0), Dual{Nothing}(-1.1836746026451233,0.0), Dual{Nothing}(0.5997536284327809,0.0), Dual{Nothing}(-0.0026686255506824658,0.0), Dual{Nothing}(0.13491169456496166,0.0), Dual{Nothing}(-1.5927630727565256,0.0), Dual{Nothing}(-0.1922893432900737,0.0), Dual{Nothing}(0.05052504302126808,0.0), Dual{Nothing}(-0.5590241557554194,0.0), Dual{Nothing}(0.5645047315307602,0.0), Dual{Nothing}(1.2987554446430223,0.0), Dual{Nothing}(1.7599283991830774,0.0), Dual{Nothing}(-0.3620427777144126,0.0), Dual{Nothing}(-0.7916989635505602,0.0), Dual{Nothing}(0.6048300383734724,0.0), Dual{Nothing}(2.7685422570248406,0.0), Dual{Nothing}(-1.3140353166373575,0.0), Dual{Nothing}(-1.397103169830246,0.0), Dual{Nothing}(0.7186316493670808,0.0), Dual{Nothing}(0.3974203973749614,0.0), Dual{Nothing}(-0.1485827979402081,0.0), Dual{Nothing}(-0.34381304950515973,0.0), Dual{Nothing}(0.09329425401099815,0.0), Dual{Nothing}(-0.5333464454646024,0.0), Dual{Nothing}(-0.8851790135452494,0.0), Dual{Nothing}(-0.24800915170701632,0.0), Dual{Nothing}(-1.4059349840202044,0.0), Dual{Nothing}(-1.029058690836033,0.0), Dual{Nothing}(-0.18658333012093123,0.0), Dual{Nothing}(-1.3806086515414893,0.0), Dual{Nothing}(-1.0150418849855098,0.0), Dual{Nothing}(-0.7210780561982354,0.0), Dual{Nothing}(-0.1947926552091395,0.0), Dual{Nothing}(0.2932430887083074,0.0), Dual{Nothing}(-0.8401696542017689,0.0), Dual{Nothing}(-1.017899898456564,0.0), Dual{Nothing}(0.24651492414824858,0.0), Dual{Nothing}(-0.09424270268570241,0.0), Dual{Nothing}(-0.9668896500109253,0.0), Dual{Nothing}(-0.26310599387305167,0.0), Dual{Nothing}(0.3795610308517061,0.0), Dual{Nothing}(0.689769463423817,0.0), Dual{Nothing}(0.3678458895164794,0.0), Dual{Nothing}(1.7765376641924904,0.0), Dual{Nothing}(-1.6398850679191057,0.0), Dual{Nothing}(-0.7547106596979791,0.0), Dual{Nothing}(-0.2675124907028486,0.0), Dual{Nothing}(0.16625716617087874,0.0), Dual{Nothing}(0.02410419800705741,0.0), Dual{Nothing}(-1.3338679242765834,0.0), Dual{Nothing}(0.27965025898328444,0.0), Dual{Nothing}(1.5919178959517784,0.0), Dual{Nothing}(-1.147483780503363,0.0), Dual{Nothing}(-2.1603930607613115,0.0), Dual{Nothing}(0.06573260706892552,0.0), Dual{Nothing}(-0.7392175541514464,0.0), Dual{Nothing}(-1.212334730468986,0.0), Dual{Nothing}(-0.7592090550165697,0.0), Dual{Nothing}(0.12513630315679725,0.0), Dual{Nothing}(0.5437954050958345,0.0), Dual{Nothing}(-1.6626577211378886,0.0), Dual{Nothing}(-1.1869035814529771,0.0), Dual{Nothing}(-0.9405974319804489,0.0), Dual{Nothing}(-1.0662381829688712,0.0), Dual{Nothing}(1.1185504345165755,0.0), Dual{Nothing}(0.8109644509122794,0.0), Dual{Nothing}(3.003641813919958,0.0), Dual{Nothing}(0.9810196499196863,0.0), Dual{Nothing}(-0.5788228588378383,0.0), Dual{Nothing}(0.23932311023125008,0.0), Dual{Nothing}(0.5704164340366688,0.0), Dual{Nothing}(0.778742179119182,0.0), Dual{Nothing}(-1.348689707716629,0.0), Dual{Nothing}(-1.6143169891173794,0.0), Dual{Nothing}(0.5160870828595369,0.0), Dual{Nothing}(-1.0029092778470423,0.0), Dual{Nothing}(0.10739946494055806,0.0), Dual{Nothing}(1.3376980570706563,0.0), Dual{Nothing}(0.5160285106908271,0.0), Dual{Nothing}(0.11822541766439275,0.0), Dual{Nothing}(0.6777063916175979,0.0), Dual{Nothing}(0.1729517187092178,0.0), Dual{Nothing}(-0.5518862596639036,0.0), Dual{Nothing}(0.37382500909381766,0.0), Dual{Nothing}(-0.4183682008861384,0.0), Dual{Nothing}(-0.8051825297997153,0.0), Dual{Nothing}(-0.5396801401425266,0.0), Dual{Nothing}(-1.0904009447316616,0.0), Dual{Nothing}(0.31973646324364297,0.0), Dual{Nothing}(0.4489911850193585,0.0), Dual{Nothing}(-0.7768906222686068,0.0), Dual{Nothing}(-1.9325584133760798,0.0), Dual{Nothing}(1.011562524842437,0.0), Dual{Nothing}(-0.8715879685523633,0.0), Dual{Nothing}(-2.311193088447649,0.0), Dual{Nothing}(-0.43307820676177317,0.0), Dual{Nothing}(1.193207827277219,0.0), Dual{Nothing}(-0.6532946213324587,0.0), Dual{Nothing}(0.08373987680356114,0.0), Dual{Nothing}(-0.9732736145056727,0.0), Dual{Nothing}(-0.15623142074368912,0.0), Dual{Nothing}(0.930413685443454,0.0), Dual{Nothing}(-1.011957348408198,0.0), Dual{Nothing}(-1.1922034947588211,0.0), Dual{Nothing}(0.8880908268010511,0.0), Dual{Nothing}(-0.35495426230791943,0.0), Dual{Nothing}(-1.1581597740083576,0.0), Dual{Nothing}(1.8226536015117423,0.0), Dual{Nothing}(1.3340411826805225,0.0), Dual{Nothing}(0.39157832069883486,0.0), Dual{Nothing}(-0.11489181539985306,0.0), Dual{Nothing}(0.9359886899428111,0.0), Dual{Nothing}(-0.09650811199328822,0.0), Dual{Nothing}(0.7011953422883995,0.0), Dual{Nothing}(-0.5504257877785411,0.0), Dual{Nothing}(1.5791181113332708,0.0), Dual{Nothing}(-0.6379776616987783,0.0), Dual{Nothing}(0.6267725413983589,0.0), Dual{Nothing}(0.34102005241989897,0.0), Dual{Nothing}(1.336928911233565,0.0), Dual{Nothing}(-0.10902728151641009,0.0), Dual{Nothing}(-0.025601414247729912,0.0), Dual{Nothing}(-0.39898739415883366,0.0), Dual{Nothing}(-0.8421548021726252,0.0), Dual{Nothing}(0.8598001289788095,0.0), Dual{Nothing}(3.173301426971881,0.0), Dual{Nothing}(-0.8002131895945269,0.0), Dual{Nothing}(0.8577436889333699,0.0), Dual{Nothing}(-0.36815937043377944,0.0), Dual{Nothing}(1.723190920194858,0.0), Dual{Nothing}(-0.43075394148147983,0.0), Dual{Nothing}(-0.10338117453898195,0.0), Dual{Nothing}(-1.858144016404955,0.0), Dual{Nothing}(-0.8936737883376005,0.0), Dual{Nothing}(0.4418032920037531,0.0), Dual{Nothing}(-1.1999830190418275,0.0), Dual{Nothing}(-1.461016395241358,0.0), Dual{Nothing}(-0.22113799251687996,0.0), Dual{Nothing}(0.910201677000483,0.0), Dual{Nothing}(-0.11278893059404721,0.0), Dual{Nothing}(-1.0871882458812676,0.0), Dual{Nothing}(0.8068266706897268,0.0), Dual{Nothing}(0.10540124381835785,0.0), Dual{Nothing}(-0.5114763795778505,0.0), Dual{Nothing}(0.6250652757816657,0.0), Dual{Nothing}(1.950282601448339,0.0), Dual{Nothing}(1.639511950690734,0.0), Dual{Nothing}(-1.4270113655405483,0.0), Dual{Nothing}(1.0942480849658467,0.0), Dual{Nothing}(0.2399520255289788,0.0), Dual{Nothing}(0.09315073421073733,0.0), Dual{Nothing}(0.21720517719077695,0.0), Dual{Nothing}(-0.33386813335831217,0.0), Dual{Nothing}(0.11189842381525393,0.0), Dual{Nothing}(0.6214172123517339,0.0), Dual{Nothing}(-0.3218857497138383,0.0), Dual{Nothing}(0.4028462156063203,0.0), Dual{Nothing}(1.7052911570948168,0.0), Dual{Nothing}(-1.3388375325863662,0.0), Dual{Nothing}(-0.0016154172613461841,0.0), Dual{Nothing}(1.5708975725161118,0.0), Dual{Nothing}(-0.4615712265038257,0.0), Dual{Nothing}(0.32875093930415095,0.0), Dual{Nothing}(-0.33900932942380535,0.0), Dual{Nothing}(1.0750773392330017,0.0), Dual{Nothing}(1.092274468345443,0.0), Dual{Nothing}(-0.4407885172090749,0.0), Dual{Nothing}(1.107079343282651,0.0), Dual{Nothing}(-1.301802571745099,0.0), Dual{Nothing}(-0.9784347927195904,0.0), Dual{Nothing}(-0.005247597095293201,0.0), Dual{Nothing}(-0.4671386892103881,0.0), Dual{Nothing}(-0.07454333884035565,0.0), Dual{Nothing}(0.21580735154942118,0.0), Dual{Nothing}(-0.9011070159458345,0.0), Dual{Nothing}(0.6770565938006323,0.0), Dual{Nothing}(-1.0811822417360035,0.0), Dual{Nothing}(-0.0774879415468989,0.0), Dual{Nothing}(-0.27322008870606207,0.0), Dual{Nothing}(0.7028162443233674,0.0), Dual{Nothing}(-0.750092179670353,0.0), Dual{Nothing}(0.9878645354500039,0.0), Dual{Nothing}(-1.9849461146939076,0.0), Dual{Nothing}(-2.2432847657468735,1.0)]], (y = Bool[0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], x = ForwardDiff.Dual{Nothing, Float64, 1}[Dual{Nothing}(1.3786337500809231,0.0), Dual{Nothing}(1.3385142894651247,0.0), Dual{Nothing}(0.37392476794716495,0.0), Dual{Nothing}(-0.5830647026389231,0.0), Dual{Nothing}(0.041209194073643984,0.0), Dual{Nothing}(-0.8291489985507582,0.0), Dual{Nothing}(-0.7915585618239962,0.0), Dual{Nothing}(-0.4978959113162895,0.0), Dual{Nothing}(-0.532468787560903,0.0), Dual{Nothing}(2.4114705067727105,0.0), Dual{Nothing}(-0.41246442802323735,0.0), Dual{Nothing}(1.5707092208596094,0.0), Dual{Nothing}(0.9842151338910431,0.0), Dual{Nothing}(0.5756872195406343,0.0), Dual{Nothing}(-0.8874105467802021,0.0), Dual{Nothing}(0.17240234160518172,0.0), Dual{Nothing}(0.6530257090872761,0.0), Dual{Nothing}(-1.1836746026451233,0.0), Dual{Nothing}(0.5997536284327809,0.0), Dual{Nothing}(-0.0026686255506824658,0.0), Dual{Nothing}(0.13491169456496166,0.0), Dual{Nothing}(-1.5927630727565256,0.0), Dual{Nothing}(-0.1922893432900737,0.0), Dual{Nothing}(0.05052504302126808,0.0), Dual{Nothing}(-0.5590241557554194,0.0), Dual{Nothing}(0.5645047315307602,0.0), Dual{Nothing}(1.2987554446430223,0.0), Dual{Nothing}(1.7599283991830774,0.0), Dual{Nothing}(-0.3620427777144126,0.0), Dual{Nothing}(-0.7916989635505602,0.0), Dual{Nothing}(0.6048300383734724,0.0), Dual{Nothing}(2.7685422570248406,0.0), Dual{Nothing}(-1.3140353166373575,0.0), Dual{Nothing}(-1.397103169830246,0.0), Dual{Nothing}(0.7186316493670808,0.0), Dual{Nothing}(0.3974203973749614,0.0), Dual{Nothing}(-0.1485827979402081,0.0), Dual{Nothing}(-0.34381304950515973,0.0), Dual{Nothing}(0.09329425401099815,0.0), Dual{Nothing}(-0.5333464454646024,0.0), Dual{Nothing}(-0.8851790135452494,0.0), Dual{Nothing}(-0.24800915170701632,0.0), Dual{Nothing}(-1.4059349840202044,0.0), Dual{Nothing}(-1.029058690836033,0.0), Dual{Nothing}(-0.18658333012093123,0.0), Dual{Nothing}(-1.3806086515414893,0.0), Dual{Nothing}(-1.0150418849855098,0.0), Dual{Nothing}(-0.7210780561982354,0.0), Dual{Nothing}(-0.1947926552091395,0.0), Dual{Nothing}(0.2932430887083074,0.0), Dual{Nothing}(-0.8401696542017689,0.0), Dual{Nothing}(-1.017899898456564,0.0), Dual{Nothing}(0.24651492414824858,0.0), Dual{Nothing}(-0.09424270268570241,0.0), Dual{Nothing}(-0.9668896500109253,0.0), Dual{Nothing}(-0.26310599387305167,0.0), Dual{Nothing}(0.3795610308517061,0.0), Dual{Nothing}(0.689769463423817,0.0), Dual{Nothing}(0.3678458895164794,0.0), Dual{Nothing}(1.7765376641924904,0.0), Dual{Nothing}(-1.6398850679191057,0.0), Dual{Nothing}(-0.7547106596979791,0.0), Dual{Nothing}(-0.2675124907028486,0.0), Dual{Nothing}(0.16625716617087874,0.0), Dual{Nothing}(0.02410419800705741,0.0), Dual{Nothing}(-1.3338679242765834,0.0), Dual{Nothing}(0.27965025898328444,0.0), Dual{Nothing}(1.5919178959517784,0.0), Dual{Nothing}(-1.147483780503363,0.0), Dual{Nothing}(-2.1603930607613115,0.0), Dual{Nothing}(0.06573260706892552,0.0), Dual{Nothing}(-0.7392175541514464,0.0), Dual{Nothing}(-1.212334730468986,0.0), Dual{Nothing}(-0.7592090550165697,0.0), Dual{Nothing}(0.12513630315679725,0.0), Dual{Nothing}(0.5437954050958345,0.0), Dual{Nothing}(-1.6626577211378886,0.0), Dual{Nothing}(-1.1869035814529771,0.0), Dual{Nothing}(-0.9405974319804489,0.0), Dual{Nothing}(-1.0662381829688712,0.0), Dual{Nothing}(1.1185504345165755,0.0), Dual{Nothing}(0.8109644509122794,0.0), Dual{Nothing}(3.003641813919958,0.0), Dual{Nothing}(0.9810196499196863,0.0), Dual{Nothing}(-0.5788228588378383,0.0), Dual{Nothing}(0.23932311023125008,0.0), Dual{Nothing}(0.5704164340366688,0.0), Dual{Nothing}(0.778742179119182,0.0), Dual{Nothing}(-1.348689707716629,0.0), Dual{Nothing}(-1.6143169891173794,0.0), Dual{Nothing}(0.5160870828595369,0.0), Dual{Nothing}(-1.0029092778470423,0.0), Dual{Nothing}(0.10739946494055806,0.0), Dual{Nothing}(1.3376980570706563,0.0), Dual{Nothing}(0.5160285106908271,0.0), Dual{Nothing}(0.11822541766439275,0.0), Dual{Nothing}(0.6777063916175979,0.0), Dual{Nothing}(0.1729517187092178,0.0), Dual{Nothing}(-0.5518862596639036,0.0), Dual{Nothing}(0.37382500909381766,0.0), Dual{Nothing}(-0.4183682008861384,0.0), Dual{Nothing}(-0.8051825297997153,0.0), Dual{Nothing}(-0.5396801401425266,0.0), Dual{Nothing}(-1.0904009447316616,0.0), Dual{Nothing}(0.31973646324364297,0.0), Dual{Nothing}(0.4489911850193585,0.0), Dual{Nothing}(-0.7768906222686068,0.0), Dual{Nothing}(-1.9325584133760798,0.0), Dual{Nothing}(1.011562524842437,0.0), Dual{Nothing}(-0.8715879685523633,0.0), Dual{Nothing}(-2.311193088447649,0.0), Dual{Nothing}(-0.43307820676177317,0.0), Dual{Nothing}(1.193207827277219,0.0), Dual{Nothing}(-0.6532946213324587,0.0), Dual{Nothing}(0.08373987680356114,0.0), Dual{Nothing}(-0.9732736145056727,0.0), Dual{Nothing}(-0.15623142074368912,0.0), Dual{Nothing}(0.930413685443454,0.0), Dual{Nothing}(-1.011957348408198,0.0), Dual{Nothing}(-1.1922034947588211,0.0), Dual{Nothing}(0.8880908268010511,0.0), Dual{Nothing}(-0.35495426230791943,0.0), Dual{Nothing}(-1.1581597740083576,0.0), Dual{Nothing}(1.8226536015117423,0.0), Dual{Nothing}(1.3340411826805225,0.0), Dual{Nothing}(0.39157832069883486,0.0), Dual{Nothing}(-0.11489181539985306,0.0), Dual{Nothing}(0.9359886899428111,0.0), Dual{Nothing}(-0.09650811199328822,0.0), Dual{Nothing}(0.7011953422883995,0.0), Dual{Nothing}(-0.5504257877785411,0.0), Dual{Nothing}(1.5791181113332708,0.0), Dual{Nothing}(-0.6379776616987783,0.0), Dual{Nothing}(0.6267725413983589,0.0), Dual{Nothing}(0.34102005241989897,0.0), Dual{Nothing}(1.336928911233565,0.0), Dual{Nothing}(-0.10902728151641009,0.0), Dual{Nothing}(-0.025601414247729912,0.0), Dual{Nothing}(-0.39898739415883366,0.0), Dual{Nothing}(-0.8421548021726252,0.0), Dual{Nothing}(0.8598001289788095,0.0), Dual{Nothing}(3.173301426971881,0.0), Dual{Nothing}(-0.8002131895945269,0.0), Dual{Nothing}(0.8577436889333699,0.0), Dual{Nothing}(-0.36815937043377944,0.0), Dual{Nothing}(1.723190920194858,0.0), Dual{Nothing}(-0.43075394148147983,0.0), Dual{Nothing}(-0.10338117453898195,0.0), Dual{Nothing}(-1.858144016404955,0.0), Dual{Nothing}(-0.8936737883376005,0.0), Dual{Nothing}(0.4418032920037531,0.0), Dual{Nothing}(-1.1999830190418275,0.0), Dual{Nothing}(-1.461016395241358,0.0), Dual{Nothing}(-0.22113799251687996,0.0), Dual{Nothing}(0.910201677000483,0.0), Dual{Nothing}(-0.11278893059404721,0.0), Dual{Nothing}(-1.0871882458812676,0.0), Dual{Nothing}(0.8068266706897268,0.0), Dual{Nothing}(0.10540124381835785,0.0), Dual{Nothing}(-0.5114763795778505,0.0), Dual{Nothing}(0.6250652757816657,0.0), Dual{Nothing}(1.950282601448339,0.0), Dual{Nothing}(1.639511950690734,0.0), Dual{Nothing}(-1.4270113655405483,0.0), Dual{Nothing}(1.0942480849658467,0.0), Dual{Nothing}(0.2399520255289788,0.0), Dual{Nothing}(0.09315073421073733,0.0), Dual{Nothing}(0.21720517719077695,0.0), Dual{Nothing}(-0.33386813335831217,0.0), Dual{Nothing}(0.11189842381525393,0.0), Dual{Nothing}(0.6214172123517339,0.0), Dual{Nothing}(-0.3218857497138383,0.0), Dual{Nothing}(0.4028462156063203,0.0), Dual{Nothing}(1.7052911570948168,0.0), Dual{Nothing}(-1.3388375325863662,0.0), Dual{Nothing}(-0.0016154172613461841,0.0), Dual{Nothing}(1.5708975725161118,0.0), Dual{Nothing}(-0.4615712265038257,0.0), Dual{Nothing}(0.32875093930415095,0.0), Dual{Nothing}(-0.33900932942380535,0.0), Dual{Nothing}(1.0750773392330017,0.0), Dual{Nothing}(1.092274468345443,0.0), Dual{Nothing}(-0.4407885172090749,0.0), Dual{Nothing}(1.107079343282651,0.0), Dual{Nothing}(-1.301802571745099,0.0), Dual{Nothing}(-0.9784347927195904,0.0), Dual{Nothing}(-0.005247597095293201,0.0), Dual{Nothing}(-0.4671386892103881,0.0), Dual{Nothing}(-0.07454333884035565,0.0), Dual{Nothing}(0.21580735154942118,0.0), Dual{Nothing}(-0.9011070159458345,0.0), Dual{Nothing}(0.6770565938006323,0.0), Dual{Nothing}(-1.0811822417360035,0.0), Dual{Nothing}(-0.0774879415468989,0.0), Dual{Nothing}(-0.27322008870606207,0.0), Dual{Nothing}(0.7028162443233674,0.0), Dual{Nothing}(-0.750092179670353,0.0), Dual{Nothing}(0.9878645354500039,0.0), Dual{Nothing}(-1.9849461146939076,0.0), Dual{Nothing}(-2.2432847657468735,1.0)], z = [-2.0850403641529387, -1.0272903585792263, -0.7431095869972788, -1.1037593794432314, -0.014894064580039952, 0.7566400730565224, -0.34616458405033174, 0.19332616952394346, 1.7049840937947098, 0.00042222120909916807, -1.8174273737958468, -0.8893518752614951, -1.1191399165933316, 0.5270206054217899, -0.23184234148867225, 0.588556909880039, 0.6450975708496578, -1.2285869522856472, -2.6023048686185883, 0.15099695684177022, -0.6126196395352268, -0.3101570011107497, 0.3344531545767711, 0.526465719374126, 0.653236173189104, 0.5722039574533349, -0.34803343595465, 0.3739173933788274, -0.032917081695145886, 0.22279773334120231, 0.129409362664695, 0.7319850048862708, 1.0470925979815309, -0.521578332283403, -0.1679402461580042, -0.5607094673298565, 1.6332580890346107, -0.6557578417360079, -0.8247599208576163, -0.28325985706658086, -0.7410933550575428, -1.7707564173894004, -0.3213115494363777, 0.8587983612222057, -2.0882371348366555, 1.5199594882576197, 0.38779421508766926, -2.7402696158890385, 0.6912825297919843, 2.324237938322681, 0.32266006776748646, -0.15951611473447125, -0.48494862552672646, -0.7381839444160242, -0.22416008227408757, 2.330942673954756, -0.6587390464379462, -0.044212555992568216, -0.1192232560681671, -0.5829725900771651, -0.8625797283204574, -1.869956994607143, -0.6169796277477968, 1.7209113410524328, -0.02624230875763607, -1.0000614449481051, 1.5184896934567684, 1.052480248465717, -0.5962826942665881, 0.06146535298242884, 0.6160165193664607, -1.3247730127621895, 1.7277937705733566, -0.9972722983506108, 0.6596256190115635, 0.6267327220228265, 1.419091366601008, -0.4077420229984929, -1.1230576216822414, 0.19210096049873393, -1.112717832117119, 1.0869422297968119, 0.024135047824738548, 0.1779293577647506, 0.28945706317678627, 1.15385204425419, 0.2870796406518293, 1.1424421158921039, 0.5413036545417684, 1.0851668257960498, 0.7379511635253359, 1.550049059077266, 0.8716169547865161, 0.17809607306377093, 0.9754688930482432, -1.7442863235330996, 0.42689939604406196, -0.06651810133322517, -0.602104075340254, 0.6798005323037567, -0.674584767446727, -0.4513034577164329, -0.39309540622015465, -0.3098842841268254, 2.028289601224332, -1.4368362299107658, 0.28116716318317864, -0.6080693447478903, 0.2203675191081463, 0.8115744545684986, -0.32356771433549236, 0.1102486417700369, 0.7505611827159431, 0.5128713664256123, 0.17460643122515535, 0.4834315756534306, -0.2972804533772169, -0.945339618788703, 0.4240485542774693, 0.3519121731101256, -1.525572146722383, 0.06933996697282802, 0.1069705801051875, 0.36337586244944725, 0.43190628225371025, -1.3654824280514473, 1.3342877796847687, -0.34843847037570486, -2.0842606669426074, -1.054518685476339, -0.07084436389952144, 0.6950478566943733, 0.9076766555165758, -0.16078189099138232, -1.2693025762517063, 0.9366897938025077, -0.7196168493665394, -1.1334089865426886, 0.3705229964254276, -1.3059997238887813, 0.01521492849823345, -0.38864099492247567, 1.5269908620628274, 0.06034396804550971, 0.8596143344652758, -0.0069698353132489664, 0.5377004132762364, -0.23537084901573155, -0.06271720266418306, -1.2992027296833655, 0.09970228463607628, -1.3065887133096357, 0.24207181357975283, -0.19688448591525867, 0.7934772723167636, 0.6612397159674998, 1.6414177449909406, 0.39784216491907093, -0.3850236960444509, 0.24089366104987567, 0.23330351622981296, -0.27188287888957097, 1.1544784525666156, -1.2599535108862792, 0.7474735715591995, -2.5370056235268046, -1.4050912192596745, -0.848597512021804, -1.57673497597063, -2.7330072450078724, 1.344166126292757, -0.5178328414811352, -1.0368161450740632, 0.6302251132078822, -0.16948852347422474, -1.5557063207357251, 0.6725758726097119, -1.037241941478974, 1.373970295660399, -0.6846786019162496, 0.056320732867915, -0.8286561650918808, -0.1592424166932931, 0.5524194611887456, -0.08629299203093858, 0.003232210627519402, -0.02689469582205406, 0.3213025842126427, -0.5971937990063068, -1.8504001036376276, 0.17019431338164548, -0.29303242195062784, 0.39207622839295286, -0.17423191114138303, -3.0762385179991067, 0.5829794085034877, -1.797266735221523, -0.7947294121886257, 0.1756980328096011, -1.2455448957662363], cluster = CategoricalValue{Int64, UInt32}[9, 4, 2, 1, 10, 10, 3, 3, 10, 8, 10, 9, 6, 9, 7, 6, 10, 7, 6, 1, 3, 1, 3, 5, 5, 2, 6, 7, 7, 3, 3, 9, 8, 8, 5, 7, 9, 9, 8, 1, 10, 6, 5, 10, 8, 8, 7, 10, 10, 8, 1, 3, 6, 7, 10, 2, 10, 9, 8, 8, 6, 3, 10, 3, 10, 1, 2, 4, 1, 9, 6, 6, 5, 3, 10, 3, 8, 5, 10, 7, 6, 3, 2, 4, 9, 2, 10, 2, 4, 1, 1, 10, 8, 8, 5, 7, 7, 5, 3, 7, 10, 5, 3, 10, 7, 7, 8, 6, 4, 1, 1, 7, 8, 3, 2, 7, 9, 4, 9, 10, 6, 8, 1, 9, 2, 4, 3, 1, 4, 3, 9, 1, 6, 9, 9, 5, 2, 7, 8, 7, 7, 6, 2, 10, 5, 8, 10, 4, 3, 4, 3, 3, 4, 10, 2, 9, 7, 2, 1, 5, 7, 5, 10, 9, 6, 8, 8, 5, 1, 10, 9, 7, 7, 4, 3, 6, 2, 1, 9, 5, 10, 8, 6, 3, 2, 5, 2, 9, 10, 2, 6, 1, 9, 2, 1, 3, 7, 4, 8, 9]), ForwardDiff.Dual{Nothing, Float64, 1}[Dual{Nothing}(-2.2432847657468735,1.0)], ForwardDiff.Partials{1, Float64}[Partials(1.0,)], [NaN, 2.86445747e-314, 6.748837316e-314], FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}(Base.RefValue{FormulaCompiler.DerivativeEvaluator}(FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3, @NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.FDOverrideVector, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}(#= circular reference @-3 =#))), ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}((Partials(1.0,),), ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}[Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}}(2.310843641e-314,2.86450826e-314)]), FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}(FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}(Base.RefValue{FormulaCompiler.DerivativeEvaluator}(FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3, @NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.FDOverrideVector, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{y::Vector{Bool}, x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}(#= circular reference @-4 =#))), Base.RefValue{Vector{Float64}}(Float64[])), ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}((Partials(1.0,),), ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}[Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}}(6.7893225493e-314,6.789322557e-314)]), Base.RefValue{Vector{Float64}}(Float64[]), [6.7849351436e-314, 6.784935183e-314, 6.784935191e-314], MutableDiffResult([2.337022567e-314, 2.1310244414e-314, 2.337009342e-314], ([2.3221573175e-314; 2.1310244414e-314; 2.1310766385e-314;;],)), MutableDiffResult(0.0, ([1.3e-322],)), 200, [0.0; 1.0; 0.0;;], [0.1441090366974896], [1.0, -2.2432847657468735, -1.2455448957662363], [0.0, 1.0000000000026419, 0.0], [0.003488907286898753, 0.23978337523122548, -0.00434559066299837], [-2.2432847657468735], ([1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432983498555963],)), [0.03568283681801269], [-0.0017651067129476707, 0.24568685204344928, 0.00036989322074863843], [2.1219957915e-314, 3.8195924238e-313, 8.0635840065e-313, 8.70018274493e-313, 1.082217853674e-312, 0.0, 1.03977793781e-312, 1.29441743273e-312, 1.35807730652e-312, 1.54905692777e-312, 2.03711595979e-312, 2.206875623083e-312, 2.461515118053e-312, 1.40051722262e-312, 1.400517222037e-312, 3.26e-322, 2.588834865566e-312, 2.652494739324e-312, 2.652494739324e-312, 2.716154613063e-312, 2.65249473934e-312, 2.652494739324e-312, 2.652494738707e-312, 2.652494739324e-312, 2.67371469724e-312, 6.23e-322, 0.0, 2.97079410804e-313, 7.0e-323, 1.2731974749e-313, 1.2731974749e-313, 2.12199579754e-313, 3.09811385486e-312, 2.970794108043e-312, 7.26e-322, 2.86469431847e-312, 2.88591427638e-312, 3.22543360294e-312, 3.289093476747e-312, 3.480073098e-312, 3.96813213002e-312, 4.13789179331e-312, 4.39253128828e-312, 3.33153339285e-312, 3.331533391815e-312, 7.76e-322, 4.519851035794e-312, 4.58351090955e-312, 4.58351090955e-312, 4.64717078329e-312, 4.583510909567e-312, 4.58351090955e-312, 4.583510908485e-312, 4.58351090955e-312, 4.604730867467e-312, 1.07e-321, 0.0, 2.3341953706e-313, 2.3341953706e-313, 2.3341953706e-313, 4.243991588e-314, 2.121995791e-314, 2.337378737e-314, 2.3373787686e-314, 2.3373787686e-314, 2.3373787686e-314, 2.3096800967e-314, 2.3096800967e-314, 2.3373787686e-314, 2.3373787686e-314, 2.337378737e-314, 2.337383219e-314, 2.3237370074e-314, 2.3300327634e-314, 2.337383219e-314, 2.3096800967e-314, 2.337378737e-314, 2.3373787686e-314, 2.3300327634e-314, 2.3300327634e-314, 2.3373831875e-314, 2.337383219e-314, 2.337383219e-314, 6.796656594e-314, 2.3373775196e-314, 2.337377994e-314, 2.3373787686e-314, 2.3096800967e-314, 2.337378737e-314, 2.3373787686e-314, 2.3373787686e-314, 2.3373787686e-314, 2.3096800967e-314, 2.3096800967e-314, 2.3373787686e-314, 2.3373787686e-314, 2.337378737e-314, 2.337383219e-314, 2.3292351597e-314, 2.3373775196e-314, 2.337383219e-314, 2.3096800967e-314, 2.337378737e-314, 2.3373787686e-314, 2.3373775196e-314, 2.3373775196e-314, 2.3097850916e-314, 2.337383219e-314, 2.3373808555e-314, 6.7938750757e-314, 6.796656831e-314, 2.3096800967e-314, 2.3373787686e-314, 2.337378737e-314, 2.337383219e-314, 2.337378737e-314, 2.337383219e-314, 2.3373808555e-314, 2.337378737e-314, 2.337383219e-314, 2.337378737e-314, 2.3373831875e-314, 2.3373787686e-314, 2.337383219e-314, 2.337383219e-314, 2.337378737e-314, 2.3373831875e-314, 2.3373787686e-314, 2.3373808555e-314, 2.337383219e-314, 2.337383219e-314, 6.748837316e-314, 6.7938726567e-314, 2.219101026e-314, 2.2188738033e-314, 2.337383219e-314, 6.7938750757e-314, 2.337378737e-314, 2.337378737e-314, 2.337383219e-314, 2.337383219e-314, 2.8759059906e-314, 6.796657171e-314, 2.3096800967e-314, 2.3373787686e-314, 2.337378737e-314, 2.337383219e-314, 2.3096707293e-314, 2.337383219e-314, 2.3096707293e-314, 2.337383219e-314, 2.3096707293e-314, 2.3300327634e-314, 2.3096800967e-314, 2.337379085e-314, 2.337383219e-314, 2.337383219e-314, 2.8764082696e-314, 2.337379085e-314, 2.337383219e-314, 2.337383219e-314, 2.3096800967e-314, 2.337378737e-314, 2.3373787686e-314, 2.337378737e-314, 2.337383219e-314, 2.337383219e-314, 2.337383219e-314, 2.3373787686e-314, 2.3098352334e-314, 2.337383219e-314, 2.337383219e-314, 2.219152883e-314, 2.219152915e-314, 2.3103924604e-314, 2.8759059906e-314, 2.337383219e-314, 2.337383219e-314, 2.8759058958e-314, 6.796657614e-314, 6.7966576217e-314, 2.8759058958e-314, 2.8759058958e-314, 2.337383219e-314, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.3685638365e-314, 5.0e-324], [6.7849333096e-314, 2.2029543284e-314, 2.337383219e-314], StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}
+│ 
+│ y ~ 1 + x + z
+│ 
+│ Coefficients:
+│ ──────────────────────────────────────────────────────────────────────────
+│                   Coef.  Std. Error      z  Pr(>|z|)  Lower 95%  Upper 95%
+│ ──────────────────────────────────────────────────────────────────────────
+│ (Intercept)   0.105242     0.142892   0.74    0.4614  -0.174821   0.385306
+│ x             0.144109     0.143103   1.01    0.3139  -0.136368   0.424586
+│ z            -0.0175484    0.143456  -0.12    0.9026  -0.298717   0.26362
+│ ──────────────────────────────────────────────────────────────────────────, [0.10524248209671609, 0.1441090366974896, -0.017548433839644367], [0.020418106918846816 0.0009858593230189247 0.0020669342180964353; 0.0009858593230189247 0.02047850338336018 -0.0009707074081988171; 0.0020669342180964353 -0.0009707074081988171 0.020579568359095163], LogitLink(), [:x], (y = Bool[0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], x = [1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432847657468735], z = [-2.0850403641529387, -1.0272903585792263, -0.7431095869972788, -1.1037593794432314, -0.014894064580039952, 0.7566400730565224, -0.34616458405033174, 0.19332616952394346, 1.7049840937947098, 0.00042222120909916807, -1.8174273737958468, -0.8893518752614951, -1.1191399165933316, 0.5270206054217899, -0.23184234148867225, 0.588556909880039, 0.6450975708496578, -1.2285869522856472, -2.6023048686185883, 0.15099695684177022, -0.6126196395352268, -0.3101570011107497, 0.3344531545767711, 0.526465719374126, 0.653236173189104, 0.5722039574533349, -0.34803343595465, 0.3739173933788274, -0.032917081695145886, 0.22279773334120231, 0.129409362664695, 0.7319850048862708, 1.0470925979815309, -0.521578332283403, -0.1679402461580042, -0.5607094673298565, 1.6332580890346107, -0.6557578417360079, -0.8247599208576163, -0.28325985706658086, -0.7410933550575428, -1.7707564173894004, -0.3213115494363777, 0.8587983612222057, -2.0882371348366555, 1.5199594882576197, 0.38779421508766926, -2.7402696158890385, 0.6912825297919843, 2.324237938322681, 0.32266006776748646, -0.15951611473447125, -0.48494862552672646, -0.7381839444160242, -0.22416008227408757, 2.330942673954756, -0.6587390464379462, -0.044212555992568216, -0.1192232560681671, -0.5829725900771651, -0.8625797283204574, -1.869956994607143, -0.6169796277477968, 1.7209113410524328, -0.02624230875763607, -1.0000614449481051, 1.5184896934567684, 1.052480248465717, -0.5962826942665881, 0.06146535298242884, 0.6160165193664607, -1.3247730127621895, 1.7277937705733566, -0.9972722983506108, 0.6596256190115635, 0.6267327220228265, 1.419091366601008, -0.4077420229984929, -1.1230576216822414, 0.19210096049873393, -1.112717832117119, 1.0869422297968119, 0.024135047824738548, 0.1779293577647506, 0.28945706317678627, 1.15385204425419, 0.2870796406518293, 1.1424421158921039, 0.5413036545417684, 1.0851668257960498, 0.7379511635253359, 1.550049059077266, 0.8716169547865161, 0.17809607306377093, 0.9754688930482432, -1.7442863235330996, 0.42689939604406196, -0.06651810133322517, -0.602104075340254, 0.6798005323037567, -0.674584767446727, -0.4513034577164329, -0.39309540622015465, -0.3098842841268254, 2.028289601224332, -1.4368362299107658, 0.28116716318317864, -0.6080693447478903, 0.2203675191081463, 0.8115744545684986, -0.32356771433549236, 0.1102486417700369, 0.7505611827159431, 0.5128713664256123, 0.17460643122515535, 0.4834315756534306, -0.2972804533772169, -0.945339618788703, 0.4240485542774693, 0.3519121731101256, -1.525572146722383, 0.06933996697282802, 0.1069705801051875, 0.36337586244944725, 0.43190628225371025, -1.3654824280514473, 1.3342877796847687, -0.34843847037570486, -2.0842606669426074, -1.054518685476339, -0.07084436389952144, 0.6950478566943733, 0.9076766555165758, -0.16078189099138232, -1.2693025762517063, 0.9366897938025077, -0.7196168493665394, -1.1334089865426886, 0.3705229964254276, -1.3059997238887813, 0.01521492849823345, -0.38864099492247567, 1.5269908620628274, 0.06034396804550971, 0.8596143344652758, -0.0069698353132489664, 0.5377004132762364, -0.23537084901573155, -0.06271720266418306, -1.2992027296833655, 0.09970228463607628, -1.3065887133096357, 0.24207181357975283, -0.19688448591525867, 0.7934772723167636, 0.6612397159674998, 1.6414177449909406, 0.39784216491907093, -0.3850236960444509, 0.24089366104987567, 0.23330351622981296, -0.27188287888957097, 1.1544784525666156, -1.2599535108862792, 0.7474735715591995, -2.5370056235268046, -1.4050912192596745, -0.848597512021804, -1.57673497597063, -2.7330072450078724, 1.344166126292757, -0.5178328414811352, -1.0368161450740632, 0.6302251132078822, -0.16948852347422474, -1.5557063207357251, 0.6725758726097119, -1.037241941478974, 1.373970295660399, -0.6846786019162496, 0.056320732867915, -0.8286561650918808, -0.1592424166932931, 0.5524194611887456, -0.08629299203093858, 0.003232210627519402, -0.02689469582205406, 0.3213025842126427, -0.5971937990063068, -1.8504001036376276, 0.17019431338164548, -0.29303242195062784, 0.39207622839295286, -0.17423191114138303, -3.0762385179991067, 0.5829794085034877, -1.797266735221523, -0.7947294121886257, 0.1756980328096011, -1.2455448957662363], cluster = CategoricalValue{Int64, UInt32}[9, 4, 2, 1, 10, 10, 3, 3, 10, 8, 10, 9, 6, 9, 7, 6, 10, 7, 6, 1, 3, 1, 3, 5, 5, 2, 6, 7, 7, 3, 3, 9, 8, 8, 5, 7, 9, 9, 8, 1, 10, 6, 5, 10, 8, 8, 7, 10, 10, 8, 1, 3, 6, 7, 10, 2, 10, 9, 8, 8, 6, 3, 10, 3, 10, 1, 2, 4, 1, 9, 6, 6, 5, 3, 10, 3, 8, 5, 10, 7, 6, 3, 2, 4, 9, 2, 10, 2, 4, 1, 1, 10, 8, 8, 5, 7, 7, 5, 3, 7, 10, 5, 3, 10, 7, 7, 8, 6, 4, 1, 1, 7, 8, 3, 2, 7, 9, 4, 9, 10, 6, 8, 1, 9, 2, 4, 3, 1, 4, 3, 9, 1, 6, 9, 9, 5, 2, 7, 8, 7, 7, 6, 2, 10, 5, 8, 10, 4, 3, 4, 3, 3, 4, 10, 2, 9, 7, 2, 1, 5, 7, 5, 10, 9, 6, 8, 8, 5, 1, 10, 9, 7, 7, 4, 3, 6, 2, 1, 9, 5, 10, 8, 6, 3, 2, 5, 2, 9, 10, 2, 6, 1, 9, 2, 1, 3, 7, 4, 8, 9])), (y = Bool[0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], x = [1.3786337500809231, 1.3385142894651247, 0.37392476794716495, -0.5830647026389231, 0.041209194073643984, -0.8291489985507582, -0.7915585618239962, -0.4978959113162895, -0.532468787560903, 2.4114705067727105, -0.41246442802323735, 1.5707092208596094, 0.9842151338910431, 0.5756872195406343, -0.8874105467802021, 0.17240234160518172, 0.6530257090872761, -1.1836746026451233, 0.5997536284327809, -0.0026686255506824658, 0.13491169456496166, -1.5927630727565256, -0.1922893432900737, 0.05052504302126808, -0.5590241557554194, 0.5645047315307602, 1.2987554446430223, 1.7599283991830774, -0.3620427777144126, -0.7916989635505602, 0.6048300383734724, 2.7685422570248406, -1.3140353166373575, -1.397103169830246, 0.7186316493670808, 0.3974203973749614, -0.1485827979402081, -0.34381304950515973, 0.09329425401099815, -0.5333464454646024, -0.8851790135452494, -0.24800915170701632, -1.4059349840202044, -1.029058690836033, -0.18658333012093123, -1.3806086515414893, -1.0150418849855098, -0.7210780561982354, -0.1947926552091395, 0.2932430887083074, -0.8401696542017689, -1.017899898456564, 0.24651492414824858, -0.09424270268570241, -0.9668896500109253, -0.26310599387305167, 0.3795610308517061, 0.689769463423817, 0.3678458895164794, 1.7765376641924904, -1.6398850679191057, -0.7547106596979791, -0.2675124907028486, 0.16625716617087874, 0.02410419800705741, -1.3338679242765834, 0.27965025898328444, 1.5919178959517784, -1.147483780503363, -2.1603930607613115, 0.06573260706892552, -0.7392175541514464, -1.212334730468986, -0.7592090550165697, 0.12513630315679725, 0.5437954050958345, -1.6626577211378886, -1.1869035814529771, -0.9405974319804489, -1.0662381829688712, 1.1185504345165755, 0.8109644509122794, 3.003641813919958, 0.9810196499196863, -0.5788228588378383, 0.23932311023125008, 0.5704164340366688, 0.778742179119182, -1.348689707716629, -1.6143169891173794, 0.5160870828595369, -1.0029092778470423, 0.10739946494055806, 1.3376980570706563, 0.5160285106908271, 0.11822541766439275, 0.6777063916175979, 0.1729517187092178, -0.5518862596639036, 0.37382500909381766, -0.4183682008861384, -0.8051825297997153, -0.5396801401425266, -1.0904009447316616, 0.31973646324364297, 0.4489911850193585, -0.7768906222686068, -1.9325584133760798, 1.011562524842437, -0.8715879685523633, -2.311193088447649, -0.43307820676177317, 1.193207827277219, -0.6532946213324587, 0.08373987680356114, -0.9732736145056727, -0.15623142074368912, 0.930413685443454, -1.011957348408198, -1.1922034947588211, 0.8880908268010511, -0.35495426230791943, -1.1581597740083576, 1.8226536015117423, 1.3340411826805225, 0.39157832069883486, -0.11489181539985306, 0.9359886899428111, -0.09650811199328822, 0.7011953422883995, -0.5504257877785411, 1.5791181113332708, -0.6379776616987783, 0.6267725413983589, 0.34102005241989897, 1.336928911233565, -0.10902728151641009, -0.025601414247729912, -0.39898739415883366, -0.8421548021726252, 0.8598001289788095, 3.173301426971881, -0.8002131895945269, 0.8577436889333699, -0.36815937043377944, 1.723190920194858, -0.43075394148147983, -0.10338117453898195, -1.858144016404955, -0.8936737883376005, 0.4418032920037531, -1.1999830190418275, -1.461016395241358, -0.22113799251687996, 0.910201677000483, -0.11278893059404721, -1.0871882458812676, 0.8068266706897268, 0.10540124381835785, -0.5114763795778505, 0.6250652757816657, 1.950282601448339, 1.639511950690734, -1.4270113655405483, 1.0942480849658467, 0.2399520255289788, 0.09315073421073733, 0.21720517719077695, -0.33386813335831217, 0.11189842381525393, 0.6214172123517339, -0.3218857497138383, 0.4028462156063203, 1.7052911570948168, -1.3388375325863662, -0.0016154172613461841, 1.5708975725161118, -0.4615712265038257, 0.32875093930415095, -0.33900932942380535, 1.0750773392330017, 1.092274468345443, -0.4407885172090749, 1.107079343282651, -1.301802571745099, -0.9784347927195904, -0.005247597095293201, -0.4671386892103881, -0.07454333884035565, 0.21580735154942118, -0.9011070159458345, 0.6770565938006323, -1.0811822417360035, -0.0774879415468989, -0.27322008870606207, 0.7028162443233674, -0.750092179670353, 0.9878645354500039, -1.9849461146939076, -2.2432847657468735], z = [-2.0850403641529387, -1.0272903585792263, -0.7431095869972788, -1.1037593794432314, -0.014894064580039952, 0.7566400730565224, -0.34616458405033174, 0.19332616952394346, 1.7049840937947098, 0.00042222120909916807, -1.8174273737958468, -0.8893518752614951, -1.1191399165933316, 0.5270206054217899, -0.23184234148867225, 0.588556909880039, 0.6450975708496578, -1.2285869522856472, -2.6023048686185883, 0.15099695684177022, -0.6126196395352268, -0.3101570011107497, 0.3344531545767711, 0.526465719374126, 0.653236173189104, 0.5722039574533349, -0.34803343595465, 0.3739173933788274, -0.032917081695145886, 0.22279773334120231, 0.129409362664695, 0.7319850048862708, 1.0470925979815309, -0.521578332283403, -0.1679402461580042, -0.5607094673298565, 1.6332580890346107, -0.6557578417360079, -0.8247599208576163, -0.28325985706658086, -0.7410933550575428, -1.7707564173894004, -0.3213115494363777, 0.8587983612222057, -2.0882371348366555, 1.5199594882576197, 0.38779421508766926, -2.7402696158890385, 0.6912825297919843, 2.324237938322681, 0.32266006776748646, -0.15951611473447125, -0.48494862552672646, -0.7381839444160242, -0.22416008227408757, 2.330942673954756, -0.6587390464379462, -0.044212555992568216, -0.1192232560681671, -0.5829725900771651, -0.8625797283204574, -1.869956994607143, -0.6169796277477968, 1.7209113410524328, -0.02624230875763607, -1.0000614449481051, 1.5184896934567684, 1.052480248465717, -0.5962826942665881, 0.06146535298242884, 0.6160165193664607, -1.3247730127621895, 1.7277937705733566, -0.9972722983506108, 0.6596256190115635, 0.6267327220228265, 1.419091366601008, -0.4077420229984929, -1.1230576216822414, 0.19210096049873393, -1.112717832117119, 1.0869422297968119, 0.024135047824738548, 0.1779293577647506, 0.28945706317678627, 1.15385204425419, 0.2870796406518293, 1.1424421158921039, 0.5413036545417684, 1.0851668257960498, 0.7379511635253359, 1.550049059077266, 0.8716169547865161, 0.17809607306377093, 0.9754688930482432, -1.7442863235330996, 0.42689939604406196, -0.06651810133322517, -0.602104075340254, 0.6798005323037567, -0.674584767446727, -0.4513034577164329, -0.39309540622015465, -0.3098842841268254, 2.028289601224332, -1.4368362299107658, 0.28116716318317864, -0.6080693447478903, 0.2203675191081463, 0.8115744545684986, -0.32356771433549236, 0.1102486417700369, 0.7505611827159431, 0.5128713664256123, 0.17460643122515535, 0.4834315756534306, -0.2972804533772169, -0.945339618788703, 0.4240485542774693, 0.3519121731101256, -1.525572146722383, 0.06933996697282802, 0.1069705801051875, 0.36337586244944725, 0.43190628225371025, -1.3654824280514473, 1.3342877796847687, -0.34843847037570486, -2.0842606669426074, -1.054518685476339, -0.07084436389952144, 0.6950478566943733, 0.9076766555165758, -0.16078189099138232, -1.2693025762517063, 0.9366897938025077, -0.7196168493665394, -1.1334089865426886, 0.3705229964254276, -1.3059997238887813, 0.01521492849823345, -0.38864099492247567, 1.5269908620628274, 0.06034396804550971, 0.8596143344652758, -0.0069698353132489664, 0.5377004132762364, -0.23537084901573155, -0.06271720266418306, -1.2992027296833655, 0.09970228463607628, -1.3065887133096357, 0.24207181357975283, -0.19688448591525867, 0.7934772723167636, 0.6612397159674998, 1.6414177449909406, 0.39784216491907093, -0.3850236960444509, 0.24089366104987567, 0.23330351622981296, -0.27188287888957097, 1.1544784525666156, -1.2599535108862792, 0.7474735715591995, -2.5370056235268046, -1.4050912192596745, -0.848597512021804, -1.57673497597063, -2.7330072450078724, 1.344166126292757, -0.5178328414811352, -1.0368161450740632, 0.6302251132078822, -0.16948852347422474, -1.5557063207357251, 0.6725758726097119, -1.037241941478974, 1.373970295660399, -0.6846786019162496, 0.056320732867915, -0.8286561650918808, -0.1592424166932931, 0.5524194611887456, -0.08629299203093858, 0.003232210627519402, -0.02689469582205406, 0.3213025842126427, -0.5971937990063068, -1.8504001036376276, 0.17019431338164548, -0.29303242195062784, 0.39207622839295286, -0.17423191114138303, -3.0762385179991067, 0.5829794085034877, -1.797266735221523, -0.7947294121886257, 0.1756980328096011, -1.2455448957662363], cluster = CategoricalValue{Int64, UInt32}[9, 4, 2, 1, 10, 10, 3, 3, 10, 8, 10, 9, 6, 9, 7, 6, 10, 7, 6, 1, 3, 1, 3, 5, 5, 2, 6, 7, 7, 3, 3, 9, 8, 8, 5, 7, 9, 9, 8, 1, 10, 6, 5, 10, 8, 8, 7, 10, 10, 8, 1, 3, 6, 7, 10, 2, 10, 9, 8, 8, 6, 3, 10, 3, 10, 1, 2, 4, 1, 9, 6, 6, 5, 3, 10, 3, 8, 5, 10, 7, 6, 3, 2, 4, 9, 2, 10, 2, 4, 1, 1, 10, 8, 8, 5, 7, 7, 5, 3, 7, 10, 5, 3, 10, 7, 7, 8, 6, 4, 1, 1, 7, 8, 3, 2, 7, 9, 4, 9, 10, 6, 8, 1, 9, 2, 4, 3, 1, 4, 3, 9, 1, 6, 9, 9, 5, 2, 7, 8, 7, 7, 6, 2, 10, 5, 8, 10, 4, 3, 4, 3, 3, 4, 10, 2, 9, 7, 2, 1, 5, 7, 5, 10, 9, 6, 8, 8, 5, 1, 10, 9, 7, 7, 4, 3, 6, 2, 1, 9, 5, 10, 8, 6, 3, 2, 5, 2, 9, 10, 2, 6, 1, 9, 2, 1, 3, 7, 4, 8, 9])), 0xffffffffffffffff)
+└ @ Main ~/.julia/dev/Margins/test/test_vcov.jl:43
+ERROR: LoadError: Some tests did not pass: 27 passed, 4 failed, 36 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/runtests.jl:11
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Binary categorical effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:30
+  Test threw exception
+  Expression: all(isfinite, binary_effects.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:30 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:30 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:28 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Binary categorical effects: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:31
+  Test threw exception
+  Expression: "binary_var" in binary_effects.table.term
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:31 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:28 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Mixed variable types: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:37
+  Test threw exception
+  Expression: nrow(mixed_effects.table) >= 2
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:37 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:36 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Mixed variable types: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:38
+  Test threw exception
+  Expression: all(isfinite, mixed_effects.table.dydx)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:38 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:38 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:36 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Mixed variable types: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:39
+  Test threw exception
+  Expression: "x" in mixed_effects.table.term
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:39 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:36 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Mixed variable types: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:40
+  Test threw exception
+  Expression: any(contains.("cat_var", mixed_effects.table.term))
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:40 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:40 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:36 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+Contrasts parameter: Error During Test at /Users/emf/.julia/dev/Margins/test/test_contrasts.jl:44
+  Got exception outside of a @test
+  MethodError: no method matching _ame_continuous_and_categorical(::Margins.MarginsEngine{IdentityLink}, ::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, cat_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}; target::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol)
+  This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+  
+  Closest candidates are:
+    _ame_continuous_and_categorical(::Margins.MarginsEngine, ::NamedTuple; target, backend, measure) got unsupported keyword argument "contrasts"
+     @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:185
+  
+  Stacktrace:
+    [1] kwerr(::@NamedTuple{target::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol}, ::Function, ::Margins.MarginsEngine{IdentityLink}, ::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, cat_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}})
+      @ Base ./error.jl:165
+    [2] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{contrasts::Symbol})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:125
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_contrasts.jl:45 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_contrasts.jl:45 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_contrasts.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:15 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Default model vcov: Error During Test at /Users/emf/.julia/dev/Margins/test/test_vcov.jl:21
+  Test threw exception
+  Expression: nrow(res_default.table) == 1
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [3] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:21 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [5] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:20 [inlined]
+   [6] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [7] top-level scope
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:7
+Default model vcov: Error During Test at /Users/emf/.julia/dev/Margins/test/test_vcov.jl:22
+  Test threw exception
+  Expression: all(isfinite, res_default.table.se)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:22 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:22 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:20 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:7
+Default model vcov: Error During Test at /Users/emf/.julia/dev/Margins/test/test_vcov.jl:23
+  Test threw exception
+  Expression: all(res_default.table.se .> 0)
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:23 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:23 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:20 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_vcov.jl:7
+Explicit model vcov: Error During Test at /Users/emf/.julia/dev/Margins/test/test_vcov.jl:27
+  Got exception outside of a @test
+  MethodError: no method matching _ame_continuous_and_categorical(::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}; target::Symbol, backend::Symbol, measure::Symbol, vcov::Symbol)
+  This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+  
+  Closest candidates are:
+    _ame_continuous_and_categorical(::Margins.MarginsEngine, ::NamedTuple; target, backend, measure) got unsupported keyword argument "vcov"
+     @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:185
+  
+  Stacktrace:
+    [1] kwerr(::@NamedTuple{target::Symbol, backend::Symbol, measure::Symbol, vcov::Symbol}, ::Function, ::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}})
+      @ Base ./error.jl:165
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{vcov::Symbol})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:125
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:28 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:28 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:16 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Confidence intervals: Error During Test at /Users/emf/.julia/dev/Margins/test/test_vcov.jl:48
+  Got exception outside of a @test
+  MethodError: no method matching _ame_continuous_and_categorical(::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}; target::Symbol, backend::Symbol, measure::Symbol, ci_level::Float64)
+  This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+  
+  Closest candidates are:
+    _ame_continuous_and_categorical(::Margins.MarginsEngine, ::NamedTuple; target, backend, measure) got unsupported keyword argument "ci_level"
+     @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:185
+  
+  Stacktrace:
+    [1] kwerr(::@NamedTuple{target::Symbol, backend::Symbol, measure::Symbol, ci_level::Float64}, ::Function, ::Margins.MarginsEngine{LogitLink}, ::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, cluster::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}})
+      @ Base ./error.jl:165
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{ci_level::Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:125
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:49 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:49 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/test_vcov.jl:7
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:16 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:12
+   [12] include(mod::Module, _path::String)
+      @ Base ./Base.jl:557
+   [13] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:323
+   [14] _start()
+      @ Base ./client.jl:531
+Invalid scale parameter: Test Failed at /Users/emf/.julia/dev/Margins/test/test_errors.jl:30
+  Expression: population_margins(m, df; type = :predictions, scale = :invalid)
+    Expected: ArgumentError
+  No exception thrown
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:30 [inlined]
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [3] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:30 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [5] top-level scope
+   @ ~/.julia/dev/Margins/test/test_errors.jl:7
+Empty vars parameter: Error During Test at /Users/emf/.julia/dev/Margins/test/test_errors.jl:37
+  Test threw exception
+  Expression: nrow(result.table) == 0 || nrow(result.table) >= 0
+  type MarginsResult has no field table
+  Stacktrace:
+   [1] getproperty(x::MarginsResult, f::Symbol)
+     @ Base ./Base.jl:49
+   [2] macro expansion
+     @ ~/.julia/dev/Margins/test/test_errors.jl:37 [inlined]
+   [3] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:676 [inlined]
+   [4] macro expansion
+     @ ~/.julia/dev/Margins/test/test_errors.jl:37 [inlined]
+   [5] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [6] macro expansion
+     @ ~/.julia/dev/Margins/test/test_errors.jl:36 [inlined]
+   [7] macro expansion
+     @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [8] top-level scope
+     @ ~/.julia/dev/Margins/test/test_errors.jl:7
+Invalid variable names: Test Failed at /Users/emf/.julia/dev/Margins/test/test_errors.jl:42
+  Expression: population_margins(m, df; type = :effects, vars = [:nonexistent])
+    Expected: ArgumentError
+      Thrown: Margins.MarginsError
+      MarginsError: Variable nonexistent not found in data
+      Stacktrace:
+        [1] _validate_variables(data_nt::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, z::Vector{Float64}}, vars::Vector{Symbol})
+          @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:27
+        [2] _process_vars_parameter(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, vars::Vector{Symbol}, data_nt::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, z::Vector{Float64}})
+          @ Margins ~/.julia/dev/Margins/src/population/core.jl:226
+        [3] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, target::Symbol, backend::Symbol, at::Nothing, over::Nothing, measure::Symbol, kwargs::@Kwargs{})
+          @ Margins ~/.julia/dev/Margins/src/population/core.jl:107
+        [4] macro expansion
+          @ ~/.julia/dev/Margins/test/test_errors.jl:42 [inlined]
+        [5] macro expansion
+          @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:773 [inlined]
+        [6] macro expansion
+          @ ~/.julia/dev/Margins/test/test_errors.jl:42 [inlined]
+        [7] macro expansion
+          @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+        [8] macro expansion
+          @ ~/.julia/dev/Margins/test/test_errors.jl:42 [inlined]
+        [9] macro expansion
+          @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+       [10] top-level scope
+          @ ~/.julia/dev/Margins/test/test_errors.jl:7
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:42 [inlined]
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [3] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:42 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [5] top-level scope
+   @ ~/.julia/dev/Margins/test/test_errors.jl:7
+Mismatched model and data: Test Failed at /Users/emf/.julia/dev/Margins/test/test_errors.jl:48
+  Expression: population_margins(m, df_wrong; type = :effects)
+    Expected: Exception
+  No exception thrown
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:48 [inlined]
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [3] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:47 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [5] top-level scope
+   @ ~/.julia/dev/Margins/test/test_errors.jl:7
+Data type compatibility: Test Failed at /Users/emf/.julia/dev/Margins/test/test_errors.jl:66
+  Expression: profile_margins(m_mixed, df_mixed; type = :effects, at = :means)
+    Expected: Exception
+  No exception thrown
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:66 [inlined]
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [3] macro expansion
+   @ ~/.julia/dev/Margins/test/test_errors.jl:58 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [5] top-level scope
+   @ ~/.julia/dev/Margins/test/test_errors.jl:7
+Test Summary:                                | Pass  Fail  Error  Total   Time
+Core Functionality                           |   27     4     36     67  17.5s
+  GLM basics: Population and Profile Margins |                10     10   6.3s
+  Profile margins (at) semantics             |                 5      5   1.7s
+  Grouping functionality                     |                 4      4   2.1s
+    Over parameter                           |                 1      1   0.0s
+    By parameter                             |                 1      1   1.4s
+    Within parameter                         |                 1      1   0.1s
+    Multiple grouping                        |                 1      1   0.6s
+  Categorical contrasts                      |                11     11   1.0s
+    Categorical marginal effects             |                 3      3   0.2s
+    Binary categorical effects               |                 3      3   0.0s
+    Mixed variable types                     |                 4      4   0.2s
+    Contrasts parameter                      |                 1      1   0.4s
+  Covariance matrix handling                 |                 5      5   1.5s
+    Default model vcov                       |                 3      3   0.3s
+    Explicit model vcov                      |                 1      1   0.2s
+    Robust standard errors                   |                        0   0.4s
+    Confidence intervals                     |                 1      1   0.1s
+  Error handling and input validation        |    4     4      1      9   1.5s
+    Invalid type parameter                   |    2                   2   0.1s
+    Invalid target parameter                 |    1                   1   0.0s
+    Invalid scale parameter                  |          1             1   0.2s
+    Empty vars parameter                     |                 1      1   0.0s
+    Invalid variable names                   |          1             1   0.0s
+    Mismatched model and data                |          1             1   0.2s
+    Invalid at parameter                     |    1                   1   0.0s
+    Data type compatibility                  |          1             1   0.8s
+  Automatic Variable Detection               |   23                  23   3.1s

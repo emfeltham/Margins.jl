@@ -19,20 +19,23 @@ using Margins
     # include("test_mixedmodels.jl") where is this?
 end
 
-# Statistical Validation Suite
+# Advanced Features (Phase 1 additions)
+@testset "Advanced Features" begin
+    include("test_elasticities.jl")
+    include("test_categorical_mixtures.jl") 
+    include("test_bool_profiles.jl")
+    include("test_table_profiles.jl")
+    include("test_prediction_scales.jl")
+end
+
+# Performance (critical for regression prevention)
+@testset "Performance" begin
+    include("test_performance.jl")
+    include("test_zero_allocations.jl")
+end
+
+# Statistical validation tests
 @testset "Statistical Correctness" begin
-    # Essential quick statistical validation (always run)
     include("statistical_validation/backend_consistency.jl")
-    
-    # Comprehensive statistical validation (9 tiers, ~60 seconds)
-    # Run comprehensive tests if explicitly requested via environment variable
-    if get(ENV, "MARGINS_COMPREHENSIVE_TESTS", "false") == "true"
-        @info "Running comprehensive statistical validation framework (9 tiers)..."
-        @info "This includes: analytical SE validation, bootstrap validation, robust SE integration, and specialized edge cases"
-        include("statistical_validation/statistical_validation.jl")
-        @info "Comprehensive statistical validation completed successfully ✓"
-    else
-        @info "Quick statistical validation completed ✓"
-        @info "Run with MARGINS_COMPREHENSIVE_TESTS=true for full 9-tier validation suite"
-    end
+    include("statistical_validation/statistical_validation.jl")
 end

@@ -20,9 +20,9 @@ using Margins
         @test_throws ArgumentError profile_margins(m, df; type=:invalid, at=:means)
     end
 
-    # Test invalid target parameter
-    @testset "Invalid target parameter" begin
-        @test_throws ArgumentError population_margins(m, df; type=:effects, target=:invalid)
+    # Test invalid scale parameter (deprecated target parameter) 
+    @testset "Invalid scale parameter (deprecated target)" begin
+        @test_throws MethodError population_margins(m, df; type=:effects, target=:invalid)  # target param no longer exists
     end
 
     # Test invalid scale parameter
@@ -32,14 +32,13 @@ using Margins
 
     # Test empty vars
     @testset "Empty vars parameter" begin
-        # This should work but return empty result or throw informative error
-        result = population_margins(m, df; type=:effects, vars=Symbol[])
-        @test nrow(DataFrame(result)) == 0 || nrow(result) >= 0  # Either empty or some default behavior
+        # Empty vars should throw informative error
+        @test_throws ArgumentError population_margins(m, df; type=:effects, vars=Symbol[])
     end
 
     # Test invalid variable names
     @testset "Invalid variable names" begin
-        @test_throws ArgumentError population_margins(m, df; type=:effects, vars=[:nonexistent])
+        @test_throws Margins.MarginsError population_margins(m, df; type=:effects, vars=[:nonexistent])
     end
 
     # Test mismatched model and data
@@ -53,7 +52,7 @@ using Margins
         @test_throws ArgumentError profile_margins(m, df; type=:effects, at=:invalid)
     end
 
-    # Test data type compatibility warnings
+    # Test data type compatibility
     @testset "Data type compatibility" begin
         df_mixed = DataFrame(
             y = randn(50),
@@ -62,7 +61,8 @@ using Margins
         )
         m_mixed = lm(@formula(y ~ x + z), df_mixed)
         
-        # This may throw errors due to type incompatibility
-        @test_throws Exception profile_margins(m_mixed, df_mixed; type=:effects, at=:means)
+        # Mixed data types should work fine (Int/Bool are properly handled)
+        result = profile_margins(m_mixed, df_mixed; type=:effects, at=:means)
+        @test nrow(DataFrame(result)) >= 1  # Should succeed
     end
 end

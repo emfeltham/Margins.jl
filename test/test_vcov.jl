@@ -25,7 +25,7 @@ using Margins
 
     # Test model vcov explicitly  
     @testset "Explicit model vcov" begin
-        res_model = population_margins(m, df; type=:effects, vars=[:x], vcov=:model)
+        res_model = population_margins(m, df; type=:effects, vars=[:x], vcov=GLM.vcov)
         @test nrow(DataFrame(res_model)) == 1
         @test all(isfinite, DataFrame(res_model).se)
         @test all(DataFrame(res_model).se .> 0)
@@ -33,23 +33,19 @@ using Margins
 
     # Test robust standard errors (if CovarianceMatrices is available)
     @testset "Robust standard errors" begin
-        try
-            using CovarianceMatrices
-            res_robust = population_margins(m, df; type=:effects, vars=[:x], vcov=HC1())
-            @test nrow(DataFrame(res_robust)) == 1
-            @test all(isfinite, DataFrame(res_robust).se)
-            @test all(DataFrame(res_robust).se .> 0)
-        catch e
-            @warn "Skipping robust SE test: CovarianceMatrices not available or other error: $e"
-        end
+        using CovarianceMatrices
+        res_robust = population_margins(m, df; type=:effects, vars=[:x], vcov=HC1())
+        @test nrow(DataFrame(res_robust)) == 1
+        @test all(isfinite, DataFrame(res_robust).se)
+        @test all(DataFrame(res_robust).se .> 0)
     end
 
     # Test confidence intervals
     @testset "Confidence intervals" begin
-        res_ci = population_margins(m, df; type=:effects, vars=[:x], ci_level=0.95)
+        res_ci = population_margins(m, df; type=:effects, vars=[:x], ci_alpha=0.05)
         @test nrow(DataFrame(res_ci)) == 1
-        @test haskey(DataFrame(res_ci), :ci_lower)
-        @test haskey(DataFrame(res_ci), :ci_upper)
+        @test :ci_lower in propertynames(DataFrame(res_ci))
+        @test :ci_upper in propertynames(DataFrame(res_ci))
         @test all(isfinite, DataFrame(res_ci).ci_lower)
         @test all(isfinite, DataFrame(res_ci).ci_upper)
         @test all(DataFrame(res_ci).ci_lower .< DataFrame(res_ci).ci_upper)

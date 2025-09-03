@@ -62,8 +62,6 @@ include("testing_utilities.jl")
                         @error "$(quadrant_name) failed for $name: $(get(result, :error, "Unknown error"))"
                     end
                 end
-                
-                @info "✓ $(name): All 2×2 quadrants consistent between AD and FD backends"
             end
         end
     end
@@ -157,8 +155,6 @@ include("testing_utilities.jl")
             
             @test all(isapprox.(ad_mu_df.estimate, fd_mu_df.estimate; rtol=1e-8))
             @test all(isapprox.(ad_mu_df.se, fd_mu_df.se; rtol=1e-6))
-            
-            @info "✓ Logistic regression: AD and FD consistent on both target scales"
         end
     end
     
@@ -193,8 +189,6 @@ include("testing_utilities.jl")
                 @test validate_all_finite_positive(ad_scaled_df).all_valid
                 @test validate_all_finite_positive(fd_scaled_df).all_valid
             end
-            
-            @info "✓ Backend consistency maintained across different sample sizes"
         end
     end
     
@@ -210,7 +204,6 @@ include("testing_utilities.jl")
                                                        rtol_estimate=1e-8, rtol_se=1e-6)
             
             @test consistency_result.all_consistent
-            @info "✓ Small sample (n=30): Backend consistency maintained"
         end
         
         @testset "Extreme Coefficient Consistency" begin
@@ -222,17 +215,6 @@ include("testing_utilities.jl")
                                                        rtol_estimate=1e-8, rtol_se=1e-6)
             
             @test consistency_result.all_consistent
-            @info "✓ Extreme coefficients: Backend consistency maintained"
         end
     end
-    
-    @info "🎯 BACKEND CONSISTENCY VALIDATION: COMPLETE"
-    @info "AD and FD backends produce statistically equivalent results across:"
-    @info "  ✓ All 2×2 framework quadrants"
-    @info "  ✓ Linear and GLM models" 
-    @info "  ✓ Multiple target scales (η and μ)"
-    @info "  ✓ Various sample sizes"
-    @info "  ✓ Edge cases and extreme conditions"
-    @info ""
-    @info "Computational implementation correctness: VERIFIED ✓"
 end

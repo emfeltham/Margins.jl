@@ -2,8 +2,9 @@ using Test
 using Random
 using DataFrames, CategoricalArrays, GLM
 using Margins
+using Statistics
 
-@testset "Profile margins (at) semantics" begin
+@testset "Profile margins reference grid semantics" begin
     Random.seed!(123)
     n = 200
     df = DataFrame(
@@ -15,28 +16,27 @@ using Margins
     m = lm(@formula(y ~ x + z + g), df)
 
     # Profile predictions at means
-    profile1 = profile_margins(m, df; type=:predictions, at=:means)
-    profile2 = profile_margins(m, df; type=:predictions, at=Dict(:all=>:mean))
+    profile1 = profile_margins(m, df, means_grid(df); type=:predictions)  # At sample means
+    profile2 = profile_margins(m, df, means_grid(df); type=:predictions)  # Equivalent explicit call
     @test nrow(DataFrame(profile1)) == 1
     @test nrow(DataFrame(profile2)) == 1
 
-    # general→specific precedence: :all then x override
-    atspec = Dict(:all=>:mean, :x=>[-1.0, 0.0, 1.0])
-    profile_spec = profile_margins(m, df; type=:predictions, at=atspec)
+    # Using cartesian grid to specify x values, others use typical values
+    profile_spec = profile_margins(m, df, cartesian_grid(df; x=[-1.0, 0.0, 1.0]); type=:predictions)
     @test nrow(DataFrame(profile_spec)) == 3
     df_result = DataFrame(profile_spec)
     @test any(contains.(string.(names(df_result)), "x"))
 
-    # numlist parsing e.g., "-2(2)2" becomes [-2,0,2]
-    profile_num = profile_margins(m, df; type=:predictions, at=Dict(:x=>"-2(2)2"))
+    # explicit values (equivalent to numlist "-2(2)2" which becomes [-2,0,2])
+    profile_num = profile_margins(m, df, cartesian_grid(df; x=[-2.0, 0.0, 2.0]); type=:predictions)
     @test nrow(DataFrame(profile_num)) == 3
 
-    # multiple at blocks concatenation  
-    profile_multi = profile_margins(m, df; type=:predictions, at=[Dict(:x=>[-1.0]), Dict(:x=>[1.0])])
+    # explicit profiles using DataFrame with proper categorical values
+    profile_multi = profile_margins(m, df, DataFrame(x=[-1.0, 1.0], z=[mean(df.z), mean(df.z)], g=[df.g[1], df.g[1]]); type=:predictions)
     @test nrow(DataFrame(profile_multi)) == 2
 
-    # multiple profiles without averaging
-    profile_multiple = profile_margins(m, df; type=:predictions, at=Dict(:x=>[-2.0,0.0,2.0]))
+    # multiple profiles using cartesian grid
+    profile_multiple = profile_margins(m, df, cartesian_grid(df; x=[-2.0, 0.0, 2.0]); type=:predictions)
     @test nrow(DataFrame(profile_multiple)) == 3
 end
 

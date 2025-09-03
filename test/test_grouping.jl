@@ -34,15 +34,15 @@ using Margins
         res_multi = population_margins(m, df; type=:effects, vars=[:x], groups=[:group1, :group2])
         expected_rows = length(levels(df.group1)) * length(levels(df.group2))
         @test nrow(DataFrame(res_multi)) <= expected_rows  # May be fewer due to empty combinations
-        @test haskey(DataFrame(res_multi), Symbol("at_group1"))
-        @test haskey(DataFrame(res_multi), Symbol("at_group2"))
+        @test Symbol("at_group1") in propertynames(DataFrame(res_multi))
+        @test Symbol("at_group2") in propertynames(DataFrame(res_multi))
     end
 
     # Test unified groups parameter - continuous groups (quartiles)
     @testset "Continuous groups (quartiles)" begin
         res_continuous = population_margins(m, df; type=:effects, vars=[:z], groups=(:x, 4))
         @test nrow(DataFrame(res_continuous)) == 4  # Four quartiles
-        @test haskey(DataFrame(res_continuous), Symbol("at_x"))
+        @test Symbol("at_x") in propertynames(DataFrame(res_continuous))
         @test all(isfinite, DataFrame(res_continuous).estimate)
         # Check that we have distinct x values (quartile midpoints)
         @test length(unique(DataFrame(res_continuous)[!, Symbol("at_x")])) == 4
@@ -50,18 +50,18 @@ using Margins
 
     # Test unified groups parameter - nested groups
     @testset "Nested groups" begin
-        res_nested = population_margins(m, df; type=:effects, vars=[:x], groups=(main=:group1, within=:group2))
+        res_nested = population_margins(m, df; type=:effects, vars=[:x], groups=(:group1 => :group2))
         expected_rows = length(levels(df.group1)) * length(levels(df.group2))
         @test nrow(DataFrame(res_nested)) <= expected_rows  # May be fewer due to empty combinations  
-        @test haskey(DataFrame(res_nested), Symbol("at_group1"))
-        @test haskey(DataFrame(res_nested), Symbol("at_group2"))
+        @test Symbol("at_group1") in propertynames(DataFrame(res_nested))
+        @test Symbol("at_group2") in propertynames(DataFrame(res_nested))
     end
 
     # Test unified groups parameter - predictions
     @testset "Groups with predictions" begin
         res_pred = population_margins(m, df; type=:predictions, groups=:group1)
         @test nrow(DataFrame(res_pred)) == length(levels(df.group1))
-        @test haskey(DataFrame(res_pred), Symbol("at_group1"))
+        @test Symbol("at_group1") in propertynames(DataFrame(res_pred))
         @test all(isfinite, DataFrame(res_pred).estimate)
         @test all(DataFrame(res_pred).term .== "AAP")
     end
