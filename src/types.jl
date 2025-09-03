@@ -155,12 +155,16 @@ function _standard_table(mr::MarginsResult)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
+    # Get sample size from metadata
+    n_obs = get(mr.metadata, :n_obs, missing)
+    
     df = DataFrames.DataFrame(
         variable = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 
         t_stat = t_stats,
-        p_value = p_values
+        p_value = p_values,
+        n = fill(n_obs, length(mr.estimates))  # Add sample size column
     )
     
     _add_structural_columns!(df, mr)
@@ -212,6 +216,10 @@ function _profile_table(mr::MarginsResult)
     df[!, :lower] = mr.estimates .- z .* mr.standard_errors
     df[!, :upper] = mr.estimates .+ z .* mr.standard_errors
     
+    # Add sample size from metadata
+    n_obs = get(mr.metadata, :n_obs, missing)
+    df[!, :n] = fill(n_obs, length(mr.estimates))
+    
     # Add grouping columns if present
     if mr.group_values !== nothing
         for (k, v) in pairs(mr.group_values)
@@ -226,11 +234,15 @@ function _stata_table(mr::MarginsResult)
     t_stats = mr.estimates ./ mr.standard_errors  
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
+    # Get sample size from metadata
+    n_obs = get(mr.metadata, :n_obs, missing)
+    
     df = DataFrame(
         margin = mr.estimates,      # Stata uses "margin" not "estimate"
         std_err = mr.standard_errors, # "std_err" not "se" 
         t = t_stats,
-        P_t = p_values             # "P>|t|" equivalent
+        P_t = p_values,            # "P>|t|" equivalent
+        N = fill(n_obs, length(mr.estimates))  # Add sample size (Stata uses uppercase N)
     )
     _add_structural_columns!(df, mr)
     return df

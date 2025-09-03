@@ -31,7 +31,8 @@ function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; 
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],
-        p_value = [2 * (1 - cdf(Normal(), abs(mean_prediction / se)))]
+        p_value = [2 * (1 - cdf(Normal(), abs(mean_prediction / se)))],
+        n = [n_obs]  # Add sample size
     )
     
     return df, G

@@ -186,13 +186,15 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
+    n_obs = length(first(data_nt))
     
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
     n_vars = length(engine.de.vars)
     results = DataFrames.DataFrame(
         term = Vector{String}(undef, n_vars),
         estimate = Vector{Float64}(undef, n_vars), 
-        se = Vector{Float64}(undef, n_vars)
+        se = Vector{Float64}(undef, n_vars),
+        n = fill(n_obs, n_vars)  # Add sample size for all variables
     )
     G = Matrix{Float64}(undef, n_vars, length(engine.β))
     

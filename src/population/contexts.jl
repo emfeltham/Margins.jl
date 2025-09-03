@@ -17,6 +17,20 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     group_specs = groups === nothing ? [Dict()] : _parse_groups_specification(groups, data_nt)
     
     # Create all combinations of contexts
+    total_combinations = length(scenario_specs) * length(group_specs)
+    
+    # Warn about potential combination explosion
+    if total_combinations > 1000
+        error("Combination explosion detected ($total_combinations combinations). " *
+              "This would likely exhaust system memory. " *
+              "Please reduce the number of groups or scenarios. " *
+              "Maximum recommended: 1000 combinations.")
+    elseif total_combinations > 100
+        @warn "Large number of combinations detected ($total_combinations). " *
+              "This may result in slow computation and large output. " *
+              "Consider reducing grouping complexity or scenario count if performance is poor."
+    end
+    
     for scenario_spec in scenario_specs, group_spec in group_specs
         context_data, context_indices = _create_context_data(data_nt, scenario_spec, group_spec)
         
@@ -42,7 +56,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                     var_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(var_result))
                 end
                 
-                append!(results, var_result)
+                results = _append_results_with_missing_columns(results, var_result)
                 push!(gradients_list, var_gradients)
             end
         else # :predictions
@@ -60,7 +74,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                 pred_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(pred_result))
             end
             
-            append!(results, pred_result)
+            results = _append_results_with_missing_columns(results, pred_result)
             push!(gradients_list, pred_gradients)
         end
     end
@@ -466,6 +480,14 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     n_obs = length(first(context_data))
     n_params = length(engine.β)
     
+    # CRITICAL: Check for empty subgroups - violates statistical correctness principles
+    if n_obs == 0
+        error("Cannot compute marginal effects for empty subgroup. " *
+              "This violates statistical correctness principles - " *
+              "marginal effects require at least one observation. " *
+              "Consider using coarser grouping or removing empty categories.")
+    end
+    
     # For single variable, we need to compute the AME for just this var
     # First check if this variable is continuous or categorical
     col = context_data[var]
@@ -488,7 +510,8 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
         estimate = [ame_val],
         se = [se],
         t_stat = [ame_val / se],
-        p_value = [2 * (1 - cdf(Normal(), abs(ame_val / se)))]
+        p_value = [2 * (1 - cdf(Normal(), abs(ame_val / se)))],
+        n = [n_obs]  # Add sample size for this subgroup
     )
     
     # Reshape gradient to matrix form (1×p)
@@ -576,4 +599,47 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     )
     
     return df, G
+end
+
+"""
+    _append_results_with_missing_columns(results, new_result) -> DataFrame
+
+Helper function to append DataFrames that may have different column structures.
+This is needed for complex parallel grouping where different group specifications
+create results with different at_ columns.
+"""
+function _append_results_with_missing_columns(results::DataFrames.DataFrame, new_result::DataFrames.DataFrame)
+    if nrow(results) == 0
+        return new_result
+    end
+    
+    # Simple approach: use vcat with cols=:union to let DataFrames handle missing columns
+    try
+        return vcat(results, new_result; cols=:union)
+    catch e
+        # Fallback: manual column alignment with string-based missing values
+        all_cols = union(names(results), names(new_result))
+        
+        # Ensure all columns exist in both DataFrames, using string "missing" for consistency
+        for col in all_cols
+            if !(col in names(results))
+                results[!, col] = fill("missing", nrow(results))
+            end
+        end
+        
+        new_result_copy = copy(new_result)
+        for col in all_cols
+            if !(col in names(new_result_copy))
+                new_result_copy[!, col] = fill("missing", nrow(new_result_copy))
+            end
+        end
+        
+        # Reorder columns to match
+        results = results[!, all_cols]
+        new_result_copy = new_result_copy[!, all_cols]
+        
+        # Now append
+        append!(results, new_result_copy)
+        return results
+    end
 end

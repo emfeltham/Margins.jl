@@ -356,6 +356,9 @@ function _process_vars_parameter(model, vars, data_nt::NamedTuple)
         _validate_variables(data_nt, vars_vec)
         return vars_vec
     elseif vars isa Vector{Symbol}
+        if isempty(vars)
+            throw(ArgumentError("vars cannot be an empty vector. Use vars=nothing or vars=:all_continuous to auto-detect variables, or specify at least one variable."))
+        end
         _validate_variables(data_nt, vars)
         return vars
     else
