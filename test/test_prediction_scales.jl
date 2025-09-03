@@ -22,14 +22,14 @@ using Margins
         pred_link = population_margins(m_logit, df; type=:predictions, scale=:link)
         pred_response = population_margins(m_logit, df; type=:predictions, scale=:response)
         
-        @test nrow(pred_link.table) == 1
-        @test nrow(pred_response.table) == 1
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 1
+        @test nrow(DataFrame(pred_response)) == 1
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
         
         # Link scale should be log-odds, response scale should be probabilities
-        link_val = pred_link.table.dydx[1]
-        response_val = pred_response.table.dydx[1]
+        link_val = DataFrame(pred_link).estimate[1]
+        response_val = DataFrame(pred_response).estimate[1]
         
         # Response scale should be bounded [0,1] for logistic
         @test 0.0 <= response_val <= 1.0
@@ -44,16 +44,16 @@ using Margins
         prof_link = profile_margins(m_logit, df; at=scenarios, type=:predictions, scale=:link)
         prof_response = profile_margins(m_logit, df; at=scenarios, type=:predictions, scale=:response)
         
-        @test nrow(prof_link.table) == 3
-        @test nrow(prof_response.table) == 3
-        @test all(isfinite, prof_link.table.dydx)
-        @test all(isfinite, prof_response.table.dydx)
+        @test nrow(DataFrame(prof_link)) == 3
+        @test nrow(DataFrame(prof_response)) == 3
+        @test all(isfinite, DataFrame(prof_link).estimate)
+        @test all(isfinite, DataFrame(prof_response).estimate)
         
         # All response predictions should be in [0,1]
-        @test all(0.0 .<= prof_response.table.dydx .<= 1.0)
+        @test all(0.0 .<= DataFrame(prof_response).estimate .<= 1.0)
         
         # Link predictions should vary more widely
-        @test maximum(prof_link.table.dydx) - minimum(prof_link.table.dydx) > 1.0
+        @test maximum(DataFrame(prof_link).estimate) - minimum(DataFrame(prof_link).estimate) > 1.0
     end
     
     @testset "ProbitLink Predictions" begin
@@ -62,13 +62,13 @@ using Margins
         pred_link = population_margins(m_probit, df; type=:predictions, scale=:link)  
         pred_response = population_margins(m_probit, df; type=:predictions, scale=:response)
         
-        @test nrow(pred_link.table) == 1
-        @test nrow(pred_response.table) == 1
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 1
+        @test nrow(DataFrame(pred_response)) == 1
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
         
-        link_val = pred_link.table.dydx[1]
-        response_val = pred_response.table.dydx[1]
+        link_val = DataFrame(pred_link).estimate[1]
+        response_val = DataFrame(pred_response).estimate[1]
         
         # Response scale should be bounded [0,1] for probit too
         @test 0.0 <= response_val <= 1.0
@@ -83,13 +83,13 @@ using Margins
         pred_link = population_margins(m_log, df; type=:predictions, scale=:link)
         pred_response = population_margins(m_log, df; type=:predictions, scale=:response)
         
-        @test nrow(pred_link.table) == 1
-        @test nrow(pred_response.table) == 1
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 1
+        @test nrow(DataFrame(pred_response)) == 1
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
         
-        link_val = pred_link.table.dydx[1] 
-        response_val = pred_response.table.dydx[1]
+        link_val = DataFrame(pred_link).estimate[1] 
+        response_val = DataFrame(pred_response).estimate[1]
         
         # Response scale should be positive (counts)
         @test response_val > 0.0
@@ -107,20 +107,20 @@ using Margins
         pred_link = population_margins(m_linear, df; type=:predictions, scale=:link)
         pred_response = population_margins(m_linear, df; type=:predictions, scale=:response) 
         
-        @test nrow(pred_link.table) == 1
-        @test nrow(pred_response.table) == 1
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 1
+        @test nrow(DataFrame(pred_response)) == 1
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
         
         # Should be identical for identity link
-        link_val = pred_link.table.dydx[1]
-        response_val = pred_response.table.dydx[1]
+        link_val = DataFrame(pred_link).estimate[1]
+        response_val = DataFrame(pred_response).estimate[1]
         @test abs(link_val - response_val) < 1e-10
         
         # Test profiles too
         prof_link = profile_margins(m_linear, df; at=Dict(:x=>[0.0]), type=:predictions, scale=:link)
         prof_response = profile_margins(m_linear, df; at=Dict(:x=>[0.0]), type=:predictions, scale=:response)
-        @test abs(prof_link.table.dydx[1] - prof_response.table.dydx[1]) < 1e-10
+        @test abs(DataFrame(prof_link).estimate[1] - DataFrame(prof_response).estimate[1]) < 1e-10
     end
 end
 
@@ -139,17 +139,17 @@ end
     pred_link = population_margins(m, df; type=:predictions, scale=:link)
     pred_response = population_margins(m, df; type=:predictions, scale=:response)
     
-    @test all(pred_link.table.se .> 0)  
-    @test all(pred_response.table.se .> 0)
-    @test all(isfinite, pred_link.table.se)
-    @test all(isfinite, pred_response.table.se)
+    @test all(DataFrame(pred_link).se .> 0)  
+    @test all(DataFrame(pred_response).se .> 0)
+    @test all(isfinite, DataFrame(pred_link).se)
+    @test all(isfinite, DataFrame(pred_response).se)
     
     # Standard errors should generally be different due to transformation
-    @test abs(pred_link.table.se[1] - pred_response.table.se[1]) > 1e-6
+    @test abs(DataFrame(pred_link).se[1] - DataFrame(pred_response).se[1]) > 1e-6
     
     # Test basic result structure
-    @test all(names(pred_link.table) .⊇ ["term", "dydx", "se"])
-    @test all(names(pred_response.table) .⊇ ["term", "dydx", "se"])
+    @test all(names(DataFrame(pred_link)) .⊇ ["term", "estimate", "se"])
+    @test all(names(DataFrame(pred_response)) .⊇ ["term", "estimate", "se"])
 end
 
 @testset "Profile Prediction Grids with Scales" begin
@@ -170,30 +170,30 @@ end
     prof_response = profile_margins(m, df; at=scenarios, type=:predictions, scale=:response)
     
     # Should have 3 × 2 = 6 scenario combinations
-    @test nrow(prof_link.table) == 6
-    @test nrow(prof_response.table) == 6
+    @test nrow(DataFrame(prof_link)) == 6
+    @test nrow(DataFrame(prof_response)) == 6
     
     # Check that profile columns are present
-    @test "at_x1" in names(prof_link.table)
-    @test "at_x2" in names(prof_link.table)
-    @test "at_x1" in names(prof_response.table)
-    @test "at_x2" in names(prof_response.table)
+    @test "at_x1" in names(DataFrame(prof_link))
+    @test "at_x2" in names(DataFrame(prof_link))
+    @test "at_x1" in names(DataFrame(prof_response))
+    @test "at_x2" in names(DataFrame(prof_response))
     
     # All predictions should be finite
-    @test all(isfinite, prof_link.table.dydx)
-    @test all(isfinite, prof_response.table.dydx)
+    @test all(isfinite, DataFrame(prof_link).estimate)
+    @test all(isfinite, DataFrame(prof_response).estimate)
     
     # Response predictions should be in [0,1]
-    @test all(0.0 .<= prof_response.table.dydx .<= 1.0)
+    @test all(0.0 .<= DataFrame(prof_response).estimate .<= 1.0)
     
     # Test averaged profiles
     prof_avg_link = profile_margins(m, df; at=scenarios, type=:predictions, scale=:link, average=true)
     prof_avg_response = profile_margins(m, df; at=scenarios, type=:predictions, scale=:response, average=true)
     
-    @test nrow(prof_avg_link.table) == 1
-    @test nrow(prof_avg_response.table) == 1
-    @test all(isfinite, prof_avg_link.table.dydx)
-    @test all(isfinite, prof_avg_response.table.dydx)
+    @test nrow(DataFrame(prof_avg_link)) == 1
+    @test nrow(DataFrame(prof_avg_response)) == 1
+    @test all(isfinite, DataFrame(prof_avg_link).estimate)
+    @test all(isfinite, DataFrame(prof_avg_response).estimate)
 end
 
 @testset "Edge Cases and Error Handling" begin
@@ -213,10 +213,10 @@ end
         pred_link = profile_margins(m, df; at=single_scenario, type=:predictions, scale=:link)
         pred_response = profile_margins(m, df; at=single_scenario, type=:predictions, scale=:response)
         
-        @test nrow(pred_link.table) == 1
-        @test nrow(pred_response.table) == 1
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 1
+        @test nrow(DataFrame(pred_response)) == 1
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
     end
     
     @testset "Extreme Scenarios" begin
@@ -226,12 +226,12 @@ end
         pred_link = profile_margins(m, df; at=extreme_scenarios, type=:predictions, scale=:link)
         pred_response = profile_margins(m, df; at=extreme_scenarios, type=:predictions, scale=:response)
         
-        @test nrow(pred_link.table) == 2
-        @test nrow(pred_response.table) == 2
-        @test all(isfinite, pred_link.table.dydx)
-        @test all(isfinite, pred_response.table.dydx)
+        @test nrow(DataFrame(pred_link)) == 2
+        @test nrow(DataFrame(pred_response)) == 2
+        @test all(isfinite, DataFrame(pred_link).estimate)
+        @test all(isfinite, DataFrame(pred_response).estimate)
         
         # Response should still be bounded [0,1] even for extreme inputs
-        @test all(0.0 .<= pred_response.table.dydx .<= 1.0)
+        @test all(0.0 .<= DataFrame(pred_response).estimate .<= 1.0)
     end
 end

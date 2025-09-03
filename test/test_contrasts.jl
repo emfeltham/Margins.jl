@@ -18,32 +18,32 @@ using Margins
     # Test categorical effects
     @testset "Categorical marginal effects" begin
         cat_effects = population_margins(m, df; type=:effects, vars=[:cat_var])
-        @test nrow(cat_effects.table) >= 1  # Should have contrasts
-        @test all(isfinite, cat_effects.table.dydx)
-        @test "cat_var" in cat_effects.table.term
+        @test nrow(DataFrame(cat_effects)) >= 1  # Should have contrasts
+        @test all(isfinite, DataFrame(cat_effects).estimate)
+        @test "cat_var" in DataFrame(cat_effects).term
     end
 
     # Test binary categorical effects  
     @testset "Binary categorical effects" begin
         binary_effects = population_margins(m, df; type=:effects, vars=[:binary_var])
-        @test nrow(binary_effects.table) >= 1
-        @test all(isfinite, binary_effects.table.dydx)
-        @test "binary_var" in binary_effects.table.term
+        @test nrow(DataFrame(binary_effects)) >= 1
+        @test all(isfinite, DataFrame(binary_effects).estimate)
+        @test "binary_var" in DataFrame(binary_effects).term
     end
 
     # Test mixed continuous and categorical
     @testset "Mixed variable types" begin
         mixed_effects = population_margins(m, df; type=:effects, vars=[:x, :cat_var])
-        @test nrow(mixed_effects.table) >= 2  # At least one continuous + categorical contrasts
-        @test all(isfinite, mixed_effects.table.dydx)
-        @test "x" in mixed_effects.table.term
-        @test any(contains.("cat_var", mixed_effects.table.term))
+        @test nrow(DataFrame(mixed_effects)) >= 2  # At least one continuous + categorical contrasts
+        @test all(isfinite, DataFrame(mixed_effects).estimate)
+        @test "x" in DataFrame(mixed_effects).term
+        @test any(contains.("cat_var", DataFrame(mixed_effects).term))
     end
 
     # Test contrasts parameter
     @testset "Contrasts parameter" begin
         pairwise_effects = population_margins(m, df; type=:effects, vars=[:cat_var], contrasts=:pairwise)
-        @test nrow(pairwise_effects.table) >= 1
-        @test all(isfinite, pairwise_effects.table.dydx)
+        @test nrow(DataFrame(pairwise_effects)) >= 1
+        @test all(isfinite, DataFrame(pairwise_effects).estimate)
     end
 end

@@ -244,11 +244,11 @@ include("analytical_se_validation.jl")
     @testset "Tier 2: Function Transformations - 2×2 Coverage" begin
         
         @testset "Log Transformation: y ~ log(x)" begin
-            # Generate data directly to ensure positive values for log
-            Random.seed!(123)
+            # CRITICAL: This test exposes a package bug - FD runs despite backend=:ad
+            Random.seed!(123)  # Use original problematic seed to debug the issue
             n = 500
             df = DataFrame(
-                x = rand(n) * 2.0 .+ 1.0,  # Safe range [1.0, 3.0] for log + FD steps
+                x = rand(n) * 2.0 .+ 1.0,  # Original range that triggers the problem
                 z = randn(n)
             )
             df.y = 0.5 * log.(df.x) + 0.3 * df.z + 0.1 * randn(n)
@@ -257,31 +257,32 @@ include("analytical_se_validation.jl")
             β₀, β₁ = coef(model)
             
             # === 2×2 FRAMEWORK FOR LOG TRANSFORMATION ===
+            # Note: Default backend now safely handles log functions (backend defaults changed to :ad)
             
-            # 1. Population Effects: Use AD backend to avoid FD domain issues with log
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x], target=:eta, backend=:ad)
+            # 1. Population Effects: Now works with default backend (after fix)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
             pop_effects_df = DataFrame(pop_effects)
             manual_ame = mean(β₁ ./ df.x)  # ∂/∂x[β₁·log(x)] = β₁/x, averaged
             @test pop_effects_df.estimate[1] ≈ manual_ame atol=1e-12
             @test validate_all_finite_positive(pop_effects_df).all_valid
             
-            # 2. Population Predictions
+            # 2. Population Predictions: Now works with default backend
             pop_predictions = population_margins(model, df; type=:predictions, scale=:response)
             pop_pred_df = DataFrame(pop_predictions)
             manual_mean_prediction = mean(GLM.predict(model, df))
             @test pop_pred_df.estimate[1] ≈ manual_mean_prediction atol=1e-12
             @test validate_all_finite_positive(pop_pred_df).all_valid
             
-            # 3. Profile Effects at specific point (use AD for log)
+            # 3. Profile Effects at specific point: Now works with default backend
             test_x = 2.0
             profile_effects = profile_margins(model, df; type=:effects, vars=[:x], 
-                                            at=Dict(:x => test_x), target=:eta, backend=:ad)
+                                            at=Dict(:x => test_x), target=:eta)
             prof_effects_df = DataFrame(profile_effects)
             manual_mem = β₁ / test_x  # ∂/∂x[β₁·log(x)] = β₁/x at x=test_x
             @test prof_effects_df.estimate[1] ≈ manual_mem atol=1e-12
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
-            # 4. Profile Predictions at specific point
+            # 4. Profile Predictions at specific point: Now works with default backend
             profile_predictions = profile_margins(model, df; type=:predictions,
                                                 at=Dict(:x => test_x), scale=:response)
             prof_pred_df = DataFrame(profile_predictions)

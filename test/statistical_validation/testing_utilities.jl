@@ -283,7 +283,7 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
     
     # 4. Profile Predictions (APM) 
     # For categorical-only models, profile predictions at :means may fail
-    # We'll test this and handle gracefully
+    # We'll test this and let it error if invalid
     try
         profile_predictions = profile_margins(model, data; type=:predictions, at=:means)
         prof_pred_df = DataFrame(profile_predictions)

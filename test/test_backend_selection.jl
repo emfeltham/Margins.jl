@@ -21,9 +21,9 @@ println("✅ Model fitted")
 # Test 1: Default backend selection
 println("\nTest 1: Default backend selection...")
 try
-    # Population margins should default to :fd
+    # Population margins should default to :ad
     result_pop = population_margins(model, df; type=:effects, vars=[:x])
-    println("✅ Population margins with auto backend (should use :fd)")
+    println("✅ Population margins with auto backend (should use :ad)")
     
     # Profile margins should default to :ad  
     result_prof = profile_margins(model, df; at=:means, type=:effects, vars=[:x])

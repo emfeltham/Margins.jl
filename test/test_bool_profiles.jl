@@ -20,9 +20,9 @@ using Margins
         # Should not throw InexactError when Bool columns are present
         result = profile_margins(m, df; at=:means, type=:effects, vars=[:x])
         
-        @test nrow(result.table) == 1
-        @test all(isfinite, result.table.dydx)
-        @test all(result.table.se .> 0)
+        @test nrow(DataFrame(result)) == 1
+        @test all(isfinite, DataFrame(result).estimate)
+        @test all(DataFrame(result).se .> 0)
     end
     
     @testset "Bool Fractional Values" begin
@@ -35,17 +35,17 @@ using Margins
         result = profile_margins(m, df; at=scenarios, type=:effects, vars=[:x])
         
         # Should create 4×2 = 8 scenarios
-        @test nrow(result.table) == 8
-        @test all(isfinite, result.table.dydx)
-        @test all(result.table.se .> 0)
+        @test nrow(DataFrame(result)) == 8
+        @test all(isfinite, DataFrame(result).estimate)
+        @test all(DataFrame(result).se .> 0)
         
         # Check profile columns are present
-        @test "at_treated" in names(result.table)
-        @test "at_urban" in names(result.table)
+        @test "at_treated" in names(DataFrame(result))
+        @test "at_urban" in names(DataFrame(result))
         
         # Check fractional values are preserved
-        @test Set(result.table.at_treated) == Set([0.0, 0.3, 0.7, 1.0])
-        @test Set(result.table.at_urban) == Set([0.0, 1.0])
+        @test Set(DataFrame(result).at_treated) == Set([0.0, 0.3, 0.7, 1.0])
+        @test Set(DataFrame(result).at_urban) == Set([0.0, 1.0])
     end
     
     @testset ":all Specification with Bool Columns" begin
@@ -59,19 +59,19 @@ using Margins
         result = profile_margins(m, df; at=scenarios, type=:effects, vars=[:x])
         
         # Should create 2×1 = 2 scenarios (treated=[0,1], urban=0.5)
-        @test nrow(result.table) == 2
-        @test all(isfinite, result.table.dydx)
+        @test nrow(DataFrame(result)) == 2
+        @test all(isfinite, DataFrame(result).estimate)
         
         # Check that Real columns got mean values, Bool got specified values
-        @test "at_x" in names(result.table)
-        @test "at_z" in names(result.table) 
-        @test "at_treated" in names(result.table)
-        @test "at_urban" in names(result.table)
+        @test "at_x" in names(DataFrame(result))
+        @test "at_z" in names(DataFrame(result)) 
+        @test "at_treated" in names(DataFrame(result))
+        @test "at_urban" in names(DataFrame(result))
         
         # urban should be 0.5 for all rows
-        @test all(result.table.at_urban .== 0.5)
+        @test all(DataFrame(result).at_urban .== 0.5)
         # treated should be [0, 1]
-        @test Set(result.table.at_treated) == Set([0, 1])
+        @test Set(DataFrame(result).at_treated) == Set([0, 1])
     end
     
     @testset "Mixed Variable Types in Profiles" begin
@@ -86,33 +86,33 @@ using Margins
         result = profile_margins(m, df; at=scenarios, type=:predictions, scale=:response)
         
         # Should create 3×1×3×2 = 18 scenarios
-        @test nrow(result.table) == 18
-        @test all(0.0 .<= result.table.dydx .<= 1.0)  # Response scale bounded [0,1]
-        @test all(isfinite, result.table.dydx)
+        @test nrow(DataFrame(result)) == 18
+        @test all(0.0 .<= DataFrame(result).estimate .<= 1.0)  # Response scale bounded [0,1]
+        @test all(isfinite, DataFrame(result).estimate)
         
         # Check all profile columns present
-        @test "at_x" in names(result.table)
-        @test "at_z" in names(result.table)
-        @test "at_treated" in names(result.table) 
-        @test "at_urban" in names(result.table)
+        @test "at_x" in names(DataFrame(result))
+        @test "at_z" in names(DataFrame(result))
+        @test "at_treated" in names(DataFrame(result)) 
+        @test "at_urban" in names(DataFrame(result))
     end
     
     @testset "Bool Column Default Behavior" begin
         # When at=:means, Bool columns should default to false
         result = profile_margins(m, df; at=:means, type=:predictions, scale=:response)
         
-        @test nrow(result.table) == 1
+        @test nrow(DataFrame(result)) == 1
         
         # Check that all variables get profile columns with :means
-        profile_cols = filter(n -> startswith(string(n), "at_"), names(result.table))
+        profile_cols = filter(n -> startswith(string(n), "at_"), names(DataFrame(result)))
         
         # Should have profile columns for all variables in the model
         expected_profile_cols = ["at_x", "at_z", "at_treated", "at_urban", "at_y"]
         @test sort(profile_cols) == sort(expected_profile_cols)
         
         # Bool columns should be set to false (default value)
-        @test result.table.at_treated[1] == false
-        @test result.table.at_urban[1] == false
+        @test DataFrame(result).at_treated[1] == false
+        @test DataFrame(result).at_urban[1] == false
     end
 end
 

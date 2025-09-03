@@ -37,18 +37,18 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                               vars = [:treatment])
         
         # Verify structure
-        @test nrow(result.table) == 4  # One contrast per profile
-        @test all(result.table.term .== :treatment)
-        @test all(result.table.level_from .== "Control") 
-        @test all(result.table.level_to .== "Treatment")
-        @test all(.!ismissing.(result.table.se))
-        @test all(result.table.se .> 0)
+        @test nrow(DataFrame(result)) == 4  # One contrast per profile
+        @test all(DataFrame(result).term .== :treatment)
+        @test all(DataFrame(result).level_from .== "Control") 
+        @test all(DataFrame(result).level_to .== "Treatment")
+        @test all(.!ismissing.(DataFrame(result).se))
+        @test all(DataFrame(result).se .> 0)
         
         # Check profile columns are preserved
-        @test :at_x1 in names(result.table)
-        @test :at_x2 in names(result.table) 
-        @test Set(result.table.at_x1) == Set([0.0, 1.0])
-        @test Set(result.table.at_x2) == Set([0.0, 1.0])
+        @test :at_x1 in names(DataFrame(result))
+        @test :at_x2 in names(DataFrame(result)) 
+        @test Set(DataFrame(result).at_x1) == Set([0.0, 1.0])
+        @test Set(DataFrame(result).at_x2) == Set([0.0, 1.0])
     end
 
     @testset "Multiple Categorical Variables" begin
@@ -65,15 +65,15 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                 vars = [:treatment, :region])
         
         # Should have contrasts for both treatment and region
-        treatment_rows = result.table[result.table.term .== :treatment, :]
-        region_rows = result.table[result.table.term .== :region, :]
+        treatment_rows = result[DataFrame(result).term .== :treatment, :]
+        region_rows = result[DataFrame(result).term .== :region, :]
         
-        @test nrow(treatment_rows) == 2  # One per profile
-        @test nrow(region_rows) >= 2     # Multiple region contrasts possible
+        @test nrow(DataFrame(treatment_rows)) == 2  # One per profile
+        @test nrow(DataFrame(region_rows)) >= 2     # Multiple region contrasts possible
         
         # All should have valid SEs
-        @test all(.!ismissing.(result.table.se))
-        @test all(result.table.se .> 0)
+        @test all(.!ismissing.(DataFrame(result).se))
+        @test all(DataFrame(result).se .> 0)
     end
 
     @testset "Different Contrast Types" begin
@@ -99,8 +99,8 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
         # Baseline should have fewer contrasts than pairwise for multi-level categorical
         region_levels = length(levels(df.region))
         if region_levels > 2
-            baseline_contrasts = nrow(result_baseline.table[result_baseline.table.term .== :region, :])
-            pairwise_contrasts = nrow(result_pairwise.table[result_pairwise.table.term .== :region, :])
+            baseline_contrasts = nrow(result_baseline[DataFrame(result_baseline).term .== :region, :])
+            pairwise_contrasts = nrow(result_pairwise[DataFrame(result_pairwise).term .== :region, :])
             @test baseline_contrasts < pairwise_contrasts
         end
     end
@@ -125,8 +125,8 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                    target = :mu)   # Response scale
         
         # For linear model, η and μ effects should be identical
-        @test abs(result_eta.table.dydx[1] - result_mu.table.dydx[1]) < 1e-10
-        @test abs(result_eta.table.se[1] - result_mu.table.se[1]) < 1e-10
+        @test abs(DataFrame(result_eta).estimate[1] - DataFrame(result_mu).estimate[1]) < 1e-10
+        @test abs(DataFrame(result_eta).se[1] - DataFrame(result_mu).se[1]) < 1e-10
     end
 
     @testset "Averaging Support" begin
@@ -150,15 +150,15 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                          vars = [:treatment], 
                                          average = true)
         
-        @test nrow(result_individual.table) == 3  # One per profile
-        @test nrow(result_averaged.table) == 1    # Averaged to single row
+        @test nrow(DataFrame(result_individual)) == 3  # One per profile
+        @test nrow(DataFrame(result_averaged)) == 1    # Averaged to single row
         
         # Averaged effect should equal mean of individual effects  
-        @test abs(result_averaged.table.dydx[1] - mean(result_individual.table.dydx)) < 1e-10
+        @test abs(DataFrame(result_averaged).estimate[1] - mean(DataFrame(result_individual).estimate)) < 1e-10
         
         # Averaged SE should be proper delta-method, not simple average
-        simple_se_avg = mean(result_individual.table.se)
-        @test result_averaged.table.se[1] != simple_se_avg  # Should differ from simple average
+        simple_se_avg = mean(DataFrame(result_individual).se)
+        @test DataFrame(result_averaged).se[1] != simple_se_avg  # Should differ from simple average
     end
 
     @testset "Mixed Continuous and Categorical" begin
@@ -175,10 +175,10 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                 vars = [:x1, :treatment, :region])
         
         # Should have continuous and categorical effects
-        continuous_terms = result.table[result.table.term .== :x1, :]
-        categorical_terms = result.table[result.table.term .!= :x1, :]
+        continuous_terms = result[DataFrame(result).term .== :x1, :]
+        categorical_terms = result[DataFrame(result).term .!= :x1, :]
         
-        @test nrow(continuous_terms) == 2  # One per profile
+        @test nrow(DataFrame(continuous_terms)) == 2  # One per profile
         @test nrow(categorical_terms) > 0  # At least some categorical contrasts
         
         # Continuous terms shouldn't have level_from/level_to
@@ -215,14 +215,14 @@ using Margins, GLM, DataFrames, Test, Random, CategoricalArrays
                                      vars = [:treatment])
         
         # Results should be very similar (allowing for small numerical differences)
-        @test nrow(result_table.table) == nrow(result_dict.table)
+        @test nrow(DataFrame(result_table)) == nrow(result_dict)
         
         # Sort both by profile columns for comparison
-        table_sorted = sort(result_table.table, [:at_x1, :at_region])
-        dict_sorted = sort(result_dict.table, [:at_x1, :at_region])
+        table_sorted = sort(result_table, [:at_x1, :at_region])
+        dict_sorted = sort(result_dict, [:at_x1, :at_region])
         
         for i in 1:nrow(table_sorted)
-            @test abs(table_sorted.dydx[i] - dict_sorted.dydx[i]) < 1e-8
+            @test abs(table_sorted.estimate[i] - dict_sorted.estimate[i]) < 1e-8
             @test abs(table_sorted.se[i] - dict_sorted.se[i]) < 1e-8
         end
     end

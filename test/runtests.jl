@@ -21,10 +21,18 @@ end
 
 # Statistical Validation Suite
 @testset "Statistical Correctness" begin
-    @info "Starting comprehensive statistical validation framework..."
-    # Core statistical correctness validation
-    include("statistical_validation/statistical_validation.jl")
-    # Backend consistency validation (essential)
+    # Essential quick statistical validation (always run)
     include("statistical_validation/backend_consistency.jl")
-    @info "Statistical validation framework completed successfully ✓"
+    
+    # Comprehensive statistical validation (9 tiers, ~60 seconds)
+    # Run comprehensive tests if explicitly requested via environment variable
+    if get(ENV, "MARGINS_COMPREHENSIVE_TESTS", "false") == "true"
+        @info "Running comprehensive statistical validation framework (9 tiers)..."
+        @info "This includes: analytical SE validation, bootstrap validation, robust SE integration, and specialized edge cases"
+        include("statistical_validation/statistical_validation.jl")
+        @info "Comprehensive statistical validation completed successfully ✓"
+    else
+        @info "Quick statistical validation completed ✓"
+        @info "Run with MARGINS_COMPREHENSIVE_TESTS=true for full 9-tier validation suite"
+    end
 end

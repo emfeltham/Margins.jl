@@ -102,7 +102,7 @@ try
     result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1])
     
     println("   ✅ Profile margins with mixture-based typical values succeeded")
-    println("   ✅ Result: $(nrow(DataFrame(result))) effects computed")
+    println("   ✅ Result: $(nrow(result)) effects computed")
     
     # The reference grid should now use frequency mixtures for region and education
     println("   ✅ Integration test passed")

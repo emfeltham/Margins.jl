@@ -87,7 +87,7 @@ try
     result = profile_margins(model, data; at=:means, type=:effects, vars=[:income])
     
     println("   ✅ Profile margins with frequency-weighted typical values succeeded")
-    println("   ✅ Result: $(nrow(DataFrame(result))) effects computed")
+    println("   ✅ Result: $(nrow(result)) effects computed")
     
     # The reference grid now uses frequency mixtures, so the "at means" profile
     # represents the actual population composition rather than arbitrary first levels

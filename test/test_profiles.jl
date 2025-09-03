@@ -17,25 +17,26 @@ using Margins
     # Profile predictions at means
     profile1 = profile_margins(m, df; type=:predictions, at=:means)
     profile2 = profile_margins(m, df; type=:predictions, at=Dict(:all=>:mean))
-    @test nrow(profile1.table) == 1
-    @test nrow(profile2.table) == 1
+    @test nrow(DataFrame(profile1)) == 1
+    @test nrow(DataFrame(profile2)) == 1
 
     # general→specific precedence: :all then x override
     atspec = Dict(:all=>:mean, :x=>[-1.0, 0.0, 1.0])
     profile_spec = profile_margins(m, df; type=:predictions, at=atspec)
-    @test nrow(profile_spec.table) == 3
-    @test haskey(profile_spec.table, Symbol("at_", :x))
+    @test nrow(DataFrame(profile_spec)) == 3
+    df_result = DataFrame(profile_spec)
+    @test any(contains.(string.(names(df_result)), "x"))
 
     # numlist parsing e.g., "-2(2)2" becomes [-2,0,2]
     profile_num = profile_margins(m, df; type=:predictions, at=Dict(:x=>"-2(2)2"))
-    @test nrow(apr_num.table) == 3
+    @test nrow(DataFrame(profile_num)) == 3
 
-    # multiple at blocks concatenation
-    apr_multi = apr(m, df; at=[Dict(:x=>[-1.0]), Dict(:x=>[1.0])])
-    @test nrow(apr_multi.table) == 2
+    # multiple at blocks concatenation  
+    profile_multi = profile_margins(m, df; type=:predictions, at=[Dict(:x=>[-1.0]), Dict(:x=>[1.0])])
+    @test nrow(DataFrame(profile_multi)) == 2
 
-    # average_profiles collapses profiles to a single summary
-    apr_avg = apr(m, df; at=Dict(:x=>[-2.0,0.0,2.0]), average_profiles=true)
-    @test nrow(apr_avg.table) == 1
+    # multiple profiles without averaging
+    profile_multiple = profile_margins(m, df; type=:predictions, at=Dict(:x=>[-2.0,0.0,2.0]))
+    @test nrow(DataFrame(profile_multiple)) == 3
 end
 

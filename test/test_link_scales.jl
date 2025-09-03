@@ -23,14 +23,14 @@ using Margins
         eta_pop = population_margins(m_logit, df; type=:effects, vars=[:x], target=:eta)
         mu_pop = population_margins(m_logit, df; type=:effects, vars=[:x], target=:mu)
         
-        @test nrow(eta_pop.table) == 1
-        @test nrow(mu_pop.table) == 1
-        @test all(isfinite, eta_pop.table.dydx)
-        @test all(isfinite, mu_pop.table.dydx)
+        @test nrow(DataFrame(eta_pop)) == 1
+        @test nrow(DataFrame(mu_pop)) == 1
+        @test all(isfinite, DataFrame(eta_pop).estimate)
+        @test all(isfinite, DataFrame(mu_pop).estimate)
         
         # Critical test: effects should be different for LogitLink
-        eta_val = eta_pop.table.dydx[1]
-        mu_val = mu_pop.table.dydx[1]
+        eta_val = DataFrame(eta_pop).estimate[1]
+        mu_val = DataFrame(mu_pop).estimate[1]
         @test abs(eta_val - mu_val) > 0.001  # Should be substantially different
         @test eta_val / mu_val > 2.0  # η effects should be larger (chain rule: dμ/dη = μ(1-μ) ≤ 0.25)
         
@@ -38,13 +38,13 @@ using Margins
         eta_prof = profile_margins(m_logit, df; at=:means, type=:effects, vars=[:x], target=:eta)
         mu_prof = profile_margins(m_logit, df; at=:means, type=:effects, vars=[:x], target=:mu)
         
-        @test nrow(eta_prof.table) == 1
-        @test nrow(mu_prof.table) == 1
-        @test abs(eta_prof.table.dydx[1] - mu_prof.table.dydx[1]) > 0.001
+        @test nrow(DataFrame(eta_prof)) == 1
+        @test nrow(DataFrame(mu_prof)) == 1
+        @test abs(DataFrame(eta_prof).estimate[1] - DataFrame(mu_prof).estimate[1]) > 0.001
         
         # Population and profile should be similar for large n
-        @test abs(eta_pop.table.dydx[1] - eta_prof.table.dydx[1]) < 0.1  
-        @test abs(mu_pop.table.dydx[1] - mu_prof.table.dydx[1]) < 0.1
+        @test abs(DataFrame(eta_pop).estimate[1] - DataFrame(eta_prof).estimate[1]) < 0.1  
+        @test abs(DataFrame(mu_pop).estimate[1] - DataFrame(mu_prof).estimate[1]) < 0.1
     end
     
     @testset "ProbitLink (Binomial GLM)" begin
@@ -54,14 +54,14 @@ using Margins
         eta_pop = population_margins(m_probit, df; type=:effects, vars=[:x], target=:eta)
         mu_pop = population_margins(m_probit, df; type=:effects, vars=[:x], target=:mu)
         
-        @test nrow(eta_pop.table) == 1
-        @test nrow(mu_pop.table) == 1
-        @test all(isfinite, eta_pop.table.dydx)
-        @test all(isfinite, mu_pop.table.dydx)
+        @test nrow(DataFrame(eta_pop)) == 1
+        @test nrow(DataFrame(mu_pop)) == 1
+        @test all(isfinite, DataFrame(eta_pop).estimate)
+        @test all(isfinite, DataFrame(mu_pop).estimate)
         
         # Critical test: effects should be different for ProbitLink
-        eta_val = eta_pop.table.dydx[1]
-        mu_val = mu_pop.table.dydx[1]
+        eta_val = DataFrame(eta_pop).estimate[1]
+        mu_val = DataFrame(mu_pop).estimate[1]
         @test abs(eta_val - mu_val) > 0.001
         @test eta_val / mu_val > 1.5  # η effects should be larger
     end
@@ -74,14 +74,14 @@ using Margins
         eta_pop = population_margins(m_log, df; type=:effects, vars=[:x], target=:eta)
         mu_pop = population_margins(m_log, df; type=:effects, vars=[:x], target=:mu)
         
-        @test nrow(eta_pop.table) == 1 
-        @test nrow(mu_pop.table) == 1
-        @test all(isfinite, eta_pop.table.dydx)
-        @test all(isfinite, mu_pop.table.dydx)
+        @test nrow(DataFrame(eta_pop)) == 1 
+        @test nrow(DataFrame(mu_pop)) == 1
+        @test all(isfinite, DataFrame(eta_pop).estimate)
+        @test all(isfinite, DataFrame(mu_pop).estimate)
         
         # Critical test: effects should be different for LogLink
-        eta_val = eta_pop.table.dydx[1]
-        mu_val = mu_pop.table.dydx[1]
+        eta_val = DataFrame(eta_pop).estimate[1]
+        mu_val = DataFrame(mu_pop).estimate[1]
         @test abs(eta_val - mu_val) > 0.001
         # For log link: dμ/dη = exp(η) = μ, so μ effects should be larger
         @test abs(mu_val / eta_val) > 2.0  
@@ -94,20 +94,20 @@ using Margins
         eta_pop = population_margins(m_linear, df; type=:effects, vars=[:x], target=:eta)
         mu_pop = population_margins(m_linear, df; type=:effects, vars=[:x], target=:mu)
         
-        @test nrow(eta_pop.table) == 1
-        @test nrow(mu_pop.table) == 1
-        @test all(isfinite, eta_pop.table.dydx)
-        @test all(isfinite, mu_pop.table.dydx)
+        @test nrow(DataFrame(eta_pop)) == 1
+        @test nrow(DataFrame(mu_pop)) == 1
+        @test all(isfinite, DataFrame(eta_pop).estimate)
+        @test all(isfinite, DataFrame(mu_pop).estimate)
         
         # Critical test: effects should be identical for IdentityLink
-        eta_val = eta_pop.table.dydx[1]
-        mu_val = mu_pop.table.dydx[1]
+        eta_val = DataFrame(eta_pop).estimate[1]
+        mu_val = DataFrame(mu_pop).estimate[1]
         @test abs(eta_val - mu_val) < 1e-10  # Should be numerically identical
         
         # Test profile margins too
         eta_prof = profile_margins(m_linear, df; at=:means, type=:effects, vars=[:x], target=:eta)  
         mu_prof = profile_margins(m_linear, df; at=:means, type=:effects, vars=[:x], target=:mu)
-        @test abs(eta_prof.table.dydx[1] - mu_prof.table.dydx[1]) < 1e-10
+        @test abs(DataFrame(eta_prof).estimate[1] - DataFrame(mu_prof).estimate[1]) < 1e-10
     end
 end
 
@@ -162,17 +162,17 @@ end
     eta_res = population_margins(m, df; type=:effects, vars=[:x], target=:eta)
     mu_res = population_margins(m, df; type=:effects, vars=[:x], target=:mu)
     
-    @test all(eta_res.table.se .> 0)  # Positive standard errors
-    @test all(mu_res.table.se .> 0)
-    @test all(isfinite, eta_res.table.se)  # Finite standard errors
-    @test all(isfinite, mu_res.table.se)
+    @test all(DataFrame(eta_res).se .> 0)  # Positive standard errors
+    @test all(DataFrame(mu_res).se .> 0)
+    @test all(isfinite, DataFrame(eta_res).se)  # Finite standard errors
+    @test all(isfinite, DataFrame(mu_res).se)
     
     # Standard errors should generally be different (due to delta method)
-    @test abs(eta_res.table.se[1] - mu_res.table.se[1]) > 1e-6
+    @test abs(DataFrame(eta_res).se[1] - DataFrame(mu_res).se[1]) > 1e-6
     
     # Test basic result structure
-    @test all(names(eta_res.table) .⊇ ["term", "dydx", "se"])
-    @test all(names(mu_res.table) .⊇ ["term", "dydx", "se"])
+    @test all(names(DataFrame(eta_res)) .⊇ ["term", "estimate", "se"])
+    @test all(names(DataFrame(mu_res)) .⊇ ["term", "estimate", "se"])
 end
 
 @testset "Multi-Variable Link Scale Effects" begin
@@ -191,15 +191,15 @@ end
     eta_multi = population_margins(m, df; type=:effects, vars=[:x1, :x2, :x3], target=:eta)
     mu_multi = population_margins(m, df; type=:effects, vars=[:x1, :x2, :x3], target=:mu)
     
-    @test nrow(eta_multi.table) == 3
-    @test nrow(mu_multi.table) == 3
-    @test Set(eta_multi.table.term) == Set([:x1, :x2, :x3])
-    @test Set(mu_multi.table.term) == Set([:x1, :x2, :x3])
+    @test nrow(DataFrame(eta_multi)) == 3
+    @test nrow(DataFrame(mu_multi)) == 3
+    @test Set(DataFrame(eta_multi).term) == Set([:x1, :x2, :x3])
+    @test Set(DataFrame(mu_multi).term) == Set([:x1, :x2, :x3])
     
     # All effects should differ between scales
     for i in 1:3
-        eta_val = eta_multi.table.dydx[i]
-        mu_val = mu_multi.table.dydx[i] 
+        eta_val = DataFrame(eta_multi).estimate[i]
+        mu_val = DataFrame(mu_multi).estimate[i] 
         @test abs(eta_val - mu_val) > 0.001
         @test abs(eta_val) > abs(mu_val)  # Link scale effects should be larger in magnitude
     end

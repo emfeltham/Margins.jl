@@ -21,8 +21,8 @@ using Margins, GLM, DataFrames, Test, Random, Logging, StatsBase
         result = population_margins(model_good, df; type=:effects, vars=[:x1])
         
         # Should produce valid results
-        @test nrow(result.table) == 1
-        @test result.table.se[1] > 0
+        @test nrow(DataFrame(result)) == 1
+        @test DataFrame(result).se[1] > 0
     end
 
     @testset "Broken vcov - Error Thrown" begin
@@ -83,8 +83,8 @@ using Margins, GLM, DataFrames, Test, Random, Logging, StatsBase
                                   vcov=custom_vcov)
         
         # Should use the custom vcov (different SEs than model vcov)
-        @test result.table.se[1] > 0
-        @test nrow(result.table) == 1
+        @test DataFrame(result).se[1] > 0
+        @test nrow(DataFrame(result)) == 1
     end
 
     @testset "Error Message Quality" begin

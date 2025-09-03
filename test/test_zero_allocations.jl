@@ -132,8 +132,8 @@ using Margins
         result2 = population_margins(model, data; backend=:fd, vars=[:x1])
         
         # Results should be identical (ensuring buffer reuse doesn't corrupt results)
-        @test result1.df.estimate ≈ result2.df.estimate rtol=1e-12
-        @test result1.df.se ≈ result2.df.se rtol=1e-12
+        @test result1.estimate ≈ result2.estimate rtol=1e-12
+        @test result1.se ≈ result2.se rtol=1e-12
     end
     
     @testset "Large dataset stress test" begin

@@ -34,7 +34,7 @@ using Margins
     @testset "Empty vars parameter" begin
         # This should work but return empty result or throw informative error
         result = population_margins(m, df; type=:effects, vars=Symbol[])
-        @test nrow(result.table) == 0 || nrow(result.table) >= 0  # Either empty or some default behavior
+        @test nrow(DataFrame(result)) == 0 || nrow(result) >= 0  # Either empty or some default behavior
     end
 
     # Test invalid variable names

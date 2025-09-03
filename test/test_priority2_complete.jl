@@ -21,20 +21,20 @@ println("✅ Model fitted with interaction terms")
 
 println("\n📋 Priority 2 Requirements Check:")
 
-# ✅ 1. Population margins default to :fd backend
+# ✅ 1. Population margins default to :ad backend
 println("\n1. Testing population margins backend defaults...")
 result_pop_auto = population_margins(model, df; type=:effects, vars=[:x1, :x2])
-println("   ✅ Population margins with backend=:auto (defaults to :fd)")
+println("   ✅ Population margins with backend=:auto (defaults to :ad)")
 
 # ✅ 2. Profile margins default to :ad backend  
 println("\n2. Testing profile margins backend defaults...")
 result_prof_auto = profile_margins(model, df; at=:means, type=:effects, vars=[:x1, :x2])
 println("   ✅ Profile margins with backend=:auto (defaults to :ad)")
 
-# ✅ 3. Graceful backend fallbacks
-println("\n3. Testing graceful backend fallbacks...")
+# ✅ 3. Explicit backend behavior
+println("\n3. Testing explicit backend behavior...")
 try
-    # These should work without warnings for well-behaved models
+    # These should work with explicit backend selection
     result_pop_ad = population_margins(model, df; type=:effects, vars=[:x1], backend=:ad)
     result_prof_fd = profile_margins(model, df; at=:means, type=:effects, vars=[:x1], backend=:fd)
     println("   ✅ Cross-backend usage works without errors")
@@ -96,10 +96,10 @@ catch e
 end
 
 println("\n🎯 Priority 2 Implementation Summary:")
-println("   ✅ Population margins default to :fd backend for zero allocations")
+println("   ✅ Population margins default to :ad backend for optimal accuracy")
 println("   ✅ Profile margins default to :ad backend for speed/accuracy") 
 println("   ✅ :auto backend selection implemented")
-println("   ✅ Graceful fallbacks for all backend combinations")
+println("   ✅ Explicit backend selection for all combinations")
 println("   ✅ Numerical consistency maintained across backends")
 println("   ✅ Integration with Priority 1 categorical solution")
 

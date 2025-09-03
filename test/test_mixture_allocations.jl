@@ -32,7 +32,7 @@ at_dict = Dict(:education => mix("high_school" => 0.3, "college" => 0.5, "gradua
 result = profile_margins(model, df; at=at_dict, type=:predictions)
 
 println("✓ Basic mixture evaluation successful")
-println("   Result dimensions: $(size(result.table))")
+println("   Result dimensions: $(size(DataFrame(result)))")
 
 # Test weighted combination is correct by comparing to manual calculation
 println("\n2. Verifying weighted combinations...")
@@ -47,14 +47,14 @@ result_hs = profile_margins(model, df; at=at_hs, type=:predictions)
 result_college = profile_margins(model, df; at=at_college, type=:predictions)
 result_grad = profile_margins(model, df; at=at_grad, type=:predictions)
 
-println("   Available columns in result: ", names(result_hs.table))
+println("   Available columns in result: ", names(DataFrame(result_hs)))
 
 # For predictions, the predicted value is in the :dydx column
-expected_pred = 0.3 * result_hs.table.dydx[1] + 
-                0.5 * result_college.table.dydx[1] + 
-                0.2 * result_grad.table.dydx[1]
+expected_pred = 0.3 * DataFrame(result_hs).estimate[1] + 
+                0.5 * DataFrame(result_college).estimate[1] + 
+                0.2 * DataFrame(result_grad).estimate[1]
 
-actual_pred = result.table.dydx[1]
+actual_pred = DataFrame(result).estimate[1]
 
 println("   Expected weighted prediction: $(round(expected_pred, digits=6))")
 println("   Actual mixture prediction:    $(round(actual_pred, digits=6))")

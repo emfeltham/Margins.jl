@@ -231,15 +231,15 @@ end
             # Test predictions
             result_pred = profile_margins(simple_model, df; at=Dict(:education => edu_mix), type=:predictions)
             @test result_pred isa MarginsResult
-            @test nrow(result_pred.table) == 1
-            @test "dydx" in names(result_pred.table)
-            @test isfinite(result_pred.table.dydx[1])
+            @test nrow(DataFrame(result_pred)) == 1
+            @test "estimate" in names(DataFrame(result_pred))
+            @test isfinite(DataFrame(result_pred).estimate[1])
             
             # Test effects
             result_eff = profile_margins(simple_model, df; at=Dict(:education => edu_mix), type=:effects)
             @test result_eff isa MarginsResult
-            @test nrow(result_eff.table) >= 1  # At least age effect
-            @test all(isfinite, result_eff.table.dydx)
+            @test nrow(DataFrame(result_eff)) >= 1  # At least age effect
+            @test all(isfinite, DataFrame(result_eff).estimate)
         end
         
         @testset "Weighted Contrast Accuracy" begin
@@ -247,7 +247,7 @@ end
             
             # Get mixture result
             mixture_result = profile_margins(simple_model, df; at=Dict(:education => edu_mix), type=:predictions)
-            mixture_pred = mixture_result.table.dydx[1]
+            mixture_pred = DataFrame(mixture_result).estimate[1]
             
             # Get individual level results
             hs_result = profile_margins(simple_model, df; at=Dict(:education => "high_school"), type=:predictions)
@@ -255,7 +255,7 @@ end
             grad_result = profile_margins(simple_model, df; at=Dict(:education => "graduate"), type=:predictions)
             
             # Manual weighted combination
-            expected = 0.4 * hs_result.table.dydx[1] + 0.4 * col_result.table.dydx[1] + 0.2 * grad_result.table.dydx[1]
+            expected = 0.4 * DataFrame(hs_result).estimate[1] + 0.4 * DataFrame(col_result).estimate[1] + 0.2 * DataFrame(grad_result).estimate[1]
             
             # Should match exactly (within floating point precision)
             @test abs(mixture_pred - expected) < 1e-12
@@ -270,18 +270,18 @@ end
             bool_mix = mix(true => 0.7, false => 0.3)
             result_cat = profile_margins(model_cat_bool, df_cat_bool; at=Dict(:employed => bool_mix), type=:predictions)
             @test result_cat isa MarginsResult
-            @test isfinite(result_cat.table.dydx[1])
+            @test isfinite(DataFrame(result_cat).estimate[1])
             
             # Test with regular Vector{Bool}
             bool_result = profile_margins(interaction_model, df; at=Dict(:employed => bool_mix), type=:predictions)
             @test bool_result isa MarginsResult
-            @test isfinite(bool_result.table.dydx[1])
+            @test isfinite(DataFrame(bool_result).estimate[1])
             
             # Verify weighted combination for regular Bool
-            emp_true = profile_margins(interaction_model, df; at=Dict(:employed => true), type=:predictions).table.dydx[1]
-            emp_false = profile_margins(interaction_model, df; at=Dict(:employed => false), type=:predictions).table.dydx[1]
+            emp_true = profile_margins(interaction_model, df; at=Dict(:employed => true), type=:predictions).estimate[1]
+            emp_false = profile_margins(interaction_model, df; at=Dict(:employed => false), type=:predictions).estimate[1]
             expected_bool = 0.7 * emp_true + 0.3 * emp_false
-            @test abs(bool_result.table.dydx[1] - expected_bool) < 1e-12
+            @test abs(DataFrame(bool_result).estimate[1] - expected_bool) < 1e-12
         end
         
         @testset "Multiple Categorical Mixtures" begin
@@ -295,8 +295,8 @@ end
                 type=:predictions
             )
             @test result isa MarginsResult
-            @test nrow(result.table) == 1
-            @test isfinite(result.table.dydx[1])
+            @test nrow(DataFrame(result)) == 1
+            @test isfinite(DataFrame(result).estimate[1])
             
             # Test with mixture + continuous overrides
             result_mixed = profile_margins(interaction_model, df;
@@ -308,7 +308,7 @@ end
                 type=:predictions
             )
             @test result_mixed isa MarginsResult
-            @test isfinite(result_mixed.table.dydx[1])
+            @test isfinite(DataFrame(result_mixed).estimate[1])
         end
         
         @testset "Effects with Mixtures" begin
@@ -316,11 +316,11 @@ end
             
             result = profile_margins(interaction_model, df; at=Dict(:education => edu_mix), type=:effects)
             @test result isa MarginsResult
-            @test nrow(result.table) >= 1  # At least one effect (age, income, or employed)
-            @test "term" in names(result.table)
-            @test "dydx" in names(result.table)
-            @test all(isfinite, result.table.dydx)
-            @test all(isfinite, result.table.se)
+            @test nrow(DataFrame(result)) >= 1  # At least one effect (age, income, or employed)
+            @test "term" in names(DataFrame(result))
+            @test "estimate" in names(DataFrame(result))
+            @test all(isfinite, DataFrame(result).estimate)
+            @test all(isfinite, DataFrame(result).se)
         end
         
         @testset "Error Handling" begin
