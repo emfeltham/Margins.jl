@@ -132,6 +132,41 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     reference_grid = _build_reference_grid(at, data_nt)
     at_spec = at
     
+    # Route to unified implementation with reference grid
+    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, at_spec)
+end
+
+"""
+    _extract_profile_values(reference_grid, result_length::Int) -> NamedTuple
+
+Extract profile values from reference grid and expand to match the result length.
+Each profile can generate multiple results (one per variable), so we need to repeat
+each profile row for each variable it generates.
+"""
+function _extract_profile_values(reference_grid, result_length::Int)
+    n_profiles = nrow(reference_grid)
+    vars_per_profile = result_length ÷ n_profiles
+    
+    # Convert to named tuple with expanded values
+    profile_dict = Dict{Symbol, Vector}()
+    
+    for col_name in names(reference_grid)
+        col_data = reference_grid[!, col_name]
+        # Repeat each profile value vars_per_profile times
+        expanded_data = repeat(col_data, inner=vars_per_profile)
+        profile_dict[Symbol(col_name)] = expanded_data
+    end
+    
+    return NamedTuple(profile_dict)
+end
+
+"""
+    _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, at_spec) -> MarginsResult
+
+Unified internal implementation for both profile_margins methods.
+This eliminates code duplication between the convenience method and DataFrame method.
+"""
+function _profile_margins_unified(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -186,30 +221,6 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
         
         return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     end
-end
-
-"""
-    _extract_profile_values(reference_grid, result_length::Int) -> NamedTuple
-
-Extract profile values from reference grid and expand to match the result length.
-Each profile can generate multiple results (one per variable), so we need to repeat
-each profile row for each variable it generates.
-"""
-function _extract_profile_values(reference_grid, result_length::Int)
-    n_profiles = nrow(reference_grid)
-    vars_per_profile = result_length ÷ n_profiles
-    
-    # Convert to named tuple with expanded values
-    profile_dict = Dict{Symbol, Vector}()
-    
-    for col_name in names(reference_grid)
-        col_data = reference_grid[!, col_name]
-        # Repeat each profile value vars_per_profile times
-        expanded_data = repeat(col_data, inner=vars_per_profile)
-        profile_dict[Symbol(col_name)] = expanded_data
-    end
-    
-    return NamedTuple(profile_dict)
 end
 
 """
@@ -268,57 +279,15 @@ function _profile_margins_impl_with_refgrid(model, data_nt::NamedTuple, referenc
     # Input validation (similar to main method but with reference_grid)
     _validate_profile_inputs_with_refgrid(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov)
     
-    # Handle vars parameter
-    if type === :effects
-        vars = _process_vars_parameter(model, vars, data_nt)
-    else # type === :predictions
-        vars = nothing
-    end
-    
-    # Backend selection
-    recommended_backend = backend === :auto ? :ad : backend
-    
-    # Build engine
-    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
-    
-    if type === :effects
-        # Use reference grid directly
-        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)
-        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=reference_grid)
-        
-        metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(reference_grid)
-        
-        estimates = df.estimate
-        standard_errors = df.se
-        terms = df.term
-        
-        profile_values = _extract_profile_values(reference_grid, length(estimates))
-        
-        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
-    else # :predictions
-        df, G = _profile_predictions(engine, reference_grid; target)
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=reference_grid)
-        
-        metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(reference_grid)
-        
-        estimates = df.estimate
-        standard_errors = df.se
-        terms = df.term
-        
-        profile_values = _extract_profile_values(reference_grid, length(estimates))
-        
-        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
-    end
+    # Route to unified implementation with reference grid directly
+    return _profile_margins_unified(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov, reference_grid)
 end
 
 # Additional validation function for DataFrame reference grid method
 function _validate_profile_inputs_with_refgrid(model, data, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
-    # Standard validation
-    _validate_profile_inputs(model, data, :means, type, vars, target, backend, measure, vcov)  # Use :means as dummy for at validation
+    # Standard validation (convert internal target back to scale for validation)
+    scale = target_to_scale(target)
+    _validate_profile_inputs(model, data, :means, type, vars, scale, backend, measure, vcov)  # Use :means as dummy for at validation
     
     # Reference grid specific validation
     if nrow(reference_grid) == 0
