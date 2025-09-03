@@ -4,7 +4,7 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data; at=:means, kwargs...) -> MarginsResult
+    profile_margins(model, data; at=:means, type=:effects, vars=nothing, target=:mu, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -112,18 +112,18 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, kwargs...)
+function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov)
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
     # Call internal implementation with NamedTuple (no more DataFrame dispatch issues)
-    return _profile_margins_impl(model, data_nt, at, type, vars, target, backend, measure, kwargs...)
+    return _profile_margins_impl(model, data_nt, at, type, vars, target, backend, measure, vcov)
 end
 
 # Internal implementation that works with NamedTuple to avoid dispatch confusion
-function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, kwargs...)
+function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation
-    _validate_profile_inputs(model, data_nt, at, type, vars, target, backend, measure)
+    _validate_profile_inputs(model, data_nt, at, type, vars, target, backend, measure, vcov)
     
     # Build reference grid from at specification  
     reference_grid = _build_reference_grid(at, data_nt)
@@ -140,15 +140,15 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
     # Profile margins default to :ad for speed/accuracy at specific points
     recommended_backend = backend === :auto ? :ad : backend
     
-    # Build zero-allocation engine with caching
-    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
+    # Build zero-allocation engine with caching (including vcov function)
+    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
         df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)  # → MEM/MER
         metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at_spec, kwargs...)
+                                  model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
@@ -165,9 +165,9 @@ function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, var
         return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions(engine, reference_grid; target, kwargs...)  # → APM/APR
+        df, G = _profile_predictions(engine, reference_grid; target)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at_spec, kwargs...)
+                                  model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection  
         metadata[:analysis_type] = :profile
@@ -210,68 +210,126 @@ function _extract_profile_values(reference_grid, result_length::Int)
 end
 
 """
-    profile_margins(model, reference_grid::DataFrame; kwargs...) -> MarginsResult
+    profile_margins(model, data, reference_grid::DataFrame; type=:effects, vars=nothing, target=:mu, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
-Compute profile margins using an explicit reference grid DataFrame.
+Core method that takes a pre-built reference grid directly for maximum control and efficiency.
 
-This is the most efficient method when you have already constructed your desired reference grid.
-No additional profile building is performed - the DataFrame is used directly, making this 
-ideal for complex scenarios or when the same reference grid will be reused multiple times.
+This method bypasses the reference grid building step and uses the provided DataFrame directly,
+making it the most efficient approach for complex scenarios or when you need precise control
+over the evaluation points.
 
 # Arguments
 - `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
-- `reference_grid::DataFrame`: Pre-built reference grid with specific covariate combinations
+- `data`: Original data table (used for model context, not for profile building)
+- `reference_grid::DataFrame`: Pre-built reference grid with exact evaluation points
 
 # Keyword Arguments
-Same as the main `profile_margins()` method, except `at` parameter is not needed since
-the reference grid is provided directly.
-
-# Returns
-`MarginsResult` with the same structure as the main method, containing results for
-each row of the reference grid.
-
-# Performance Notes
-- Most efficient profile margins method (zero reference grid construction overhead)
-- Ideal for complex scenarios requiring custom reference grids
-- Perfect for repeated analysis with the same covariate combinations
-- Enables maximum control over profile specification
+Same as the convenience method, except `at` is not needed since the reference grid is provided directly.
 
 # Examples
 ```julia
-# Pre-built reference grid for systematic analysis
+# Direct reference grid specification (most efficient)
 reference_grid = DataFrame(
-    age = [25, 35, 45, 55],
-    education = [12, 16, 12, 16], 
-    income = [30000, 50000, 35000, 60000]
+    age = [25, 35, 45],
+    education = [12, 16, 20],
+    region = ["North", "South", "North"]
 )
-result = profile_margins(model, reference_grid; type=:effects, vars=[:experience])
+result = profile_margins(model, data, reference_grid; type=:effects, vars=[:income])
 
-# Complex factorial design
-grid = expand.grid(
-    treatment = ["A", "B", "C"],
-    dose = [10, 20, 30],
-    age_group = ["young", "old"]
+# Complex scenarios with categorical mixtures
+using Margins: mix
+reference_grid = DataFrame(
+    x1 = [0, 1, 2],
+    categorical_var = [mix("A" => 0.7, "B" => 0.3), "A", "B"]
 )
-result = profile_margins(model, grid; type=:predictions)
-
-# Reuse same reference grid for multiple analyses
-effects_result = profile_margins(model, reference_grid; type=:effects)
-predictions_result = profile_margins(model, reference_grid; type=:predictions)
+result = profile_margins(model, data, reference_grid; type=:predictions)
 ```
 """
-# Note: DataFrame method removed to avoid dispatch ambiguity
-# Both use cases (data with 'at' and explicit reference_grid) now handled by single method above
+function profile_margins(model, data, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov)
+    # Convert data to NamedTuple for consistency
+    data_nt = Tables.columntable(data)
+    
+    # Call internal implementation with the reference grid directly
+    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov)
+end
+
+# Internal implementation for DataFrame reference grid method
+function _profile_margins_impl_with_refgrid(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
+    # Input validation (similar to main method but with reference_grid)
+    _validate_profile_inputs_with_refgrid(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov)
+    
+    # Handle vars parameter
+    if type === :effects
+        vars = _process_vars_parameter(model, vars, data_nt)
+    else # type === :predictions
+        vars = nothing
+    end
+    
+    # Backend selection
+    recommended_backend = backend === :auto ? :ad : backend
+    
+    # Build engine
+    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
+    
+    if type === :effects
+        # Use reference grid directly
+        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; target, backend=recommended_backend, measure)
+        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), 
+                                  model_type=typeof(model), at_spec=reference_grid)
+        
+        metadata[:analysis_type] = :profile
+        metadata[:n_profiles] = nrow(reference_grid)
+        
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        
+        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+    else # :predictions
+        df, G = _profile_predictions(engine, reference_grid; target)
+        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), 
+                                  model_type=typeof(model), at_spec=reference_grid)
+        
+        metadata[:analysis_type] = :profile
+        metadata[:n_profiles] = nrow(reference_grid)
+        
+        estimates = df.estimate
+        standard_errors = df.se
+        terms = df.term
+        
+        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        
+        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+    end
+end
+
+# Additional validation function for DataFrame reference grid method
+function _validate_profile_inputs_with_refgrid(model, data, reference_grid::DataFrame, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
+    # Standard validation
+    _validate_profile_inputs(model, data, :means, type, vars, target, backend, measure, vcov)  # Use :means as dummy for at validation
+    
+    # Reference grid specific validation
+    if nrow(reference_grid) == 0
+        throw(ArgumentError("reference_grid cannot be empty"))
+    end
+    
+    if ncol(reference_grid) == 0
+        throw(ArgumentError("reference_grid must have at least one column"))
+    end
+end
 
 
 """
-    _profile_predictions(engine, reference_grid; target, kwargs...) -> (DataFrame, Matrix{Float64})
+    _profile_predictions(engine, reference_grid; target) -> (DataFrame, Matrix{Float64})
 
 Compute adjusted predictions at profiles (APM/APR) with delta-method standard errors.
 
 This function evaluates predictions at each row of the reference grid, providing
 adjusted predictions at the mean (APM) or at representative values (APR).
 """
-function _profile_predictions(engine::MarginsEngine{L}, reference_grid; target=:mu, kwargs...) where L
+function _profile_predictions(engine::MarginsEngine{L}, reference_grid; target=:mu) where L
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     
@@ -334,7 +392,7 @@ end
 
 Validate inputs to profile_margins() with clear Julia-style error messages.
 """
-function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol)
+function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -346,6 +404,9 @@ function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::S
     
     # Use centralized validation for common parameters
     validate_profile_parameters(at, type, target, backend, measure, vars)
+    
+    # Validate vcov parameter
+    validate_vcov_parameter(vcov, model)
     
     # Validate model has required methods
     try

@@ -7,7 +7,7 @@
 # Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
-    population_margins(model, data; kwargs...) -> MarginsResult
+    population_margins(model, data; type=:effects, vars=nothing, target=:mu, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -98,9 +98,9 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, kwargs...)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, vcov=GLM.vcov)
     # Input validation
-    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups)
+    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups, vcov)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -115,17 +115,17 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     # Population margins default to :ad for consistency across all functions
     recommended_backend = backend === :auto ? :ad : backend
     
-    # Build zero-allocation engine with caching
-    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
+    # Build zero-allocation engine with caching (including vcov function)
+    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if scenarios !== nothing || groups !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend=recommended_backend, kwargs...)
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend=recommended_backend)
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure, kwargs...)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
+        df, G = _ame_continuous_and_categorical(engine, data_nt; target, backend=recommended_backend, measure)  # → AME (both continuous and categorical)
+        metadata = _build_metadata(; type, vars, target, backend=recommended_backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -137,8 +137,8 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
         
         return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     else # :predictions  
-        df, G = _population_predictions(engine, data_nt; target, kwargs...)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model), kwargs...)
+        df, G = _population_predictions(engine, data_nt; target)  # → AAP
+        metadata = _build_metadata(; type, vars=Symbol[], target, backend=recommended_backend, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -178,11 +178,11 @@ function _get_continuous_variables(model, data_nt::NamedTuple)
 end
 
 """
-    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups)
+    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups, vcov)
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, scenarios, measure::Symbol, groups)
+function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -194,6 +194,9 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
     
     # Use centralized validation for common parameters
     validate_population_parameters(type, target, backend, measure, vars)
+    
+    # Validate vcov parameter
+    validate_vcov_parameter(vcov, model)
     
     # Validate vars parameter for effects
     if type === :effects && vars !== nothing

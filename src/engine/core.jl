@@ -87,7 +87,7 @@ engine = build_engine(model, data_nt, [:x1, :x2])
 # with minimal allocation overhead
 ```
 """
-function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol})
+function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov)
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
     
@@ -110,9 +110,12 @@ function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol})
     η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
     row_buf = Vector{Float64}(undef, n_cols)       # Buffer for design matrix rows
     
+    # vcov parameter is a function - just call it with the model
+    covariance_matrix = vcov(model)
+    
     return MarginsEngine(
         compiled, de, g_buf, gβ_accumulator, η_buf, row_buf,
-        model, coef(model), vcov(model), _auto_link(model), vars, data_nt
+        model, coef(model), covariance_matrix, _auto_link(model), vars, data_nt
     )
 end
 

@@ -164,7 +164,7 @@ function _standard_table(mr::MarginsResult)
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
     df = DataFrame(
-        variable = mr.terms,  # Clean variable names, not "x1_effect"
+        term = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 
         t_stat = t_stats,
@@ -187,7 +187,7 @@ end
 
 function _compact_table(mr::MarginsResult)
     df = DataFrame(
-        variable = mr.terms,
+        term = mr.terms,
         estimate = mr.estimates,
         se = mr.standard_errors
     )
@@ -200,7 +200,7 @@ function _confidence_table(mr::MarginsResult)
     z = quantile(Normal(), 1 - alpha/2)
     
     df = DataFrame(
-        variable = mr.terms,
+        term = mr.terms,
         estimate = mr.estimates,
         lower = mr.estimates .- z .* mr.standard_errors,
         upper = mr.estimates .+ z .* mr.standard_errors
@@ -224,7 +224,7 @@ function _profile_table(mr::MarginsResult)
     end
     
     # Add results columns
-    df[!, :variable] = mr.terms  # Clean variable names
+    df[!, :term] = mr.terms  # Clean variable names
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
     df[!, :lower] = mr.estimates .- z .* mr.standard_errors

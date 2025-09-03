@@ -181,8 +181,18 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect) where L
-    engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
+function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect, contrasts=:baseline) where L
+    if engine.de === nothing 
+        # Return empty DataFrame with correct column structure
+        empty_df = DataFrame(
+            term = String[],
+            estimate = Float64[],
+            se = Float64[],
+            n = Int[]
+        )
+        return (empty_df, Matrix{Float64}(undef, 0, length(engine.β)))
+    end
+    
     
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
@@ -520,7 +530,7 @@ function _create_frequency_mixture(col)
 end
 
 """
-    _build_metadata(; kwargs...) -> Dict
+    _build_metadata(; type, vars, target, backend, measure, n_obs, model_type, timestamp, at_spec, has_contexts) -> Dict
 
 Build metadata dictionary for MarginsResult.
 
@@ -532,7 +542,8 @@ Build metadata dictionary for MarginsResult.
 - `n_obs::Int=0`: Number of observations
 - `model_type=nothing`: Type of fitted model
 - `timestamp=now()`: Analysis timestamp
-- Additional kwargs stored in :additional sub-dict
+- at_spec: Profile specification (for profile margins)
+- has_contexts: Whether contexts (scenarios/groups) are used
 
 # Returns
 - `Dict{Symbol, Any}`: Metadata dictionary
@@ -554,7 +565,8 @@ function _build_metadata(;
     n_obs=0,
     model_type=nothing,
     timestamp=nothing,
-    kwargs...)
+    at_spec=nothing,
+    has_contexts=false)
     
     # Set default timestamp
     ts = timestamp === nothing ? string(now()) : timestamp
@@ -569,7 +581,8 @@ function _build_metadata(;
         :n_obs => n_obs,
         :model_type => model_type === nothing ? "unknown" : string(typeof(model_type)),
         :timestamp => ts,
-        :additional => Dict{Symbol, Any}(kwargs...)
+        :at_spec => at_spec,
+        :has_contexts => has_contexts
     )
 end
 

@@ -1,14 +1,14 @@
 # population/contexts.jl - Handle at/over parameters for population contexts (Stata-compatible)
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend, kwargs...)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend)
 
 Handle population margins with scenarios/groups contexts (unified API).
 
 This function implements the complex logic for counterfactual scenarios (scenarios) and 
 subgroup analysis (groups) in population margins computation.
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend, kwargs...)
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     
@@ -84,7 +84,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     
     # Build metadata
     metadata = _build_metadata(; type, vars, target, backend, n_obs=length(first(data_nt)), 
-                              model_type=typeof(engine.model), has_contexts=true, kwargs...)
+                              model_type=typeof(engine.model), has_contexts=true)
     
     # Add analysis_type for format auto-detection
     metadata[:analysis_type] = :population  # This is still population-level, just with contexts

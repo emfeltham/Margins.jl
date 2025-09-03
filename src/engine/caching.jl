@@ -43,18 +43,19 @@ engine = get_or_build_engine(model, data_nt, [:x1, :x2])
 engine2 = get_or_build_engine(model, data_nt, [:x1, :x2])  # Cache hit!
 ```
 """
-function get_or_build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol})
-    # Create comprehensive cache key including all relevant factors
+function get_or_build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov)
+    # Create comprehensive cache key including all relevant factors AND vcov
     cache_key = hash((
         model,                    # Model object (coefficients, structure, etc.)
         keys(data_nt),           # Data structure (column names)
         vars,                    # Variables for derivatives
         typeof(model),           # Model type for dispatch  
-        fieldnames(typeof(model)) # Model structure fields
+        fieldnames(typeof(model)), # Model structure fields
+        vcov                     # Covariance matrix specification (critical for caching!)
     ))
     
     return get!(ENGINE_CACHE, cache_key) do
-        build_engine(model, data_nt, vars)
+        build_engine(model, data_nt, vars, vcov)
     end
 end
 

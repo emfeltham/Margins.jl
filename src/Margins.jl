@@ -16,8 +16,8 @@ Built on FormulaCompiler.jl for high-performance zero-allocation evaluation.
 
 # Core API
 
-- `population_margins(model, data; kwargs...)`: Population-level analysis
-- `profile_margins(model, data; at=:means, kwargs...)`: Profile-level analysis  
+- `population_margins(model, data; type, vars, target, backend, scenarios, groups, measure, vcov)`: Population-level analysis
+- `profile_margins(model, data; at, type, vars, target, backend, measure, vcov)`: Profile-level analysis  
 - `MarginsResult`: Result container with Tables.jl interface
 
 # Examples
