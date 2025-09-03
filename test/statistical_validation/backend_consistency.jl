@@ -139,8 +139,8 @@ include("testing_utilities.jl")
         
         @testset "Logistic Model - Both Target Scales" begin
             # Link scale (η) - should be identical (no chain rule)
-            ad_eta = population_margins(model, df; type=:effects, vars=[:x], target=:eta, backend=:ad)
-            fd_eta = population_margins(model, df; type=:effects, vars=[:x], target=:eta, backend=:fd)
+            ad_eta = population_margins(model, df; type=:effects, vars=[:x], scale=:link, backend=:ad)
+            fd_eta = population_margins(model, df; type=:effects, vars=[:x], scale=:link, backend=:fd)
             
             ad_eta_df = DataFrame(ad_eta)
             fd_eta_df = DataFrame(fd_eta)
@@ -149,8 +149,8 @@ include("testing_utilities.jl")
             @test all(isapprox.(ad_eta_df.se, fd_eta_df.se; rtol=1e-10))
             
             # Response scale (μ) - chain rule involved, still should be consistent
-            ad_mu = population_margins(model, df; type=:effects, vars=[:x], target=:mu, backend=:ad)
-            fd_mu = population_margins(model, df; type=:effects, vars=[:x], target=:mu, backend=:fd)
+            ad_mu = population_margins(model, df; type=:effects, vars=[:x], scale=:response, backend=:ad)
+            fd_mu = population_margins(model, df; type=:effects, vars=[:x], scale=:response, backend=:fd)
             
             ad_mu_df = DataFrame(ad_mu)
             fd_mu_df = DataFrame(fd_mu)
