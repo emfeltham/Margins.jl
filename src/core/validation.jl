@@ -97,7 +97,7 @@ Validate the `at` parameter for profile specifications.
 Must be `:means`, a Dict, or Vector{Dict}.
 """
 function validate_at_parameter(at)
-    if !(at === :means || at isa Dict || at isa Vector{Dict})
+    if !(at === :means || at isa Dict || (at isa Vector && !isempty(at) && all(x -> x isa Dict, at)))
         throw(ArgumentError("at must be :means, Dict{Symbol,Any}, or Vector{Dict{Symbol,Any}}, got $(typeof(at))"))
     end
 end

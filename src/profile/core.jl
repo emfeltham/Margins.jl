@@ -4,7 +4,7 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data; at=:means, type=:effects, vars=nothing, target=:mu, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data; at=:means, type=:effects, vars=nothing, scale=:response, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -225,7 +225,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
 end
 
 """
-    profile_margins(model, data, reference_grid::DataFrame; type=:effects, vars=nothing, target=:mu, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid::DataFrame; type=:effects, vars=nothing, scale=:response, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
 Core method that takes a pre-built reference grid directly for maximum control and efficiency.
 
@@ -352,7 +352,7 @@ function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
 end
 
 """
-    _validate_profile_inputs(model, data, at, type, vars, target, backend, measure)
+    _validate_profile_inputs(model, data, at, type, vars, scale, backend, measure)
 
 Validate inputs to profile_margins() with clear Julia-style error messages.
 """

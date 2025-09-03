@@ -17,11 +17,11 @@ needed for delta-method standard error computation.
 struct PredictionWithGradient{T<:Real}
     value::T
     gradient::Vector{Float64}
-    scale::Symbol  # :eta or :mu
+    scale::Symbol  # :link or :response
 end
 
 """
-    compute_prediction_with_gradient(compiled, data_nt, row_idx, β, link, target, row_buf) -> PredictionWithGradient
+    compute_prediction_with_gradient(compiled, data_nt, row_idx, β, link, scale, row_buf) -> PredictionWithGradient
 
 Compute prediction and gradient for a single observation.
 
@@ -29,7 +29,7 @@ This is the core prediction computation used throughout Margins.jl.
 It consolidates the repeated pattern of:
 1. Building model row with FormulaCompiler
 2. Computing linear predictor η = X'β  
-3. Applying inverse link function if target=:mu
+3. Applying inverse link function if scale=:response
 4. Computing gradient with chain rule if needed
 
 # Arguments
@@ -38,7 +38,7 @@ It consolidates the repeated pattern of:
 - `row_idx::Int`: Index of observation to compute
 - `β::Vector{Float64}`: Model coefficients
 - `link`: GLM link function
-- `target::Symbol`: Either `:eta` (link scale) or `:mu` (response scale)
+- `scale::Symbol`: Either `:link` (link scale) or `:response` (response scale)
 - `row_buf::Vector{Float64}`: Pre-allocated buffer for model row
 
 # Returns
@@ -48,8 +48,8 @@ It consolidates the repeated pattern of:
 - `scale`: Target scale used
 
 # Performance
-- Zero allocation when `target=:eta` (link scale)
-- Minimal allocation for `target=:mu` (response scale gradient copy)
+- Zero allocation when `scale=:link` (link scale)
+- Minimal allocation for `scale=:response` (response scale gradient copy)
 """
 function compute_prediction_with_gradient(
     compiled, data_nt, row_idx::Int, β::Vector{Float64}, 

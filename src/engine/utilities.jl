@@ -162,7 +162,7 @@ function _is_continuous_variable(col)
 end
 
 """
-    _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrame, Matrix)
+    _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad) -> (DataFrame, Matrix)
 
 Zero-allocation population effects (AME) using FormulaCompiler's built-in APIs.
 Implements REORG.md lines 290-348 with explicit backend selection and batch operations.
@@ -170,7 +170,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 # Arguments
 - `engine::MarginsEngine`: Pre-built margins engine
 - `data_nt::NamedTuple`: Data in columntable format
-- `target::Symbol`: `:eta` for link scale, `:mu` for response scale
+- `scale::Symbol`: `:link` for link scale, `:response` for response scale
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
@@ -178,7 +178,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 
 # Examples
 ```julia
-df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd)
+df, G = _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:fd)
 ```
 """
 function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline) where L
@@ -295,7 +295,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
 end
 
 """
-    _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad) -> (DataFrame, Matrix)
+    _mem_continuous_and_categorical(engine, profiles; scale=:response, backend=:ad) -> (DataFrame, Matrix)
 
 Profile Effects (MEM) Using Reference Grids with FormulaCompiler's built-in APIs.
 Implements REORG.md lines 353-486 following FormulaCompiler guide.
@@ -303,7 +303,7 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 # Arguments
 - `engine::MarginsEngine`: Pre-built margins engine
 - `profiles::Vector{Dict}`: Vector of profile dictionaries
-- `target::Symbol`: `:eta` for link scale, `:mu` for response scale
+- `scale::Symbol`: `:link` for link scale, `:response` for response scale
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
@@ -312,7 +312,7 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 # Examples
 ```julia
 profiles = [Dict(:x1 => 0.0, :region => "North")]
-df, G = _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad)
+df, G = _mem_continuous_and_categorical(engine, profiles; scale=:response, backend=:ad)
 ```
 """
 function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector; target=:mu, backend=:ad, measure=:effect) where L
