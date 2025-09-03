@@ -287,47 +287,104 @@ treatment_effects_df = DataFrame(results)
 
 ## Advanced Grouping and Stratification
 
-### Complex Grouping Strategies
+Margins.jl provides a comprehensive grouping framework for population-based marginal effects analysis, supporting hierarchical stratification patterns that extend far beyond traditional approaches.
 
-#### Nested Grouping with `over` Parameter
+### Hierarchical Grouping Framework
+
+#### Basic Grouping Patterns
 ```julia
-# Effects within demographic groups
+# Simple categorical grouping
 demographic_effects = population_margins(model, data;
                                         type=:effects,
                                         vars=[:income],
-                                        over=[:education, :region])
+                                        groups=:education)
 
-# Results stratified by education × region combinations
-DataFrame(demographic_effects)
+# Cross-tabulated grouping
+cross_effects = population_margins(model, data;
+                                 type=:effects,
+                                 vars=[:income], 
+                                 groups=[:education, :region])
 ```
 
-#### Conditional Analysis
+#### Nested Hierarchical Grouping
 ```julia
-# Effects only for specific subgroups
-urban_effects = population_margins(model, data[data.region .== "Urban", :];
+# Hierarchical nesting: region → education within each region
+nested_effects = population_margins(model, data;
                                   type=:effects,
-                                  vars=[:education])
+                                  vars=[:income],
+                                  groups=:region => :education)
 
-rural_effects = population_margins(model, data[data.region .== "Rural", :];
-                                  type=:effects, 
-                                  vars=[:education])
+# Deep nesting: region → urban → education
+deep_nested = population_margins(model, data;
+                               type=:effects,
+                               groups=:region => (:urban => :education))
 ```
 
-### Profile Analysis Across Groups
-
+#### Continuous Variable Binning
 ```julia
-# Effects at representative points across groups
-group_profiles = profile_margins(model, data;
-    at=Dict(
-        :age => [25, 45, 65],           # Age scenarios
-        :education => ["HS", "College"]  # Education levels
-    ),
+# Quartile analysis
+income_quartiles = population_margins(model, data;
+                                    type=:effects,
+                                    groups=(:income, 4))  # Q1, Q2, Q3, Q4
+
+# Custom policy-relevant thresholds
+policy_thresholds = population_margins(model, data;
+                                     type=:effects,
+                                     groups=(:income, [25000, 50000, 75000]))
+
+# Mixed categorical and continuous
+mixed_groups = population_margins(model, data;
+                                type=:effects,
+                                groups=[:education, (:income, 4)])
+```
+
+### Counterfactual Scenario Analysis
+
+#### Policy Scenarios with Population Override
+```julia
+# Binary policy scenarios
+policy_analysis = population_margins(model, data;
+                                   type=:effects,
+                                   vars=[:outcome],
+                                   scenarios=Dict(:policy => [0, 1]))
+
+# Multi-variable scenarios
+complex_scenarios = population_margins(model, data;
+                                     type=:effects,
+                                     scenarios=Dict(:treatment => [0, 1], 
+                                                   :policy => ["current", "reform"]))
+```
+
+#### Combined Grouping and Scenarios
+```julia
+# Comprehensive policy analysis: demographics × policy scenarios
+full_analysis = population_margins(model, data;
+                                 type=:effects,
+                                 vars=[:outcome],
+                                 groups=[:education, :region],
+                                 scenarios=Dict(:treatment => [0, 1]))
+```
+
+### Complex Nested Patterns
+
+#### Parallel Grouping Within Hierarchy
+```julia
+# Region → (education levels + income quartiles separately)
+parallel_groups = population_margins(model, data;
+                                   type=:effects,
+                                   groups=:region => [:education, (:income, 4)])
+```
+
+#### Advanced Policy Applications
+```julia
+# Healthcare policy analysis
+healthcare_analysis = population_margins(health_model, health_data;
     type=:effects,
-    vars=[:income]
+    groups=:state => (:urban => [:insurance_type, (:income, 3)]),
+    scenarios=Dict(:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
 )
 
-# Results show income effects for each age×education combination
-DataFrame(group_profiles)
+# Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios
 ```
 
 ## Error Handling and Diagnostics

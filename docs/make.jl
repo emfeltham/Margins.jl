@@ -18,10 +18,12 @@ makedocs(;
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
       "Profile Analysis" => "profile_margins.md", 
+      "Population Grouping" => "grouping.md",
       "Backend Selection" => "backend_selection.md",
       "Performance Guide" => "performance.md",
       "Advanced Features" => "advanced.md"
     ],
+    "Migration Guide" => "stata_migration.md",
     "Package Comparison" => "comparison.md",
     "API Reference" => "api.md",
     "Examples" => "examples.md"

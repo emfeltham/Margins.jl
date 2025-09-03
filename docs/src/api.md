@@ -141,19 +141,19 @@ profile_margins(model, grid)
 **Examples:**
 ```julia
 # By single categorical variable
-population_margins(model, data; over=:region)
+population_margins(model, data; groups=:region)
 
 # Multiple grouping
-population_margins(model, data; over=[:region, :year])
+population_margins(model, data; groups=[:region, :year])
 
-# Advanced grouping (future enhancement)
-population_margins(model, data; over=(region=nothing, income=[20000, 50000, 80000]))
+# Advanced grouping (unified syntax)
+population_margins(model, data; groups=(:income, [20000, 50000, 80000]))
 ```
 
-#### Counterfactual Analysis (`at`)
+#### Counterfactual Analysis (`scenarios`)
 ```julia
 # Effects when treatment is set to 1 vs 0 for entire population
-population_margins(model, data; at=Dict(:treatment => [0, 1]), type=:effects)
+population_margins(model, data; scenarios=Dict(:treatment => [0, 1]), type=:effects)
 ```
 
 ## Usage Patterns

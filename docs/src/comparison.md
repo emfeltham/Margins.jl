@@ -27,7 +27,7 @@ For researchers familiar with Stata's `margins` command, Margins.jl provides equ
 |---------------|----------------------|-------|
 | `margins, at(x=0 x=1 x=2)` | `profile_margins(model, data; at=Dict(:x => [0,1,2]))` | Multiple evaluation points |
 | `margins, at(x=0 z=1) at(x=1 z=2)` | `profile_margins(model, data; at=[Dict(:x=>0, :z=>1), Dict(:x=>1, :z=>2)])` | Custom scenarios |
-| `margins, over(group)` | `population_margins(model, data; over=:group)` | Subgroup analysis |
+| `margins, over(group)` | `population_margins(model, data; groups=:group)` | Subgroup analysis |
 | `margins, dydx(x) at(z=(0 1))` | `profile_margins(model, data; at=Dict(:z=>[0,1]), vars=[:x])` | Specific variables |
 
 ### Elasticity Commands

@@ -179,7 +179,7 @@ println(DataFrame(ame_results))
 # Effects by gender subgroups  
 gender_effects = population_margins(wage_model, data; 
                                   type=:effects, 
-                                  over=:female)
+                                  groups=:female)
 println("Effects by gender:")
 println(DataFrame(gender_effects))
 ```
@@ -274,18 +274,59 @@ println(DataFrame(unemployment_semi))
 
 ## Advanced Features
 
-### Grouping and Stratification
+### Advanced Grouping and Stratification
 
 ```julia
-# Effects within urban/rural areas
+# Basic categorical grouping
 urban_analysis = population_margins(wage_model, data; 
                                   type=:effects, 
-                                  over=:urban)
+                                  groups=:urban)
 
-# Stratified analysis by education level
-education_strata = population_margins(wage_model, data; 
-                                    type=:effects, 
-                                    over=[:education, :urban])
+# Cross-tabulated grouping
+education_urban = population_margins(wage_model, data; 
+                                   type=:effects, 
+                                   groups=[:education, :urban])
+
+# Hierarchical grouping: education → urban within each education level
+nested_analysis = population_margins(wage_model, data;
+                                   type=:effects,
+                                   groups=:education => :urban)
+
+# Continuous binning: age quartiles
+age_quartiles = population_margins(wage_model, data;
+                                 type=:effects,
+                                 groups=(:age, 4))
+
+# Custom thresholds for policy analysis
+income_thresholds = population_margins(wage_model, data;
+                                     type=:effects,
+                                     groups=(:log_wage, [2.0, 2.5, 3.0]))
+
+# Mixed categorical and continuous
+complex_groups = population_margins(wage_model, data;
+                                  type=:effects,
+                                  groups=[:education, (:age, 4)])
+```
+
+### Counterfactual Scenario Analysis
+
+```julia
+# Policy scenarios: unemployment rate effects
+recession_scenarios = population_margins(wage_model, data;
+                                       type=:effects,
+                                       scenarios=Dict(:unemployment_rate => [3.0, 6.0, 12.0]))
+
+# Combined grouping and scenarios
+education_recession = population_margins(wage_model, data;
+                                       type=:effects,
+                                       groups=:education,
+                                       scenarios=Dict(:unemployment_rate => [3.0, 12.0]))
+
+# Multi-variable scenarios
+complex_policy = population_margins(wage_model, data;
+                                  type=:effects,
+                                  scenarios=Dict(:urban => [0, 1], 
+                                               :unemployment_rate => [3.0, 9.0]))
 ```
 
 ### Robust Standard Errors
@@ -345,7 +386,7 @@ stata_scenarios = profile_margins(wage_model, data;
 # Stata: margins, over(female)
 stata_subgroups = population_margins(wage_model, data; 
                                    type=:effects, 
-                                   over=:female)
+                                   groups=:female)
 ```
 
 ## Best Practices

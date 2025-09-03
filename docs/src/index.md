@@ -22,7 +22,7 @@ Build on top of [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompile
 ## Quick Start
 
 ```julia
-using Margins, DataFrames, GLM
+using CategoricalArrays, DataFrames, GLM, Margins
 
 # Generate sample data
 n = 1000
@@ -30,7 +30,7 @@ df = DataFrame(
     y = randn(n),
     x1 = randn(n), 
     x2 = randn(n),
-    group = rand(["A", "B", "C"], n)
+    group = categorical(rand(["A", "B", "C"], n)) # Raw string input not (yet) supported
 )
 
 # Fit model
@@ -140,13 +140,13 @@ population_margins(model, data; measure=:semielasticity_y)  # unit change Y per 
 
 ```julia
 # Effects by categorical groups
-population_margins(model, data; type=:effects, over=:region)
+population_margins(model, data; type=:effects, groups=:region)
 
-# Multiple grouping variables
-population_margins(model, data; type=:effects, over=[:region, :year])
+# Multiple grouping variables  
+population_margins(model, data; type=:effects, groups=[:region, :year])
 
 # Complex nested grouping
-population_margins(model, data; type=:effects, over=[:region, :income_quartile])
+population_margins(model, data; type=:effects, groups=[:region, :income_quartile])
 ```
 
 ## Statistical Guarantees
