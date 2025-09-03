@@ -4,7 +4,7 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data; at=:means, type=:effects, vars=nothing, scale=:response, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -16,13 +16,11 @@ or adjusted predictions at specific profiles (APM/APR).
 # Arguments
 - `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
 - `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
+- `reference_grid`: DataFrame specifying covariate combinations for analysis
+  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `cartesian_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Or provide custom DataFrame with desired covariate combinations
 
 # Keyword Arguments
-- `at=:means`: Profile specification (required for profile analysis)
-  - `:means` - Effects/predictions at sample means (MEM/APM)
-  - `Dict` - Cartesian product specification: `Dict(:x1 => [0, 1], :x2 => [2, 3])`
-  - `Vector{Dict}` - Explicit profiles: `[Dict(:x1 => 0, :x2 => 2), Dict(:x1 => 1, :x2 => 3)]`
-  - `DataFrame` - Pre-built reference grid (most efficient for complex scenarios)
 - `type::Symbol=:effects`: Analysis type
   - `:effects` - Marginal Effects at profiles (MEM/MER): derivatives/contrasts at specific points
   - `:predictions` - Adjusted Predictions at profiles (APM/APR): fitted values at specific points
@@ -65,22 +63,25 @@ or adjusted predictions at specific profiles (APM/APR).
 # Examples
 ```julia
 # Effects at sample means (MEM) - most common case
-result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1, :x2])
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1, :x2])
 DataFrame(result)  # Convert to DataFrame with profile information
 
-# Elasticities at sample means (NEW in Phase 3)
-result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1], measure=:elasticity)
+# Elasticities at sample means
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1], measure=:elasticity)
 
-# Effects at specific scenarios (MER)
-result = profile_margins(model, data; at=Dict(:x1 => [0, 1], :income => [25000, 50000]), 
+# Effects at specific scenarios (MER) using cartesian grid
+result = profile_margins(model, data, cartesian_grid(data; x1=[0, 1], income=[25000, 50000]); 
                         type=:effects, vars=[:education])
 
-# Semi-elasticities at specific profiles (NEW in Phase 3)
-result = profile_margins(model, data; at=Dict(:x1 => [-1, 0, 1]), 
+# Semi-elasticities at specific profiles
+result = profile_margins(model, data, cartesian_grid(data; x1=[-1, 0, 1]); 
                         type=:effects, vars=[:x2], measure=:semielasticity_dyex)
 
 # Predictions at the mean (APM)
-result = profile_margins(model, data; at=:means, type=:predictions)
+result = profile_margins(model, data, means_grid(data); type=:predictions)
+
+# Balanced factorial designs (AsBalanced)
+result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
 
 # Multiple explicit profiles for complex analysis
 profiles = [
@@ -120,23 +121,6 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=nothing, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov, typical=mean)
-    # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
-    data_nt = Tables.columntable(data)
-    
-    # Filter data to only include model variables (cleaner approach)
-    model_data_nt = _filter_data_to_model_variables(data_nt, model)
-    
-    # Input validation
-    _validate_profile_inputs(model, model_data_nt, at, type, vars, scale, backend, measure, vcov)
-    
-    # Build reference grid from at specification (uses filtered data automatically)
-    reference_grid = _build_reference_grid(at, model_data_nt, model, typical)
-    at_spec = at
-    
-    # Route to unified implementation with reference grid (using filtered data)
-    return _profile_margins(model, model_data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec, ci_alpha)
-end
 
 """
     _extract_profile_values(reference_grid, result_length::Int) -> NamedTuple
@@ -232,38 +216,52 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
 end
 
 """
-    profile_margins(model, data, reference_grid::DataFrame; type=:effects, vars=nothing, scale=:response, backend=:auto, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, vcov=GLM.vcov) -> MarginsResult
 
-Core method that takes a pre-built reference grid directly for maximum control and efficiency.
+Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
-This method bypasses the reference grid building step and uses the provided DataFrame directly,
-making it the most efficient approach for complex scenarios or when you need precise control
-over the evaluation points.
+This function evaluates effects/predictions at user-specified scenarios using reference grids,
+implementing the "Profile" approach from the 2×2 framework (Population vs Profile × Effects vs Predictions).
 
 # Arguments
 - `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
-- `data`: Original data table (used for model context, not for profile building)
-- `reference_grid::DataFrame`: Pre-built reference grid with exact evaluation points
+- `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
+- `reference_grid`: DataFrame specifying covariate combinations for analysis
+  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `cartesian_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Or provide custom DataFrame with desired covariate combinations
 
 # Keyword Arguments
-Same as the convenience method, except `at` is not needed since the reference grid is provided directly.
+- `type::Symbol=:effects`: Analysis type
+  - `:effects` - Marginal Effects at profiles: derivatives/contrasts at specific points
+  - `:predictions` - Adjusted Predictions at profiles: fitted values at specific points
+- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+- `scale::Symbol=:response`: Target scale (:response or :link)
+- `backend::Symbol=:ad`: Computational backend (:ad or :fd)
+- `measure::Symbol=:effect`: Effect measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
+- `vcov=GLM.vcov`: Covariance matrix function for standard errors
 
 # Examples
 ```julia
-# Direct reference grid specification (most efficient)
-reference_grid = DataFrame(
-    age = [25, 35, 45],
-    education = [12, 16, 20],
-    region = ["North", "South", "North"]
-)
+# Effects at sample means (most common case)
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1, :x2])
+
+# Balanced factorial designs (AsBalanced)
+result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
+
+# Effects at specific scenarios using cartesian grid
+result = profile_margins(model, data, cartesian_grid(data; x1=[0, 1], income=[25000, 50000]); 
+                        type=:effects, vars=[:education])
+
+# Predictions using quantile-based grid
+result = profile_margins(model, data, quantile_grid(data; age=[0.25, 0.5, 0.75]); type=:predictions)
+
+# Direct reference grid specification (maximum control)
+reference_grid = DataFrame(age=[25, 35, 45], education=[12, 16, 20], region=["North", "South", "North"])
 result = profile_margins(model, data, reference_grid; type=:effects, vars=[:income])
 
 # Complex scenarios with categorical mixtures
 using Margins: mix
-reference_grid = DataFrame(
-    x1 = [0, 1, 2],
-    categorical_var = [mix("A" => 0.7, "B" => 0.3), "A", "B"]
-)
+reference_grid = DataFrame(x1=[0, 1, 2], categorical_var=[mix("A" => 0.7, "B" => 0.3), "A", "B"])
 result = profile_margins(model, data, reference_grid; type=:predictions)
 ```
 """
@@ -275,8 +273,8 @@ function profile_margins(
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
-    # Input validation (similar to main method but with reference_grid)
-    _validate_profile_inputs(model, data_nt, :means, type, vars, scale, backend, measure, vcov)  # Use :means as dummy for at validation
+    # Input validation for reference grid approach
+    _validate_profile_inputs_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
     
     # Reference grid specific validation
     if nrow(reference_grid) == 0
@@ -359,22 +357,26 @@ function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
 end
 
 """
-    _validate_profile_inputs(model, data, at, type, vars, scale, backend, measure)
+    _validate_profile_inputs_refgrid(model, data, reference_grid, type, vars, scale, backend, measure, vcov)
 
-Validate inputs to profile_margins() with clear Julia-style error messages.
+Validate inputs to profile_margins() with reference grid approach.
 """
-function _validate_profile_inputs(model, data, at, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
+function _validate_profile_inputs_refgrid(model, data, reference_grid, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Validate required arguments
-    if model === nothing
+    if isnothing(model)
         throw(ArgumentError("model cannot be nothing"))
     end
     
-    if data === nothing
+    if isnothing(data)
         throw(ArgumentError("data cannot be nothing"))
     end
     
-    # Use centralized validation for common parameters
-    validate_profile_parameters(at, type, scale, backend, measure, vars)
+    if isnothing(reference_grid)
+        throw(ArgumentError("reference_grid cannot be nothing"))
+    end
+    
+    # Use centralized validation for common parameters (without the at parameter)
+    validate_population_parameters(type, scale, backend, measure, vars)  # Reuse population validation
     
     # Validate vcov parameter
     validate_vcov_parameter(vcov, model)
@@ -390,33 +392,6 @@ function _validate_profile_inputs(model, data, at, type::Symbol, vars, scale::Sy
         GLM.vcov(model)
     catch e
         throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
-    end
-    
-    # Profile-specific validation for at parameter (already handled by centralized validation)
-    # Additional detailed validation for complex at specifications
-    if !(at === :means || at isa Dict || at isa Vector || at isa DataFrame)
-        throw(ArgumentError("at parameter must be :means, Dict, Vector{Dict}, or DataFrame"))
-    end
-    
-    # Additional validation for Dict specification
-    if at isa Dict
-        if isempty(at)
-            throw(ArgumentError("at Dict cannot be empty - specify at least one variable and its values"))
-        end
-        for (k, v) in pairs(at)
-            if !(k isa Symbol)
-                throw(ArgumentError("at Dict keys must be Symbols (variable names), got $(typeof(k))"))
-            end
-        end
-    end
-    
-    # Additional validation for Vector specification  
-    if at isa Vector && !isempty(at)
-        for (i, profile) in enumerate(at)
-            if !(profile isa Dict || profile isa NamedTuple)
-                throw(ArgumentError("at Vector elements must be Dict or NamedTuple (profiles), element $i is $(typeof(profile))"))
-            end
-        end
     end
 end
 

@@ -35,40 +35,92 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
     end
 end
 
-# Helper: accumulate marginal effect value across rows using concrete arguments
-function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, scale::Symbol, backend::Symbol, idx::Int)
-    acc = 0.0
-    if scale === :response
-        for row in rows
-            FormulaCompiler.marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
-            acc += g_buf[idx]
+# Helper: accumulate marginal effect value across rows using concrete arguments (with weights support)
+function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, scale::Symbol, backend::Symbol, idx::Int, weights::Union{Vector{Float64}, Nothing}=nothing)
+    if isnothing(weights)
+        # Unweighted case (original implementation)
+        acc = 0.0
+        if scale === :response
+            for row in rows
+                marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
+                acc += g_buf[idx]
+            end
+        else
+            for row in rows
+                marginal_effects_eta!(g_buf, de, β, row; backend=backend)
+                acc += g_buf[idx]
+            end
         end
+        return acc
     else
-        for row in rows
-            FormulaCompiler.marginal_effects_eta!(g_buf, de, β, row; backend=backend)
-            acc += g_buf[idx]
+        # Weighted case
+        weighted_acc = 0.0
+        if scale === :response
+            for row in rows
+                w = weights[row]
+                if w > 0  # Skip zero-weight observations
+                    marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
+                    weighted_acc += w * g_buf[idx]
+                end
+            end
+        else
+            for row in rows
+                w = weights[row]
+                if w > 0  # Skip zero-weight observations  
+                    marginal_effects_eta!(g_buf, de, β, row; backend=backend)
+                    weighted_acc += w * g_buf[idx]
+                end
+            end
         end
+        return weighted_acc
     end
-    return acc
 end
 
-# Helper: average response (μ or η) over rows using concrete arguments
-function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link, data_nt::NamedTuple, rows, scale::Symbol)
-    if scale === :response
-        s = 0.0
-        for row in rows
-            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row)
-            η = dot(β, row_buf)
-            s += GLM.linkinv(link, η)
+# Helper: average response (μ or η) over rows using concrete arguments (with weights support)
+function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link, data_nt::NamedTuple, rows, scale::Symbol, weights::Union{Vector{Float64}, Nothing}=nothing)
+    if isnothing(weights)
+        # Unweighted case (original implementation)
+        if scale === :response
+            s = 0.0
+            for row in rows
+                modelrow!(row_buf, compiled, data_nt, row)
+                η = dot(β, row_buf)
+                s += GLM.linkinv(link, η)
+            end
+            return s / length(rows)
+        else
+            s = 0.0
+            for row in rows
+                modelrow!(row_buf, compiled, data_nt, row)
+                s += dot(β, row_buf)
+            end
+            return s / length(rows)
         end
-        return s / length(rows)
     else
-        s = 0.0
-        for row in rows
-            FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row)
-            s += dot(β, row_buf)
+        # Weighted case
+        total_weight = sum(weights[row] for row in rows)
+        if scale === :response
+            weighted_s = 0.0
+            for row in rows
+                w = weights[row]
+                if w > 0
+                    modelrow!(row_buf, compiled, data_nt, row)
+                    η = dot(β, row_buf)
+                    weighted_s += w * GLM.linkinv(link, η)
+                end
+            end
+            return weighted_s / total_weight
+        else
+            weighted_s = 0.0
+            for row in rows
+                w = weights[row]
+                if w > 0
+                    modelrow!(row_buf, compiled, data_nt, row)
+                    weighted_s += w * dot(β, row_buf)
+                end
+            end
+            return weighted_s / total_weight
         end
-        return s / length(rows)
     end
 end
 
@@ -181,7 +233,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 df, G = _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:fd)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline) where L
+function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, weights=nothing) where L
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
     
@@ -227,21 +279,41 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     # Process continuous variables (if any)
     if engine.de !== nothing
         for var in continuous_requested
-            # Direct computation with explicit backend - no fallbacks
-            # Users must choose backend explicitly based on their accuracy/performance needs
-            FormulaCompiler.accumulate_ame_gradient!(
-                engine.gβ_accumulator, local_de, local_β, rows, var;
-                link=(scale === :response ? local_link : GLM.IdentityLink()), 
-                backend=backend
-            )
+            if isnothing(weights)
+                # Unweighted case - use FormulaCompiler's optimized implementation
+                accumulate_ame_gradient!(
+                    engine.gβ_accumulator, local_de, local_β, rows, var;
+                    link=(scale === :response ? local_link : GLM.IdentityLink()), 
+                    backend=backend
+                )
+                gβ_avg = engine.gβ_accumulator  # Use directly without copying
+            else
+                # Weighted case - use unweighted gradients for now (TODO: improve)
+                # This is a simplification that provides weighted point estimates but 
+                # uses unweighted gradients for standard errors
+                accumulate_ame_gradient!(
+                    engine.gβ_accumulator, local_de, local_β, rows, var;
+                    link=(scale === :response ? local_link : GLM.IdentityLink()), 
+                    backend=backend
+                )
+                gβ_avg = engine.gβ_accumulator
+                
+                # TODO: Implement proper weighted gradient computation
+                # For full statistical rigor, we need FormulaCompiler support for weighted gradients
+            end
             
-            # Note: accumulate_ame_gradient! already averages the gradient
-            gβ_avg = engine.gβ_accumulator  # Use directly without copying
             se = compute_se_only(gβ_avg, engine.Σ)
             
             # Compute AME value via helper with concrete arguments
-            ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, scale, backend, cont_idx)
-            ame_val /= length(rows)
+            ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, scale, backend, cont_idx, weights)
+            
+            # Handle weighted vs unweighted averaging
+            if isnothing(weights)
+                ame_val /= length(rows)  # Simple average
+            else
+                total_weight = sum(weights[row] for row in rows)
+                ame_val /= total_weight  # Weighted average
+            end
             
             # Apply elasticity transformations if requested (Phase 3)
             final_val = ame_val
@@ -249,11 +321,16 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 # Compute average x and y for elasticity measures (vectorized)
                 xcol = getproperty(data_nt, var)
                 
-                # Step 1: Compute average x directly (no loop needed)
-                x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
+                # Step 1: Compute weighted average x
+                if isnothing(weights)
+                    x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
+                else
+                    total_weight = sum(weights[row] for row in rows)
+                    x̄ = sum(weights[row] * float(xcol[row]) for row in rows) / total_weight
+                end
                 
                 # Step 2: Compute η/μ averages using helper with concrete arguments
-                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale)
+                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale, weights)
                 
                 # Apply transformation based on measure type
                 if measure === :elasticity

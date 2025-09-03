@@ -97,6 +97,50 @@ function _validate_mixture_against_data(mixture::CategoricalMixture, col, var::S
 end
 
 """
+    _create_balanced_mixture(col) -> CategoricalMixture or Float64
+
+Create a balanced (equal weight) categorical mixture from data column levels.
+This provides orthogonal factorial designs for AsBalanced analysis in profile margins.
+
+For Bool columns, returns 0.5 (50-50 balanced probability).
+For CategoricalArray, assigns equal probability to all levels.
+
+# Arguments
+- `col`: Data column (Vector of any categorical type)
+
+# Returns
+- `CategoricalMixture`: Mixture with levels and equal weights 
+- `Float64`: For Bool columns, returns 0.5 (balanced)
+
+# Examples
+```julia
+# Bool column -> 50-50 probability
+_create_balanced_mixture([true, false, true, false]) # -> 0.5
+
+# Categorical -> Equal weights
+_create_balanced_mixture(["A", "B", "C", "A"]) # -> CategoricalMixture(["A","B","C"], [1/3, 1/3, 1/3])
+```
+"""
+function _create_balanced_mixture(col)
+    if eltype(col) <: Bool
+        return 0.5  # Balanced probability for Bool variables
+    end
+    
+    # Get unique levels
+    if col isa CategoricalArray
+        levels = string.(CategoricalArrays.levels(col))
+    else
+        levels = sort(unique(string.(col)))
+    end
+    
+    # Create equal weights
+    n_levels = length(levels)
+    equal_weights = fill(1.0 / n_levels, n_levels)
+    
+    return CategoricalMixture(levels, equal_weights)
+end
+
+"""
     _mixture_to_scenario_value(mixture::CategoricalMixture, original_col)
 
 Convert a categorical mixture to a representative value for FormulaCompiler scenario creation.

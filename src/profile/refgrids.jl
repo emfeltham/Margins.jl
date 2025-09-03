@@ -422,3 +422,238 @@ function _create_frequency_mixture_sampled(col)
     
     return CategoricalMixture(levels, weights)
 end
+
+# =============================================================================
+# Reference Grid Builder Functions (NEW - AsBalanced Support)
+# =============================================================================
+
+"""
+    means_grid(data; typical=mean) -> DataFrame
+
+Build reference grid with sample means for continuous variables and frequency-weighted 
+mixtures for categorical variables. This is the standard "at means" behavior.
+
+# Arguments
+- `data`: DataFrame or NamedTuple containing the data
+- `typical`: Function to compute typical values for continuous variables (default: mean)
+
+# Returns
+- `DataFrame`: Single-row reference grid with typical values
+
+# Examples
+```julia
+# Standard "at means" grid
+ref_grid = means_grid(data)
+result = profile_margins(model, data, ref_grid)
+
+# Using median instead of mean for continuous variables
+ref_grid = means_grid(data; typical=median)
+```
+"""
+function means_grid(data; typical=mean)
+    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    
+    # Use existing infrastructure with frequency weighting
+    typical_values = _get_typical_values_dict(data_nt, typical)
+    
+    # Convert to DataFrame format
+    cols = Dict{Symbol, Vector}()
+    for (k, v) in typical_values
+        if v isa Real && !(v isa Bool)
+            cols[k] = Float64[v]
+        elseif v isa Bool  
+            cols[k] = Bool[v]
+        else
+            cols[k] = [v]  # Generic for CategoricalMixture, strings, etc.
+        end
+    end
+    
+    return DataFrame(cols)
+end
+
+"""
+    balanced_grid(data; vars...) -> DataFrame
+
+Build reference grid with balanced (equal weight) mixtures for specified categorical variables.
+This creates orthogonal factorial designs for AsBalanced analysis.
+
+Continuous variables use sample means. Categorical variables specified in `vars` get
+equal probability weights. Other categorical variables use frequency-weighted mixtures.
+
+# Arguments
+- `data`: DataFrame or NamedTuple containing the data
+- `vars...`: Keyword arguments specifying which variables to balance
+  - Use `:all` to balance all categorical variables: `education=:all`
+  - Use specific levels: `education=["high_school", "college"]`
+
+# Returns  
+- `DataFrame`: Single-row reference grid with balanced categorical mixtures
+
+# Examples
+```julia
+# Balance all levels of education variable
+ref_grid = balanced_grid(data; education=:all)
+
+# Balance specific education levels 
+ref_grid = balanced_grid(data; education=["high_school", "college"])
+
+# Balance multiple variables
+ref_grid = balanced_grid(data; education=:all, region=:all)
+
+# Use with profile_margins
+result = profile_margins(model, data, ref_grid)
+```
+"""
+function balanced_grid(data; vars...)
+    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    
+    # Start with frequency-weighted typical values
+    typical_values = _get_typical_values_dict(data_nt, mean)
+    
+    # Override specified variables with balanced mixtures
+    for (var, spec) in vars
+        if !haskey(data_nt, var)
+            throw(ArgumentError("Variable :$var not found in data. Available variables: $(collect(keys(data_nt)))"))
+        end
+        
+        col = getproperty(data_nt, var)
+        
+        if spec === :all
+            # Balance all levels of this categorical variable
+            typical_values[var] = _create_balanced_mixture(col)
+        elseif spec isa Vector
+            # Balance only specified levels
+            if eltype(col) <: Bool && spec isa Vector{String}
+                # Handle Bool with string levels
+                if !issubset(spec, ["true", "false"])
+                    throw(ArgumentError("Bool variable :$var can only specify levels 'true' and/or 'false'"))
+                end
+                equal_weights = fill(1.0/length(spec), length(spec))
+                typical_values[var] = CategoricalMixture(spec, equal_weights)
+            else
+                # Validate levels exist in data
+                actual_levels = if col isa CategoricalArray
+                    string.(CategoricalArrays.levels(col))
+                else
+                    unique(string.(col))
+                end
+                
+                spec_str = string.(spec)
+                missing_levels = setdiff(spec_str, actual_levels) 
+                if !isempty(missing_levels)
+                    throw(ArgumentError("Variable :$var contains levels not found in data: $missing_levels. Available: $actual_levels"))
+                end
+                
+                equal_weights = fill(1.0/length(spec), length(spec))
+                typical_values[var] = CategoricalMixture(spec_str, equal_weights)
+            end
+        else
+            throw(ArgumentError("Balanced specification for :$var must be :all or Vector of levels"))
+        end
+    end
+    
+    # Convert to DataFrame format
+    cols = Dict{Symbol, Vector}()
+    for (k, v) in typical_values
+        if v isa Real && !(v isa Bool)
+            cols[k] = Float64[v]
+        elseif v isa Bool  
+            cols[k] = Bool[v]
+        else
+            cols[k] = [v]  # CategoricalMixture objects, strings, etc.
+        end
+    end
+    
+    return DataFrame(cols)
+end
+
+"""
+    cartesian_grid(data; vars...) -> DataFrame
+
+Build Cartesian product reference grid from variable specifications.
+This replaces the current `at=Dict(...)` functionality with a cleaner builder approach.
+
+# Arguments
+- `data`: DataFrame or NamedTuple containing the data
+- `vars...`: Keyword arguments mapping variables to values
+  - Single values: `age=45`
+  - Multiple values: `age=[25, 45, 65]`
+  - Numlist notation: `age="25(10)65"` (25, 35, 45, 55, 65)
+
+# Returns
+- `DataFrame`: Reference grid with Cartesian product of specified values
+
+# Examples
+```julia
+# Simple cartesian product
+ref_grid = cartesian_grid(data; age=[25, 45, 65], treatment=[true, false])
+
+# Mixed specifications
+ref_grid = cartesian_grid(data; age="25(10)65", education=["college", "graduate"])
+
+# Use with profile_margins
+result = profile_margins(model, data, ref_grid)
+```
+"""
+function cartesian_grid(data; vars...)
+    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    at_dict = Dict{Symbol, Any}(vars)
+    return _build_cartesian_refgrid(at_dict, data_nt, mean)
+end
+
+"""
+    quantile_grid(data; vars...) -> DataFrame
+
+Build reference grid using quantiles of continuous variables.
+
+# Arguments
+- `data`: DataFrame or NamedTuple containing the data  
+- `vars...`: Keyword arguments mapping variables to quantile specifications
+  - Vector of quantiles: `income=[0.1, 0.5, 0.9]` (10th, 50th, 90th percentiles)
+  - Number of quantiles: `age=4` (quartiles: 25th, 50th, 75th percentiles)
+
+# Returns
+- `DataFrame`: Reference grid with quantile-based values
+
+# Examples
+```julia
+# Specific quantiles
+ref_grid = quantile_grid(data; income=[0.1, 0.5, 0.9])
+
+# Standard quantiles (quartiles, quintiles, etc.)
+ref_grid = quantile_grid(data; age=4, income=5)
+
+# Use with profile_margins
+result = profile_margins(model, data, ref_grid)
+```
+"""
+function quantile_grid(data; vars...)
+    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    
+    # Convert quantile specifications to actual values
+    at_dict = Dict{Symbol, Any}()
+    for (var, spec) in vars
+        if !haskey(data_nt, var)
+            throw(ArgumentError("Variable :$var not found in data"))
+        end
+        
+        col = getproperty(data_nt, var)
+        if !_is_continuous_variable(col)
+            throw(ArgumentError("quantile_grid() only supports continuous variables. Variable :$var is $(eltype(col))"))
+        end
+        
+        if spec isa Number && spec > 1
+            # Number of quantiles (e.g., 4 for quartiles)
+            n_quantiles = Int(spec)
+            quantiles = [(i)/(n_quantiles+1) for i in 1:n_quantiles]
+            at_dict[var] = [quantile(col, q) for q in quantiles]
+        elseif spec isa Vector{<:Real} && all(0 .≤ spec .≤ 1)
+            # Explicit quantiles
+            at_dict[var] = [quantile(col, q) for q in spec]
+        else
+            throw(ArgumentError("Quantile specification for :$var must be number of quantiles (>1) or vector of quantile values in [0,1]"))
+        end
+    end
+    
+    return _build_cartesian_refgrid(at_dict, data_nt, mean)
+end

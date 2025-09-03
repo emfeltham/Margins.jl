@@ -7,7 +7,7 @@
 # Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> MarginsResult
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -51,6 +51,11 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function for robust/clustered standard errors
+- `weights=nothing`: Observation weights for survey data or sampling corrections
+  - `nothing` - No weights (equal weight for all observations, default)
+  - `Symbol` - Column name containing weights (e.g., `:sampling_weight`)
+  - `Vector` - Weight vector matching number of observations
+  - Weights enable proper survey inference: `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
 
 # Returns
 `MarginsResult` containing:
@@ -94,6 +99,12 @@ result = population_margins(model, data; groups=(:income, 4))  # By income quart
 
 # High-performance production use with finite differences
 result = population_margins(model, data; backend=:fd, scale=:link)
+
+# Survey data with sampling weights
+result = population_margins(model, data; weights=:sampling_weight)
+
+# Frequency weights for aggregated data
+result = population_margins(model, data; weights=data.freq_weights)
 ```
 
 # Frequency-Weighted Categorical Handling
@@ -109,11 +120,14 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov)
-    # Input validation with new scale parameter
-    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing)
+    # Input validation with new scale parameter and weights
+    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov, weights)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
+    
+    # Process weights parameter
+    weights_vec = _process_weights_parameter(weights, data, data_nt)
     
     # Handle vars parameter with improved validation
     if type === :effects
@@ -123,15 +137,19 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
     end
     
     # Build zero-allocation engine with caching (including vcov function)
-    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
+    engine = get_or_build_engine(model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov)
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
-    if scenarios !== nothing || groups !== nothing
+    if !isnothing(scenarios) || !isnothing(groups)
+        # TODO: Add weights support to contexts (future enhancement)
+        if !isnothing(weights_vec)
+            throw(ArgumentError("weights parameter not yet supported with scenarios/groups. Please use basic population_margins() for now."))
+        end
         return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend)
     end
     
     if type === :effects
-        df, G = _ame_continuous_and_categorical(engine, data_nt; scale, backend, measure)  # → AME (both continuous and categorical)
+        df, G = _ame_continuous_and_categorical(engine, data_nt; scale, backend, measure, weights=weights_vec)  # → AME (both continuous and categorical)
         metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Store confidence interval parameters in metadata
@@ -140,6 +158,9 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
         
+        # Store weights info in metadata
+        metadata[:weighted] = !isnothing(weights_vec)
+        
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
@@ -147,7 +168,7 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         
         return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
     else # :predictions  
-        df, G = _population_predictions(engine, data_nt; scale)  # → AAP
+        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
         
         # Store confidence interval parameters in metadata
@@ -155,6 +176,9 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, sc
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
+        
+        # Store weights info in metadata  
+        metadata[:weighted] = !isnothing(weights_vec)
         
         # Extract raw components from DataFrame
         estimates = df.estimate
@@ -191,11 +215,11 @@ function _get_continuous_variables(model, data_nt::NamedTuple)
 end
 
 """
-    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov)
+    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov, weights)
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, scale::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov)
+function _validate_population_inputs(model, data, type::Symbol, vars, scale::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov, weights)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -219,18 +243,23 @@ function _validate_population_inputs(model, data, type::Symbol, vars, scale::Sym
     end
     
     # Validate scenarios parameter (replaces 'at' for population margins)
-    if scenarios !== nothing && !(scenarios isa Dict)
+    if !isnothing(scenarios) && !(scenarios isa Dict)
         throw(ArgumentError("scenarios parameter must be a Dict specifying counterfactual scenarios"))
     end
     
     # Teaching validation: Check for vars/scenarios overlap
-    if scenarios !== nothing && vars !== nothing && type === :effects
+    if !isnothing(scenarios) && !isnothing(vars) && type == :effects
         _validate_vars_scenarios_overlap(vars, scenarios)
     end
     
     # Validate groups parameter (unified grouping system)
-    if groups !== nothing
+    if !isnothing(groups)
         _validate_groups_parameter(groups)
+    end
+    
+    # Validate weights parameter
+    if !isnothing(weights)
+        _validate_weights_parameter(weights, data)
     end
     
     # Validate model has required methods
@@ -379,5 +408,84 @@ function _process_vars_parameter(model, vars, data_nt::NamedTuple)
         return vars
     else
         throw(ArgumentError("vars must be Symbol, Vector{Symbol}, or :all_continuous"))
+    end
+end
+
+"""
+    _validate_weights_parameter(weights, data)
+
+Validate the weights parameter for population_margins().
+
+# Arguments
+- `weights`: The weights specification (Symbol, Vector, or nothing)
+- `data`: Original data (for Tables.jl compatibility check)
+
+# Throws
+- `ArgumentError`: If weights specification is invalid
+"""
+function _validate_weights_parameter(weights, data)
+    if weights isa Symbol
+        # Check that the column exists in the data
+        if !Tables.columnaccess(data) || !haskey(Tables.columntable(data), weights)
+            throw(ArgumentError("weights column :$weights not found in data"))
+        end
+    elseif weights isa AbstractVector
+        # Check that weights vector has right length
+        n_data = Tables.rowaccess(data) ? length(Tables.rows(data)) : length(first(Tables.columns(data)))
+        if length(weights) != n_data
+            throw(ArgumentError("weights vector length ($(length(weights))) must match number of observations ($n_data)"))
+        end
+        
+        # Check that all weights are non-negative
+        if !all(w >= 0 for w in weights)
+            throw(ArgumentError("all weights must be non-negative"))
+        end
+        
+        # Check that at least some weights are positive
+        if all(w == 0 for w in weights)
+            throw(ArgumentError("at least some weights must be positive"))
+        end
+    else
+        throw(ArgumentError("weights must be Symbol (column name) or Vector{<:Real}"))
+    end
+end
+
+"""
+    _process_weights_parameter(weights, data, data_nt) -> Vector{Float64} or nothing
+
+Process the weights parameter into a standardized Float64 vector.
+
+# Arguments
+- `weights`: The weights specification (Symbol, Vector, or nothing)
+- `data`: Original data (unused but kept for API consistency)
+- `data_nt`: Data in NamedTuple format
+
+# Returns
+- `Vector{Float64}`: Processed weights vector
+- `nothing`: If no weights specified
+
+# Examples
+```julia
+# No weights
+weights_vec = _process_weights_parameter(nothing, data, data_nt)  # -> nothing
+
+# Column name
+weights_vec = _process_weights_parameter(:sampling_weight, data, data_nt)  # -> Float64 vector
+
+# Direct vector
+weights_vec = _process_weights_parameter([1.0, 2.0, 1.5], data, data_nt)  # -> Float64 vector
+```
+"""
+function _process_weights_parameter(weights, data, data_nt)
+    if isnothing(weights)
+        return nothing
+    elseif weights isa Symbol
+        # Extract weights column from data
+        weights_col = getproperty(data_nt, weights)
+        return Float64.(weights_col)  # Convert to Float64
+    elseif weights isa AbstractVector
+        return Float64.(weights)  # Convert to Float64
+    else
+        throw(ArgumentError("Unexpected weights type: $(typeof(weights))"))  # Should not reach here due to validation
     end
 end
