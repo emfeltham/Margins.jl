@@ -336,7 +336,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
     results = DataFrame(
         term = String[],
         estimate = Float64[],
-        se = Float64[]
+        se = Float64[],
+        profile_desc = NamedTuple[]  # Store profile info for later string conversion
     )
     G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
@@ -416,19 +417,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 end
             end
             
-            # Build profile description
-            profile_desc = join(["$(k)=$(v)" for (k,v) in pairs(profile)], ", ")
-            if var ∈ continuous_vars
-                term_name = "$(var) at $(profile_desc)"
-            else
-                # Show the specific contrast being computed
-                current_level = profile[var]
-                baseline_level = _get_baseline_level(engine.model, var)
-                term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
-            end
-            
-            # Store results using push!
-            push!(results, (term=term_name, estimate=final_val, se=se))
+            # Store results using string terms for MarginsResult compatibility
+            push!(results, (term=string(var), estimate=final_val, se=se, profile_desc=profile))
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
         end
@@ -750,7 +740,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     results = DataFrame(
         term = String[],
         estimate = Float64[],
-        se = Float64[]
+        se = Float64[],
+        profile_desc = NamedTuple[]  # Store profile info for later string conversion
     )
     G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
@@ -795,21 +786,15 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     # Apply measure transformation
                     if measure === :effect
                         estimate = marginal_effect
-                    elseif measure === :elasticity
-                        # Get the variable value at this profile
+                    else
+                        # Get variable and predicted values for measure transformations
                         var_value = refgrid_data[var][profile_idx]
-                        # Get the predicted value (μ or η)
                         output = Vector{Float64}(undef, length(refgrid_compiled))
                         refgrid_compiled(output, refgrid_data, profile_idx)
                         pred_value = sum(output)  # Sum of all terms gives prediction
                         
-                        if scale === :response
-                            estimate = marginal_effect * (var_value / pred_value)
-                        else # :link
-                            estimate = marginal_effect * (var_value / pred_value)
-                        end
-                    else
-                        error("Unsupported measure: $measure")
+                        # Use reusable transformation function
+                        estimate = apply_measure_transformation(marginal_effect, var_value, pred_value, measure)
                     end
                     
                     # Compute parameter gradient for SE using refgrid derivative evaluator
@@ -822,8 +807,22 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     
                     se = compute_se_only(engine.gβ_accumulator, engine.Σ)
                     
-                    # Store results
-                    push!(results, (term=string(var), estimate=estimate, se=se))
+                    # Store results with profile info (convert mixtures to display values)
+                    profile_dict = Dict{Symbol,Any}()
+                    for k in names(reference_grid)
+                        val = reference_grid[profile_idx, k]
+                        if val isa CategoricalMixture
+                            # Store mixture as a descriptive string
+                            profile_dict[Symbol(k)] = string(val)
+                        else
+                            profile_dict[Symbol(k)] = val
+                        end
+                    end
+                    profile_nt = NamedTuple(profile_dict)
+                    push!(results.term, string(var))
+                    push!(results.estimate, estimate)
+                    push!(results.se, se)
+                    push!(results.profile_desc, profile_nt)
                     G[row_idx, :] = engine.gβ_accumulator
                     
                     row_idx += 1
@@ -851,8 +850,22 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 profile_desc = join(profile_parts, ", ")
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
                 
-                # Store results
-                push!(results, (term=term_name, estimate=final_effect, se=se))
+                # Store results with profile info (convert mixtures to display values)
+                profile_dict = Dict{Symbol,Any}()
+                for k in names(reference_grid)
+                    val = reference_grid[profile_idx, k]
+                    if val isa CategoricalMixture
+                        # Store mixture as a descriptive string
+                        profile_dict[Symbol(k)] = string(val)
+                    else
+                        profile_dict[Symbol(k)] = val
+                    end
+                end
+                profile_nt = NamedTuple(profile_dict)
+                push!(results.term, var)
+                push!(results.estimate, final_effect)
+                push!(results.se, se)
+                push!(results.profile_desc, profile_nt)
                 G[row_idx, :] = engine.gβ_accumulator
                 
                 row_idx += 1

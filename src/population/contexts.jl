@@ -92,7 +92,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     # Extract raw components from DataFrame
     estimates = results.estimate
     standard_errors = results.se
-    terms = results.term
+    terms = string.(results.term)  # Convert Symbol to String
     
     # CRITICAL: Preserve actual subgroup sizes from computation
     if "n" in names(results)

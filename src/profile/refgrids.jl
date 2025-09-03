@@ -1,6 +1,52 @@
 # profile/refgrids.jl - Reference grid builders for profile_margins
 
 using Statistics
+using FormulaCompiler
+
+"""
+    _filter_data_to_model_variables(data_nt::NamedTuple, model) -> NamedTuple
+
+Filter data to only include variables that are actually used in the model.
+This is the cleanest approach to prevent non-model variables from leaking into computations.
+
+# Arguments
+- `data_nt::NamedTuple`: Full data in columntable format
+- `model`: Statistical model (GLM, MixedModel, etc.)
+
+# Returns
+- `NamedTuple`: Filtered data containing only model variables
+
+# Notes
+- Works with GLM.jl models and MixedModels.jl models
+- Excludes outcome variables (not needed for margin computation)
+- Could be extended for mixed models to handle fixed vs random effects
+"""
+function _filter_data_to_model_variables(data_nt::NamedTuple, model)
+    # Get model variables using FormulaCompiler
+    compiled = FormulaCompiler.compile_formula(model, data_nt)
+    
+    # Extract all variables used in model operations
+    model_vars = Set{Symbol}()
+    for op in compiled.ops
+        if op isa FormulaCompiler.LoadOp
+            Col = typeof(op).parameters[1]
+            push!(model_vars, Col)
+        elseif op isa FormulaCompiler.ContrastOp
+            Col = typeof(op).parameters[1]
+            push!(model_vars, Col)
+        end
+    end
+    
+    # Filter data to only include model variables
+    filtered_data = Dict{Symbol, Any}()
+    for var in model_vars
+        if haskey(data_nt, var)
+            filtered_data[var] = getproperty(data_nt, var)
+        end
+    end
+    
+    return NamedTuple(filtered_data)
+end
 
 # Cache for typical values computation (performance optimization)
 const TYPICAL_VALUES_CACHE = Dict{UInt64, Dict{Symbol, Any}}()
@@ -80,13 +126,19 @@ _build_reference_grid([Dict(:x1 => 0, :x2 => 2), Dict(:x1 => 1, :x2 => 3)], data
 _build_reference_grid(existing_grid, data_nt)
 ```
 """
-function _build_reference_grid(at_spec, data_nt::NamedTuple)
-    if at_spec === :means
-        return _build_means_refgrid(data_nt)
+function _build_reference_grid(at_spec, data_nt::NamedTuple, model, typical)
+    if isnothing(at_spec)
+        return _build_means_refgrid(data_nt, model, typical)
     elseif at_spec isa Dict
-        return _build_cartesian_refgrid(at_spec, data_nt)
+        # Validate that all variables in at_spec are in the model (via filtered data)
+        for var in keys(at_spec)
+            if !haskey(data_nt, var)
+                throw(ArgumentError("Variable :$var specified in 'at' is not in the model. Model variables: $(sort(collect(keys(data_nt))))"))
+            end
+        end
+        return _build_cartesian_refgrid(at_spec, data_nt, typical)
     elseif at_spec isa Vector
-        return _build_explicit_refgrid(at_spec, data_nt)
+        return _build_explicit_refgrid(at_spec, data_nt, typical)
     elseif at_spec isa DataFrame
         return at_spec  # Use directly (most efficient path)
     else
@@ -100,9 +152,10 @@ end
 Build reference grid with sample means for continuous variables and first levels for categorical.
 Uses unified typical value computation for consistency.
 """
-function _build_means_refgrid(data_nt::NamedTuple)
-    # Use unified typical value computation
-    typical_values = _get_typical_values_dict(data_nt)
+function _build_means_refgrid(data_nt::NamedTuple, model, typical)
+    # Data is already filtered to model variables, so we can use it directly
+    typical_values = _get_typical_values_dict(data_nt, typical)
+    
     # Convert to DataFrame by creating columns with proper types
     cols = Dict{Symbol, Vector}()
     for (k, v) in typical_values
@@ -125,9 +178,9 @@ Build Cartesian product reference grid from Dict specification with optimized me
 Variables not specified use typical values (means/first levels).
 Uses unified approach for consistent typical value computation.
 """
-function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple)
+function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple, typical)
     # Use unified typical value computation for base values
-    base_dict = _get_typical_values_dict(data_nt)
+    base_dict = _get_typical_values_dict(data_nt, typical)
     
     # Extract specified variables and their values (optimized)
     var_names = collect(keys(at_spec))
@@ -187,9 +240,9 @@ end
 Build reference grid from explicit vector of profiles (Dicts or NamedTuples).
 Missing variables are filled with typical values using unified approach.
 """
-function _build_explicit_refgrid(at_spec::Vector, data_nt::NamedTuple)
+function _build_explicit_refgrid(at_spec::Vector, data_nt::NamedTuple, typical)
     # Use unified typical value computation for base values
-    base_dict = _get_typical_values_dict(data_nt)
+    base_dict = _get_typical_values_dict(data_nt, typical)
     
     grid_rows = []
     for profile in at_spec
@@ -233,7 +286,7 @@ This ensures consistent typical value computation across all reference grid meth
 and eliminates code duplication. Uses caching to avoid recomputing typical values
 for the same data. Converts CategoricalMixture objects to scenario values.
 """
-function _get_typical_values_dict(data_nt::NamedTuple)
+function _get_typical_values_dict(data_nt::NamedTuple, typical)
     # Create lightweight cache key based on data structure only (not content)
     # This avoids O(n) hash computation on large columns
     cache_key = hash((keys(data_nt), [length(col) for col in values(data_nt)], [eltype(col) for col in values(data_nt)]))
@@ -246,7 +299,7 @@ function _get_typical_values_dict(data_nt::NamedTuple)
     # Compute typical values with optimized implementations
     typical_values = Dict{Symbol, Any}()
     for (name, col) in pairs(data_nt)
-        typical_val = _get_typical_value_optimized(col)
+        typical_val = _get_typical_value_optimized(col, typical)
         
         # Store CategoricalMixture objects for later processing into override vectors
         if typical_val isa CategoricalMixture
@@ -271,10 +324,10 @@ end
 Optimized version of _get_typical_value that avoids unnecessary O(n) computations
 by using simplified heuristics for typical values in profile scenarios.
 """
-function _get_typical_value_optimized(col)
+function _get_typical_value_optimized(col, typical)
     if _is_continuous_variable(col)
-        # For continuous variables, use sample mean (O(n) unavoidable for statistical correctness)
-        return mean(col)
+        # For continuous variables, use the specified typical function (mean, median, etc.)
+        return typical(col)
     elseif col isa CategoricalArray
         # For CategoricalArray, use simplified frequency mixture
         return _create_frequency_mixture_optimized(col)

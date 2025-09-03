@@ -193,19 +193,23 @@ validate_vcov_parameter(CovarianceMatrices.HC1, model)
 ```
 """
 function validate_vcov_parameter(vcov, model)
-    # Check that vcov is a function
-    if !isa(vcov, Function)
-        throw(ArgumentError("vcov must be a function that takes a model and returns a covariance matrix"))
-    end
-    
     # Test that vcov works with the model
     try
-        vcov_result = vcov(model)
+        if isa(vcov, Function)
+            # vcov is a function like GLM.vcov
+            vcov_result = vcov(model)
+        else
+            # vcov is likely a CovarianceMatrices estimator like HC1()
+            # Use Base.invokelatest to handle the optional dependency
+            vcov_module = Base.require(Main, :CovarianceMatrices)
+            vcov_result = Base.invokelatest(vcov_module.vcov, vcov, model)
+        end
+        
         if !isa(vcov_result, AbstractMatrix)
-            throw(ArgumentError("vcov function must return a matrix"))
+            throw(ArgumentError("vcov must produce a matrix when applied to the model"))
         end
     catch e
-        throw(ArgumentError("vcov function failed on provided model: $e"))
+        throw(ArgumentError("vcov failed when applied to provided model: $e"))
     end
 end
 

@@ -241,7 +241,7 @@ function _validate_population_inputs(model, data, type::Symbol, vars, scale::Sym
     end
     
     try
-        vcov(model)
+        GLM.vcov(model)
     catch e
         throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
     end

@@ -8,7 +8,7 @@ Container for marginal effects results with flexible table formatting.
 Fields:
 - `estimates::Vector{Float64}`: Point estimates
 - `standard_errors::Vector{Float64}`: Standard errors
-- `terms::Vector{String}`: Variable names (clean, no suffixes)
+- `terms::Vector{Symbol}`: Variable names (clean, no suffixes)
 - `profile_values::Union{Nothing, NamedTuple}`: Reference grid values for profile margins
 - `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
@@ -34,7 +34,7 @@ struct MarginsResult
     # Core statistical results
     estimates::Vector{Float64}
     standard_errors::Vector{Float64}  
-    terms::Vector{String}  # Clean variable names
+    terms::Vector{String}  # Clean variable names (converted to strings for display)
     
     # Structural information
     profile_values::Union{Nothing, NamedTuple}  # Reference grid (profile margins only)

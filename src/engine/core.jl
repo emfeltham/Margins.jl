@@ -121,7 +121,14 @@ function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov)
         actual_vcov = vcov
     end
     
-    covariance_matrix = actual_vcov(model)
+    # Handle both functions (GLM.vcov) and CovarianceMatrices estimators (HC1())
+    if isa(actual_vcov, Function)
+        covariance_matrix = actual_vcov(model)
+    else
+        # Handle CovarianceMatrices estimators as optional dependency
+        vcov_module = Base.require(Main, :CovarianceMatrices)
+        covariance_matrix = Base.invokelatest(vcov_module.vcov, actual_vcov, model)
+    end
     
     return MarginsEngine(
         compiled, de, g_buf, gβ_accumulator, η_buf, row_buf,

@@ -55,12 +55,16 @@ const VERSION = v"2.0.0"
 # Core API - Clean 2×2 framework  
 export population_margins, profile_margins, MarginsResult
 
+# Categorical mixture utilities
+export CategoricalMixture, mix
+
 # Include all submodules in dependency order
 include("types.jl")
 include("core/validation.jl")
 include("computation/predictions.jl")
 include("computation/statistics.jl")
 include("features/categorical_mixtures.jl")
+include("engine/measures.jl")  # Measure transformation utilities
 include("engine/core.jl")
 include("engine/utilities.jl") 
 include("engine/caching.jl")  # Unified caching system

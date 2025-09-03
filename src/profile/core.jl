@@ -120,19 +120,22 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov)
+function profile_margins(model, data; at=nothing, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov, typical=mean)
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
-    # Input validation
-    _validate_profile_inputs(model, data_nt, at, type, vars, scale, backend, measure, vcov)
+    # Filter data to only include model variables (cleaner approach)
+    model_data_nt = _filter_data_to_model_variables(data_nt, model)
     
-    # Build reference grid from at specification  
-    reference_grid = _build_reference_grid(at, data_nt)
+    # Input validation
+    _validate_profile_inputs(model, model_data_nt, at, type, vars, scale, backend, measure, vcov)
+    
+    # Build reference grid from at specification (uses filtered data automatically)
+    reference_grid = _build_reference_grid(at, model_data_nt, model, typical)
     at_spec = at
     
-    # Route to unified implementation with reference grid
-    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec, ci_alpha)
+    # Route to unified implementation with reference grid (using filtered data)
+    return _profile_margins(model, model_data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec, ci_alpha)
 end
 
 """
@@ -180,6 +183,10 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Use reference grid directly for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
         df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend, measure)  # → MEM/MER
+        
+        # Convert symbol terms + profile info to descriptive strings for user display
+        df = _convert_profile_terms_to_strings(df, engine.model)
+        
         metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
@@ -193,7 +200,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Extract raw components from DataFrame  
         estimates = df.estimate
         standard_errors = df.se
-        terms = df.term
+        terms = string.(df.term)  # Convert Symbol to String
         
         # Extract profile values from reference grid - expand to match result length
         profile_values = _extract_profile_values(reference_grid, length(estimates))
@@ -215,7 +222,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        terms = df.term
+        terms = string.(df.term)  # Convert Symbol to String
         
         # Extract profile values from reference grid - expand to match result length
         profile_values = _extract_profile_values(reference_grid, length(estimates))
@@ -263,7 +270,7 @@ result = profile_margins(model, data, reference_grid; type=:predictions)
 function profile_margins(
     model, data, reference_grid::DataFrame;
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
-    backend::Symbol=:ad, measure::Symbol=:effect, ci_alpha::Float64=0.05, vcov=GLM.vcov
+    backend::Symbol=:ad, measure::Symbol=:effect, ci_alpha::Float64=0.05, vcov=GLM.vcov, typical=mean
 )
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
@@ -380,7 +387,7 @@ function _validate_profile_inputs(model, data, at, type::Symbol, vars, scale::Sy
     end
     
     try
-        vcov(model)
+        GLM.vcov(model)
     catch e
         throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
     end
@@ -411,4 +418,37 @@ function _validate_profile_inputs(model, data, at, type::Symbol, vars, scale::Sy
             end
         end
     end
+end
+
+"""
+    _convert_profile_terms_to_strings(df::DataFrame, model)
+
+Convert symbol terms + profile descriptions to user-friendly descriptive strings.
+Internal computation uses symbols, but user display uses descriptive strings.
+"""
+function _convert_profile_terms_to_strings(df::DataFrame, model)
+    # Create descriptive term strings
+    descriptive_terms = String[]
+    
+    for i in 1:nrow(df)
+        var = df.term[i]
+        profile = df.profile_desc[i]
+        
+        # Build profile description
+        profile_parts = ["$(k)=$(v)" for (k, v) in pairs(profile)]
+        profile_desc = join(profile_parts, ", ")
+        
+        # For now, use simple format - we can enhance categorical detection later if needed
+        term_name = "$(var) at $(profile_desc)"
+        push!(descriptive_terms, term_name)
+    end
+    
+    # Create new DataFrame with string terms and remove profile_desc column
+    result_df = DataFrame(
+        term = descriptive_terms,
+        estimate = df.estimate,
+        se = df.se
+    )
+    
+    return result_df
 end
