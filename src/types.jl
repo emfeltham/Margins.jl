@@ -155,17 +155,23 @@ function _standard_table(mr::MarginsResult)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
-    # Get sample size from metadata
-    n_obs = get(mr.metadata, :n_obs, missing)
-    
     df = DataFrames.DataFrame(
         variable = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 
         t_stat = t_stats,
-        p_value = p_values,
-        n = fill(n_obs, length(mr.estimates))  # Add sample size column
+        p_value = p_values
     )
+    
+    # CRITICAL: Use actual subgroup sizes, never fallback to incorrect quantities
+    if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
+        # Grouped case: use the actual subgroup sizes from computation
+        df[!, :n] = mr.metadata[:subgroup_n_values]
+    else
+        # Simple case: use overall sample size  
+        n_obs = get(mr.metadata, :n_obs, missing)
+        df[!, :n] = fill(n_obs, length(mr.estimates))
+    end
     
     _add_structural_columns!(df, mr)
     return df

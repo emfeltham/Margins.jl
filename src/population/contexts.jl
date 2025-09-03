@@ -94,6 +94,13 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     standard_errors = results.se
     terms = results.term
     
+    # CRITICAL: Preserve actual subgroup sizes from computation
+    if "n" in names(results)
+        # Store the actual subgroup n values in metadata
+        metadata[:subgroup_n_values] = results.n
+        metadata[:has_subgroup_n] = true
+    end
+    
     # Extract profile values from at_ columns (if any)
     profile_values = _extract_context_profile_values(results)
     
