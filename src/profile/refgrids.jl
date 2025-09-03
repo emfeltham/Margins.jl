@@ -6,6 +6,46 @@ using Statistics
 const TYPICAL_VALUES_CACHE = Dict{UInt64, Dict{Symbol, Any}}()
 
 """
+    _parse_numlist(str::String) -> Vector{Float64}
+
+Parse numlist notation like "-2(2)2" into vector [-2, 0, 2].
+Format: start(step)end where step is the increment.
+"""
+function _parse_numlist(str::String)
+    # Match pattern like "-2(2)2" or "1(0.5)3"
+    m = match(r"^(-?\d*\.?\d+)\((-?\d*\.?\d+)\)(-?\d*\.?\d+)$", str)
+    if m === nothing
+        throw(ArgumentError("Invalid numlist format: $str. Expected format: start(step)end"))
+    end
+    
+    start_val = parse(Float64, m.captures[1])
+    step_val = parse(Float64, m.captures[2])
+    end_val = parse(Float64, m.captures[3])
+    
+    # Generate sequence
+    if step_val == 0
+        throw(ArgumentError("Step size cannot be zero in numlist: $str"))
+    end
+    
+    # Handle both positive and negative steps
+    result = Float64[]
+    current = start_val
+    if step_val > 0
+        while current <= end_val + 1e-10  # Small tolerance for floating point
+            push!(result, current)
+            current += step_val
+        end
+    else
+        while current >= end_val - 1e-10  # Small tolerance for floating point
+            push!(result, current)
+            current += step_val
+        end
+    end
+    
+    return result
+end
+
+"""
     _build_reference_grid(at_spec, data_nt) -> DataFrame
 
 Build unified reference grid from at specification with efficient single-pass approach.
@@ -95,6 +135,10 @@ function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple)
     
     for (i, var) in enumerate(var_names)
         vals = at_spec[var]
+        # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
+        if vals isa String && occursin(r"^-?\d+\(\d+\)-?\d+$", vals)
+            vals = _parse_numlist(vals)
+        end
         var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
     end
     

@@ -98,9 +98,9 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, vcov=GLM.vcov)
-    # Input validation
-    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups, vcov)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_level::Float64=0.95, vcov=GLM.vcov)
+    # Input validation with new scale parameter
+    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -114,6 +114,9 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     # Proper backend selection
     # Population margins default to :ad for consistency across all functions
     recommended_backend = backend === :auto ? :ad : backend
+    
+    # Convert scale to internal target terminology for FormulaCompiler.jl compatibility
+    target = scale_to_target(scale)
     
     # Build zero-allocation engine with caching (including vcov function)
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
@@ -178,11 +181,11 @@ function _get_continuous_variables(model, data_nt::NamedTuple)
 end
 
 """
-    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups, vcov)
+    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov)
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov)
+function _validate_population_inputs(model, data, type::Symbol, vars, scale::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -193,7 +196,7 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
     end
     
     # Use centralized validation for common parameters
-    validate_population_parameters(type, target, backend, measure, vars)
+    validate_population_parameters(type, scale, backend, measure, vars)
     
     # Validate vcov parameter
     validate_vcov_parameter(vcov, model)

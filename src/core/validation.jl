@@ -17,14 +17,72 @@ function validate_type_parameter(type::Symbol)
 end
 
 """
+    validate_scale_parameter(scale::Symbol)
+
+Validate the `scale` parameter for margins functions.
+Must be either `:link` (link scale) or `:response` (response scale).
+
+"""
+function validate_scale_parameter(scale::Symbol)  
+    scale ∉ (:link, :response) && 
+        throw(ArgumentError("scale must be :link or :response, got :$(scale)"))
+end
+
+"""
+    scale_to_target(scale::Symbol) -> Symbol
+
+Convert new scale terminology to internal target terminology.
+- `:response` → `:mu` (response scale, transformed via inverse link)
+- `:link` → `:eta` (linear predictor scale, untransformed)
+
+This maintains backward compatibility with internal FormulaCompiler.jl integration.
+"""
+function scale_to_target(scale::Symbol)
+    if scale === :response
+        return :mu
+    elseif scale === :link  
+        return :eta
+    else
+        throw(ArgumentError("Invalid scale: $scale. Use :response or :link"))
+    end
+end
+
+"""
+    target_to_scale(target::Symbol) -> Symbol
+
+Convert internal target terminology to new scale terminology.
+- `:mu` → `:response` (response scale, transformed via inverse link)
+- `:eta` → `:link` (linear predictor scale, untransformed)
+
+This is used for validation functions that need scale parameter.
+"""
+function target_to_scale(target::Symbol)
+    if target === :mu
+        return :response
+    elseif target === :eta  
+        return :link
+    else
+        throw(ArgumentError("Invalid target: $target. Use :mu or :eta"))
+    end
+end
+
+# Legacy support for transition period
+"""
     validate_target_parameter(target::Symbol)
 
-Validate the `target` parameter for margins functions.
-Must be either `:eta` (link scale) or `:mu` (response scale).
+DEPRECATED: Use `validate_scale_parameter()` instead.
+Validates legacy `:eta`/`:mu` parameters and converts to `:link`/`:response`.
 """
 function validate_target_parameter(target::Symbol)  
-    target ∉ (:eta, :mu) && 
-        throw(ArgumentError("target must be :eta or :mu, got :$(target)"))
+    if target ∈ (:eta, :mu)
+        # Legacy support - convert silently
+        return target === :eta ? :link : :response
+    elseif target ∈ (:link, :response)
+        # Already using new terminology
+        return target
+    else
+        throw(ArgumentError("scale must be :link or :response (or legacy :eta/:mu), got :$(target)"))
+    end
 end
 
 """
@@ -104,14 +162,14 @@ function validate_grouping_parameters(over, within, by)
 end
 
 """
-    validate_common_parameters(type, target, backend, measure=:effect, vars=nothing)
+    validate_common_parameters(type, scale, backend, measure=:effect, vars=nothing)
 
 Validate all common API parameters in a single call.
 This is the main validation entry point for most margins functions.
 
 # Arguments
 - `type::Symbol`: Effect type (`:effects` or `:predictions`)  
-- `target::Symbol`: Target scale (`:eta` or `:mu`)
+- `scale::Symbol`: Target scale (`:link` or `:response`)
 - `backend::Symbol`: Computation backend (`:ad`, `:fd`, or `:auto`)
 - `measure::Symbol`: Effect measure (default `:effect`)
 - `vars`: Variable selection (default `nothing`)
@@ -119,39 +177,39 @@ This is the main validation entry point for most margins functions.
 # Examples
 ```julia
 # Basic validation
-validate_common_parameters(:effects, :mu, :auto)
+validate_common_parameters(:effects, :response, :auto)
 
 # Full validation with all parameters  
-validate_common_parameters(:effects, :eta, :fd, :elasticity, [:x1, :x2])
+validate_common_parameters(:effects, :link, :fd, :elasticity, [:x1, :x2])
 ```
 """
-function validate_common_parameters(type, target, backend, measure=:effect, vars=nothing)
+function validate_common_parameters(type, scale, backend, measure=:effect, vars=nothing)
     validate_type_parameter(type)
-    validate_target_parameter(target)
+    validate_scale_parameter(scale)  # Use new scale validation
     validate_backend_parameter(backend)
     validate_measure_parameter(measure, type)
     validate_vars_parameter(vars, type)
 end
 
 """
-    validate_profile_parameters(at, type, target, backend, measure=:effect, vars=nothing)
+    validate_profile_parameters(at, type, scale, backend, measure=:effect, vars=nothing)
 
 Validate parameters specific to profile margins functions.
 Includes all common parameter validation plus profile-specific checks.
 """
-function validate_profile_parameters(at, type, target, backend, measure=:effect, vars=nothing)
+function validate_profile_parameters(at, type, scale, backend, measure=:effect, vars=nothing)
     validate_at_parameter(at)
-    validate_common_parameters(type, target, backend, measure, vars)
+    validate_common_parameters(type, scale, backend, measure, vars)
 end
 
 """
-    validate_population_parameters(type, target, backend, measure=:effect, vars=nothing)
+    validate_population_parameters(type, scale, backend, measure=:effect, vars=nothing)
 
 Validate parameters specific to population margins functions.
 Currently identical to common validation but provided for API symmetry.
 """
-function validate_population_parameters(type, target, backend, measure=:effect, vars=nothing)
-    validate_common_parameters(type, target, backend, measure, vars)
+function validate_population_parameters(type, scale, backend, measure=:effect, vars=nothing)
+    validate_common_parameters(type, scale, backend, measure, vars)
 end
 
 """

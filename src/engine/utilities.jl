@@ -182,8 +182,21 @@ df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd
 ```
 """
 function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect, contrasts=:baseline) where L
-    if engine.de === nothing 
-        # Return empty DataFrame with correct column structure
+    rows = 1:length(first(data_nt))
+    n_obs = length(first(data_nt))
+    
+    # Auto-detect variable types and process accordingly
+    continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, data_nt)
+    
+    # Determine which variables we're processing (continuous vs categorical)
+    continuous_requested = engine.de === nothing ? Symbol[] : engine.de.vars
+    categorical_requested = [v for v in engine.vars if v ∉ continuous_vars]
+    
+    # Total number of variables to process
+    total_vars = length(continuous_requested) + length(categorical_requested)
+    
+    if total_vars == 0
+        # No variables to process - return empty DataFrame
         empty_df = DataFrame(
             term = String[],
             estimate = Float64[],
@@ -193,22 +206,14 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
         return (empty_df, Matrix{Float64}(undef, 0, length(engine.β)))
     end
     
-    
-    rows = 1:length(first(data_nt))
-    n_obs = length(first(data_nt))
-    
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
-    n_vars = length(engine.de.vars)
     results = DataFrame(
-        term = Vector{String}(undef, n_vars),
-        estimate = Vector{Float64}(undef, n_vars), 
-        se = Vector{Float64}(undef, n_vars),
-        n = fill(n_obs, n_vars)  # Add sample size for all variables
+        term = Vector{String}(undef, total_vars),
+        estimate = Vector{Float64}(undef, total_vars), 
+        se = Vector{Float64}(undef, total_vars),
+        n = fill(n_obs, total_vars)  # Add sample size for all variables
     )
-    G = Matrix{Float64}(undef, n_vars, length(engine.β))
-    
-    # Auto-detect variable types and process accordingly
-    continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, data_nt)
+    G = Matrix{Float64}(undef, total_vars, length(engine.β))
     
     # Process continuous variables with FC's built-in AME gradient accumulation (ZERO ALLOCATION!)
     cont_idx = 1
@@ -218,8 +223,10 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     local_link = engine.link
     local_row_buf = engine.row_buf
     local_compiled = engine.compiled
-    for var in engine.de.vars
-        if var ∈ continuous_vars
+    
+    # Process continuous variables (if any)
+    if engine.de !== nothing
+        for var in continuous_requested
             # Direct computation with explicit backend - no fallbacks
             # Users must choose backend explicitly based on their accuracy/performance needs
             FormulaCompiler.accumulate_ame_gradient!(
@@ -267,19 +274,21 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 G[cont_idx, j] = gβ_avg[j]
             end
             cont_idx += 1
-            
-        else  # Categorical variable
-            # Compute traditional baseline contrasts for population margins
-            ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, target, backend)
-            se = compute_se_only(gβ_avg, engine.Σ)
-            
-            # Direct assignment instead of push! to avoid reallocation  
-            results.term[cont_idx] = "$(var) (baseline contrast)"
-            results.estimate[cont_idx] = ame_val
-            results.se[cont_idx] = se
-            G[cont_idx, :] = gβ_avg  # Still increment for output indexing
-            cont_idx += 1
         end
+    end
+    
+    # Process categorical variables (if any)
+    for var in categorical_requested
+        # Compute traditional baseline contrasts for population margins
+        ame_val, gβ_avg = _compute_categorical_baseline_ame(engine, var, rows, target, backend)
+        se = compute_se_only(gβ_avg, engine.Σ)
+        
+        # Direct assignment instead of push! to avoid reallocation  
+        results.term[cont_idx] = string(var)
+        results.estimate[cont_idx] = ame_val
+        results.se[cont_idx] = se
+        G[cont_idx, :] = gβ_avg  # Still increment for output indexing
+        cont_idx += 1
     end
     
     return (results, G)
@@ -594,13 +603,60 @@ using StatsBase: mode
     _compute_categorical_baseline_ame(engine, var, rows, target, backend) -> (Float64, Vector{Float64})
 
 Compute traditional baseline contrasts for categorical variables in population margins.
-Helper function for _ame_continuous_and_categorical.
+This computes the average marginal effect (AME) of changing from baseline to the modal level.
 """
 function _compute_categorical_baseline_ame(engine::MarginsEngine{L}, var::Symbol, rows, target::Symbol, backend::Symbol) where L
-    # Placeholder implementation - categorical AME computation
-    # Would compute average discrete change from baseline level
-    ame_val = 0.0  # Placeholder
-    gβ_avg = zeros(length(engine.β))  # Placeholder gradient
+    # Get the variable data
+    var_col = getproperty(engine.data_nt, var)
+    
+    # Get baseline level from model  
+    baseline_level = _get_baseline_level(engine.model, var)
+    
+    # Find the modal (most frequent) non-baseline level
+    level_counts = Dict()
+    for row in rows
+        level = var_col[row]
+        if level != baseline_level
+            level_counts[level] = get(level_counts, level, 0) + 1
+        end
+    end
+    
+    if isempty(level_counts)
+        # All observations are at baseline level
+        return (0.0, zeros(length(engine.β)))
+    end
+    
+    # Get the most frequent non-baseline level
+    modal_level = argmax(level_counts)
+    
+    # Compute average discrete change: E[Y|var=modal] - E[Y|var=baseline]
+    ame_sum = 0.0
+    grad_sum = zeros(length(engine.β))
+    
+    # For each observation, compute the discrete change if we switched from baseline to modal
+    for row in rows
+        # Create profiles for this observation
+        baseline_profile = Dict(Symbol(k) => v[row] for (k, v) in pairs(engine.data_nt))
+        modal_profile = copy(baseline_profile)
+        
+        # Set the categorical variable to baseline and modal levels
+        baseline_profile[var] = baseline_level
+        modal_profile[var] = modal_level
+        
+        # Compute predictions
+        baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, target, backend)
+        modal_pred, modal_grad = _profile_prediction_with_gradient(engine, modal_profile, target, backend)
+        
+        # Accumulate the discrete change
+        ame_sum += (modal_pred - baseline_pred)
+        grad_sum .+= (modal_grad .- baseline_grad)
+    end
+    
+    # Average over all observations
+    n_obs = length(rows)
+    ame_val = ame_sum / n_obs
+    gβ_avg = grad_sum ./ n_obs
+    
     return (ame_val, gβ_avg)
 end
 

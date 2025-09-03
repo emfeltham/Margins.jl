@@ -112,18 +112,21 @@ result = profile_margins(model, data;
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
 """
-function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov)
+function profile_margins(model, data; at=:means, type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:auto, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_level::Float64=0.95, vcov=GLM.vcov)
+    # Convert scale to internal target terminology
+    internal_target = scale_to_target(scale)
+    
     # Convert to NamedTuple immediately to avoid DataFrame dispatch issues
     data_nt = Tables.columntable(data)
     
     # Call internal implementation with NamedTuple (no more DataFrame dispatch issues)
-    return _profile_margins_impl(model, data_nt, at, type, vars, target, backend, measure, vcov)
+    return _profile_margins_impl(model, data_nt, at, type, vars, internal_target, backend, measure, vcov)
 end
 
 # Internal implementation that works with NamedTuple to avoid dispatch confusion
 function _profile_margins_impl(model, data_nt::NamedTuple, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Input validation
-    _validate_profile_inputs(model, data_nt, at, type, vars, target, backend, measure, vcov)
+    _validate_profile_inputs(model, data_nt, at, type, vars, target_to_scale(target), backend, measure, vcov)
     
     # Build reference grid from at specification  
     reference_grid = _build_reference_grid(at, data_nt)
@@ -245,12 +248,19 @@ reference_grid = DataFrame(
 result = profile_margins(model, data, reference_grid; type=:predictions)
 ```
 """
-function profile_margins(model, data, reference_grid::DataFrame; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov)
+function profile_margins(
+    model, data, reference_grid::DataFrame;
+    type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
+    backend::Symbol=:auto, measure::Symbol=:effect, vcov=GLM.vcov
+)
+    # Convert scale to internal target terminology
+    internal_target = scale_to_target(scale)
+    
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
     # Call internal implementation with the reference grid directly
-    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, target, backend, measure, vcov)
+    return _profile_margins_impl_with_refgrid(model, data_nt, reference_grid, type, vars, internal_target, backend, measure, vcov)
 end
 
 # Internal implementation for DataFrame reference grid method
@@ -392,7 +402,7 @@ end
 
 Validate inputs to profile_margins() with clear Julia-style error messages.
 """
-function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::Symbol, backend::Symbol, measure::Symbol, vcov)
+function _validate_profile_inputs(model, data, at, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -403,7 +413,7 @@ function _validate_profile_inputs(model, data, at, type::Symbol, vars, target::S
     end
     
     # Use centralized validation for common parameters
-    validate_profile_parameters(at, type, target, backend, measure, vars)
+    validate_profile_parameters(at, type, scale, backend, measure, vars)
     
     # Validate vcov parameter
     validate_vcov_parameter(vcov, model)
