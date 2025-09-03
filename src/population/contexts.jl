@@ -1,39 +1,45 @@
 # population/contexts.jl - Handle at/over parameters for population contexts (Stata-compatible)
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, at, over; type, target, backend, kwargs...)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend, kwargs...)
 
-Handle population margins with at/over contexts (Stata-compatible).
+Handle population margins with scenarios/groups contexts (unified API).
 
-This function implements the complex logic for counterfactual scenarios (at) and 
-subgroup analysis (over) in population margins computation.
+This function implements the complex logic for counterfactual scenarios (scenarios) and 
+subgroup analysis (groups) in population margins computation.
 """
-function _population_margins_with_contexts(engine, data_nt, vars, at, over; type, target, backend, kwargs...)
-    results = DataFrame()
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend, kwargs...)
+    results = DataFrames.DataFrame()
     gradients_list = Matrix{Float64}[]
     
-    # Parse specifications
-    at_specs = at === nothing ? [Dict()] : _parse_at_specification(at)
-    over_specs = over === nothing ? [Dict()] : _parse_over_specification(over, data_nt)
+    # Parse specifications (unified API)
+    scenario_specs = scenarios === nothing ? [Dict()] : _parse_at_specification(scenarios)
+    group_specs = groups === nothing ? [Dict()] : _parse_groups_specification(groups, data_nt)
     
     # Create all combinations of contexts
-    for at_spec in at_specs, over_spec in over_specs
-        context_data = _create_context_data(data_nt, at_spec, over_spec)
+    for scenario_spec in scenario_specs, group_spec in group_specs
+        context_data, context_indices = _create_context_data(data_nt, scenario_spec, group_spec)
         
         if type === :effects
             # Process each variable
             for var in vars
-                # Skip if this var appears in at/over (conflict resolution)
-                if haskey(at_spec, var) || haskey(over_spec, var)
+                # Skip if this var appears in scenarios/groups (conflict resolution)
+                if haskey(scenario_spec, var) || haskey(group_spec, var)
                     continue
                 end
                 
                 # Compute effect in this context
-                var_result, var_gradients = _compute_population_effect_in_context(engine, context_data, var, target, backend)
+                var_result, var_gradients = _compute_population_effect_in_context(engine, context_data, context_indices, var, target, backend)
                 
                 # Add context identifiers
-                for (ctx_var, ctx_val) in merge(at_spec, over_spec)
-                    var_result[!, Symbol("at_$(ctx_var)")] = ctx_val
+                for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
+                    # Handle continuous binning values specially
+                    if ctx_val isa NamedTuple && haskey(ctx_val, :label)
+                        display_val = ctx_val.label
+                    else
+                        display_val = ctx_val
+                    end
+                    var_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(var_result))
                 end
                 
                 append!(results, var_result)
@@ -41,11 +47,17 @@ function _population_margins_with_contexts(engine, data_nt, vars, at, over; type
             end
         else # :predictions
             # Compute prediction in this context
-            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_data, target)
+            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_data, context_indices, target)
             
             # Add context identifiers
-            for (ctx_var, ctx_val) in merge(at_spec, over_spec)
-                pred_result[!, Symbol("at_$(ctx_var)")] = ctx_val
+            for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
+                # Handle continuous binning values specially
+                if ctx_val isa NamedTuple && haskey(ctx_val, :label)
+                    display_val = ctx_val.label
+                else
+                    display_val = ctx_val
+                end
+                pred_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(pred_result))
             end
             
             append!(results, pred_result)
@@ -156,17 +168,25 @@ function _parse_over_specification(over, data_nt)
         
         return contexts
     elseif over isa Vector
-        # Simple vector syntax - all categorical
+        # Mixed vector syntax - handle both categorical and continuous variables
         contexts = [Dict()]
         for var in over
             if _is_continuous_variable(data_nt[var])
-                error("Continuous variable $var in over() must specify values. Use over=($var => [values])")
+                # For continuous variables in vector syntax, use automatic quartile binning
+                quantile_groups = _create_quantile_groups(data_nt[var], var, 4)  # Default to quartiles
+                new_contexts = []
+                for ctx in contexts, qg in quantile_groups
+                    push!(new_contexts, merge(ctx, qg))
+                end
+                contexts = new_contexts
+            else
+                # For categorical variables, use all unique levels
+                new_contexts = []
+                for ctx in contexts, val in unique(data_nt[var])
+                    push!(new_contexts, merge(ctx, Dict(var => val)))
+                end
+                contexts = new_contexts
             end
-            new_contexts = []
-            for ctx in contexts, val in unique(data_nt[var])
-                push!(new_contexts, merge(ctx, Dict(var => val)))
-            end
-            contexts = new_contexts
         end
         return contexts
     elseif over isa Symbol
@@ -175,6 +195,186 @@ function _parse_over_specification(over, data_nt)
     else
         error("over parameter must be a NamedTuple, Vector, or Symbol")
     end
+end
+
+"""
+    _parse_groups_specification(groups, data_nt) -> Vector{Dict}
+
+Parse unified groups specification for stratified analysis.
+Supports the unified grouping syntax from POP_GROUPING.md Phase 3.
+"""
+function _parse_groups_specification(groups, data_nt)
+    # Simple categorical grouping: :education
+    if groups isa Symbol
+        return _parse_over_specification([groups], data_nt)
+    end
+    
+    # Vector grouping: may be all symbols or mixed specs  
+    if groups isa AbstractVector
+        if all(x -> x isa Symbol, groups)
+            # All symbols - simple categorical cross-tabulation
+            return _parse_over_specification(groups, data_nt)
+        else
+            # Mixed vector - handle each spec and create cross-product
+            all_groups = []
+            for spec in groups
+                spec_groups = _parse_groups_specification(spec, data_nt)
+                if isempty(all_groups)
+                    all_groups = spec_groups
+                else
+                    # Cross-product with existing groups
+                    new_groups = []
+                    for existing_group in all_groups
+                        for spec_group in spec_groups
+                            combined_group = merge(existing_group, spec_group)
+                            push!(new_groups, combined_group)
+                        end
+                    end
+                    all_groups = new_groups
+                end
+            end
+            return all_groups
+        end
+    end
+    
+    # Continuous grouping: (:income, 4) or (:age, [25000, 50000])
+    if groups isa Tuple && length(groups) == 2
+        var, spec = groups
+        if var isa Symbol
+            # Quantile specification: (:income, 4)
+            if spec isa Integer && spec > 0
+                return _create_quantile_groups(data_nt[var], var, spec)
+            end
+            # Threshold specification: (:income, [25000, 50000])
+            if spec isa AbstractVector && all(x -> x isa Real, spec)
+                return _create_threshold_groups(data_nt[var], var, spec)
+            end
+        end
+    end
+    
+    # Phase 3: => syntax for nested grouping: :region => :education
+    if groups isa Pair
+        outer_spec = groups.first
+        inner_spec = groups.second
+        return _create_nested_strata(outer_spec, inner_spec, data_nt)
+    end
+    
+    error("Invalid groups specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, Int), (Symbol, Vector), or outer => inner")
+end
+
+"""
+    _create_nested_strata(outer_spec, inner_spec, data_nt) -> Vector{Dict}
+
+Phase 3: Create nested strata using => syntax.
+Implements outer => inner pattern: outer first, then inner within each outer.
+Supports inner_spec as Vector for parallel inner groupings.
+"""
+function _create_nested_strata(outer_spec, inner_spec, data_nt)
+    # Parse outer specification
+    outer_groups = _parse_groups_specification(outer_spec, data_nt)
+    
+    # Handle inner specification - can be single spec or Vector of specs
+    if inner_spec isa AbstractVector
+        # Multiple inner specifications - create parallel groups within each outer
+        nested_groups = []
+        for outer_group in outer_groups
+            for inner_single_spec in inner_spec
+                inner_groups = _parse_groups_specification(inner_single_spec, data_nt)
+                for inner_group in inner_groups
+                    # Merge outer and inner groups
+                    combined_group = merge(outer_group, inner_group)
+                    push!(nested_groups, combined_group)
+                end
+            end
+        end
+        return nested_groups
+    else
+        # Single inner specification
+        inner_groups = _parse_groups_specification(inner_spec, data_nt)
+        
+        # Create nested combinations: outer => inner means inner within each outer
+        nested_groups = []
+        for outer_group in outer_groups
+            for inner_group in inner_groups
+                # Merge outer and inner groups
+                combined_group = merge(outer_group, inner_group)
+                push!(nested_groups, combined_group)
+            end
+        end
+        
+        return nested_groups
+    end
+end
+
+"""
+    _create_quantile_groups(col, var, n_quantiles) -> Vector{Dict}
+
+Create groups based on quantiles of a continuous variable.
+Phase 3: Enhanced with proper quartile/tertile labeling.
+"""
+function _create_quantile_groups(col, var, n_quantiles)
+    quantiles = [quantile(col, i/n_quantiles) for i in 0:n_quantiles]
+    groups = []
+    for i in 1:(n_quantiles)
+        lower, upper = quantiles[i], quantiles[i+1]
+        
+        # Generate descriptive labels based on n_quantiles
+        if n_quantiles == 4
+            label = ["Q1", "Q2", "Q3", "Q4"][i]
+        elseif n_quantiles == 3
+            label = ["T1", "T2", "T3"][i]
+        elseif n_quantiles == 5
+            label = ["P1", "P2", "P3", "P4", "P5"][i]  # Quintiles
+        else
+            label = "Bin$i"
+        end
+        
+        # Create group with range information for filtering
+        group = Dict(
+            var => (lower=lower, upper=upper, label=label, bin=i),
+            Symbol("$(var)_bin") => i
+        )
+        push!(groups, group)
+    end
+    return groups
+end
+
+"""
+    _create_threshold_groups(col, var, thresholds) -> Vector{Dict}
+
+Create groups based on specified threshold values.
+Phase 3: Enhanced with proper range-based grouping.
+"""
+function _create_threshold_groups(col, var, thresholds)
+    groups = []
+    n_groups = length(thresholds) + 1
+    
+    for i in 1:n_groups
+        if i == 1
+            # First group: [min, threshold1)
+            lower = minimum(col)
+            upper = thresholds[1]
+            label = "< $(thresholds[1])"
+        elseif i == n_groups
+            # Last group: [threshold_last, max]
+            lower = thresholds[end]
+            upper = maximum(col)
+            label = ">= $(thresholds[end])"
+        else
+            # Middle groups: [threshold_{i-1}, threshold_i)
+            lower = thresholds[i-1]
+            upper = thresholds[i]
+            label = "[$(lower), $(upper))"
+        end
+        
+        group = Dict(
+            var => (lower=lower, upper=upper, label=label, bin=i),
+            Symbol("$(var)_bin") => i
+        )
+        push!(groups, group)
+    end
+    
+    return groups
 end
 
 """
@@ -195,15 +395,17 @@ function _create_continuous_subgroups(col, specified_values)
 end
 
 """
-    _create_context_data(data_nt, at_spec, over_spec) -> NamedTuple
+    _create_context_data(data_nt, at_spec, over_spec) -> (NamedTuple, Vector{Int})
 
 Create context data (counterfactual overrides + subgroup filtering).
+Phase 3: Enhanced for continuous binning with range-based filtering.
+Returns the filtered data and the indices of the original rows that were kept.
 """
 function _create_context_data(data_nt, at_spec, over_spec)
     # Start with full data
     context_data = data_nt  # Don't deepcopy for performance
     
-    # Apply counterfactual overrides (at)
+    # Apply counterfactual overrides (at/scenarios)
     for (var, val) in at_spec
         if haskey(context_data, var)
             # Override all values with specified value
@@ -213,18 +415,32 @@ function _create_context_data(data_nt, at_spec, over_spec)
         end
     end
     
-    # Apply subgroup filtering (over)
+    # Apply subgroup filtering (groups)
     indices_to_keep = collect(1:length(first(context_data)))
     for (var, spec) in over_spec
         if haskey(context_data, var)
-            if spec isa NamedTuple && haskey(spec, :indices)
-                # Continuous subgroup - intersect with these indices
-                indices_to_keep = intersect(indices_to_keep, spec.indices)
+            if spec isa NamedTuple && haskey(spec, :lower) && haskey(spec, :upper)
+                # Phase 3: Range-based continuous filtering
+                col = context_data[var]
+                if haskey(spec, :bin) && spec.bin == 1
+                    # First bin: include lower boundary
+                    range_indices = findall(x -> spec.lower <= x < spec.upper, col)
+                elseif haskey(spec, :bin) && spec.bin > 1
+                    # Other bins: exclude lower boundary to avoid overlap
+                    range_indices = findall(x -> spec.lower < x <= spec.upper, col)
+                else
+                    # Fallback: include both boundaries
+                    range_indices = findall(x -> spec.lower <= x <= spec.upper, col)
+                end
+                indices_to_keep = intersect(indices_to_keep, range_indices)
             else
                 # Categorical - filter by value
                 var_indices = findall(==(spec), context_data[var])
                 indices_to_keep = intersect(indices_to_keep, var_indices)
             end
+        elseif occursin("_bin", String(var)) && haskey(over_spec, var)
+            # Skip bin columns - they're handled by their parent variable
+            continue
         end
     end
     
@@ -234,54 +450,130 @@ function _create_context_data(data_nt, at_spec, over_spec)
         for (var, col) in pairs(context_data)
             subset_data = merge(subset_data, NamedTuple{(var,)}((col[indices_to_keep],)))
         end
-        return subset_data
+        return subset_data, indices_to_keep
     end
     
-    return context_data
+    return context_data, indices_to_keep
 end
 
 """
-    _compute_population_effect_in_context(engine, context_data, var, target, backend) -> (DataFrame, Matrix{Float64})
+    _compute_population_effect_in_context(engine, context_data, context_indices, var, target, backend) -> (DataFrame, Matrix{Float64})
 
 Compute population marginal effect for a single variable in a specific context.
 """
-function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, var::Symbol, target::Symbol, backend::Symbol) where L
-    # Use existing AME computation but with context data
+function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, var::Symbol, target::Symbol, backend::Symbol) where L
+    # Create a temporary engine for this single variable to reuse existing AME infrastructure
     n_obs = length(first(context_data))
+    n_params = length(engine.β)
     
-    # For now, return a simple result - this should delegate to FormulaCompiler
-    df = DataFrame(
+    # For single variable, we need to compute the AME for just this var
+    # First check if this variable is continuous or categorical
+    col = context_data[var]
+    is_categorical = eltype(col) <: Bool || eltype(col) <: CategoricalValue
+    
+    if is_categorical
+        # Use existing categorical AME computation
+        ame_val, gβ_avg = _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, target, backend)
+    else
+        # Use existing continuous AME computation for single variable
+        ame_val, gβ_avg = _compute_continuous_ame_context(engine, var, context_data, context_indices, target, backend)
+    end
+    
+    # Compute delta-method SE
+    se = sqrt(dot(gβ_avg, engine.Σ, gβ_avg))
+    
+    # Create results DataFrame
+    df = DataFrames.DataFrame(
         term = [string(var)],
-        estimate = [0.0],  # Placeholder
-        se = [0.0],        # Placeholder
-        t_stat = [0.0],
-        p_value = [1.0]
+        estimate = [ame_val],
+        se = [se],
+        t_stat = [ame_val / se],
+        p_value = [2 * (1 - cdf(Normal(), abs(ame_val / se)))]
     )
     
-    G = zeros(1, length(engine.β))  # Placeholder gradient
+    # Reshape gradient to matrix form (1×p)
+    G = reshape(gβ_avg, 1, length(gβ_avg))
     
     return df, G
 end
 
 """
-    _compute_population_prediction_in_context(engine, context_data, target) -> (DataFrame, Matrix{Float64})
+    _compute_continuous_ame_context(engine, var, context_data, context_indices, target, backend) -> (Float64, Vector{Float64})
+
+Compute continuous AME for a single variable in context using FormulaCompiler.
+"""
+function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, target::Symbol, backend::Symbol) where L
+    # Get variable index for AME computation
+    var_idx = findfirst(v -> v == var, engine.de.vars)
+    if var_idx === nothing
+        throw(ArgumentError("Variable $var not found in derivatives engine"))
+    end
+    
+    # Use the context_indices to compute AME only for the filtered subgroup
+    rows = context_indices  # Now we use only the rows for this specific group!
+    
+    n_params = length(engine.β)
+    
+    # Clear accumulator buffer
+    fill!(engine.gβ_accumulator, 0.0)
+    
+    # Use FormulaCompiler to compute AME gradient with original data and engine
+    FormulaCompiler.accumulate_ame_gradient!(
+        engine.gβ_accumulator, engine.de, engine.β, rows, var;
+        link=(target === :mu ? engine.link : GLM.IdentityLink()), 
+        backend=backend
+    )
+    
+    # The gradient is already averaged by accumulate_ame_gradient!
+    gβ_avg = copy(engine.gβ_accumulator)  # Copy to avoid mutation
+    
+    # Compute AME value
+    ame_val = _accumulate_me_value(engine.g_buf, engine.de, engine.β, engine.link, rows, target, backend, var_idx)
+    ame_val /= length(rows)  # Average across context observations
+    
+    return (ame_val, gβ_avg)
+end
+
+"""
+    _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, target, backend) -> (Float64, Vector{Float64})
+
+Compute categorical baseline AME for a single variable in context using FormulaCompiler.
+"""
+function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, target::Symbol, backend::Symbol) where L
+    # For now, delegate to continuous implementation (placeholder)
+    # TODO: Implement proper categorical contrast computation
+    return _compute_continuous_ame_context(engine, var, context_data, context_indices, target, backend)
+end
+
+"""
+    _compute_population_prediction_in_context(engine, context_data, context_indices, target) -> (DataFrame, Matrix{Float64})
 
 Compute population average prediction in a specific context.
 """
-function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, target::Symbol) where L
-    # Use existing prediction computation but with context data
+function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, target::Symbol) where L
+    # Use the same logic as _population_predictions but with context_data
     n_obs = length(first(context_data))
+    n_params = length(engine.β)
     
-    # For now, return a simple result
-    df = DataFrame(
+    # Use pre-allocated η_buf as working buffer; size to n_obs
+    work = view(engine.η_buf, 1:n_obs)
+    G = zeros(1, n_params)  # Single row for population average
+    
+    # Delegate hot loop to the same helper but with context data
+    mean_prediction = _population_predictions_impl!(G, work, engine.compiled, engine.row_buf,
+                                                    engine.β, engine.link, context_data, target)
+    
+    # Delta-method SE (G is 1×p, Σ is p×p)
+    se = sqrt((G * engine.Σ * G')[1, 1])
+    
+    # Create results DataFrame
+    df = DataFrames.DataFrame(
         term = ["AAP"],
-        estimate = [0.0],  # Placeholder
-        se = [0.0],        # Placeholder
-        t_stat = [0.0],
-        p_value = [1.0]
+        estimate = [mean_prediction],
+        se = [se],
+        t_stat = [mean_prediction / se],
+        p_value = [2 * (1 - cdf(Normal(), abs(mean_prediction / se)))]
     )
-    
-    G = zeros(1, length(engine.β))  # Placeholder gradient
     
     return df, G
 end

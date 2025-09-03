@@ -155,7 +155,7 @@ function _standard_table(mr::MarginsResult)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
-    df = DataFrame(
+    df = DataFrames.DataFrame(
         variable = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 

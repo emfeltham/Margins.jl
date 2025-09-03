@@ -189,7 +189,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
     n_vars = length(engine.de.vars)
-    results = DataFrame(
+    results = DataFrames.DataFrame(
         term = Vector{String}(undef, n_vars),
         estimate = Vector{Float64}(undef, n_vars), 
         se = Vector{Float64}(undef, n_vars)
@@ -562,7 +562,7 @@ function _build_metadata(;
     return Dict{Symbol, Any}(
         :type => type,
         :vars => vars,
-        :n_vars => length(vars),
+        :n_vars => vars === nothing ? 0 : length(vars),
         :target => target,
         :backend => backend, 
         :n_obs => n_obs,

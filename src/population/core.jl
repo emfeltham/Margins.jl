@@ -37,8 +37,12 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
   - `:semielasticity_x` - Semi-elasticities w.r.t. x (percent change in y for unit change in x)
   - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
-- `at=nothing`: Counterfactual scenarios (Dict mapping variables to values)
+- `scenarios=nothing`: Counterfactual scenarios (Dict mapping variables to values)
   - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
+- `groups=nothing`: Grouping specification for stratified analysis
+  - Simple: `:education` or `[:region, :gender]` for categorical grouping
+  - Continuous: `(:income, 4)` for quartiles, `(:age, [25, 50, 75])` for thresholds
+  - Nested: `(main=:region, within=:gender)` for hierarchical grouping
 
 # Returns
 `MarginsResult` containing:
@@ -70,7 +74,12 @@ result = population_margins(model, data; vars=[:x1], measure=:semielasticity_x)
 result = population_margins(model, data; type=:predictions)
 
 # Counterfactual analysis: effects when x2 is set to 0 vs 1
-result = population_margins(model, data; vars=[:x1], at=Dict(:x2 => [0, 1]))
+result = population_margins(model, data; vars=[:x1], scenarios=Dict(:x2 => [0, 1]))
+
+# Grouping examples (NEW unified syntax)
+result = population_margins(model, data; groups=:education)  # By education level
+result = population_margins(model, data; groups=(:income, 4))  # By income quartiles  
+result = population_margins(model, data; groups=(main=:region, within=:gender))  # Nested
 
 # High-performance production use with finite differences
 result = population_margins(model, data; backend=:ad, target=:eta)
@@ -89,9 +98,9 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, at=nothing, measure::Symbol=:effect, kwargs...)
+function population_margins(model, data; type::Symbol=:effects, vars=nothing, target::Symbol=:mu, backend::Symbol=:auto, scenarios=nothing, groups=nothing, measure::Symbol=:effect, kwargs...)
     # Input validation
-    _validate_population_inputs(model, data, type, vars, target, backend, at, measure)
+    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups)
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -109,9 +118,9 @@ function population_margins(model, data; type::Symbol=:effects, vars=nothing, ta
     # Build zero-allocation engine with caching
     engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars)
     
-    # Handle at parameter for counterfactual scenarios
-    if at !== nothing
-        return _population_margins_with_contexts(engine, data_nt, vars, at, nothing; type, target, backend=recommended_backend, kwargs...)
+    # Handle scenarios/groups parameters for counterfactual scenarios and grouping
+    if scenarios !== nothing || groups !== nothing
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, target, backend=recommended_backend, kwargs...)
     end
     
     if type === :effects
@@ -169,11 +178,11 @@ function _get_continuous_variables(model, data_nt::NamedTuple)
 end
 
 """
-    _validate_population_inputs(model, data, type, vars, target, backend, at, over, measure)
+    _validate_population_inputs(model, data, type, vars, target, backend, scenarios, measure, groups)
 
 Validate inputs to population_margins() with clear Julia-style error messages.
 """
-function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, at, measure::Symbol)
+function _validate_population_inputs(model, data, type::Symbol, vars, target::Symbol, backend::Symbol, scenarios, measure::Symbol, groups)
     # Validate required arguments
     if model === nothing
         throw(ArgumentError("model cannot be nothing"))
@@ -193,12 +202,20 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
         end
     end
     
-    # Validate at parameter
-    if at !== nothing && !(at isa Dict)
-        throw(ArgumentError("at parameter must be a Dict specifying counterfactual scenarios"))
+    # Validate scenarios parameter (replaces 'at' for population margins)
+    if scenarios !== nothing && !(scenarios isa Dict)
+        throw(ArgumentError("scenarios parameter must be a Dict specifying counterfactual scenarios"))
     end
     
-    # The 'over' and 'by' parameters have been removed in the current API design
+    # Teaching validation: Check for vars/scenarios overlap
+    if scenarios !== nothing && vars !== nothing && type === :effects
+        _validate_vars_scenarios_overlap(vars, scenarios)
+    end
+    
+    # Validate groups parameter (unified grouping system)
+    if groups !== nothing
+        _validate_groups_parameter(groups)
+    end
     
     # Validate model has required methods
     try
@@ -212,6 +229,114 @@ function _validate_population_inputs(model, data, type::Symbol, vars, target::Sy
     catch e
         throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
     end
+end
+
+"""
+    _validate_vars_scenarios_overlap(vars, scenarios)
+
+Phase 5: Teaching validation that provides helpful error messages when users 
+incorrectly specify the same variable in both vars and scenarios parameters.
+"""
+function _validate_vars_scenarios_overlap(vars, scenarios::Dict)
+    # Convert vars to vector for consistent handling
+    vars_vec = vars isa Symbol ? [vars] : (vars === :all_continuous ? Symbol[] : vars)
+    
+    # Find overlapping variables
+    scenario_vars = Set(keys(scenarios))
+    overlapping_vars = intersect(Set(vars_vec), scenario_vars)
+    
+    if !isempty(overlapping_vars)
+        overlapping_list = join(overlapping_vars, ", ")
+        
+        # Create teaching error message
+        error_msg = """
+        Invalid parameter combination: Variables $(overlapping_list) appear in both 'vars' and 'scenarios'.
+        
+        What you're asking:
+           vars = [$(join(vars_vec, ", "))]        -> "What's the marginal effect of these variables?"
+           scenarios = Dict(...)  -> "Hold these variables constant at specific values"
+        
+        This is contradictory! You can't compute the effect of changing a variable while holding it constant.
+        
+        What you probably want:
+        
+        1. Effect of OTHER variables when $(overlapping_list) varies:
+           population_margins(model, data; vars=[:other_var], scenarios=Dict(:$(overlapping_list) => [value1, value2]))
+           
+        2. Predicted outcomes when $(overlapping_list) varies:
+           population_margins(model, data; type=:predictions, scenarios=Dict(:$(overlapping_list) => [value1, value2]))
+           
+        3. Effect of $(overlapping_list) within subgroups:
+           population_margins(model, data; vars=[$(overlapping_list)], groups=:grouping_var)
+           
+        4. Just the effect of $(overlapping_list) (no scenarios):
+           population_margins(model, data; vars=[$(overlapping_list)])
+        
+        Learn more about marginal effects vs predictions in the documentation.
+        """
+        
+        throw(ArgumentError(error_msg))
+    end
+end
+
+"""
+    _validate_groups_parameter(groups)
+
+Validate the unified groups parameter for population margins.
+Phase 3: Clean syntax with no legacy compatibility.
+"""
+function _validate_groups_parameter(groups)
+    # Simple categorical grouping: :education or [:region, :gender]
+    if groups isa Symbol 
+        return
+    end
+    
+    # Vector grouping (may contain mixed categorical and continuous specs)
+    if groups isa AbstractVector
+        # All symbols - simple categorical cross-tabulation
+        if all(x -> x isa Symbol, groups)
+            return
+        end
+        # Mixed vector - validate each element
+        for spec in groups
+            _validate_groups_parameter(spec)
+        end
+        return
+    end
+    
+    # Continuous grouping: (:income, 4) or (:age, [25000, 50000])
+    if groups isa Tuple && length(groups) == 2
+        var, spec = groups
+        if var isa Symbol
+            # Quantile specification: (:income, 4)
+            if spec isa Integer && spec > 0
+                return
+            end
+            # Threshold specification: (:income, [25000, 50000])
+            if spec isa AbstractVector && all(x -> x isa Real, spec)
+                return
+            end
+        end
+    end
+    
+    # Phase 3: => syntax for nested grouping: :region => :education
+    if groups isa Pair
+        outer_spec = groups.first
+        inner_spec = groups.second
+        # Recursively validate outer and inner specifications
+        _validate_groups_parameter(outer_spec)
+        # Inner specification can also be a Vector for multiple groupings
+        if inner_spec isa AbstractVector
+            for spec in inner_spec
+                _validate_groups_parameter(spec)
+            end
+        else
+            _validate_groups_parameter(inner_spec)
+        end
+        return
+    end
+    
+    throw(ArgumentError("groups must be Symbol, Vector{Symbol}, continuous specification (Symbol, Int/Vector), or nested specification (outer => inner)"))
 end
 
 """

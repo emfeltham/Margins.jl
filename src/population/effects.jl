@@ -26,7 +26,7 @@ function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; 
     se = sqrt((G * engine.Σ * G')[1, 1])
     
     # Create results DataFrame
-    df = DataFrame(
+    df = DataFrames.DataFrame(
         term = ["AAP"],
         estimate = [mean_prediction],
         se = [se],
