@@ -1,19 +1,13 @@
-"""
-Centralized statistical computation utilities for Margins.jl.
-
-This module consolidates the repeated delta-method SE computation patterns
-while maintaining **ZERO ALLOCATION** characteristics. All functions are
-designed to work with pre-allocated buffers and existing data structures.
-
-**CRITICAL**: No new allocations are introduced. All functions either:
-1. Return scalar values (zero allocation)
-2. Write to pre-allocated output buffers
-3. Work with existing gradient vectors without copying
-"""
-module StatisticalUtils
-
-using FormulaCompiler
-using Distributions: Normal, cdf, quantile
+# Centralized statistical computation utilities for Margins.jl.
+#
+# This file consolidates the repeated delta-method SE computation patterns
+# while maintaining **ZERO ALLOCATION** characteristics. All functions are
+# designed to work with pre-allocated buffers and existing data structures.
+#
+# **CRITICAL**: No new allocations are introduced. All functions either:
+# 1. Return scalar values (zero allocation)
+# 2. Write to pre-allocated output buffers
+# 3. Work with existing gradient vectors without copying
 
 """
     compute_delta_method_se(gradient::Vector{Float64}, Σ::Matrix{Float64}) -> Float64
@@ -122,4 +116,4 @@ Identical to compute_delta_method_se but with clearer naming for single-purpose 
     return FormulaCompiler.delta_method_se(gradient, Σ)
 end
 
-end # module StatisticalUtils
+# End of statistics.jl

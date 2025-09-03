@@ -1,18 +1,11 @@
-"""
-Unified prediction and gradient computation for Margins.jl.
-
-This module consolidates the core prediction computation patterns that were
-duplicated across multiple files. It handles both η (link) and μ (response)
-scales with proper chain rule application for GLMs.
-
-All functions maintain the zero-allocation characteristics where possible
-and preserve exact statistical behavior.
-"""
-module Predictions
-
-using GLM
-using FormulaCompiler
-using LinearAlgebra: dot
+# Unified prediction and gradient computation for Margins.jl.
+#
+# This file consolidates the core prediction computation patterns that were
+# duplicated across multiple files. It handles both η (link) and μ (response)
+# scales with proper chain rule application for GLMs.
+#
+# All functions maintain the zero-allocation characteristics where possible
+# and preserve exact statistical behavior.
 
 """
     PredictionWithGradient{T<:Real}
@@ -210,4 +203,4 @@ function compute_predictions_only!(
     end
 end
 
-end # module Predictions
+# End of predictions.jl

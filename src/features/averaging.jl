@@ -1,6 +1,6 @@
 # features/averaging.jl - Proper delta method averaging for profiles
 
-using ..StatisticalUtils: compute_se_only
+# Removed module imports - functions now in main namespace
 
 """
     _average_rows_with_proper_se(df, G, Σ; group_cols)

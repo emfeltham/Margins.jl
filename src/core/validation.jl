@@ -1,12 +1,9 @@
-"""
-Centralized parameter validation for Margins.jl API functions.
-
-This module provides consistent parameter validation across the entire API,
-ensuring uniform error messages and eliminating duplicate validation code.
-All validation functions follow the principle of failing fast with clear,
-actionable error messages.
-"""
-module Validation
+# Centralized parameter validation for Margins.jl API functions.
+#
+# This file provides consistent parameter validation across the entire API,
+# ensuring uniform error messages and eliminating duplicate validation code.
+# All validation functions follow the principle of failing fast with clear,
+# actionable error messages.
 
 """
     validate_type_parameter(type::Symbol)
@@ -45,11 +42,11 @@ end
     validate_measure_parameter(measure::Symbol, type::Symbol)
 
 Validate the `measure` parameter for effects computation.
-Must be one of `:effect`, `:elasticity`, `:semielasticity_x`, `:semielasticity_y`.
+Must be one of `:effect`, `:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx`.
 Only applies when `type=:effects`.
 """
 function validate_measure_parameter(measure::Symbol, type::Symbol)
-    valid_measures = (:effect, :elasticity, :semielasticity_x, :semielasticity_y)
+    valid_measures = (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
     measure ∉ valid_measures && 
         throw(ArgumentError("measure must be one of $(valid_measures), got :$(measure)"))
     
@@ -157,4 +154,4 @@ function validate_population_parameters(type, target, backend, measure=:effect, 
     validate_common_parameters(type, target, backend, measure, vars)
 end
 
-end # module Validation
+# End of validation.jl

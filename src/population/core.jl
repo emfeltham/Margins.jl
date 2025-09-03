@@ -1,6 +1,6 @@
 # population/core.jl - Main population_margins() function with compilation caching
 
-using ..Validation: validate_population_parameters
+# Removed module imports - functions now in main namespace
 
 # Global cache for compiled formulas (MARGINS_GUIDE.md pattern)
 # Unified caching system (see engine/caching.jl)
@@ -35,8 +35,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
   - `:effect` - Marginal effects (default, current behavior)
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
-  - `:semielasticity_x` - Semi-elasticities w.r.t. x (percent change in y for unit change in x)
-  - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
+  - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
+  - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
 - `scenarios=nothing`: Counterfactual scenarios (Dict mapping variables to values)
   - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
 - `groups=nothing`: Grouping specification for stratified analysis
@@ -68,7 +68,7 @@ result = population_margins(model, data; vars=[:x1, :x2], target=:mu)
 result = population_margins(model, data; vars=[:x1, :x2], measure=:elasticity)
 
 # Semi-elasticities (NEW in Phase 3)
-result = population_margins(model, data; vars=[:x1], measure=:semielasticity_x)
+result = population_margins(model, data; vars=[:x1], measure=:semielasticity_dyex)
 
 # Average adjusted predictions  
 result = population_margins(model, data; type=:predictions)

@@ -2,8 +2,6 @@
 # Main profile_margins() function with reference grid approach
 
 using Distributions: Normal, cdf
-using ..Validation: validate_profile_parameters
-using ..Predictions: compute_predictions_batch!
 
 """
     profile_margins(model, data; at=:means, kwargs...) -> MarginsResult
@@ -40,8 +38,8 @@ or adjusted predictions at specific profiles (APM/APR).
 - `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
   - `:effect` - Marginal effects (default, current behavior)
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
-  - `:semielasticity_x` - Semi-elasticities w.r.t. x (percent change in y for unit change in x)
-  - `:semielasticity_y` - Semi-elasticities w.r.t. y (unit change in y for percent change in x)
+  - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
+  - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
 
 # Returns
 `MarginsResult` containing:
@@ -71,7 +69,7 @@ result = profile_margins(model, data; at=Dict(:x1 => [0, 1], :income => [25000, 
 
 # Semi-elasticities at specific profiles (NEW in Phase 3)
 result = profile_margins(model, data; at=Dict(:x1 => [-1, 0, 1]), 
-                        type=:effects, vars=[:x2], measure=:semielasticity_x)
+                        type=:effects, vars=[:x2], measure=:semielasticity_dyex)
 
 # Predictions at the mean (APM)
 result = profile_margins(model, data; at=:means, type=:predictions)

@@ -98,7 +98,8 @@ end
 
 function Base.show(io::IO, ::MIME"text/plain", mr::MarginsResult)
     show(io, mr)
-    println(io, "\nUse DataFrame(result; format=...) for different table formats")
+    # unpleasant to show this every time?
+    # println(io, "\nUse DataFrame(result; format=...) for different table formats")
 end
 
 function _show_stata_table(io::IO, mr::MarginsResult)
@@ -115,9 +116,15 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     # Header line
     println(io, "─"^(var_width + 4*num_width + 3))
     
-    # Column headers
+    # Column headers - dynamic based on measure
+    measure = get(mr.metadata, :measure, :effect)
+    header_text = measure === :effect ? "dy/dx" :
+                  measure === :elasticity ? "eyex" :
+                  measure === :semielasticity_dyex ? "dyex" :
+                  measure === :semielasticity_eydx ? "eydx" : "dy/dx"
+    
     print(io, rpad("", var_width))
-    print(io, lpad("dy/dx", num_width))
+    print(io, lpad(header_text, num_width))
     print(io, lpad("Std. Err.", num_width))
     print(io, lpad("[$(Int(100*(1-alpha)))% Conf.", num_width))
     print(io, lpad("Interval]", num_width))
@@ -206,7 +213,7 @@ function _profile_table(mr::MarginsResult)
     alpha = get(mr.metadata, :alpha, 0.05)
     z = quantile(Normal(), 1 - alpha/2)
     
-    df = DataFrame()
+    df = DataFrames.DataFrame()
     
     # Add profile columns first (primary organization) - just variable names
     if mr.profile_values !== nothing

@@ -6,7 +6,7 @@ using Statistics
 const TYPICAL_VALUES_CACHE = Dict{UInt64, Dict{Symbol, Any}}()
 
 """
-    _build_reference_grid(at_spec, data_nt) -> DataFrame
+    _build_reference_grid(at_spec, data_nt) -> DataFrames.DataFrame
 
 Build unified reference grid from at specification with efficient single-pass approach.
 
@@ -14,7 +14,7 @@ Supports various input formats:
 - `:means` - Use sample means for continuous, first levels for categorical
 - `Dict` - Cartesian product of specified values, typical values for others  
 - `Vector{Dict}` - Explicit list of profiles
-- `DataFrame` - Use directly (most efficient)
+- `DataFrames.DataFrame` - Use directly (most efficient)
 
 The unified approach ensures consistent typical value computation and efficient memory usage.
 
@@ -23,7 +23,7 @@ The unified approach ensures consistent typical value computation and efficient 
 - `data_nt::NamedTuple`: Original data in columntable format
 
 # Returns
-- `DataFrame`: Reference grid ready for FormulaCompiler processing
+- `DataFrames.DataFrame`: Reference grid ready for FormulaCompiler processing
 
 # Examples
 ```julia
@@ -36,7 +36,7 @@ _build_reference_grid(Dict(:x1 => [0, 1], :x2 => [2, 3]), data_nt)
 # Explicit profiles for complex scenarios
 _build_reference_grid([Dict(:x1 => 0, :x2 => 2), Dict(:x1 => 1, :x2 => 3)], data_nt)
 
-# Pre-built DataFrame (zero additional processing)
+# Pre-built DataFrames.DataFrame (zero additional processing)
 _build_reference_grid(existing_grid, data_nt)
 ```
 """
@@ -47,15 +47,15 @@ function _build_reference_grid(at_spec, data_nt::NamedTuple)
         return _build_cartesian_refgrid(at_spec, data_nt)
     elseif at_spec isa Vector
         return _build_explicit_refgrid(at_spec, data_nt)
-    elseif at_spec isa DataFrame
+    elseif at_spec isa DataFrames.DataFrame
         return at_spec  # Use directly (most efficient path)
     else
-        throw(ArgumentError("Invalid at specification: $(typeof(at_spec)). Must be :means, Dict, Vector{Dict}, or DataFrame"))
+        throw(ArgumentError("Invalid at specification: $(typeof(at_spec)). Must be :means, Dict, Vector{Dict}, or DataFrames.DataFrame"))
     end
 end
 
 """
-    _build_means_refgrid(data_nt) -> DataFrame
+    _build_means_refgrid(data_nt) -> DataFrames.DataFrame
 
 Build reference grid with sample means for continuous variables and first levels for categorical.
 Uses unified typical value computation for consistency.
@@ -63,11 +63,23 @@ Uses unified typical value computation for consistency.
 function _build_means_refgrid(data_nt::NamedTuple)
     # Use unified typical value computation
     typical_values = _get_typical_values_dict(data_nt)
-    return DataFrame([typical_values])
+    # Convert to DataFrames.DataFrame by creating columns with proper types
+    cols = Dict{Symbol, Vector}()
+    for (k, v) in typical_values
+        # Preserve type information by creating typed vectors
+        if v isa Real && !(v isa Bool)
+            cols[k] = Float64[v]
+        elseif v isa Bool  
+            cols[k] = Bool[v]
+        else
+            cols[k] = [v]  # Generic for strings, categoricals, etc.
+        end
+    end
+    return DataFrames.DataFrame(cols)
 end
 
 """
-    _build_cartesian_refgrid(at_spec::Dict, data_nt) -> DataFrame
+    _build_cartesian_refgrid(at_spec::Dict, data_nt) -> DataFrames.DataFrame
 
 Build Cartesian product reference grid from Dict specification with optimized memory usage.
 Variables not specified use typical values (means/first levels).
@@ -103,11 +115,30 @@ function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple)
         combo_idx += 1
     end
     
-    return DataFrame(grid_rows)
+    # Convert vector of dicts to DataFrames.DataFrame using columntable approach
+    if isempty(grid_rows)
+        return DataFrames.DataFrame()
+    end
+    # Convert to column table format for efficient DataFrames.DataFrame construction, preserving types
+    cols = Dict{Symbol, Vector}()
+    for key in keys(first(grid_rows))
+        # Get all values for this column
+        values = [row[key] for row in grid_rows]
+        # Create vector with proper type based on first value type
+        first_val = first(values)
+        if all(v -> typeof(v) == typeof(first_val), values)
+            # All same type - use specific type
+            cols[key] = typeof(first_val)[values...]
+        else
+            # Mixed types - fall back to Any
+            cols[key] = Vector{Any}(values)
+        end
+    end
+    return DataFrames.DataFrame(cols)
 end
 
 """
-    _build_explicit_refgrid(at_spec::Vector, data_nt) -> DataFrame
+    _build_explicit_refgrid(at_spec::Vector, data_nt) -> DataFrames.DataFrame
 
 Build reference grid from explicit vector of profiles (Dicts or NamedTuples).
 Missing variables are filled with typical values using unified approach.
@@ -126,7 +157,26 @@ function _build_explicit_refgrid(at_spec::Vector, data_nt::NamedTuple)
         push!(grid_rows, row)
     end
     
-    return DataFrame(grid_rows)
+    # Convert vector of dicts to DataFrames.DataFrame using columntable approach
+    if isempty(grid_rows)
+        return DataFrames.DataFrame()
+    end
+    # Convert to column table format for efficient DataFrames.DataFrame construction, preserving types
+    cols = Dict{Symbol, Vector}()
+    for key in keys(first(grid_rows))
+        # Get all values for this column
+        values = [row[key] for row in grid_rows]
+        # Create vector with proper type based on first value type
+        first_val = first(values)
+        if all(v -> typeof(v) == typeof(first_val), values)
+            # All same type - use specific type
+            cols[key] = typeof(first_val)[values...]
+        else
+            # Mixed types - fall back to Any
+            cols[key] = Vector{Any}(values)
+        end
+    end
+    return DataFrames.DataFrame(cols)
 end
 
 """

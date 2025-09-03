@@ -1,7 +1,6 @@
 # engine/utilities.jl - FormulaCompiler-based marginal effects computation
 
 using Tables  # Required for the architectural rework
-using ..StatisticalUtils: compute_se_only
 
 """
     _validate_variables(data_nt, vars)
@@ -163,7 +162,7 @@ function _is_continuous_variable(col)
 end
 
 """
-    _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrame, Matrix)
+    _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:ad) -> (DataFrames.DataFrame, Matrix)
 
 Zero-allocation population effects (AME) using FormulaCompiler's built-in APIs.
 Implements REORG.md lines 290-348 with explicit backend selection and batch operations.
@@ -175,7 +174,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
-- `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
+- `(DataFrames.DataFrame, Matrix{Float64})`: Results table and gradient matrix G
 
 # Examples
 ```julia
@@ -183,12 +182,12 @@ df, G = _ame_continuous_and_categorical(engine, data_nt; target=:mu, backend=:fd
 ```
 """
 function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; target=:mu, backend=:ad, measure=:effect) where L
-    engine.de === nothing && return (DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
+    engine.de === nothing && return (DataFrames.DataFrame(), Matrix{Float64}(undef, 0, length(engine.β)))
     
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
     
-    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth (PERFORMANCE FIX)
     n_vars = length(engine.de.vars)
     results = DataFrames.DataFrame(
         term = Vector{String}(undef, n_vars),
@@ -242,9 +241,9 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 # Apply transformation based on measure type
                 if measure === :elasticity
                     final_val = (x̄ / ȳ) * ame_val
-                elseif measure === :semielasticity_x
+                elseif measure === :semielasticity_dyex
                     final_val = x̄ * ame_val
-                elseif measure === :semielasticity_y
+                elseif measure === :semielasticity_eydx
                     final_val = (1 / ȳ) * ame_val
                 end
             end
@@ -277,7 +276,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
 end
 
 """
-    _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad) -> (DataFrame, Matrix)
+    _mem_continuous_and_categorical(engine, profiles; target=:mu, backend=:ad) -> (DataFrames.DataFrame, Matrix)
 
 Profile Effects (MEM) Using Reference Grids with FormulaCompiler's built-in APIs.
 Implements REORG.md lines 353-486 following FormulaCompiler guide.
@@ -289,7 +288,7 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 - `backend::Symbol`: `:ad` or `:fd` backend selection
 
 # Returns
-- `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
+- `(DataFrames.DataFrame, Matrix{Float64})`: Results table and gradient matrix G
 
 # Examples
 ```julia
@@ -314,11 +313,11 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
     # Calculate total number of terms (for gradient matrix sizing)
     total_terms = n_profiles * length(requested_vars)
     
-    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
-    results = DataFrame(
-        term = Vector{String}(undef, total_terms),
-        estimate = Vector{Float64}(undef, total_terms),
-        se = Vector{Float64}(undef, total_terms)
+    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    results = DataFrames.DataFrame(
+        term = String[],
+        estimate = Float64[],
+        se = Float64[]
     )
     G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
@@ -391,9 +390,9 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 # Apply transformation based on measure type
                 if measure === :elasticity
                     final_val = (x_val / y_val) * effect_val
-                elseif measure === :semielasticity_x
+                elseif measure === :semielasticity_dyex
                     final_val = x_val * effect_val
-                elseif measure === :semielasticity_y
+                elseif measure === :semielasticity_eydx
                     final_val = (1 / y_val) * effect_val
                 end
             end
@@ -409,10 +408,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
             end
             
-            # Direct assignment instead of push! to avoid reallocation
-            results.term[row_idx] = term_name
-            results.estimate[row_idx] = final_val
-            results.se[row_idx] = se
+            # Store results using push!
+            push!(results, (term=term_name, estimate=final_val, se=se))
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
         end
@@ -553,6 +550,7 @@ function _build_metadata(;
     vars=Symbol[], 
     target=:mu, 
     backend=:ad,
+    measure=:effect,
     n_obs=0,
     model_type=nothing,
     timestamp=nothing,
@@ -566,7 +564,8 @@ function _build_metadata(;
         :vars => vars,
         :n_vars => vars === nothing ? 0 : length(vars),
         :target => target,
-        :backend => backend, 
+        :backend => backend,
+        :measure => measure,
         :n_obs => n_obs,
         :model_type => model_type === nothing ? "unknown" : string(typeof(model_type)),
         :timestamp => ts,
@@ -639,7 +638,7 @@ function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, 
 end
 
 """
-    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
+    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; target=:mu, backend=:ad, measure=:effect) where L -> (DataFrames.DataFrame, Matrix{Float64})
 
 **Architectural Rework**: Efficient single-compilation approach for profile marginal effects.
 
@@ -650,13 +649,13 @@ Replaces the problematic per-profile compilation with a single compilation appro
 
 # Arguments
 - `engine`: Pre-built MarginsEngine with original data
-- `reference_grid`: DataFrame containing all profiles (with potential CategoricalMixture objects)
+- `reference_grid`: DataFrames.DataFrame containing all profiles (with potential CategoricalMixture objects)
 - `target`: Target scale (:mu or :eta)
 - `backend`: Computational backend (:ad or :fd) 
 - `measure`: Effect measure (:effect, :elasticity, etc.)
 
 # Returns
-- `DataFrame`: Results with estimates, standard errors, etc.
+- `DataFrames.DataFrame`: Results with estimates, standard errors, etc.
 - `Matrix{Float64}`: Gradient matrix for delta-method standard errors
 
 # Performance
@@ -678,11 +677,11 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     # Calculate total number of terms (for gradient matrix sizing)
     total_terms = n_profiles * length(requested_vars)
     
-    # PRE-ALLOCATE results DataFrame to avoid dynamic growth
-    results = DataFrame(
-        term = Vector{String}(undef, total_terms),
-        estimate = Vector{Float64}(undef, total_terms),
-        se = Vector{Float64}(undef, total_terms)
+    # PRE-ALLOCATE results DataFrames.DataFrame to avoid dynamic growth
+    results = DataFrames.DataFrame(
+        term = String[],
+        estimate = Float64[],
+        se = Float64[]
     )
     G = Matrix{Float64}(undef, total_terms, length(engine.β))
     
@@ -755,9 +754,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     se = compute_se_only(engine.gβ_accumulator, engine.Σ)
                     
                     # Store results
-                    results.term[row_idx] = string(var)
-                    results.estimate[row_idx] = estimate
-                    results.se[row_idx] = se
+                    push!(results, (term=string(var), estimate=estimate, se=se))
                     G[row_idx, :] = engine.gβ_accumulator
                     
                     row_idx += 1
@@ -786,9 +783,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
                 
                 # Store results
-                results.term[row_idx] = term_name
-                results.estimate[row_idx] = final_effect
-                results.se[row_idx] = se
+                push!(results, (term=term_name, estimate=final_effect, se=se))
                 G[row_idx, :] = engine.gβ_accumulator
                 
                 row_idx += 1
@@ -796,9 +791,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
         end
     end
     
-    # Trim results to actual size (in case we allocated too much)
-    actual_rows = row_idx - 1
-    results = results[1:actual_rows, :]
+    # Trim gradient matrix to actual size
+    actual_rows = nrow(results)
     G = G[1:actual_rows, :]
     
     return (results, G)
