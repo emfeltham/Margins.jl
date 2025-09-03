@@ -21,6 +21,8 @@ mem_result = profile_margins(model, data; at=:means, type=:effects)
 
 # Convert to DataFrame for analysis
 DataFrame(ame_result)
+
+DataFrame(mem_result)
 ```
 
 ## Core API
@@ -51,7 +53,8 @@ profile_margins(model, data; type=:predictions)     # Adjusted Predictions at Me
 population_margins(model, data; type=:effects, measure=:elasticity)
 
 # Semi-elasticities
-population_margins(model, data; measure=:semielasticity_x)
+population_margins(model, data; measure=:semielasticity_dyex)
+population_margins(model, data; measure=:semielasticity_eydx)
 ```
 
 ### Profile Specifications
