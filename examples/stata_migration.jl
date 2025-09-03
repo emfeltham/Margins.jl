@@ -151,23 +151,23 @@ println("-" * 40)
 
 # Stata: margins, over(female)
 println("Stata command: margins, over(female)")
-stata_over_female = population_margins(linear_model, data; type=:predictions, over=:female)
-println("Margins.jl:   population_margins(model, data; type=:predictions, over=:female)")
+stata_over_female = population_margins(linear_model, data; type=:predictions, groups=:female)
+println("Margins.jl:   population_margins(model, data; type=:predictions, groups=:female)")
 println(DataFrame(stata_over_female))
 
 # Stata: margins, dydx(*) over(female) 
 println("\nStata command: margins, dydx(*) over(female)")
-stata_dydx_over = population_margins(linear_model, data; type=:effects, over=:female)
+stata_dydx_over = population_margins(linear_model, data; type=:effects, groups=:female)
 over_df = DataFrame(stata_dydx_over)
-println("Margins.jl:   population_margins(model, data; type=:effects, over=:female)")
+println("Margins.jl:   population_margins(model, data; type=:effects, groups=:female)")
 # Show key results
 println(over_df[over_df.term .== "treated", [:over_female, :term, :estimate, :se]])
 
 # Stata: margins, dydx(treated) over(education)
 println("\nStata command: margins, dydx(treated) over(education)")  
 stata_treat_edu = population_margins(linear_model, data; 
-    type=:effects, vars=[:treated], over=:education)
-println("Margins.jl:   population_margins(model, data; type=:effects, vars=[:treated], over=:education)")
+    type=:effects, vars=[:treated], groups=:education)
+println("Margins.jl:   population_margins(model, data; type=:effects, vars=[:treated], groups=:education)")
 println(DataFrame(stata_treat_edu))
 
 # ### 6. Logistic Regression Margins
@@ -227,8 +227,8 @@ println("-" * 40)
 # Stata: margins education#female
 println("Stata command: margins education#female")
 multiple_groups = population_margins(linear_model, data; 
-    type=:predictions, over=[:education, :female])
-println("Margins.jl:   population_margins(model, data; type=:predictions, over=[:education, :female])")
+    type=:predictions, groups=[:education, :female])
+println("Margins.jl:   population_margins(model, data; type=:predictions, groups=[:education, :female])")
 multi_df = DataFrame(multiple_groups)
 println(multi_df[!, [:over_education, :over_female, :estimate, :se]])
 
@@ -284,8 +284,8 @@ migration_guide = [
     ("margins", "population_margins(model, data; type=:predictions)"),
     ("margins, at(means)", "profile_margins(model, data; at=:means, type=:predictions)"),
     ("margins, at(var=values)", "profile_margins(model, data; at=Dict(:var => values), type=:predictions)"),
-    ("margins, over(group)", "population_margins(model, data; over=:group, type=:predictions)"),
-    ("margins, dydx(*) over(group)", "population_margins(model, data; type=:effects, over=:group)"),
+    ("margins, over(group)", "population_margins(model, data; groups=:group, type=:predictions)"),
+    ("margins, dydx(*) over(group)", "population_margins(model, data; type=:effects, groups=:group)"),
     ("margins [after logit]", "population_margins(logit_model, data; target=:mu, type=:predictions)"),
     ("margins, dydx(*) [after logit]", "population_margins(logit_model, data; target=:mu, type=:effects)")
 ]

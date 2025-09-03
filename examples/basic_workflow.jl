@@ -130,7 +130,7 @@ println(DataFrame(custom_predictions))
 println("\n=== Subgroup Analysis ===")
 
 # Effects within education groups
-education_effects = population_margins(model, data; type=:effects, over=:education)
+education_effects = population_margins(model, data; type=:effects, groups=:education)
 println("Average marginal effects by education level:")
 println(DataFrame(education_effects))
 

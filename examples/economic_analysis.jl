@@ -148,7 +148,7 @@ println("Overall population effects:")
 println(DataFrame(overall_ame))
 
 # Gender wage gap analysis
-gender_effects = population_margins(wage_model, data; type=:effects, over=:female)
+gender_effects = population_margins(wage_model, data; type=:effects, groups=:female)
 println("\nEffects by gender:")
 gender_df = DataFrame(gender_effects)
 println(gender_df[gender_df.term .== "experience", [:over_female, :estimate, :se, :p_value]])
