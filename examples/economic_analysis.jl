@@ -229,7 +229,7 @@ println(elas_df[!, [:at_education, :term, :estimate, :se]])
 
 # Semi-elasticity: unemployment rate effect
 unemployment_semi = population_margins(wage_model, data;
-                                     measure=:semielasticity_x,
+                                     measure=:semielasticity_eydx,
                                      vars=[:unemployment_rate])
 semi_df = DataFrame(unemployment_semi)
 println("\nUnemployment rate semi-elasticity:")
