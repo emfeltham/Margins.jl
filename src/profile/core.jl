@@ -4,7 +4,7 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -84,19 +84,20 @@ result = profile_margins(model, data, means_grid(data); type=:predictions)
 result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
 
 # Multiple explicit profiles for complex analysis
-profiles = [
-    Dict(:x1 => 0.0, :x2 => 1.0, :region => "North"),
-    Dict(:x1 => 1.0, :x2 => 0.0, :region => "South")
-]
-result = profile_margins(model, data; at=profiles, type=:effects)
+reference_grid = DataFrame(
+    x1=[0.0, 1.0], 
+    x2=[1.0, 0.0], 
+    region=["North", "South"]
+)
+result = profile_margins(model, data, reference_grid; type=:effects)
 
 # High-performance with pre-built reference grid
 reference_grid = DataFrame(x1=[0, 1, 2], x2=[10, 20, 30])
-result = profile_margins(model, reference_grid; type=:predictions)
+result = profile_margins(model, data, reference_grid; type=:predictions)
 
 # Cartesian product for systematic exploration
-result = profile_margins(model, data; 
-                        at=Dict(:age => [25, 35, 45], :education => [12, 16]), 
+result = profile_margins(model, data, 
+                        cartesian_grid(data; age=[25, 35, 45], education=[12, 16]); 
                         type=:effects, vars=[:income], backend=:ad)
 ```
 
@@ -107,16 +108,15 @@ Unspecified categorical variables use actual data composition:
 #           treated = 60% true, 40% false
 
 # Effects "at means" now uses realistic population profile
-result = profile_margins(model, data; at=:means, type=:effects)
+result = profile_margins(model, data, means_grid(data); type=:effects)
 # → income: sample mean
 # → region: frequency-weighted (75% urban, 25% rural) 
 # → treated: 0.6 (actual treatment rate)
 # → Not arbitrary first levels!
 
 # Override when needed for scenario analysis
-result = profile_margins(model, data; 
-    at=Dict(:treated => 1.0),  # 100% treatment scenario
-    type=:effects)
+reference_grid = DataFrame(treated=[1.0])  # 100% treatment scenario
+result = profile_margins(model, data, reference_grid; type=:effects)
 ```
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
@@ -169,7 +169,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend, measure)  # → MEM/MER
         
         # Convert symbol terms + profile info to descriptive strings for user display
-        df = _convert_profile_terms_to_strings(df, engine.model)
+        df = _convert_profile_terms_to_strings(df)
         
         metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
@@ -216,7 +216,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -238,6 +238,8 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 - `scale::Symbol=:response`: Target scale (:response or :link)
 - `backend::Symbol=:ad`: Computational backend (:ad or :fd)
 - `measure::Symbol=:effect`: Effect measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
+- `contrasts::Symbol=:baseline`: Contrast type for categorical variables (:baseline or :pairwise)
+- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
 
 # Examples
@@ -268,13 +270,17 @@ result = profile_margins(model, data, reference_grid; type=:predictions)
 function profile_margins(
     model, data, reference_grid::DataFrame;
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
-    backend::Symbol=:ad, measure::Symbol=:effect, ci_alpha::Float64=0.05, vcov=GLM.vcov, typical=mean
+    backend::Symbol=:ad, measure::Symbol=:effect,
+    ci_alpha::Float64=0.05, vcov=GLM.vcov,
 )
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
     # Input validation for reference grid approach
-    _validate_profile_inputs_refgrid(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov)
+    _validate_profile_inputs_refgrid(
+        model, data_nt, reference_grid, type,
+        vars, scale, backend, measure, vcov
+    )
     
     # Reference grid specific validation
     if nrow(reference_grid) == 0
@@ -285,7 +291,7 @@ function profile_margins(
         throw(ArgumentError("reference_grid must have at least one column"))
     end
     
-    # Route to unified implementation with reference grid directly
+    # Route to single implementation with reference grid directly
     return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid, ci_alpha)
 end
 
@@ -314,8 +320,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:r
     refgrid_compiled = FormulaCompiler.compile_formula(engine.model, data_nt)
     
     # Single pass over profiles via helper that takes only concrete arguments
-    _profile_predictions_impl!(predictions, G, refgrid_compiled, engine.row_buf,
-                               engine.β, engine.link, data_nt, scale)
+    _compute_profile_predictions!(predictions, G, refgrid_compiled, engine, data_nt, scale)
     
     # Safely use g_buf for SE computation if large enough  
     if length(engine.g_buf) >= n_profiles
@@ -343,14 +348,17 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:r
     return results, G
 end
 
-function _profile_predictions_impl!(predictions::AbstractVector{<:Float64},
-                                    G::AbstractMatrix{<:Float64},
-                                    compiled,
-                                    row_buf::Vector{Float64},
-                                    β::Vector{Float64},
-                                    link,
-                                    data_nt::NamedTuple,
-                                    scale::Symbol)
+function _compute_profile_predictions!(
+    predictions::AbstractVector{<:Float64},
+    G::AbstractMatrix{<:Float64},
+    compiled,
+    engine::MarginsEngine,
+    data_nt::NamedTuple,
+    scale::Symbol
+)
+    # Extract engine fields once for cleaner code
+    (; row_buf, β, link) = engine
+    
     # Use centralized batch prediction computation (zero allocation)
     compute_predictions_batch!(predictions, G, compiled, data_nt, β, link, scale, row_buf)
     return nothing
@@ -361,7 +369,11 @@ end
 
 Validate inputs to profile_margins() with reference grid approach.
 """
-function _validate_profile_inputs_refgrid(model, data, reference_grid, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov)
+function _validate_profile_inputs_refgrid(
+    model, data, reference_grid, type::Symbol, vars,
+    scale::Symbol, backend::Symbol, measure::Symbol, vcov
+)
+
     # Validate required arguments
     if isnothing(model)
         throw(ArgumentError("model cannot be nothing"))
@@ -396,12 +408,14 @@ function _validate_profile_inputs_refgrid(model, data, reference_grid, type::Sym
 end
 
 """
-    _convert_profile_terms_to_strings(df::DataFrame, model)
+    _convert_profile_terms_to_strings(df::DataFrame)
 
 Convert symbol terms + profile descriptions to user-friendly descriptive strings.
 Internal computation uses symbols, but user display uses descriptive strings.
+
+`df`` is only arg, since we assume it is filtered to model variables
 """
-function _convert_profile_terms_to_strings(df::DataFrame, model)
+function _convert_profile_terms_to_strings(df::DataFrame)
     # Create descriptive term strings
     descriptive_terms = String[]
     

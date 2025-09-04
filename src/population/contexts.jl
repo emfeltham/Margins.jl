@@ -590,8 +590,7 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     G = zeros(1, n_params)  # Single row for population average
     
     # Delegate hot loop to the same helper but with context data
-    mean_prediction = _population_predictions_impl!(G, work, engine.compiled, engine.row_buf,
-                                                    engine.β, engine.link, context_data, scale)
+    mean_prediction = _compute_population_predictions!(G, work, engine, context_data, scale, nothing)
     
     # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])

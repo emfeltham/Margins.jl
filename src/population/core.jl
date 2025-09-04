@@ -7,7 +7,7 @@
 # Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:auto, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> MarginsResult
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> MarginsResult
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -120,7 +120,13 @@ result = population_margins(model, data; type=:effects)
 
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
-function population_margins(model, data; type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect, contrasts::Symbol=:baseline, ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing)
+function population_margins(
+    model, data;
+    type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
+    backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
+    contrasts::Symbol=:baseline,
+    ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing
+)
     # Input validation with new scale parameter and weights
     _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov, weights)
     # Single data conversion (consistent format throughout)

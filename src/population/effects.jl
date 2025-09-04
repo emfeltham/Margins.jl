@@ -20,7 +20,11 @@ providing a measure of the expected outcome for the population.
 - `DataFrame`: Results with estimate, se, t_stat, p_value, n columns
 - `Matrix{Float64}`: Gradient matrix G for delta-method standard errors
 """
-function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, weights=nothing) where L
+function _population_predictions(
+    engine::MarginsEngine{L}, data_nt::NamedTuple;
+    scale=:response, weights=nothing
+) where L
+
     n_obs = length(first(data_nt))
     n_params = length(engine.β)
     
@@ -29,8 +33,9 @@ function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; 
     G = zeros(1, n_params)  # Single row for population average
 
     # Delegate hot loop to a helper with concrete arguments to ensure zero allocations
-    mean_prediction = _population_predictions_impl!(G, work, engine.compiled, engine.row_buf,
-                                                    engine.β, engine.link, data_nt, scale, weights)
+    mean_prediction = _compute_population_predictions!(
+        G, work, engine, data_nt, scale, weights
+    )
     
     # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])
@@ -49,9 +54,14 @@ function _population_predictions(engine::MarginsEngine{L}, data_nt::NamedTuple; 
 end
 
 # Helper with concrete arguments to enable full specialization and avoid per-iteration allocations
-function _population_predictions_impl!(G::AbstractMatrix{<:Float64}, work, compiled, row_buf::Vector{Float64},
-                                       β::Vector{Float64}, link, data_nt::NamedTuple, scale::Symbol, weights::Union{Vector{Float64}, Nothing})
+function _compute_population_predictions!(
+    G::AbstractMatrix{<:Float64}, work, engine::MarginsEngine, 
+    data_nt::NamedTuple, scale::Symbol, weights::Union{Vector{Float64}, Nothing}
+)
     n_obs = length(first(data_nt))
+    
+    # Extract engine fields once for cleaner code
+    (; compiled, row_buf, β, link) = engine
     
     if isnothing(weights)
         # Unweighted case (original implementation)
