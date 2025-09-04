@@ -1,388 +1,317 @@
 # Reference Grid Specification
 
-Reference grids define the covariate scenarios where marginal effects and predictions are evaluated in profile-based analysis. Margins.jl provides a flexible, unified system for specifying reference grids through two main approaches:
+Reference grids define the covariate scenarios where marginal effects and predictions are evaluated in profile-based analysis. Margins.jl provides a flexible system for specifying reference grids through builder functions and direct DataFrame specification.
 
-1. **Dict-based specification** via the `at` parameter
-2. **Table-based specification** via direct DataFrame input
+## Core Approach
 
-## Overview
-
-### Dict-Based Approach
-
-Specify scenarios using the `at` parameter with various Dict formats:
+The fundamental interface uses explicit reference grids:
 
 ```julia
-profile_margins(model, data; at=scenarios, type=:effects, ...)
-```
-
-### Table-Based Approach
-
-Specify scenarios directly as a DataFrame for maximum control:
-
-```julia
-reference_grid = DataFrame(
-    x1 = [0.0, 1.0, 0.0, 1.0],
-    x2 = [0.5, 0.5, -0.5, -0.5],
-    treated = [true, false, true, false]
-)
 profile_margins(model, data, reference_grid; type=:effects, ...)
 ```
 
-Both approaches use a unified architecture that flows through `_build_profiles()` or direct conversion → `FormulaCompiler.create_scenario()`.
+Where `reference_grid` is a DataFrame specifying the covariate combinations for analysis.
 
-## Dict-Based Specification Methods
+## Reference Grid Builders
 
-### 1. Cartesian Product Grids
+### 1. Sample Means - `means_grid(data)`
 
-Create all combinations of specified values across variables:
+Creates reference grid with sample means for continuous variables and frequency-weighted mixtures for categorical variables:
 
 ```julia
-# 3×2 = 6 scenarios: all combinations of x and z values
-at = Dict(:x => [-1, 0, 1], :z => [-0.5, 0.5])
+# Build grid with realistic defaults
+grid = means_grid(data)
+result = profile_margins(model, data, grid; type=:effects)
 
-# Results in scenarios:
-# (-1, -0.5), (-1, 0.5), (0, -0.5), (0, 0.5), (1, -0.5), (1, 0.5)
+# Custom typical value function (default is mean)
+grid = means_grid(data; typical=median)
+result = profile_margins(model, data, grid; type=:effects)
 ```
 
-### 2. Summary Statistics
+**Output structure:**
+- **Continuous variables**: Sample mean (or custom typical function)
+- **Categorical variables**: Frequency-weighted mixture based on actual data distribution
+- **Bool variables**: Probability of true (proportion of true values)
 
-Use built-in statistical summaries:
+### 2. Cartesian Product - `cartesian_grid(data; vars...)`
+
+Creates all combinations of specified values across variables:
 
 ```julia
-at = Dict(
-    :x => :mean,     # Mean of x
-    :z => :median,   # Median of z  
-    :w => :p75       # 75th percentile of w
+# 3×2 = 6 scenarios: all combinations of x and education values
+grid = cartesian_grid(data; x=[-1, 0, 1], education=["High School", "College"])
+result = profile_margins(model, data, grid; type=:effects)
+
+# Single variable varying, others at typical values
+grid = cartesian_grid(data; age=20:10:70)
+result = profile_margins(model, data, grid; type=:predictions)
+
+# Complex scenarios with multiple variables
+grid = cartesian_grid(data; 
+    income=[25000, 50000, 75000],
+    education=["HS", "College"],
+    region=["North", "South"]
+)  # Creates 3×2×2 = 12 scenarios
+result = profile_margins(model, data, grid; type=:effects)
+```
+
+### 3. Balanced Factorial - `balanced_grid(data; vars...)`
+
+Creates balanced (equal-weight) mixtures for categorical variables, useful for orthogonal factorial designs:
+
+```julia
+# Balanced factorial for categorical variables
+grid = balanced_grid(data; education=:all, region=:all)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Mixed specification
+grid = balanced_grid(data; 
+    education=:all,           # All levels with equal weight
+    income=mean(data.income)  # Fixed at mean
 )
-
-# Supported statistics: :mean, :median, :p10, :p25, :p50, :p75, :p90, etc.
+result = profile_margins(model, data, grid; type=:effects)
 ```
 
-### 3. String-Based Ranges
+### 4. Quantile-Based - `quantile_grid(data; vars...)`
 
-Stata-style numlist notation for sequences:
+Uses quantiles of continuous variables:
 
 ```julia
-at = Dict(
-    :x => "10(5)30",    # [10, 15, 20, 25, 30] - start(step)end
-    :z => "0(0.1)0.5"   # [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-)
+# Effects at income quartiles
+grid = quantile_grid(data; income=[0.25, 0.5, 0.75])
+result = profile_margins(model, data, grid; type=:effects)
 
-# Also supports comma/space-separated values
-at = Dict(:x => "1, 2.5, 4, 6.5")
+# Multiple quantile specifications
+grid = quantile_grid(data; 
+    income=[0.1, 0.5, 0.9],
+    age=[0.25, 0.75]
+)  # Creates 3×2 = 6 scenarios
+result = profile_margins(model, data, grid; type=:effects)
 ```
 
-### 4. Multiple Profile Blocks
+## Direct DataFrame Specification
 
-Concatenate different scenario sets:
-
-```julia
-at = [
-    Dict(:x => [0], :z => [-1, 1]),      # 2 scenarios: (0,-1), (0,1)
-    Dict(:x => [1, 2], :z => [0])        # 2 scenarios: (1,0), (2,0)  
-]
-# Total: 4 scenarios
-```
-
-### 5. Global + Specific Settings
-
-Apply defaults to all numeric variables, then override specific ones:
+For maximum control, create reference grids directly:
 
 ```julia
-at = Dict(
-    :all => :mean,                    # Set all Real columns to their means
-    :x => [-2, -1, 0, 1, 2],         # Override x with specific grid
-    :treatment => [0, 1],             # Override categorical variable
-    :income => :p25                   # Override with 25th percentile
-)
-```
-
-The `:all` key applies to all `Real` columns in the data, then specific variable settings take precedence.
-
-## Special Cases
-
-### Built-in Shortcuts
-
-```julia
-# Representative values at sample means
-at = :means
-
-# Per-row evaluation (empty grid)
-at = :none
-```
-
-### Boolean Variables
-
-Boolean variables can accept fractional values for population composition:
-
-```julia
-at = Dict(
-    :male => [0.0, 0.47, 1.0],      # 0%, 47%, 100% male scenarios
-    :urban => 0.65                   # 65% urban scenario
-)
-```
-
-This allows modeling scenarios with different population compositions rather than just individual-level contrasts.
-
-### Categorical Mixtures
-
-For categorical variables, Margins.jl supports **categorical mixtures** that specify population composition scenarios using the `mix()` function. This extends fractional specification beyond boolean variables to multi-level categorical variables.
-
-#### Basic Categorical Mixture Syntax
-
-```julia
-# Specify population composition for education levels
-edu_mix = mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2)
-
-at = Dict(
-    :education => edu_mix,
-    :age => [25, 50, 65],
-    :income => :mean
-)
-
-result = profile_margins(model, data; at=at, type=:predictions)
-```
-
-#### Key Features
-
-- **Sum-to-1 validation**: Mixture weights sum to 1.0 (throws `ArgumentError` if not)
-- **Level validation**: Mixture levels should exist in the original categorical variable
-- **Weighted contrasts**: Uses true weighted combination of contrast matrix rows, not approximations
-- **Integration**: Works seamlessly with existing numeric profile specifications
-
-#### Multiple Categorical Mixtures
-
-Combine multiple categorical mixtures in the same scenario:
-
-```julia
-# Population composition for multiple categorical variables
-scenarios = Dict(
-    :education => mix("high_school" => 0.4, "college" => 0.4, "graduate" => 0.2),
-    :region => mix("urban" => 0.65, "rural" => 0.35),
-    :employed => mix(true => 0.75, false => 0.25),  # Boolean mixture
-    :age => 40,  # Fixed continuous value
-    :income => 50000
-)
-
-result = profile_margins(model, data; at=scenarios, type=:predictions)
-```
-
-#### Mathematical Foundation
-
-Categorical mixtures compute **true weighted combinations** of contrast matrix rows rather than using single discrete levels:
-
-```julia
-# Standard categorical specification (single level)
-at = Dict(:education => "college")  # Uses one contrast matrix row
-
-# Categorical mixture (weighted combination)  
-at = Dict(:education => mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2))
-# Computes: 0.3 * contrast_matrix[hs_row, :] + 0.5 * contrast_matrix[col_row, :] + 0.2 * contrast_matrix[grad_row, :]
-```
-
-This enables population-level analysis where you want to understand effects or predictions for a **mixed population** with specific demographic composition, rather than just individual-level scenarios.
-
-#### Boolean Mixtures
-
-Boolean variables support mixture specification using either boolean values or strings:
-
-```julia
-# Both equivalent for boolean variables
-employment_mix1 = mix(true => 0.7, false => 0.3)          # 70% employed
-employment_mix2 = mix("true" => 0.7, "false" => 0.3)      # Same result
-
-# Usage in profiles
-at = Dict(:employed => employment_mix1, :age => :mean)
-```
-
-#### Use Cases
-
-1. **Population Policy Analysis**: Model effects of policies on populations with specific demographic compositions
-2. **Counterfactual Analysis**: "What if our customer base was 40% college-educated instead of 60%?"
-3. **Market Research**: Predictions for target demographics with known composition
-4. **Clinical Trials**: Effects in populations with specific comorbidity patterns
-
-#### Error Handling
-
-```julia
-# These will throw ArgumentError
-mix("high_school" => 0.3, "college" => 0.8)    # Weights don't sum to 1.0
-mix("high_school" => 0.3, "phd" => 0.7)        # "phd" not in data levels
-mix()                                           # Empty mixture
-```
-
-#### Validation and Accuracy
-
-Categorical mixtures are mathematically validated to ensure exact weighted combinations:
-
-```julia
-# Manual verification
-hs_pred = profile_margins(model, data; at=Dict(:education => "high_school"), type=:predictions)
-col_pred = profile_margins(model, data; at=Dict(:education => "college"), type=:predictions)  
-grad_pred = profile_margins(model, data; at=Dict(:education => "graduate"), type=:predictions)
-
-expected = 0.3 * hs_pred + 0.5 * col_pred + 0.2 * grad_pred
-
-# Mixture computation
-edu_mix = mix("high_school" => 0.3, "college" => 0.5, "graduate" => 0.2)
-actual = profile_margins(model, data; at=Dict(:education => edu_mix), type=:predictions)
-
-# Results are identical within floating-point precision
-@assert abs(expected - actual) < 1e-12
-```
-
-### Mixed Specifications
-
-Combine different methods within a single specification:
-
-```julia
-at = Dict(
-    :x => [-2, 0, 2],               # Explicit values
-    :z => :mean,                    # Summary statistic
-    :w => "10(5)25",                # Range notation
-    :treatment => [0, 1]            # Categorical levels
-)
-```
-
-## Implementation Architecture
-
-The reference grid system is architecturally unified:
-
-1. **Single Source**: All specifications processed by `_build_profiles()` in `profiles.jl`
-2. **Consistent Output**: Returns `Vector{Dict{Symbol,Any}}` of scenarios
-3. **FormulaCompiler Integration**: Scenarios passed to `create_scenario()` for evaluation
-4. **Type Safety**: Automatic handling of variable types and conversions
-
-## Usage Examples
-
-### Basic Profile Analysis
-
-```julia
-# Evaluate effects at low/medium/high values
-scenarios = Dict(:education => [8, 12, 16], :experience => :mean)
-results = profile_margins(
-    model, data; at = scenarios, type = :effects, vars = [:education])
-```
-
-### Treatment Effect Analysis
-
-```julia
-# Compare treatment effects across demographic groups
-scenarios = [
-    Dict(:treatment => [0, 1], :age => :p25, :urban => 1.0),    # Young urban
-    Dict(:treatment => [0, 1], :age => :p75, :urban => 0.0)     # Older rural
-]
-results = profile_margins(
-    model, data; at = scenarios, type = :effects, vars = [:treatment]
-)
-```
-
-### Prediction Profiles
-
-```julia
-# Generate prediction surface
-grid = Dict(
-    :x1 => "-2(0.5)2",      # -2.0, -1.5, -1.0, ..., 1.5, 2.0
-    :x2 => [-1, 0, 1]       # Three levels
-)
-predictions = profile_margins(
-    model, data; at = grid, type = :predictions, scale = :response
-)
-```
-
-## Table-Based Specification
-
-For maximum control and complex scenarios that are difficult to express through Dict syntax, use the table-based approach by passing a DataFrame directly as the third argument:
-
-### Basic Table-Based Usage
-
-```julia
-# Define exact covariate combinations
+# Simple custom grid
 reference_grid = DataFrame(
-    x1 = [0.0, 1.0, 0.0, 1.0, 2.0],
-    x2 = [0.5, 0.5, -0.5, -0.5, 0.0],
-    treated = [true, false, true, false, false]
+    age=[25, 35, 45], 
+    education=["High School", "College", "Graduate"],
+    experience=[2, 8, 15],
+    treated=[true, false, true]
 )
+result = profile_margins(model, data, reference_grid; type=:effects)
 
-# Compute effects at these exact combinations
-results = profile_margins(model, data, reference_grid; type=:effects, vars=[:x1])
+# Grid with categorical mixtures
+using Margins: mix
 
-# Compute predictions at these exact combinations
-predictions = profile_margins(model, data, reference_grid; type=:predictions, target=:mu)
+policy_grid = DataFrame(
+    age=[35, 45, 55],
+    education=[
+        mix("HS" => 0.4, "College" => 0.6),        # Current composition
+        mix("HS" => 0.2, "College" => 0.8),        # Policy scenario 1
+        mix("HS" => 0.1, "College" => 0.9)         # Policy scenario 2
+    ]
+)
+result = profile_margins(model, data, policy_grid; type=:predictions)
 ```
 
-### Advanced Table-Based Examples
+## Advanced Patterns
+
+### Frequency-Weighted Defaults
+
+When variables are unspecified in builder functions, they use actual data composition:
 
 ```julia
-# Complex interaction analysis
-interaction_grid = DataFrame(
-    age = [25, 25, 65, 65],
-    income = [30000, 80000, 30000, 80000],
-    treatment = [false, false, true, true],
-    region = ["urban", "rural", "urban", "rural"]
-)
+# Your data composition:
+# - education: 40% HS, 45% College, 15% Graduate  
+# - region: 75% Urban, 25% Rural
+# - treated: 60% true, 40% false
 
-# Non-uniform spacing for dose-response analysis
-dose_response_grid = DataFrame(
-    dose = [0.0, 0.1, 0.5, 2.0, 10.0],  # Log-spaced doses
-    age = [40.0, 40.0, 40.0, 40.0, 40.0],  # Fixed age
-    weight = [70.0, 70.0, 70.0, 70.0, 70.0]  # Fixed weight
-)
-
-# Factorial design with unbalanced scenarios
-factorial_grid = DataFrame(
-    factor_a = [1, 1, 2, 2, 3],
-    factor_b = [1, 2, 1, 2, 1],  # Unbalanced - no (3,2) combination
-    covariate = [0.0, 0.5, -0.5, 1.0, 0.25]
-)
+# Builder uses realistic defaults
+grid = cartesian_grid(data; income=[30000, 50000, 70000])
+# → income varies as specified
+# → education: mix("HS" => 0.4, "College" => 0.45, "Graduate" => 0.15)
+# → region: mix("Urban" => 0.75, "Rural" => 0.25)  
+# → treated: 0.6 (probability of true)
 ```
 
-### Advantages of Table-Based Specification
+### Scenario Comparison
 
-1. **Exact Control**: Specify any combination of covariate values, including irregular grids
-2. **Complex Designs**: Handle factorial, response surface, or custom experimental designs
-3. **Unbalanced Scenarios**: Include only the specific combinations you need
-4. **External Integration**: Import reference grids from spreadsheets, databases, or other analyses
-5. **Reproducible Research**: Store and version control exact evaluation points
-
-### Equivalence Between Approaches
-
-The two approaches are equivalent when the table represents a full Cartesian product:
+Compare different policy scenarios:
 
 ```julia
-# Dict approach (Cartesian product)
-dict_spec = Dict(:x1 => [0.0, 1.0], :x2 => [0.5, -0.5])
+# Current scenario (status quo)
+current_grid = means_grid(data)
+current = profile_margins(model, data, current_grid; type=:predictions)
 
-# Equivalent table approach
-table_spec = DataFrame(
-    x1 = [0.0, 0.0, 1.0, 1.0],
-    x2 = [0.5, -0.5, 0.5, -0.5]
+# Policy scenario (increased education)
+policy_grid = DataFrame(
+    age=mean(data.age),
+    income=mean(data.income),
+    education=mix("HS" => 0.2, "College" => 0.5, "Graduate" => 0.3)  # Policy target
 )
+future = profile_margins(model, data, policy_grid; type=:predictions)
 
-# These produce identical results
-result1 = profile_margins(model, data; at=dict_spec, type=:effects, vars=[:x1])
-result2 = profile_margins(model, data, table_spec; type=:effects, vars=[:x1])
+# Compare outcomes
+current_pred = DataFrame(current).estimate[1]
+future_pred = DataFrame(future).estimate[1]
+policy_impact = future_pred - current_pred
 ```
 
-### Current Limitations
+### Sequential Analysis
 
-- **Continuous variables only**: Table-based approach currently supports only continuous marginal effects
-- **No categorical contrasts**: Categorical variable effects not yet implemented for table-based specification
-- **No grouping**: Same limitation as Dict-based approach for `over`/`by` parameters
+Analyze effects along ranges of key variables:
 
-## Choosing Between Approaches
+```julia
+# Effects across age ranges
+age_grid = cartesian_grid(data; age=25:5:65)
+age_effects = profile_margins(model, data, age_grid; type=:effects, vars=[:education])
 
-**Use Dict-based specification when:**
-- Creating regular grids (Cartesian products)
-- Using summary statistics (means, quantiles)
-- Working with simple factorial designs
-- Need categorical variable contrasts
+# Plot age-varying effects
+using Plots
+plot(25:5:65, DataFrame(age_effects).estimate, 
+     xlabel="Age", ylabel="Education Effect", 
+     title="Age-Varying Education Effects")
+```
 
-**Use table-based specification when:**
-- Requiring exact control over covariate combinations
-- Working with irregular or unbalanced designs
-- Importing scenarios from external sources
-- Analyzing complex interaction patterns
-- Need to exclude specific covariate combinations
+## Performance Considerations
 
-This unified reference grid system provides the flexibility to specify complex evaluation scenarios while maintaining consistent, predictable behavior across all profile-based computations.
+### Grid Size and Efficiency
+
+Reference grid size affects performance linearly, but is independent of dataset size:
+
+```julia
+# Small grid: 3 scenarios
+small_grid = cartesian_grid(data; x=[0, 1, 2])
+@time profile_margins(model, huge_data, small_grid)  # ~150μs
+
+# Large grid: 27 scenarios  
+large_grid = cartesian_grid(data; x=[0,1,2], y=[0,1,2], z=[0,1,2])
+@time profile_margins(model, huge_data, large_grid)  # ~400μs
+
+# Dataset size doesn't matter
+@time profile_margins(model, small_data, large_grid)  # Still ~400μs
+```
+
+### Memory Management
+
+Builder functions are optimized for memory efficiency:
+
+```julia
+# Efficient: builders avoid unnecessary allocations
+grid = means_grid(large_data)  # O(1) memory for typical values
+
+# Less efficient: explicit grids require full materialization  
+explicit_grid = DataFrame(
+    x1=fill(mean(large_data.x1), 1000),  # O(n) memory
+    x2=fill(mean(large_data.x2), 1000)
+)
+```
+
+## Validation and Error Handling
+
+Reference grids are validated automatically:
+
+```julia
+# Error: Missing model variables
+incomplete_grid = DataFrame(x1=[0, 1])  # Missing x2 from model
+profile_margins(model, data, incomplete_grid)  
+# → ArgumentError: Missing model variables: x2
+
+# Error: Invalid categorical levels
+invalid_grid = DataFrame(
+    x1=[0, 1], 
+    group=["InvalidLevel", "AnotherInvalid"]  # Not in original data
+)
+profile_margins(model, data, invalid_grid)
+# → ArgumentError: Invalid levels for categorical variable 'group'
+
+# Warning: Large grid size
+huge_grid = cartesian_grid(data; x=1:100, y=1:100)  # 10,000 scenarios
+profile_margins(model, data, huge_grid)
+# → Warning: Large reference grid (10000 scenarios) may impact performance
+```
+
+## Statistical Properties
+
+### Delta-Method Standard Errors
+
+Standard errors are computed consistently across all reference grid types:
+
+```julia
+# Same statistical rigor regardless of grid construction method
+grid1 = means_grid(data)
+grid2 = DataFrame(age=mean(data.age), education=mode(data.education))
+grid3 = cartesian_grid(data; age=[mean(data.age)])
+
+# All use identical delta-method computation
+result1 = profile_margins(model, data, grid1; type=:effects)
+result2 = profile_margins(model, data, grid2; type=:effects)  
+result3 = profile_margins(model, data, grid3; type=:effects)
+
+# Standard errors are mathematically equivalent
+all(DataFrame(result1).se .≈ DataFrame(result2).se .≈ DataFrame(result3).se)  # true
+```
+
+### Categorical Mixture Handling
+
+Categorical mixtures are handled natively throughout the system:
+
+```julia
+# Fractional specifications work seamlessly
+mixed_grid = DataFrame(
+    age=[35, 45],
+    treated=[0.3, mix(0 => 0.6, 1 => 0.4)]  # Mix of scalar and mixture
+)
+result = profile_margins(model, data, mixed_grid; type=:predictions)
+
+# Standard errors account for mixture uncertainty automatically
+DataFrame(result)  # Includes proper SEs for mixed scenarios
+```
+
+## Migration Guide
+
+### From Old `at` Parameter Syntax
+
+```julia
+# OLD (deprecated):
+profile_margins(model, data; at=:means)
+profile_margins(model, data; at=Dict(:x => [0,1,2]))
+profile_margins(model, data; at=[Dict(:x => 0), Dict(:x => 1)])
+
+# NEW (current):
+profile_margins(model, data, means_grid(data))
+profile_margins(model, data, cartesian_grid(data; x=[0,1,2]))
+
+explicit_grid = DataFrame(x=[0, 1])
+profile_margins(model, data, explicit_grid)
+```
+
+### Builder Function Evolution
+
+```julia
+# OLD (deprecated internal names):
+refgrid_means(data)
+refgrid_cartesian(specs, data)
+
+# NEW (exported public API):
+means_grid(data)
+cartesian_grid(data; vars...)
+balanced_grid(data; vars...)
+quantile_grid(data; vars...)
+```
+
+## Best Practices
+
+1. **Start with `means_grid()`** for basic analysis
+2. **Use `cartesian_grid()`** for systematic exploration
+3. **Use `balanced_grid()`** for orthogonal factorial designs
+4. **Use `quantile_grid()`** for distributional analysis
+5. **Use explicit DataFrame** for complex custom scenarios
+6. **Validate grids** with small examples before scaling up
+7. **Consider grid size** vs computational requirements
+8. **Leverage frequency weighting** for realistic defaults
+
+See also: [`profile_margins`](@ref) for the main function interface.

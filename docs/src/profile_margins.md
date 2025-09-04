@@ -2,229 +2,199 @@
 
 Profile margins compute marginal effects or predictions at specific covariate profiles (combinations of variable values). This is ideal for understanding effects at representative scenarios like "typical cases" or specific policy counterfactuals.
 
-## Three-Tier API Design
+## Reference Grid Approach
 
-Margins.jl provides three complementary approaches to profile margins, each optimized for different use cases:
-
-### 1. Direct Builders (Canonical)
-The most powerful and composable approach using specialized builder functions:
+Margins.jl uses an explicit reference grid approach for maximum flexibility and clarity. The core function signature is:
 
 ```julia
-# Means profile - effects/predictions at sample means
-profiles = refgrid_means(data_nt)
-result = profile_margins(model, data, profiles; type=:effects)
-
-# Cartesian product - full factorial design
-profiles = refgrid_cartesian((x=[-1,0,1], education=["High School", "College"]), data_nt)
-result = profile_margins(model, data, profiles; type=:effects)
-
-# Sequence - focal variable varying, others fixed
-profiles = refgrid_sequence(:age, 20:10:70, data_nt; others=:means)
-result = profile_margins(model, data, profiles; type=:predictions)
+profile_margins(model, data, reference_grid; type=:effects, vars=nothing, ...)
 ```
 
-### 2. `at=` Parameter (Convenience)
-Familiar syntax for quick analysis:
+## Reference Grid Builders
+
+The package provides several builder functions to create reference grids easily:
+
+### 1. Sample Means - `means_grid()`
+
+The most common case: effects/predictions at sample means for continuous variables and frequency-weighted mixtures for categorical variables.
 
 ```julia
-# Sample means
-result = profile_margins(model, data; at=:means, type=:effects)
+# Effects at sample means (MEM)
+result = profile_margins(model, data, means_grid(data); type=:effects)
 
-# Custom profiles  
-result = profile_margins(model, data; at=(age=[25,35,45], education=["College"]), type=:effects)
-
-# With grouping
-result = profile_margins(model, data; at=:means, over=:gender, type=:predictions)
+# Predictions at sample means (APM)
+result = profile_margins(model, data, means_grid(data); type=:predictions)
 ```
 
-### 3. DataFrame Input (Flexibility)
-Direct control over the exact reference grid:
+### 2. Cartesian Product - `cartesian_grid()`
+
+Create all combinations of specified values across variables:
+
+```julia
+# 3×2 = 6 scenarios: all combinations of x and education values
+result = profile_margins(model, data, 
+    cartesian_grid(data; x=[-1, 0, 1], education=["High School", "College"]); 
+    type=:effects)
+
+# Single variable varying, others at typical values
+result = profile_margins(model, data,
+    cartesian_grid(data; age=20:10:70); 
+    type=:predictions)
+```
+
+### 3. Balanced Factorial - `balanced_grid()`
+
+Create balanced (equal-weight) mixtures for categorical variables:
+
+```julia
+# Balanced factorial design for categorical variables
+result = profile_margins(model, data,
+    balanced_grid(data; education=:all, region=:all); 
+    type=:effects)
+```
+
+### 4. Quantile-Based - `quantile_grid()`
+
+Use quantiles of continuous variables:
+
+```julia
+# Effects at income quartiles
+result = profile_margins(model, data,
+    quantile_grid(data; income=[0.25, 0.5, 0.75]); 
+    type=:effects)
+```
+
+## DataFrame Input (Maximum Control)
+
+For complete control, provide a DataFrame directly:
 
 ```julia
 # Custom reference grid
-grid = DataFrame(age=[25,35,45], education=["College","College","College"])
-result = profile_margins(model, data, grid; type=:effects)
+reference_grid = DataFrame(
+    age=[25, 35, 45], 
+    education=["High School", "College", "Graduate"],
+    experience=[2, 8, 15]
+)
+result = profile_margins(model, data, reference_grid; type=:effects)
 ```
 
-## Builder Functions
+## Key Features
 
-All builders return `Iterator{Dict{Symbol,Any}}` for memory-efficient computation and accept optional `over` parameter for grouping.
+### Frequency-Weighted Categorical Defaults
 
-### `refgrid_means`
-Single profile with continuous variables at means, categoricals at first level:
+When categorical variables are unspecified, they use actual population composition rather than arbitrary defaults:
 
 ```julia
-profiles = refgrid_means(data_nt)
-profiles = refgrid_means(data_nt; vars=[:age, :income])  # Subset of variables
-profiles = refgrid_means(data_nt; over=:gender)  # Grouped by gender
+# Your data: education = 40% HS, 45% College, 15% Graduate
+#           region = 75% Urban, 25% Rural
+
+# Sample means with realistic categorical composition
+result = profile_margins(model, data, means_grid(data); type=:effects)
+# → age: sample mean
+# → education: frequency-weighted mixture (40% HS, 45% College, 15% Graduate)  
+# → region: frequency-weighted mixture (75% Urban, 25% Rural)
 ```
 
-### `refgrid_cartesian`  
-Full factorial Cartesian product from specification:
+### Categorical Mixtures
+
+Use `mix()` for fractional specifications in reference grids:
 
 ```julia
-# Basic Cartesian product
-profiles = refgrid_cartesian((
-    age = [25, 45, 65],
-    education = ["High School", "College"] 
-), data_nt)
+using Margins: mix
 
-# With grouping - profiles computed within each group
-profiles = refgrid_cartesian((age=[25,45],), data_nt; over=:region)
-```
-
-### `refgrid_sequence`
-Focal variable sequence with others held constant:
-
-```julia
-# Age varying 20-70, others at means
-profiles = refgrid_sequence(:age, 20:10:70, data_nt; others=:means)
-
-# Age varying, specific values for other variables
-profiles = refgrid_sequence(:age, [25,35,45], data_nt; 
-    others=Dict(:education => "College", :experience => 10))
-```
-
-### `refgrid_quantiles`
-Variables at specific quantiles:
-
-```julia
-# Income at 10th, 50th, 90th percentiles
-profiles = refgrid_quantiles(data_nt; specs=(income=[:p10,:p50,:p90],))
-
-# Multiple variables at quantiles
-profiles = refgrid_quantiles(data_nt; specs=(
-    income = [:p25, :p75],
-    age = [:p10, :p90]
-))
-```
-
-### `refgrid_levels`
-Categorical variable at specific levels:
-
-```julia
-# Education at all levels, others at means
-profiles = refgrid_levels(data_nt; var=:education, 
-    levels=["High School", "College", "Graduate"])
-
-# With specific values for other variables  
-profiles = refgrid_levels(data_nt; var=:treatment,
-    levels=["Control", "Treatment"], 
-    others=Dict(:age => 40, :income => 50000))
-```
-
-## Common Use Cases
-
-### Policy Analysis
-```julia
-# Compare treatment effects across age groups
-profiles = refgrid_cartesian((
-    treatment = ["Control", "Treatment"],
-    age = [25, 45, 65]
-), data_nt)
-result = profile_margins(model, data, profiles; type=:effects, vars=[:treatment])
+# Policy scenario with specific treatment rates
+reference_grid = DataFrame(
+    age=[35, 45, 55],
+    treated=[mix(0 => 0.3, 1 => 0.7)]  # 70% treatment rate
+)
+result = profile_margins(model, data, reference_grid; type=:predictions)
 ```
 
 ### Elasticity Analysis
+
+Compute elasticities at specific profiles:
+
 ```julia
-# Price elasticity at different income levels
-profiles = refgrid_quantiles(data_nt; specs=(income=[:p10,:p25,:p50,:p75,:p90],))
-result = profile_margins(model, data, profiles; 
-    type=:effects, vars=[:price], measure=:elasticity)
+# Elasticities at sample means
+result = profile_margins(model, data, means_grid(data); 
+    type=:effects, measure=:elasticity)
+
+# Semi-elasticities at specific scenarios
+result = profile_margins(model, data,
+    cartesian_grid(data; income=[25000, 50000, 75000]); 
+    type=:effects, measure=:semielasticity_dyex)
 ```
 
-### Representative Case Analysis
-```julia
-# Typical case: means for continuous, mode for categorical
-profiles = refgrid_means(data_nt)
-result = profile_margins(model, data, profiles; type=:predictions)
+## Performance Characteristics
 
-# Young vs old comparison
-profiles = refgrid_cartesian((age=[25,65],), data_nt)
-result = profile_margins(model, data, profiles; type=:predictions)
+Profile margins achieve **O(1) constant-time complexity** - execution time is independent of dataset size:
+
+```julia
+# Same computational cost regardless of data size
+@time profile_margins(model, small_data, means_grid(small_data))   # ~100μs
+@time profile_margins(model, large_data, means_grid(large_data))   # ~100μs
+
+# Complex scenarios also maintain O(1) scaling
+scenarios = cartesian_grid(data; x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
+@time profile_margins(model, huge_data, scenarios)  # Still ~100μs
 ```
 
-### Grouped Analysis
+## Migration from Old API
+
+If you have code using the deprecated `at` parameter:
+
 ```julia
-# Effects by region
-profiles = refgrid_means(data_nt; over=:region)
-result = profile_margins(model, data, profiles; type=:effects)
+# OLD (deprecated):
+profile_margins(model, data; at=:means, type=:effects)
+profile_margins(model, data; at=Dict(:x => [0,1,2]), type=:effects)
 
-# Age effects within education groups
-profiles = refgrid_sequence(:age, 20:10:70, data_nt; over=:education)
-result = profile_margins(model, data, profiles; type=:effects, vars=[:age])
-```
-
-## Migration Guide
-
-### From Parameter Soup to Builders
-
-**Old approach (parameter-heavy):**
-```julia
-# Multiple scattered parameters
-result = profile_margins(model, data; 
-    at=(x=[1,2,3],), over=:group, within=:category, 
-    type=:effects, average=true)
-```
-
-**New approach (builder-based):**
-```julia
-# Grouping built into the profile source
-profiles = refgrid_cartesian((x=[1,2,3],), data_nt; over=:group)
-result = profile_margins(model, data, profiles; type=:effects, average=true)
-```
-
-### Common Patterns
-
-| Old Pattern | New Builder Approach |
-|-------------|---------------------|
-| `at=:means` | `refgrid_means(data_nt)` |
-| `at=(x=[1,2,3],)` | `refgrid_cartesian((x=[1,2,3],), data_nt)` |
-| `at=:means, over=:group` | `refgrid_means(data_nt; over=:group)` |
-| Custom DataFrame | Direct DataFrame input unchanged |
-
-### Benefits of Builder Approach
-
-1. **Composability**: Mix and match builders with grouping as needed
-2. **Type Safety**: All builders return same `Iterator{Dict{Symbol,Any}}` type  
-3. **Memory Efficiency**: Large grids stream without materialization
-4. **Clarity**: "Build profiles → compute margins" mental model
-5. **Extensibility**: New patterns without API changes
-
-## Advanced Features
-
-### Averaging Profiles
-```julia
-# Compute average effects across profiles
-profiles = refgrid_cartesian((age=[25,35,45], gender=["M","F"]), data_nt)
-result = profile_margins(model, data, profiles; type=:effects, average=true)
-```
-
-### Custom Covariance
-```julia
-# Robust standard errors
-result = profile_margins(model, data, profiles; vcov=:robust)
-
-# Custom covariance matrix
-custom_vcov = compute_custom_vcov(model, data)
-result = profile_margins(model, data, profiles; vcov=custom_vcov)
-```
-
-### Multiple Comparison Adjustments
-```julia
-# Bonferroni adjustment for multiple profiles
-result = profile_margins(model, data, profiles; mcompare=:bonferroni)
+# NEW (current):
+profile_margins(model, data, means_grid(data); type=:effects)  
+profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)
 ```
 
 ## Statistical Notes
 
-- **Standard Errors**: All results use proper delta-method standard errors with full covariance matrix
-- **Deterministic Ordering**: Results follow by → over → profiles → terms order
-- **Error-First Policy**: Statistical failures produce clear errors rather than invalid results
-- **Publication Grade**: All confidence intervals and p-values meet econometric standards
+- **Standard errors**: Computed via delta method using full model covariance matrix
+- **Categorical effects**: Use baseline contrasts vs reference levels at each profile
+- **Profile interpretation**: More concrete than population averages, ideal for policy communication
+- **Computational efficiency**: Single compilation per analysis, reused across all profiles
 
-## Performance
+## Examples
 
-- **Zero Allocation**: Large profile grids stream without intermediate DataFrame materialization
-- **Microsecond Timing**: Individual profile computations complete in microseconds
-- **Memory Efficient**: Grouping handled within builders, not in API parameters
+### Basic Workflow
+
+```julia
+using DataFrames, GLM, Margins
+
+# Fit model
+model = lm(@formula(y ~ x1 + x2 + group), data)
+
+# Effects at sample means
+mem_results = profile_margins(model, data, means_grid(data); type=:effects)
+DataFrame(mem_results)
+
+# Predictions at specific scenarios
+scenarios = cartesian_grid(data; x1=[0, 1, 2], group=["A", "B"])
+predictions = profile_margins(model, data, scenarios; type=:predictions)
+DataFrame(predictions)
+```
+
+### Policy Analysis
+
+```julia
+# Current scenario: actual data composition
+current = profile_margins(model, data, means_grid(data); type=:predictions)
+
+# Policy scenario: increased education levels
+policy_grid = DataFrame(
+    x1=mean(data.x1),
+    education=mix("High School" => 0.2, "College" => 0.5, "Graduate" => 0.3)
+)
+future = profile_margins(model, data, policy_grid; type=:predictions)
+
+# Compare scenarios
+policy_effect = DataFrame(future).estimate[1] - DataFrame(current).estimate[1]
+```
+
+See also: [`population_margins`](@ref) for population-averaged analysis.

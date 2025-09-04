@@ -41,7 +41,7 @@ ame_result = population_margins(model, df; type=:effects)
 DataFrame(ame_result)
 
 # Marginal effects at sample means (MEM)  
-mem_result = profile_margins(model, df; at=:means, type=:effects)
+mem_result = profile_margins(model, df, means_grid(df); type=:effects)
 DataFrame(mem_result)
 ```
 
@@ -67,8 +67,8 @@ population_margins(model, data; type=:effects)      # Average Marginal Effects
 population_margins(model, data; type=:predictions)  # Average Adjusted Predictions
 
 # Profile Analysis (MEM/APM equivalent)  
-profile_margins(model, data; at=:means, type=:effects)      # Effects at Sample Means
-profile_margins(model, data; at=:means, type=:predictions)  # Predictions at Sample Means
+profile_margins(model, data, means_grid(data); type=:effects)      # Effects at Sample Means
+profile_margins(model, data, means_grid(data); type=:predictions)  # Predictions at Sample Means
 ```
 
 ## Key Features
@@ -102,7 +102,7 @@ Multiple ways to specify evaluation points:
 
 ```julia
 # At sample means (most common)
-profile_margins(model, data; at=:means, type=:effects)
+profile_margins(model, data, means_grid(data); type=:effects)
 
 # Custom scenarios
 profile_margins(model, data; 
@@ -129,7 +129,7 @@ profile_margins(model, reference_grid; type=:effects)
 population_margins(model, data; type=:effects, measure=:elasticity)
 
 # Elasticities at representative scenarios  
-profile_margins(model, data; at=:means, type=:effects, measure=:elasticity)
+profile_margins(model, data, means_grid(data); type=:effects, measure=:elasticity)
 
 # Semi-elasticities  
 population_margins(model, data; measure=:semielasticity_dyex)  # change Y per % change X
@@ -193,8 +193,8 @@ population_margins(cluster_model, data)
 ### Constant-Time Profile Analysis
 ```julia
 # Profile margins scale O(1) - same time regardless of dataset size
-@time profile_margins(model, small_data; at=:means)    # constant time
-@time profile_margins(model, large_data; at=:means)    # same time complexity
+@time profile_margins(model, small_data, means_grid(small_data))    # constant time
+@time profile_margins(model, large_data, means_grid(large_data))    # same time complexity
 
 # Complex scenarios also O(1)
 scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 profiles

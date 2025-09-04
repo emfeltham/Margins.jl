@@ -24,7 +24,7 @@ ame_result = population_margins(model, df; type=:effects)
 DataFrame(ame_result)
 
 # Marginal effects at sample means (MEM)  
-mem_result = profile_margins(model, df; at=:means, type=:effects)
+mem_result = profile_margins(model, df, means_grid(df); type=:effects)
 DataFrame(mem_result)
 ```
 
@@ -81,10 +81,10 @@ For representative case analysis:
 
 ```julia
 # Effects at sample means - most interpretable approach
-means_effects = profile_margins(model, df; at=:means, type=:effects)
+means_effects = profile_margins(model, df, means_grid(df); type=:effects)
 
 # Predictions at sample means
-means_predictions = profile_margins(model, df; at=:means, type=:predictions)
+means_predictions = profile_margins(model, df, means_grid(df); type=:predictions)
 ```
 
 ### 4. Explicit Profile Lists
@@ -188,7 +188,7 @@ println(DataFrame(gender_effects))
 
 ```julia
 # Effects at sample means (representative person)
-mem_results = profile_margins(wage_model, data; at=:means, type=:effects)
+mem_results = profile_margins(wage_model, data, means_grid(data); type=:effects)
 println("Effects for typical person:")
 println(DataFrame(mem_results))
 
@@ -350,7 +350,7 @@ using BenchmarkTools
 
 # Profile margins: O(1) constant time
 println("Profile margins performance (constant time):")
-@btime profile_margins($wage_model, $data; at=:means, type=:effects)
+@btime profile_margins($wage_model, $data, means_grid($data); type=:effects)
 
 # Population margins: O(n) scaling  
 println("Population margins performance (scales with n):")
@@ -375,7 +375,7 @@ Direct equivalency for economists familiar with Stata:
 stata_ame = population_margins(wage_model, data; type=:effects)
 
 # Stata: margins, at(means) dydx(*)  
-stata_mem = profile_margins(wage_model, data; at=:means, type=:effects)
+stata_mem = profile_margins(wage_model, data, means_grid(data); type=:effects)
 
 # Stata: margins, at(age=(25 35 45) education=(1 2 3))
 stata_scenarios = profile_margins(wage_model, data;
@@ -410,7 +410,7 @@ stata_subgroups = population_margins(wage_model, data;
 ```julia
 # For large datasets (>100k observations)
 # Profile margins remain fast regardless of size
-large_data_profiles = profile_margins(model, large_data; at=:means, type=:effects)
+large_data_profiles = profile_margins(model, large_data, means_grid(large_data); type=:effects)
 
 # Population margins scale linearly - use selectively for very large data
 key_population_effects = population_margins(model, large_data; 

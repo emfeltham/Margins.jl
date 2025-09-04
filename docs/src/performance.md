@@ -77,10 +77,10 @@ For detailed backend selection guidance including domain-sensitive functions and
 
 ```julia
 # Production configuration (memory-optimized)
-population_margins(model, data; backend=:fd, target=:eta)
+population_margins(model, data; backend=:fd, scale=:link)
 
 # Development/high-reliability configuration  
-profile_margins(model, data; at=:means, backend=:ad, target=:mu)
+profile_margins(model, data, means_grid(data); backend=:ad, scale=:response)
 
 # Domain-sensitive functions (log, sqrt) - AD required
 population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)

@@ -117,7 +117,7 @@ All main functions support these core parameters:
 **Examples:**
 ```julia
 # At sample means (most common)
-profile_margins(model, data; at=:means)
+profile_margins(model, data, means_grid(data))
 
 # Cartesian product: 6 scenarios (3×2)
 profile_margins(model, data; at=Dict(:x => [0,1,2], :group => ["A","B"]))
@@ -178,7 +178,7 @@ DataFrame(ame)
 ### Performance Optimization
 ```julia
 # Maximum performance configuration
-fast_result = population_margins(model, data; backend=:fd, target=:eta)
+fast_result = population_margins(model, data; backend=:fd, scale=:link)
 
 # Profile analysis is O(1) - efficient regardless of data size
 scenarios = Dict(:var1 => [-2,-1,0,1,2], :var2 => ["A","B","C"])  # 15 scenarios
@@ -279,10 +279,10 @@ using GLM, CategoricalArrays
 model = glm(@formula(outcome ~ x1 + x2 + group), data, Binomial(), LogitLink())
 
 # Effects on probability scale
-prob_effects = population_margins(model, data; target=:mu, type=:effects)
+prob_effects = population_margins(model, data; scale=:response, type=:effects)
 
 # Effects on log-odds scale  
-logodds_effects = population_margins(model, data; target=:eta, type=:effects)
+logodds_effects = population_margins(model, data; scale=:link, type=:effects)
 ```
 
 ### With CovarianceMatrices.jl
