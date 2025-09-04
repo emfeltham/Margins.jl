@@ -239,8 +239,6 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 # For full statistical rigor, we need FormulaCompiler support for weighted gradients
             end
             
-            se = compute_se_only(gβ_avg, engine.Σ)
-            
             # Compute AME value via helper with concrete arguments
             ame_val = _accumulate_me_value(engine.g_buf, local_de, local_β, local_link, rows, scale, backend, cont_idx, weights)
             
@@ -254,6 +252,8 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             
             # Apply elasticity transformations if requested (Phase 3)
             final_val = ame_val
+            gradient_transform_factor = 1.0  # Default: no transformation
+            
             if measure !== :effect && engine.de !== nothing
                 # Compute average x and y for elasticity measures (vectorized)
                 xcol = getproperty(data_nt, var)
@@ -271,19 +271,28 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 
                 # Apply transformation based on measure type
                 if measure === :elasticity
-                    final_val = (x̄ / ȳ) * ame_val
+                    gradient_transform_factor = x̄ / ȳ
+                    final_val = gradient_transform_factor * ame_val
                 elseif measure === :semielasticity_dyex
-                    final_val = x̄ * ame_val
+                    gradient_transform_factor = x̄
+                    final_val = gradient_transform_factor * ame_val
                 elseif measure === :semielasticity_eydx
-                    final_val = (1 / ȳ) * ame_val
+                    gradient_transform_factor = 1 / ȳ
+                    final_val = gradient_transform_factor * ame_val
                 end
             end
+            
+            # Transform the gradient and compute SE with transformed gradient
+            for j in 1:length(gβ_avg)
+                gβ_avg[j] = gradient_transform_factor * gβ_avg[j]
+            end
+            se = compute_se_only(gβ_avg, engine.Σ)
             
             # Direct assignment instead of push! to avoid reallocation
             results.term[cont_idx] = string(var)
             results.estimate[cont_idx] = final_val
             results.se[cont_idx] = se
-            # Copy the averaged gradient to the output matrix
+            # Copy the transformed gradient to the output matrix
             for j in 1:length(gβ_avg)
                 G[cont_idx, j] = gβ_avg[j]
             end
@@ -402,10 +411,10 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, target)
             end
             
-            se = compute_se_only(engine.gβ_accumulator, engine.Σ)
-            
             # Apply elasticity transformations for continuous variables if requested (Phase 3)
             final_val = effect_val
+            gradient_transform_factor = 1.0  # Default: no transformation
+            
             if var ∈ continuous_vars && measure !== :effect && engine.de !== nothing
                 # Get x and y values at this specific profile
                 x_val = float(profile[var])
@@ -423,16 +432,24 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 
                 # Apply transformation based on measure type
                 if measure === :elasticity
-                    final_val = (x_val / y_val) * effect_val
+                    gradient_transform_factor = x_val / y_val
+                    final_val = gradient_transform_factor * effect_val
                 elseif measure === :semielasticity_dyex
-                    final_val = x_val * effect_val
+                    gradient_transform_factor = x_val
+                    final_val = gradient_transform_factor * effect_val
                 elseif measure === :semielasticity_eydx
-                    final_val = (1 / y_val) * effect_val
+                    gradient_transform_factor = 1 / y_val
+                    final_val = gradient_transform_factor * effect_val
                 end
             end
             
+            # Apply gradient transformation and compute SE with transformed gradient
+            engine.gβ_accumulator .*= gradient_transform_factor
+            se = compute_se_only(engine.gβ_accumulator, engine.Σ)
+            
             # Store results using string terms for MarginsResult compatibility
             push!(results, (term=string(var), estimate=final_val, se=se, profile_desc=profile))
+            # Store the transformed gradient
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
         end
