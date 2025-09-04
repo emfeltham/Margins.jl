@@ -4,7 +4,7 @@
 # Margins.jl, providing the same level of mathematical rigor for standard errors
 # that we have for point estimates in statistical_validation.jl.
 #
-# Following TEST_SE_PLAN.md Phase 1 Tier 1: Analytical SE validation for linear
+# Analytical SE validation for linear
 # and GLM models using exact mathematical formulas.
 
 using GLM

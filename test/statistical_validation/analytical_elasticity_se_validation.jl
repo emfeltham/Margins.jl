@@ -1,6 +1,6 @@
 # analytical_elasticity_se_validation.jl - Analytical Standard Error Validation for Elasticity Measures
 #
-# Phase 2B: Analytical Elasticity SE Validation
+# Analytical Elasticity SE Validation
 #
 # This file implements hand-calculated analytical standard error verification for 
 # elasticity measures in Margins.jl, following the same mathematical rigor as
@@ -319,7 +319,7 @@ end
 # Test suite for analytical elasticity SE validation
 @testset "Analytical Elasticity SE Validation" begin
     # Generate consistent test data
-    Random.seed!(42)
+    Random.seed!(06515)
     n = 100
     df = DataFrame(
         y = 5.0 .+ 2.0 .* randn(n),  # Ensure positive y for elasticity

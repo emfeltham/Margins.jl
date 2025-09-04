@@ -1,6 +1,6 @@
 # elasticity_se_validation.jl - Bootstrap Standard Error Validation for Elasticity Measures
 #
-# Phase 2B: Elasticity SE Validation
+# Elasticity SE Validation
 #
 # This file implements comprehensive bootstrap validation for elasticity standard errors
 # including :elasticity, :semielasticity_dyex, and :semielasticity_eydx measures.
@@ -252,7 +252,7 @@ end
 # Test integration with main test suite
 @testset "Elasticity SE Validation" begin
     # Generate consistent test data
-    Random.seed!(42)
+    Random.seed!(06515)
     data = make_econometric_data(n=200, seed=42)
     
     @testset "Population Elasticity SE Bootstrap Validation" begin

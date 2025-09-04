@@ -2,7 +2,7 @@
 # Add this debug code to your test to investigate the issue
 
 @testset "3-way interaction DEBUG" begin
-    Random.seed!(42)  # Same seed for consistency
+    Random.seed!(06515)  # Same seed for consistency
     n = 500
     x = randn(n)
     d = rand(n) .> 0.5       

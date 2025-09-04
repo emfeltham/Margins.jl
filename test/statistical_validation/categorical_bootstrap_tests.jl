@@ -1,6 +1,6 @@
 # categorical_bootstrap_tests.jl - Categorical Effects Bootstrap Validation
 #
-# Phase 2, Tier 2: Categorical Effects Bootstrap Testing
+# Categorical Effects Bootstrap Testing
 #
 # This file implements bootstrap validation specifically for categorical variables,
 # which use discrete changes rather than derivatives and have different SE computation

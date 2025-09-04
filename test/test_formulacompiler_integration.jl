@@ -8,7 +8,7 @@ using FormulaCompiler
 @testset "FormulaCompiler Integration Tests" begin
     
     # Create test data
-    Random.seed!(42)
+    Random.seed!(06515)
     df = DataFrame(
         x = randn(100),
         y = randn(100),

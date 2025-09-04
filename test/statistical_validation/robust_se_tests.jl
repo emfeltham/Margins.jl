@@ -1,6 +1,6 @@
 # robust_se_tests.jl - Comprehensive Robust SE Integration Tests
 #
-# Phase 3, Tier 4: Robust SE Integration Test Suite
+# Robust SE Integration Test Suite
 #
 # This file integrates robust standard error validation into the main test suite,
 # providing systematic validation of CovarianceMatrices.jl integration across
@@ -17,11 +17,10 @@ using GLM
 include("robust_se_validation.jl")
 include("testing_utilities.jl")
 
-@testset "Phase 3 Tier 4: Robust Standard Errors Integration" begin
-    Random.seed!(42)  # Reproducible testing
+@testset "Robust Standard Errors Integration" begin
+    Random.seed!(06515)  
     
     @testset "Robust SE Framework Tests" begin
-        @info "Testing robust SE framework components"
         
         # Test heteroskedastic data generation
         @testset "Heteroskedastic Data Generation" begin
@@ -196,25 +195,15 @@ include("testing_utilities.jl")
     end
     
     @testset "Robust SE Edge Cases and Error Handling" begin
-        @info "Testing robust SE edge cases and error handling"
-        
         # Test with very small sample
         @testset "Small Sample Robustness" begin
             small_data = make_heteroskedastic_data(n=30, heteroskedasticity_type=:linear)
             model = lm(@formula(y ~ x), small_data)
             
-            if COVARIANCE_MATRICES_AVAILABLE
-                # Should work but might have different properties
-                try
-                    result = population_margins(model, small_data; type=:effects, vars=[:x], vcov=HC1())
-                    result_df = DataFrame(result)
-                    @test all(isfinite, result_df.se)
-                    @test all(result_df.se .> 0)
-                    @info "✓ Small sample robust SE: Working"
-                catch e
-                    @warn "Small sample robust SE failed (acceptable): $(typeof(e))"
-                end
-            end
+            result = population_margins(model, small_data; type=:effects, vars=[:x], vcov=HC1())
+            result_df = DataFrame(result)
+            @test all(isfinite, result_df.se)
+            @test all(result_df.se .> 0)
         end
         
         # Test error handling for invalid cluster variable
@@ -224,6 +213,7 @@ include("testing_utilities.jl")
             
             if COVARIANCE_MATRICES_AVAILABLE
                 # This should fail gracefully
+                # TODO: THIS SHOULD FAIL, AND THE PACKAGE SHOULD JUST BE AVAILABLE
                 try
                     result = population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
                     @warn "Expected error for invalid cluster variable, but none occurred"
@@ -232,24 +222,5 @@ include("testing_utilities.jl")
                 end
             end
         end
-    end
-    
-    @info "🎉 PHASE 3 TIER 4 ROBUST SE INTEGRATION: COMPLETE"
-    @info ""
-    @info "Robust standard errors validation provides critical econometric functionality"
-    @info "with proper CovarianceMatrices.jl integration for real-world applications."
-    @info ""
-    @info "Key achievements:"
-    if COVARIANCE_MATRICES_AVAILABLE
-        @info "  ✅ Sandwich estimators (HC0, HC1, HC2, HC3) validation"
-        @info "  ✅ Clustered standard errors testing" 
-        @info "  ✅ Heteroskedasticity-robust SE validation"
-        @info "  ✅ 2×2 framework compatibility"
-        @info "  ✅ Edge case and error handling"
-        @info "  ✅ Integration with existing test infrastructure"
-    else
-        @info "  ⚠️  CovarianceMatrices.jl not available - install for full robust SE support"
-        @info "  ✅ Framework ready for robust SE integration"
-        @info "  ✅ Graceful degradation when dependencies missing"
     end
 end

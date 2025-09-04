@@ -9,7 +9,7 @@ using Random
 @testset "Core margins() Function Tests" begin
     
     # Create test data
-    Random.seed!(42)
+    Random.seed!(06515)
     df = DataFrame(
         x = randn(100),
         y = randn(100),
@@ -193,7 +193,7 @@ using Random
         
         @testset "Performance with Large Data" begin
             # Test with larger dataset
-            Random.seed!(42)
+            Random.seed!(06515)
             large_df = DataFrame(
                 x = randn(10000),
                 y = randn(10000),

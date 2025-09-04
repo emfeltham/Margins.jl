@@ -20,7 +20,7 @@
 # 3. DESIGN TRADEOFFS:
 #    - Statistical correctness prioritized over allocation elimination
 #    - API usability maintained (DataFrame results, flexible interfaces)
-#    - Graceful degradation when buffers are insufficient
+#    - Graceful degradation when buffers are insufficient (TODO: NO WE WANT REAL ERRORS)
 #    - FormulaCompiler.jl provides zero-allocation primitives underneath
 #
 # 4. PRODUCTION IMPACT:

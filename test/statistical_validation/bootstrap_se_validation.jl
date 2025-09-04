@@ -1,6 +1,6 @@
 # bootstrap_se_validation.jl - Systematic Bootstrap Standard Error Validation
 #
-# Phase 2, Tier 2: Systematic Bootstrap Validation Framework
+# Systematic Bootstrap Validation Framework
 # 
 # This file implements comprehensive bootstrap validation for standard errors
 # across all model types and 2×2 framework quadrants, extending beyond the

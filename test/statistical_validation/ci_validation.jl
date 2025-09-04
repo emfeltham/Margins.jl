@@ -19,7 +19,7 @@ using Margins
 include("testing_utilities.jl")
 
 @testset "CI Statistical Validation - Critical Subset" begin
-    Random.seed!(42)  # Reproducible testing
+    Random.seed!(06515)  
     
     # === TIER 1: CRITICAL MATHEMATICAL CORRECTNESS ===
     @testset "Tier 1: Core Mathematical Correctness (CI Critical)" begin

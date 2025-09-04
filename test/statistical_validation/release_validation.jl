@@ -18,7 +18,7 @@ using Margins
 include("testing_utilities.jl")
 
 @testset "Release Statistical Validation - Complete Suite" begin
-    Random.seed!(42)
+    Random.seed!(06515)
     
     @info "🎯 Starting comprehensive release validation..."
     @info "This includes all statistical correctness tests for production release"

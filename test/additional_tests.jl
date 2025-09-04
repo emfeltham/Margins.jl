@@ -4,7 +4,7 @@
 @testset "AME Additional Tests" begin
     @testset "3-way interaction OLS (all continuous predictors)" begin
         # simulate data
-        Random.seed!(42)
+        Random.seed!(06515)
         n = 500
         x = randn(n)
         d = randn(n)               # now continuous
@@ -50,7 +50,7 @@
 
     @testset "3-way interaction OLS (no repvals)" begin
         # simulate data
-        Random.seed!(42)
+        Random.seed!(06515)
         n = 500
         x = randn(n)
         d = rand(n) .> 0.5       # Bool
@@ -98,7 +98,7 @@
     # 1. Three-way interaction (continuous × Bool × continuous) in OLS
     @testset "3-way interaction OLS" begin
         # simulate
-        Random.seed!(42)
+        Random.seed!(06515)
         n = 500
         x = randn(n)
         d = rand(n) .> 0.5       # Bool

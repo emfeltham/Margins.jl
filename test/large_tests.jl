@@ -1,7 +1,7 @@
 
 @testset "large data OLS (with repvals)" begin
     # simulate
-    Random.seed!(42)
+    Random.seed!(06515)
     n = 2_000_000
     x = randn(n)
     d = rand(n) .> 0.5       # Bool

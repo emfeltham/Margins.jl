@@ -4,7 +4,7 @@ using DataFrames, CategoricalArrays, GLM
 using Margins
 
 @testset "GLM basics: Population and Profile Margins" begin
-    Random.seed!(42)
+    Random.seed!(06515)
     n = 400
     df = DataFrame(
         y = rand(Bool, n),

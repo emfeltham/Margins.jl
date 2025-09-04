@@ -1,6 +1,6 @@
 # categorical_mixture_se_validation.jl - Standard Error Validation for Categorical Mixture Features
 #
-# Phase 2B: Categorical Mixture SE Testing
+# Categorical Mixture SE Testing
 #
 # This file implements comprehensive SE validation for CategoricalMixture specifications,
 # which allow fractional categorical effects (e.g., mix("A" => 0.3, "B" => 0.7)).
@@ -304,7 +304,7 @@ end
 # Test integration with main test suite
 @testset "Categorical Mixture SE Validation" begin
     # Generate consistent test data
-    Random.seed!(42)
+    Random.seed!(06515)
     data = make_categorical_test_data(n=200, seed=42)
     
     @testset "Population Mixture SE Bootstrap Validation" begin

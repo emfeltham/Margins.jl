@@ -1,6 +1,6 @@
 # multi_model_bootstrap_tests.jl - Multi-Model Bootstrap Testing Suite
 #
-# Phase 2, Tier 2: Multi-Model Bootstrap Testing Utilities
+# Multi-Model Bootstrap Testing Utilities
 #
 # This file implements systematic bootstrap validation across different model types:
 # Linear models, GLM (logistic, Poisson), and various complexity levels.
@@ -36,7 +36,7 @@ Comprehensive bootstrap testing across multiple model types and complexities.
 Tests systematic coverage following the pattern from analytical validation.
 """
 function multi_model_bootstrap_test_suite()
-    Random.seed!(42)  # Reproducible results
+    Random.seed!(06515)  # Reproducible results
     
     # Define test model configurations
     test_models = [
@@ -269,7 +269,7 @@ Quick bootstrap validation check for development/CI purposes.
 Tests a subset of models with fewer bootstrap samples.
 """
 function quick_bootstrap_validation_check(; n_bootstrap=100)
-    @info "Quick Bootstrap Validation Check (n_bootstrap=$n_bootstrap)"
+    @debug "Quick Bootstrap Validation Check (n_bootstrap=$n_bootstrap)"
     
     # Test subset of models for speed
     quick_models = [
@@ -299,7 +299,7 @@ function quick_bootstrap_validation_check(; n_bootstrap=100)
     
     success_rate = mean([r.meets_expectation for r in results])
     
-    @info "Quick validation success rate: $(round(success_rate * 100, digits=1))%"
+    @debug "Quick validation success rate: $(round(success_rate * 100, digits=1))%"
     
     return success_rate >= 0.75  # 75% threshold for quick check
 end

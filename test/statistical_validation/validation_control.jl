@@ -63,7 +63,7 @@ function run_development_validation(; focus=:all)
         @info "Running integer variable support validation..."
         # Run subset focusing on integer variables
         @testset "Integer Variable Development Validation" begin
-            Random.seed!(42)
+            Random.seed!(06515)
             include("testing_utilities.jl")
             
             df = make_econometric_data(n=500, seed=123)
@@ -84,7 +84,7 @@ function run_development_validation(; focus=:all)
         @info "Running systematic model coverage validation..."
         # Run subset of systematic model tests
         @testset "Systematic Model Development Validation" begin
-            Random.seed!(42)
+            Random.seed!(06515)
             include("testing_utilities.jl")
             
             df = make_econometric_data(n=400, seed=456)

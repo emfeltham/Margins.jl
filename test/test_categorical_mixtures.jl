@@ -208,7 +208,7 @@ end
     end
     
     @testset "profile_margins() Integration" begin
-        Random.seed!(42)
+        Random.seed!(06515)
         n = 100
         df = DataFrame(
             education = categorical(rand(["high_school", "college", "graduate"], n)),
