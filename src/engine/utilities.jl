@@ -125,69 +125,6 @@ function _average_response_over_rows(compiled, row_buf::Vector{Float64}, β::Vec
 end
 
 """
-    _get_baseline_level(model, var) -> baseline_level
-
-Extract baseline level from model's contrast coding (statistically principled).
-
-This function implements the design decision to use the model's actual contrast
-coding rather than making assumptions from the data.
-
-# Arguments
-- `model`: Fitted statistical model
-- `var::Symbol`: Categorical variable name
-
-# Returns
-- Baseline level used in the model's contrast coding
-
-# Throws
-- `MarginsError`: If baseline level cannot be determined
-
-# Examples
-```julia
-baseline = _get_baseline_level(model, :region)  # Returns "North" if that's the baseline
-```
-"""
-function _get_baseline_level(model, var::Symbol)
-    # Extract baseline from model's contrast system
-    if hasfield(typeof(model), :mf) && hasfield(typeof(model.mf), :contrasts)
-        if haskey(model.mf.contrasts, var)
-            contrast = model.mf.contrasts[var]
-            if contrast isa StatsModels.DummyCoding
-                return contrast.base
-            elseif contrast isa StatsModels.EffectsCoding  
-                return contrast.base
-            elseif contrast isa StatsModels.HelmertCoding
-                return contrast.base
-            elseif contrast isa StatsModels.SeqDiffCoding
-                return contrast.base
-            # Add other contrast types as needed
-            else
-                throw(MarginsError("Unsupported contrast type $(typeof(contrast)) for variable $var"))
-            end
-        end
-    end
-    
-    # Fallback: For CategoricalArrays in GLM, the first level is typically the baseline
-    # Extract the variable from the original data to get its levels
-    if hasfield(typeof(model), :mf) && hasfield(typeof(model.mf), :data)
-        data = model.mf.data
-        if haskey(data, var)
-            col = data[var]
-            if isa(col, CategoricalVector) || isa(col, CategoricalArray)
-                # First level is the baseline by GLM convention
-                levels_list = levels(col)
-                if !isempty(levels_list)
-                    return levels_list[1]
-                end
-            end
-        end
-    end
-    
-    throw(MarginsError("Could not determine baseline level for variable $var from model contrasts. " *
-                      "Please ensure the model has proper contrast coding information."))
-end
-
-"""
     _is_continuous_variable(col) -> Bool
 
 Determine if a data column represents a continuous variable.

@@ -17,7 +17,7 @@ Built on FormulaCompiler.jl for high-performance zero-allocation evaluation.
 # Core API
 
 - `population_margins(model, data; type, vars, scale, backend, scenarios, groups, measure, vcov)`: Population-level analysis
-- `profile_margins(model, data; at, type, vars, scale, backend, measure, vcov)`: Profile-level analysis  
+- `profile_margins(model, data, reference_grid; type, vars, scale, backend, measure, vcov)`: Profile-level analysis  
 - `MarginsResult`: Result container with Tables.jl interface
 
 # Examples
@@ -32,7 +32,7 @@ model = lm(@formula(y ~ x1 + x2), data)
 result = population_margins(model, data; type=:effects)
 
 # Marginal effects at sample means (MEM)
-result = profile_margins(model, data; type=:effects, at=:means)
+result = profile_margins(model, data, means_grid(data); type=:effects)
 
 # Convert to DataFrame
 df = DataFrame(result)
@@ -43,6 +43,8 @@ module Margins
 # Dependencies
 using Tables, DataFrames, StatsModels, GLM
 using FormulaCompiler
+using FormulaCompiler: _get_baseline_level, CategoricalMixture, MixtureWithLevels, create_balanced_mixture, validate_mixture_against_data, mixture_to_scenario_value
+import FormulaCompiler: mix
 using LinearAlgebra: dot
 using Statistics: mean
 using CategoricalArrays
@@ -56,6 +58,7 @@ const VERSION = v"2.0.0"
 export population_margins, profile_margins, MarginsResult
 
 # Categorical mixture utilities
+# Re-export FormulaCompiler's native mixture functionality
 export CategoricalMixture, mix
 
 # Reference grid builders (NEW - AsBalanced support)
@@ -66,7 +69,8 @@ include("types.jl")
 include("core/validation.jl")
 include("computation/predictions.jl")
 include("computation/statistics.jl")
-include("features/categorical_mixtures.jl")
+# categorical_mixtures.jl functionality now provided by FormulaCompiler
+# include("features/categorical_mixtures.jl")  # REMOVED - now using FormulaCompiler's native implementation
 include("engine/measures.jl")  # Measure transformation utilities
 include("engine/core.jl")
 include("engine/utilities.jl") 

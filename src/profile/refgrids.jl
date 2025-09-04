@@ -520,7 +520,7 @@ function balanced_grid(data; vars...)
         
         if spec === :all
             # Balance all levels of this categorical variable
-            typical_values[var] = _create_balanced_mixture(col)
+            typical_values[var] = create_balanced_mixture(col)
         elseif spec isa Vector
             # Balance only specified levels
             if eltype(col) <: Bool && spec isa Vector{String}
