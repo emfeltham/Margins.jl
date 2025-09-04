@@ -8,7 +8,7 @@
 using Margins, DataFrames, GLM, CategoricalArrays, Random
 using Printf, Statistics
 
-Random.seed!(42)
+Random.seed!(06515)
 
 println("=== Stata to Margins.jl Migration Guide ===")
 println("Direct command equivalency for econometric analysis")

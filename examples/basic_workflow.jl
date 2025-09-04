@@ -9,7 +9,7 @@ using Margins, DataFrames, GLM, Random
 using Statistics
 
 # Set seed for reproducible results
-Random.seed!(42)
+Random.seed!(06515)
 
 println("=== Margins.jl Basic Workflow ===")
 println("Demonstrating the 2×2 framework: Population vs Profile × Effects vs Predictions")

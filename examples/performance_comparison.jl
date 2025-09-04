@@ -10,7 +10,7 @@ using Margins, DataFrames, GLM, Random
 using BenchmarkTools, Statistics
 using Printf
 
-Random.seed!(42)
+Random.seed!(06515)
 
 println("=== Margins.jl Performance Analysis ===")
 println("Demonstrating O(1) profile vs O(n) population scaling")
