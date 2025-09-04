@@ -61,7 +61,8 @@ for (i, row) in enumerate(eachrow(reference_grid_in_profile))
     println("  Row $i: $row")
 end
 
-result = profile_margins(model, data; at=:means, type=:effects, vars=[:x1])
+grid = means_grid(data)
+result = profile_margins(model, data, grid, type=:effects, vars=[:x1])
 df = DataFrame(result)
 println("Number of results: ", nrow(df))
 println("First few estimates: ", df.estimate[1:min(5, end)])
