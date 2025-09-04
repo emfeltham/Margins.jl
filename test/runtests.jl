@@ -12,29 +12,29 @@ using Distributions
 
 # Core functionality tests
 @testset "Core Functionality" begin
-    include("test_glm_basic.jl")
-    include("test_profiles.jl")
-    include("test_grouping.jl")
-    include("test_contrasts.jl")
-    include("test_vcov.jl")
-    include("test_errors.jl")
-    include("test_automatic_variable_detection.jl")
-    include("test_mixedmodels.jl")
+    include("core/test_glm_basic.jl")
+    include("core/test_profiles.jl")
+    include("core/test_grouping.jl")
+    include("core/test_contrasts.jl")
+    include("core/test_vcov.jl")
+    include("core/test_errors.jl")
+    include("core/test_automatic_variable_detection.jl")
+    include("core/test_mixedmodels.jl")
 end
 
-# Advanced Features (Phase 1 additions)
+# Advanced Features
 @testset "Advanced Features" begin
-    include("test_elasticities.jl")
-    include("test_categorical_mixtures.jl") 
-    include("test_bool_profiles.jl")
-    include("test_table_profiles.jl")
-    include("test_prediction_scales.jl")
+    include("features/test_elasticities.jl")
+    include("features/test_categorical_mixtures.jl") 
+    include("features/test_bool_profiles.jl")
+    include("features/test_table_profiles.jl")
+    include("features/test_prediction_scales.jl")
 end
 
 # Performance (critical for regression prevention)
 @testset "Performance" begin
-    include("test_performance.jl")
-    include("test_zero_allocations.jl")
+    include("performance/test_performance.jl")
+    include("performance/test_zero_allocations.jl")
 end
 
 # Statistical validation tests
