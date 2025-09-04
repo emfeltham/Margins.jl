@@ -110,16 +110,8 @@ function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov)
     η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
     row_buf = Vector{Float64}(undef, n_cols)       # Buffer for design matrix rows
     
-    # Handle vcov parameter (function or Symbol)
-    if vcov isa Symbol
-        if vcov === :model
-            actual_vcov = GLM.vcov
-        else
-            throw(ArgumentError("Unsupported vcov Symbol :$vcov. Use :model for GLM.vcov or pass a function directly."))
-        end
-    else
-        actual_vcov = vcov
-    end
+    # vcov should always be a function or CovarianceMatrices estimator
+    actual_vcov = vcov
     
     # Handle both functions (GLM.vcov) and CovarianceMatrices estimators (HC1())
     if isa(actual_vcov, Function)

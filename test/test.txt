@@ -208,3 +208,773 @@ Precompiling project for configuration --code-coverage=none --color=auto --check
 Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
    objective: 126.3474937319155[K[A
 [K[AMinimizing 73    Time: 0:00:00 ( 4.34 ms/it)[K
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_sample_with_replacement(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:26 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_margins_computation(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:49 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_margins_computation), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:49 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_bootstrap_se_agreement(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:131 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.validate_bootstrap_se_agreement), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:131 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_population_effects(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:171 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_population_effects), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:171 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_population_predictions(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:209 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_population_predictions), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:209 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_profile_effects(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:241 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_profile_effects), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:241 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_profile_predictions(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:285 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_profile_predictions), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:285 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_2x2_framework(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:331 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_2x2_framework), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:331 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_sample_with_replacement(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:26 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_margins_computation(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:49 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_margins_computation), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:49 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_bootstrap_se_agreement(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:131 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.validate_bootstrap_se_agreement), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:131 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_population_effects(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:171 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_population_effects), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:171 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_population_predictions(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:209 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_population_predictions), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:209 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_profile_effects(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:241 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_profile_effects), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:241 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_profile_predictions(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:285 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_profile_predictions), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:285 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition bootstrap_validate_2x2_framework(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:331 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.bootstrap_validate_2x2_framework), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:331 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+[ Info: Testing bootstrap validation framework components
+[ Info: ✓ Bootstrap sampling utilities working
+[ Info: ✓ SE agreement validation working
+[ Info: Running multi-model bootstrap validation (reduced samples for speed)
+[ Info: ✓ Multi-model bootstrap validation: 8/8 models successful
+[ Info:   Mean agreement rate: 78.1%
+[ Info: ✓ Linear model bootstrap validation: 3/3 with good agreement
+[ Info: ✓ GLM bootstrap validation: 5/5 successful
+[ Info: Running categorical effects bootstrap validation
+[ Info: ✓ Categorical bootstrap validation: 0.0% models successful
+[ Info: Running quick bootstrap validation check
+[ Info: Quick Bootstrap Validation Check (n_bootstrap=30)
+[ Info: Quick validation success rate: 50.0%
+┌ Warning: ⚠️  Quick bootstrap check: Mixed results (expected in some environments)
+└ @ Main ~/.julia/dev/Margins/test/statistical_validation/bootstrap_validation_tests.jl:153
+Test Summary:      | Pass  Total   Time
+Core Functionality |  113    113  36.0s
+Test Summary:     | Pass  Total   Time
+Advanced Features |  239    239  18.6s
+Test Summary: | Pass  Total  Time
+Performance   |   30     30  8.8s
+Logistic Regression: SE Chain Rule Verification: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:172
+  Got exception outside of a @test
+  MethodError: no method matching profile_margins(::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, ::DataFrame; type::Symbol, vars::Vector{Symbol}, at::Dict{Symbol, Float64}, scale::Symbol)
+  The function `profile_margins` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    profile_margins(::Any, ::Any, !Matched::DataFrame; type, vars, scale, backend, measure, ci_alpha, vcov) got unsupported keyword argument "at"
+     @ Margins ~/.julia/dev/Margins/src/profile/core.jl:270
+  
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:197 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:173 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:172 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Log Transformation: y ~ log(x): Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:243
+  Got exception outside of a @test
+  DomainError with -6.0554544523933395e-6:
+  log was called with a negative real argument but will only return a complex result if called with a complex argument. Try log(Complex(x)).
+  Stacktrace:
+    [1] throw_complex_domainerror(f::Symbol, x::Float64)
+      @ Base.Math ./math.jl:33
+    [2] _log
+      @ ./special/log.jl:295 [inlined]
+    [3] log(x::Float64)
+      @ Base.Math ./special/log.jl:261
+    [4] execute_op
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:238 [inlined]
+    [5] execute_ops_recursive
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:181 [inlined]
+    [6] execute_ops_recursive (repeats 2 times)
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:182 [inlined]
+    [7] execute_ops
+      @ ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:167 [inlined]
+    [8] (::FormulaCompiler.UnifiedCompiled{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.UnaryOp{:log, 2, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{3, 2}}, 3, 2})(output::Vector{Float64}, data::@NamedTuple{x::FormulaCompiler.FDOverrideVector}, row_idx::Int64)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/compilation/execution.jl:92
+    [9] macro expansion
+      @ ~/.julia/dev/FormulaCompiler/src/evaluation/derivatives/finite_diff.jl:414 [inlined]
+   [10] _fd_column_auto!(Jk::Vector{Float64}, de::FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.UnaryOp{:log, 2, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{3, 2}}, 3, 2, @NamedTuple{x::Vector{Float64}}, @NamedTuple{x::FormulaCompiler.FDOverrideVector}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}, row::Int64, var_idx::Int64)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/evaluation/derivatives/finite_diff.jl:373
+   [11] fd_jacobian_column!(Jk::Vector{Float64}, de::FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.UnaryOp{:log, 2, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{3, 2}}, 3, 2, @NamedTuple{x::Vector{Float64}}, @NamedTuple{x::FormulaCompiler.FDOverrideVector}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}, row::Int64, var::Symbol; step::Symbol)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/evaluation/derivatives/finite_diff.jl:366
+   [12] fd_jacobian_column!
+      @ ~/.julia/dev/FormulaCompiler/src/evaluation/derivatives/finite_diff.jl:352 [inlined]
+   [13] me_eta_grad_beta!(gβ::Vector{Float64}, de::FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.UnaryOp{:log, 2, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{3, 2}}, 3, 2, @NamedTuple{x::Vector{Float64}}, @NamedTuple{x::FormulaCompiler.FDOverrideVector}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}, β::Vector{Float64}, row::Int64, var::Symbol)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/evaluation/derivatives/marginal_effects.jl:261
+   [14] _mem_continuous_and_categorical_refgrid(engine::Margins.MarginsEngine{IdentityLink}, reference_grid::DataFrame; scale::Symbol, backend::Symbol, measure::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:836
+   [15] _profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data_nt::@NamedTuple{x::Vector{Float64}, z::Vector{Float64}, y::Vector{Float64}}, reference_grid::DataFrame, type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, vcov::typeof(vcov), at_spec::DataFrame, ci_alpha::Float64)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:169
+   [16] profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, reference_grid::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, ci_alpha::Float64, vcov::Function)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:295
+   [17] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:275 [inlined]
+   [18] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [19] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:245 [inlined]
+   [20] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [21] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:243 [inlined]
+   [22] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [23] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+   [24] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [25] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [26] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [27] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [28] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [29] top-level scope
+      @ none:6
+   [30] eval
+      @ ./boot.jl:430 [inlined]
+   [31] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [32] _start()
+      @ Base ./client.jl:531
+Poisson Regression: y ~ x + z: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:384
+  Got exception outside of a @test
+  MethodError: no method matching profile_margins(::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Poisson{Float64}, LogLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, ::DataFrame; type::Symbol, vars::Vector{Symbol}, at::Dict{Symbol, Float64}, scale::Symbol)
+  The function `profile_margins` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    profile_margins(::Any, ::Any, !Matched::DataFrame; type, vars, scale, backend, measure, ci_alpha, vcov) got unsupported keyword argument "at"
+     @ Margins ~/.julia/dev/Margins/src/profile/core.jl:270
+  
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:414 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:385 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:336 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Bootstrap Validation Edge Cases: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/bootstrap_validation_tests.jl:157
+  Got exception outside of a @test
+  ArgumentError: Could not find categorical variable z in model formula terms. Ensure the variable is categorical and present in the model.
+  Stacktrace:
+    [1] _get_baseline_level(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, var::Symbol)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/core/utilities.jl:459
+    [2] _compute_categorical_baseline_ame(engine::Margins.MarginsEngine{IdentityLink}, var::Symbol, rows::UnitRange{Int64}, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:634
+    [3] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{IdentityLink}, data_nt::@NamedTuple{x::Vector{Float64}, z::Vector{Float64}, y::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:306
+    [4] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:158
+    [5] bootstrap_validate_population_effects(model_func::typeof(lm), formula::FormulaTerm{Term, Term}, data::DataFrame; vars::Nothing, n_bootstrap::Int64)
+      @ Main ~/.julia/dev/Margins/test/statistical_validation/bootstrap_se_validation.jl:179
+    [6] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/bootstrap_validation_tests.jl:162 [inlined]
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [8] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/bootstrap_validation_tests.jl:158 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [10] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/bootstrap_validation_tests.jl:24
+   [11] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [12] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:718 [inlined]
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [14] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:718 [inlined]
+   [15] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [16] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+   [17] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [18] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [19] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [20] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [21] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [22] top-level scope
+      @ none:6
+   [23] eval
+      @ ./boot.jl:430 [inlined]
+   [24] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [25] _start()
+      @ Base ./client.jl:531
+Basic Robust SE Integration: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:50
+  Got exception outside of a @test
+  ArgumentError: vcov failed when applied to provided model: MethodError(StatsAPI.vcov, (:model, StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}
+  
+  y ~ 1 + x + z
+  
+  Coefficients:
+  ────────────────────────────────────────────────────────────────────────
+                  Coef.  Std. Error      t  Pr(>|t|)  Lower 95%  Upper 95%
+  ────────────────────────────────────────────────────────────────────────
+  (Intercept)  1.92601    0.028243   68.19    <1e-99   1.87031    1.9817
+  x            0.514739   0.0288924  17.82    <1e-42   0.457761   0.571717
+  z            0.336279   0.0279023  12.05    <1e-24   0.281253   0.391304
+  ────────────────────────────────────────────────────────────────────────), 0x0000000000006ae6)
+  Stacktrace:
+    [1] validate_vcov_parameter(vcov::Symbol, model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}})
+      @ Margins ~/.julia/dev/Margins/src/core/validation.jl:212
+    [2] _validate_population_inputs(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, measure::Symbol, groups::Nothing, vcov::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:242
+    [3] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:131
+    [4] population_margins
+      @ ~/.julia/dev/Margins/src/population/core.jl:123 [inlined]
+    [5] validate_robust_se_integration(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, robust_vcov::HR1; tolerance::Float64)
+      @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:105
+    [6] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:54 [inlined]
+    [7] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [8] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:51 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [10] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:24 [inlined]
+   [11] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [12] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+   [13] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [14] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:727 [inlined]
+   [15] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [16] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:727 [inlined]
+   [17] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [18] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+   [19] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [20] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [21] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [22] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [23] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [24] top-level scope
+      @ none:6
+   [25] eval
+      @ ./boot.jl:430 [inlined]
+   [26] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [27] _start()
+      @ Base ./client.jl:531
+  
+  caused by: MethodError: no method matching vcov(::Symbol, ::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}})
+  The function `vcov` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    vcov(!Matched::CovarianceMatrices.AVarEstimator, ::RegressionModel; dofadjust, kwargs...)
+     @ GLMExt ~/.julia/packages/CovarianceMatrices/4apvl/ext/GLMExt.jl:272
+    vcov(!Matched::CovarianceMatrices.AVarEstimator, ::Any)
+     @ CovarianceMatrices ~/.julia/packages/CovarianceMatrices/4apvl/src/api.jl:38
+    vcov(!Matched::Union{StatsModels.TableRegressionModel, StatsModels.TableStatisticalModel}, ::Any...; kwargs...)
+     @ StatsModels ~/.julia/packages/StatsModels/YNwJ1/src/statsmodel.jl:28
+    ...
+  
+  Stacktrace:
+    [1] #invokelatest#2
+      @ ./essentials.jl:1055 [inlined]
+    [2] invokelatest
+      @ ./essentials.jl:1052 [inlined]
+    [3] validate_vcov_parameter(vcov::Symbol, model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}})
+      @ Margins ~/.julia/dev/Margins/src/core/validation.jl:205
+    [4] _validate_population_inputs(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, measure::Symbol, groups::Nothing, vcov::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:242
+    [5] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:131
+    [6] population_margins
+      @ ~/.julia/dev/Margins/src/population/core.jl:123 [inlined]
+    [7] validate_robust_se_integration(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, robust_vcov::HR1; tolerance::Float64)
+      @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:105
+    [8] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:54 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [10] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:51 [inlined]
+   [11] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [12] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:24 [inlined]
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [14] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+   [15] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [16] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:727 [inlined]
+   [17] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [18] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:727 [inlined]
+   [19] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [20] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:24
+   [21] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [22] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:43 [inlined]
+   [23] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [24] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:42
+   [25] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [26] top-level scope
+      @ none:6
+   [27] eval
+      @ ./boot.jl:430 [inlined]
+   [28] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [29] _start()
+      @ Base ./client.jl:531
+Linear Model Sandwich Estimators: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:80
+  Expression: sandwich_results.overall_success
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:80 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:75 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:70 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+Linear Model Sandwich Estimators: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:81
+  Expression: sandwich_results.n_successful >= 2
+   Evaluated: 0 >= 2
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:81 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:75 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:70 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+GLM Sandwich Estimators: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:102
+  Expression: sandwich_results.overall_success
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:102 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:97 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:70 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+Linear Model with Heteroskedasticity: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:300
+  Expression: sandwich_results.overall_success
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:300 [inlined]
+ [3] macro expansion
+   @ [ Info: Testing bootstrap validation edge cases
+[ Info: 🎉 PHASE 2 TIER 2 BOOTSTRAP VALIDATION: COMPLETE
+[ Info: 
+[ Info: Bootstrap SE validation provides empirical verification complementing
+[ Info: the analytical SE validation from Phase 1 Tier 1.
+[ Info: 
+[ Info: Key achievements:
+[ Info:   ✅ Multi-model bootstrap framework (linear, logistic, Poisson)
+[ Info:   ✅ Profile and population margins bootstrap validation
+[ Info:   ✅ Categorical effects bootstrap testing
+[ Info:   ✅ Systematic 2×2 framework coverage
+[ Info:   ✅ Configurable tolerance and sample size
+[ Info:   ✅ Integration with existing test infrastructure
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+[ Info: Testing robust SE framework components
+[ Info: ✓ Heteroskedastic data generation working
+[ Info: Running comprehensive sandwich estimator tests
+[ Info: ✓ Linear model sandwich estimators: 0/4 successful
+[ Info: ✓ GLM sandwich estimators: 0/4 successful
+[ Info: Running clustered standard errors tests
+┌ Warning: ⚠️  Clustered SE test failed: UndefVarError(:CRHC0, Main)
+└ @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:136
+[ Info: Running comprehensive robust SE validation suite
+[ Info: ✓ Comprehensive robust SE suite: 0/3 tests successful
+[ Info:   Overall success rate: 0.0%
+[ Info: Testing robust SE edge cases and error handling
+[ Info: ✓ Small sample robust SE: Working
+[ Info: ✓ Invalid cluster variable handled gracefully: UndefVarError
+[ Info: 🎉 PHASE 3 TIER 4 ROBUST SE INTEGRATION: COMPLETE
+[ Info: 
+[ Info: Robust standard errors validation provides critical econometric functionality
+[ Info: with proper CovarianceMatrices.jl integration for real-world applications.
+[ Info: 
+[ Info: Key achievements:
+[ Info:   ✅ Sandwich estimators (HC0, HC1, HC2, HC3) validation
+[ Info:   ✅ Clustered standard errors testing
+[ Info:   ✅ Heteroskedasticity-robust SE validation
+[ Info:   ✅ 2×2 framework compatibility
+[ Info:   ✅ Edge case and error handling
+[ Info:   ✅ Integration with existing test infrastructure
+WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_simple_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition make_glm_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_glm_test_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:125 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_2x2_framework_quadrants(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_2x2_framework_quadrants), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:174 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition test_backend_consistency(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.test_backend_consistency), Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:340 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:33 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_logistic_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:72 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_poisson_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:146 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition compute_population_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:208 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition verify_linear_se_consistency(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:228 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_linear_se_consistency), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:228 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition verify_glm_se_chain_rule(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:270 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_glm_se_chain_rule), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:270 overwritten on the same line (check for duplicate calls to `include`).
+ERROR: LoadError: Some tests did not pass: 683 passed, 8 failed, 5 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/runtests.jl:41
+~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] run_comprehensive_robust_se_test_suite(; verbose::Bool)
+   @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:290
+Linear Model with Heteroskedasticity: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:301
+  Expression: sandwich_results.n_successful >= 3
+   Evaluated: 0 >= 3
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:301 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] run_comprehensive_robust_se_test_suite(; verbose::Bool)
+   @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:290
+GLM Logistic with Robust SEs: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:343
+  Expression: sandwich_results.overall_success
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:343 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] run_comprehensive_robust_se_test_suite(; verbose::Bool)
+   @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_validation.jl:333
+Comprehensive Robust SE Test Suite: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:177
+  Expression: results.overall_success_rate >= 0.6
+   Evaluated: 0.0 >= 0.6
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:177 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:165 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+Comprehensive Robust SE Test Suite: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:178
+  Expression: results.n_successful >= 1
+   Evaluated: 0 >= 1
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:178 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:165 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:21
+Test Summary:                                                   | Pass  Fail  Error  Total     Time
+Statistical Correctness                                         |  683     8      5    696  1m43.0s
+  Backend Consistency Tests - AD vs FD Validation               |   95                  95     8.6s
+  Comprehensive Statistical Validation - 2×2 Framework Coverage |  588     8      5    601  1m33.0s
+    Tier 1: Direct Coefficient Cases - All 2×2 Quadrants        |   18                  18     1.0s
+    Tier 1A: Analytical SE Validation - Linear Models           |   10                  10     0.6s
+    Tier 1B: Analytical SE Validation - GLM Chain Rules         |    9            1     10     2.2s
+      Logistic Regression: SE Chain Rule Verification           |    4            1      5     1.8s
+      Poisson Regression: SE Chain Rule Verification            |    5                   5     0.4s
+    Tier 2: Function Transformations - 2×2 Coverage             |   12            1     13     2.5s
+      Log Transformation: y ~ log(x)                            |    4            1      5     1.2s
+      Quadratic: y ~ x + x²                                     |    8                   8     1.3s
+    Tier 3: GLM Chain Rules - 2×2 Coverage                      |   16            1     17     0.8s
+      Logistic Regression: y ~ x + z                            |   10                  10     0.3s
+      Poisson Regression: y ~ x + z                             |    6            1      7     0.5s
+    Tier 4: Systematic Model Coverage - FormulaCompiler Style   |  298                 298    49.0s
+    Tier 5: Edge Cases and Statistical Robustness               |    8                   8     0.0s
+    Tier 6: Integer Variable Systematic Coverage - CRITICAL     |   47                  47    10.4s
+    Tier 7: Bootstrap SE Validation - Empirical Verification    |   63            1     64    11.8s
+      Phase 2 Tier 2: Systematic Bootstrap SE Validation        |   63            1     64    11.4s
+        Bootstrap Validation Framework Tests                    |    6                   6     0.6s
+        Multi-Model Bootstrap Validation                        |   48                  48     7.1s
+        Categorical Effects Bootstrap Validation                |    8                   8     3.4s
+        Quick Bootstrap Validation Check                        |    1                   1     0.3s
+        Bootstrap Validation Edge Cases                         |                 1      1     0.1s
+    Tier 8: Robust SE Integration - Econometric Functionality   |   26     8      1     35     3.8s
+      Phase 3 Tier 4: Robust Standard Errors Integration        |   26     8      1     35     2.4s
+        Robust SE Framework Tests                               |   15            1     16     0.3s
+          Heteroskedastic Data Generation                       |   15                  15     0.1s
+          Basic Robust SE Integration                           |                 1      1     0.1s
+        Comprehensive Sandwich Estimator Testing                |          3             3     0.7s
+          Linear Model Sandwich Estimators                      |          2             2     0.3s
+          GLM Sandwich Estimators                               |          1             1     0.4s
+        Clustered Standard Errors Testing                       |                        0     0.2s
+        Comprehensive Robust SE Test Suite                      |    9     5            14     0.0s
+          Linear Model with Heteroskedasticity                  |          2             2     0.0s
+          GLM Logistic with Robust SEs                          |          1             1     0.0s
+          Clustered Standard Errors                             |                        0     0.0s
+        Robust SE Edge Cases and Error Handling                 |    2                   2     1.2s
+    Tier 9: Specialized SE Cases - Advanced Edge Cases          |   81                  81    10.7s
+ERROR: Package Margins errored during testing
+Stacktrace:
+ [1] pkgerror(msg::String)
+   @ Pkg.Types ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Types.jl:68
+ [2] test(ctx::Pkg.Types.Context, pkgs::Vector{Pkg.Types.PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+   @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:2111
+ [3] test
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1996 [inlined]
+ [4] test(ctx::Pkg.Types.Context, pkgs::Vector{Pkg.Types.PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Cmd, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:475
+ [5] test(pkgs::Vector{Pkg.Types.PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:159
+ [6] test(pkgs::Vector{Pkg.Types.PackageSpec})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:148
+ [7] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::Pkg.Types.PackageMode, subdir::Nothing, kwargs::@Kwargs{})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:174
+ [8] test()
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:165
+ [9] top-level scope
+   @ none:1

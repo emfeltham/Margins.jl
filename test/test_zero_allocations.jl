@@ -60,6 +60,10 @@ using Margins
         # Benchmark the allocation count 
         bench = @benchmark population_margins($model, $data; backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
         
+        min_allocs = minimum(bench).allocs
+        min_time = minimum(bench).time / 1e9  # Convert to seconds
+        @debug "FD backend allocation performance" backend=:fd min_allocations=min_allocs threshold=10000 passes_test=(min_allocs < 10000) min_time_sec=min_time
+        
         # After warmup, :fd backend should achieve much reduced allocations (target is significant reduction)
         # Note: Complete zero allocations may not be achievable due to DataFrame creation and other infrastructure
         @test minimum(bench).allocs < 10000  # Relaxed from zero to a reasonable target
@@ -72,6 +76,10 @@ using Margins
         # Benchmark the allocation count
         bench = @benchmark population_margins($model, $data; backend=:ad, vars=[:x1, :x2]) samples=100 evals=1
         
+        min_allocs = minimum(bench).allocs
+        min_time = minimum(bench).time / 1e9  # Convert to seconds
+        @debug "AD backend allocation performance" backend=:ad min_allocations=min_allocs threshold=200000 passes_test=(min_allocs < 200000) min_time_sec=min_time
+        
         # AD backend should have reasonable allocations (no recompilation after warmup)
         @test minimum(bench).allocs < 200000  # Allow AD-related allocations but test for no recompilation
     end
@@ -83,6 +91,10 @@ using Margins
         # Benchmark the allocation count
         bench = @benchmark profile_margins($model, $data, means_grid($data); backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
         
+        min_allocs = minimum(bench).allocs
+        min_time = minimum(bench).time / 1e9  # Convert to seconds
+        @debug "Profile FD backend allocation performance" backend=:fd min_allocations=min_allocs threshold=300000 passes_test=(min_allocs < 300000) min_time_sec=min_time
+        
         # Profile margins with :fd should achieve reduced allocations after warmup
         @test minimum(bench).allocs < 300000  # Reasonable target given profile grid creation
     end
@@ -93,6 +105,10 @@ using Margins
         
         # Benchmark the allocation count
         bench = @benchmark profile_margins($model, $data, means_grid($data); backend=:ad, vars=[:x1, :x2]) samples=100 evals=1
+        
+        min_allocs = minimum(bench).allocs
+        min_time = minimum(bench).time / 1e9  # Convert to seconds
+        @debug "Profile AD backend allocation performance" backend=:ad min_allocations=min_allocs threshold=350000 passes_test=(min_allocs < 350000) min_time_sec=min_time
         
         # Profile margins with :ad should have reasonable allocations
         @test minimum(bench).allocs < 350000  # Allow AD-related allocations

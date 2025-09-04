@@ -35,10 +35,14 @@ include("testing_utilities.jl")
         
         for (name, model) in test_models
             @testset "$(name) - Full 2×2 Backend Consistency" begin
+                @debug "Testing backend consistency for $name" typeof(model)
+                
                 # Use the comprehensive backend consistency test from utilities
                 consistency_result = test_backend_consistency(model, df; 
                                                            rtol_estimate=1e-8,
                                                            rtol_se=1e-6)
+                
+                @debug "Backend consistency results" name=name all_consistent=consistency_result.all_consistent n_successful=consistency_result.n_successful n_total=consistency_result.n_total
                 
                 @test consistency_result.all_consistent
                 @test consistency_result.all_estimates_agree
@@ -51,14 +55,17 @@ include("testing_utilities.jl")
                         @test result.estimates_agree
                         @test result.ses_agree
                         
+                        @debug "Quadrant backend agreement" quadrant=quadrant_name max_estimate_diff=result.max_estimate_diff max_se_diff=result.max_se_diff estimates_agree=result.estimates_agree ses_agree=result.ses_agree
+                        
                         # Check maximum differences for monitoring
                         if result.max_estimate_diff > 1e-12
-                            # Difference noted but within acceptable tolerance for testing
+                            @debug "Notable estimate difference (within tolerance)" quadrant=quadrant_name diff=result.max_estimate_diff
                         end
                         if result.max_se_diff > 1e-10  
-                            # SE difference noted but within acceptable tolerance for testing
+                            @debug "Notable SE difference (within tolerance)" quadrant=quadrant_name diff=result.max_se_diff
                         end
                     else
+                        @debug "Quadrant failed" quadrant=quadrant_name error=get(result, :error, "Unknown error")
                         @error "$(quadrant_name) failed for $name: $(get(result, :error, "Unknown error"))"
                     end
                 end

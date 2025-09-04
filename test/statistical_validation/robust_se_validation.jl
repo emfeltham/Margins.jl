@@ -101,8 +101,8 @@ model-based SEs when heteroskedasticity is present.
 - `NamedTuple` with validation results
 """
 function validate_robust_se_integration(model, data, robust_vcov; tolerance=0.05)
-    # Get model-based SEs
-    model_result = population_margins(model, data; type=:effects, vars=[:x], vcov=:model)
+    # Get model-based SEs (using default GLM.vcov)
+    model_result = population_margins(model, data; type=:effects, vars=[:x])
     model_ses = DataFrame(model_result).se
     
     # Get robust SEs
@@ -234,7 +234,7 @@ function test_clustered_se_validation(model, data, cluster_var)
         clustered_ses = DataFrame(clustered_result).se
         
         # Compare to model-based SEs
-        model_result = population_margins(model, data; type=:effects, vars=[:x], vcov=:model)
+        model_result = population_margins(model, data; type=:effects, vars=[:x])
         model_ses = DataFrame(model_result).se
         
         # Clustered SEs should typically be larger than model SEs when clustering matters

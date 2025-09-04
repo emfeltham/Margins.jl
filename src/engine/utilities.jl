@@ -195,7 +195,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
         return (empty_df, Matrix{Float64}(undef, 0, length(engine.β)))
     end
     
-    # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
+    # PRE-ALLOCATE results DataFrame to avoid dynamic growth
     results = DataFrame(
         term = Vector{String}(undef, total_vars),
         estimate = Vector{Float64}(undef, total_vars), 

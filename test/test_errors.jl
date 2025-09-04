@@ -16,40 +16,47 @@ using Margins
 
     # Test invalid type parameter
     @testset "Invalid type parameter" begin
+        @debug "Testing invalid type parameter error handling" test_input=:invalid expected_error=ArgumentError
         @test_throws ArgumentError population_margins(m, df; type=:invalid)
         @test_throws ArgumentError profile_margins(m, df, means_grid(df); type=:invalid)
     end
 
     # Test invalid scale parameter (deprecated target parameter) 
     @testset "Invalid scale parameter (deprecated target)" begin
+        @debug "Testing deprecated target parameter error handling" test_input=:invalid expected_error=MethodError
         @test_throws MethodError population_margins(m, df; type=:effects, target=:invalid)  # target param no longer exists
     end
 
     # Test invalid scale parameter
     @testset "Invalid scale parameter" begin
+        @debug "Testing invalid scale parameter error handling" test_input=:invalid expected_error=ArgumentError
         @test_throws ArgumentError population_margins(m, df; type=:predictions, scale=:invalid)
     end
 
     # Test empty vars
     @testset "Empty vars parameter" begin
+        @debug "Testing empty vars parameter error handling" test_input=Symbol[] expected_error=ArgumentError
         # Empty vars should throw informative error
         @test_throws ArgumentError population_margins(m, df; type=:effects, vars=Symbol[])
     end
 
     # Test invalid variable names
     @testset "Invalid variable names" begin
+        @debug "Testing invalid variable names error handling" test_input=[:nonexistent] expected_error=Margins.MarginsError
         @test_throws Margins.MarginsError population_margins(m, df; type=:effects, vars=[:nonexistent])
     end
 
     # Test mismatched model and data
     @testset "Mismatched model and data" begin
         df_wrong = DataFrame(a=randn(n), b=randn(n))
+        @debug "Testing mismatched model and data error handling" model_vars=[:x,:z] data_vars=names(df_wrong) expected_error=Exception
         @test_throws Exception population_margins(m, df_wrong; type=:effects)
     end
 
     # Test invalid reference grid for profile_margins
     @testset "Invalid reference grid" begin
         invalid_grid = DataFrame(nonexistent_var=[1.0])  # Variable not in data
+        @debug "Testing invalid reference grid error handling" grid_vars=names(invalid_grid) data_vars=names(df) expected_error=Exception
         @test_throws Exception profile_margins(m, df, invalid_grid; type=:effects)
     end
 

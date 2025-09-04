@@ -19,6 +19,7 @@ using Random
         profile_times = Float64[]
         
         for n in dataset_sizes
+            @debug "Testing performance scaling" dataset_size=n
             data = create_test_data(n)
             model = lm(@formula(y ~ x1 + x2), data)
             
@@ -49,6 +50,8 @@ using Random
             
             pop_time = minimum(pop_benchmark).time / 1e9
             
+            @debug "Performance benchmark results" n=n profile_time_sec=profile_time pop_time_sec=pop_time ratio=profile_time/pop_time
+            
             if n > 1000
                 @test profile_time < pop_time * 2
             end
@@ -56,6 +59,7 @@ using Random
         
         if length(profile_times) >= 3
             time_ratio = profile_times[end] / profile_times[2]
+            @debug "Profile scaling validation" largest_time=profile_times[end] mid_time=profile_times[2] scaling_ratio=time_ratio threshold=5.0 passes_scaling_test=(time_ratio < 5.0)
             @test time_ratio < 5.0
         end
     end
