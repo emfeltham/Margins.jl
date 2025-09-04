@@ -135,7 +135,7 @@ Complete econometric workflow using human capital theory:
 using GLM, CategoricalArrays, Random
 
 # Generate realistic econometric dataset
-Random.seed!(42)
+Random.seed!(06515)
 n = 2000
 
 data = DataFrame(
@@ -421,7 +421,7 @@ key_population_effects = population_margins(model, large_data;
 ### Error Handling
 
 ```julia
-# Graceful error handling for production workflows
+# Graceful error handling for production workflows (TODO: WE DON'T WANT THIS)
 function robust_margins_analysis(model, data)
     try
         # Try high-accuracy automatic differentiation
