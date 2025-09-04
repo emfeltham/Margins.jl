@@ -1,10 +1,7 @@
 # population/core.jl - Main population_margins() function with compilation caching
 
-# Removed module imports - functions now in main namespace
-
 # Global cache for compiled formulas (MARGINS_GUIDE.md pattern)
 # Unified caching system (see engine/caching.jl)
-# Removed: const COMPILED_CACHE = Dict{UInt64, Any}()  # Now unified in engine/caching.jl
 
 """
     population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> MarginsResult
@@ -285,7 +282,7 @@ end
 """
     _validate_vars_scenarios_overlap(vars, scenarios)
 
-Phase 5: Teaching validation that provides helpful error messages when users 
+    Teaching validation that provides helpful error messages when users 
 incorrectly specify the same variable in both vars and scenarios parameters.
 """
 function _validate_vars_scenarios_overlap(vars, scenarios::Dict)
@@ -334,7 +331,6 @@ end
     _validate_groups_parameter(groups)
 
 Validate the unified groups parameter for population margins.
-Phase 3: Clean syntax with no legacy compatibility.
 """
 function _validate_groups_parameter(groups)
     # Simple categorical grouping: :education or [:region, :gender]
@@ -370,7 +366,7 @@ function _validate_groups_parameter(groups)
         end
     end
     
-    # Phase 3: => syntax for nested grouping: :region => :education
+    # Syntax for nested grouping: :region => :education
     if groups isa Pair
         outer_spec = groups.first
         inner_spec = groups.second

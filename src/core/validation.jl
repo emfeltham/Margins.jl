@@ -28,27 +28,6 @@ function validate_scale_parameter(scale::Symbol)
         throw(ArgumentError("scale must be :link or :response, got :$(scale)"))
 end
 
-# Scale conversion functions removed - now using scale directly throughout
-
-# Legacy support for transition period
-"""
-    validate_target_parameter(target::Symbol)
-
-DEPRECATED: Use `validate_scale_parameter()` instead.
-Validates legacy `:eta`/`:mu` parameters and converts to `:link`/`:response`.
-"""
-function validate_target_parameter(target::Symbol)  
-    if target ∈ (:eta, :mu)
-        # Legacy support - convert silently
-        return target === :eta ? :link : :response
-    elseif target ∈ (:link, :response)
-        # Already using new terminology
-        return target
-    else
-        throw(ArgumentError("scale must be :link or :response (or legacy :eta/:mu), got :$(target)"))
-    end
-end
-
 """
     validate_backend_parameter(backend::Symbol)
 

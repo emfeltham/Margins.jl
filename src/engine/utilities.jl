@@ -250,7 +250,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 ame_val /= total_weight  # Weighted average
             end
             
-            # Apply elasticity transformations if requested (Phase 3)
+            # Apply elasticity transformations if requested
             final_val = ame_val
             gradient_transform_factor = 1.0  # Default: no transformation
             
@@ -411,7 +411,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, target)
             end
             
-            # Apply elasticity transformations for continuous variables if requested (Phase 3)
+            # Apply elasticity transformations for continuous variables if requested
             final_val = effect_val
             gradient_transform_factor = 1.0  # Default: no transformation
             

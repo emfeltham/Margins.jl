@@ -1,9 +1,9 @@
-# profile/contrasts.jl - Row-specific baseline contrasts (Phase 3, Day 1)
+# profile/contrasts.jl - Row-specific baseline contrasts
 
 """
     Row-specific categorical contrasts for profile margins.
 
-This module implements "novel row-specific contrasts" as mentioned in the Phase 3 plan.
+This module implements "novel row-specific contrasts".
 Unlike population contrasts (which average across all observations), row-specific contrasts
 compute the effect of changing a categorical variable at a specific profile/covariate combination.
 

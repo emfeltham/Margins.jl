@@ -69,8 +69,6 @@ include("types.jl")
 include("core/validation.jl")
 include("computation/predictions.jl")
 include("computation/statistics.jl")
-# categorical_mixtures.jl functionality now provided by FormulaCompiler
-# include("features/categorical_mixtures.jl")  # REMOVED - now using FormulaCompiler's native implementation
 include("engine/measures.jl")  # Measure transformation utilities
 include("engine/core.jl")
 include("engine/utilities.jl") 

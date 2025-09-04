@@ -120,10 +120,10 @@ function _extract_context_profile_values(results)
         return nothing
     end
     
-    # Extract the profile data, removing the "at_" prefix
+    # Extract the profile data
     profile_dict = Dict{Symbol, Vector}()
     for col in at_cols
-        var_name = Symbol(String(col)[4:end])  # Remove "at_" prefix
+        var_name = Symbol(String(col)[4:end])
         profile_dict[var_name] = results[!, col]
     end
     
@@ -222,7 +222,7 @@ end
     _parse_groups_specification(groups, data_nt) -> Vector{Dict}
 
 Parse unified groups specification for stratified analysis.
-Supports the unified grouping syntax from POP_GROUPING.md Phase 3.
+Supports the unified grouping syntax.
 """
 function _parse_groups_specification(groups, data_nt)
     # Simple categorical grouping: :education
@@ -273,7 +273,7 @@ function _parse_groups_specification(groups, data_nt)
         end
     end
     
-    # Phase 3: => syntax for nested grouping: :region => :education
+    # Syntax for nested grouping: :region => :education
     if groups isa Pair
         outer_spec = groups.first
         inner_spec = groups.second
@@ -286,7 +286,7 @@ end
 """
     _create_nested_strata(outer_spec, inner_spec, data_nt) -> Vector{Dict}
 
-Phase 3: Create nested strata using => syntax.
+Create nested strata using => syntax.
 Implements outer => inner pattern: outer first, then inner within each outer.
 Supports inner_spec as Vector for parallel inner groupings.
 """
@@ -331,7 +331,7 @@ end
     _create_quantile_groups(col, var, n_quantiles) -> Vector{Dict}
 
 Create groups based on quantiles of a continuous variable.
-Phase 3: Enhanced with proper quartile/tertile labeling.
+Enhanced with proper quartile/tertile labeling.
 """
 function _create_quantile_groups(col, var, n_quantiles)
     quantiles = [quantile(col, i/n_quantiles) for i in 0:n_quantiles]
@@ -364,7 +364,7 @@ end
     _create_threshold_groups(col, var, thresholds) -> Vector{Dict}
 
 Create groups based on specified threshold values.
-Phase 3: Enhanced with proper range-based grouping.
+Enhanced with proper range-based grouping.
 """
 function _create_threshold_groups(col, var, thresholds)
     groups = []
@@ -419,7 +419,7 @@ end
     _create_context_data(data_nt, at_spec, over_spec) -> (NamedTuple, Vector{Int})
 
 Create context data (counterfactual overrides + subgroup filtering).
-Phase 3: Enhanced for continuous binning with range-based filtering.
+Enhanced for continuous binning with range-based filtering.
 Returns the filtered data and the indices of the original rows that were kept.
 """
 function _create_context_data(data_nt, at_spec, over_spec)
@@ -441,7 +441,7 @@ function _create_context_data(data_nt, at_spec, over_spec)
     for (var, spec) in over_spec
         if haskey(context_data, var)
             if spec isa NamedTuple && haskey(spec, :lower) && haskey(spec, :upper)
-                # Phase 3: Range-based continuous filtering
+                # Range-based continuous filtering
                 col = context_data[var]
                 if haskey(spec, :bin) && spec.bin == 1
                     # First bin: include lower boundary
