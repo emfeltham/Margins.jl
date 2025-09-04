@@ -25,17 +25,17 @@ using Margins
     @test all(isfinite, DataFrame(res_response).estimate)
 
     # Profile effects at means
-    profile_response = profile_margins(m, df; type=:effects, vars=[:x], scale=:response, at=:means)
+    profile_response = profile_margins(m, df, means_grid(df); type=:effects, vars=[:x], scale=:response)
     @test nrow(DataFrame(profile_response)) == 1
     @test all(isfinite, DataFrame(profile_response).estimate)
 
     # Population and Profile predictions
     pop_pred = population_margins(m, df; type=:predictions, scale=:response)
     @test nrow(DataFrame(pop_pred)) == 1
-    profile_pred = profile_margins(m, df; type=:predictions, scale=:response, at=Dict(:x=>[-2.0,0.0,2.0]))
+    profile_pred = profile_margins(m, df, cartesian_grid(df; x=[-2.0,0.0,2.0]); type=:predictions, scale=:response)
     @test nrow(DataFrame(profile_pred)) == 3
     # single profile at means
-    profile_single = profile_margins(m, df; type=:predictions, scale=:response, at=:means)
+    profile_single = profile_margins(m, df, means_grid(df); type=:predictions, scale=:response)
     @test nrow(DataFrame(profile_single)) == 1
 
     # Test basic functionality without grouping (grouping parameters removed)

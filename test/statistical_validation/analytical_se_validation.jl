@@ -235,7 +235,7 @@ function verify_linear_se_consistency(model, data, var_symbol; tolerance=1e-12)
     pop_matches = abs(pop_se - analytical_se) < tolerance
     
     # Test profile margins SE  
-    profile_result = profile_margins(model, data; type=:effects, vars=[var_symbol], at=:means)
+    profile_result = profile_margins(model, data, means_grid(data); type=:effects, vars=[var_symbol])
     prof_df = DataFrame(profile_result)
     prof_se = prof_df.se[1]
     prof_matches = abs(prof_se - analytical_se) < tolerance
@@ -278,8 +278,9 @@ function verify_glm_se_chain_rule(model, data, var_symbol, at_values; tolerance=
     end
     
     # Test computed profile SE at the same point
-    profile_result = profile_margins(model, data; type=:effects, vars=[var_symbol], 
-                                   at=at_values, target=:mu)  # Response scale for chain rule
+    reference_grid = DataFrame(at_values)  # Convert Dict to DataFrame for reference grid
+    profile_result = profile_margins(model, data, reference_grid; type=:effects, vars=[var_symbol], 
+                                   scale=:response)  # Response scale for chain rule
     prof_df = DataFrame(profile_result) 
     computed_se = prof_df.se[1]
     

@@ -42,8 +42,10 @@ using Random
         
         model = lm(@formula(y ~ x1 + x2), df)
         
-        # Should work without error - was failing before fix
-        result = profile_margins(model, df; at=:means, type=:effects)
+        # Should work without error - was failing before fix  
+        # Create reference grid excluding dependent variable y
+        df_explanatory = select(df, Not(:y))
+        result = profile_margins(model, df, means_grid(df_explanatory); type=:effects)
         df_result = DataFrame(result)
         
         @test nrow(df_result) == 2

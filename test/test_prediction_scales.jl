@@ -40,9 +40,8 @@ using Margins
         @test abs(link_val - response_val) > 0.05
         
         # Test profile predictions at specific scenarios
-        scenarios = Dict(:x => [-1.0, 0.0, 1.0])
-        prof_link = profile_margins(m_logit, df; at=scenarios, type=:predictions, scale=:link)
-        prof_response = profile_margins(m_logit, df; at=scenarios, type=:predictions, scale=:response)
+        prof_link = profile_margins(m_logit, df, cartesian_grid(df; x=[-1.0, 0.0, 1.0]); type=:predictions, scale=:link)
+        prof_response = profile_margins(m_logit, df, cartesian_grid(df; x=[-1.0, 0.0, 1.0]); type=:predictions, scale=:response)
         
         @test nrow(DataFrame(prof_link)) == 3
         @test nrow(DataFrame(prof_response)) == 3
@@ -118,8 +117,8 @@ using Margins
         @test abs(link_val - response_val) < 1e-10
         
         # Test profiles too
-        prof_link = profile_margins(m_linear, df; at=Dict(:x=>[0.0]), type=:predictions, scale=:link)
-        prof_response = profile_margins(m_linear, df; at=Dict(:x=>[0.0]), type=:predictions, scale=:response)
+        prof_link = profile_margins(m_linear, df, cartesian_grid(df; x=[0.0]); type=:predictions, scale=:link)
+        prof_response = profile_margins(m_linear, df, cartesian_grid(df; x=[0.0]); type=:predictions, scale=:response)
         @test abs(DataFrame(prof_link).estimate[1] - DataFrame(prof_response).estimate[1]) < 1e-10
     end
 end
@@ -148,8 +147,8 @@ end
     @test abs(DataFrame(pred_link).se[1] - DataFrame(pred_response).se[1]) > 1e-6
     
     # Test basic result structure
-    @test all(names(DataFrame(pred_link)) .⊇ ["term", "estimate", "se"])
-    @test all(names(DataFrame(pred_response)) .⊇ ["term", "estimate", "se"])
+    @test all(x -> x in names(DataFrame(pred_link)), ["term", "estimate", "se"])
+    @test all(x -> x in names(DataFrame(pred_response)), ["term", "estimate", "se"])
 end
 
 @testset "Profile Prediction Grids with Scales" begin
@@ -164,20 +163,18 @@ end
     m = glm(@formula(y ~ x1 + x2), df, Binomial(), LogitLink())
     
     # Test grid of predictions across scenarios and scales
-    scenarios = Dict(:x1 => [-1.0, 0.0, 1.0], :x2 => [-0.5, 0.5])
-    
-    prof_link = profile_margins(m, df; at=scenarios, type=:predictions, scale=:link)
-    prof_response = profile_margins(m, df; at=scenarios, type=:predictions, scale=:response)
+    prof_link = profile_margins(m, df, cartesian_grid(df; x1=[-1.0, 0.0, 1.0], x2=[-0.5, 0.5]); type=:predictions, scale=:link)
+    prof_response = profile_margins(m, df, cartesian_grid(df; x1=[-1.0, 0.0, 1.0], x2=[-0.5, 0.5]); type=:predictions, scale=:response)
     
     # Should have 3 × 2 = 6 scenario combinations
     @test nrow(DataFrame(prof_link)) == 6
     @test nrow(DataFrame(prof_response)) == 6
     
     # Check that profile columns are present
-    @test "at_x1" in names(DataFrame(prof_link))
-    @test "at_x2" in names(DataFrame(prof_link))
-    @test "at_x1" in names(DataFrame(prof_response))
-    @test "at_x2" in names(DataFrame(prof_response))
+    @test "x1" in names(DataFrame(prof_link))
+    @test "x2" in names(DataFrame(prof_link))
+    @test "x1" in names(DataFrame(prof_response))
+    @test "x2" in names(DataFrame(prof_response))
     
     # All predictions should be finite
     @test all(isfinite, DataFrame(prof_link).estimate)
@@ -186,14 +183,14 @@ end
     # Response predictions should be in [0,1]
     @test all(0.0 .<= DataFrame(prof_response).estimate .<= 1.0)
     
-    # Test averaged profiles
-    prof_avg_link = profile_margins(m, df; at=scenarios, type=:predictions, scale=:link, average=true)
-    prof_avg_response = profile_margins(m, df; at=scenarios, type=:predictions, scale=:response, average=true)
+    # Test population averaged predictions for comparison
+    pop_link = population_margins(m, df; type=:predictions, scale=:link)
+    pop_response = population_margins(m, df; type=:predictions, scale=:response)
     
-    @test nrow(DataFrame(prof_avg_link)) == 1
-    @test nrow(DataFrame(prof_avg_response)) == 1
-    @test all(isfinite, DataFrame(prof_avg_link).estimate)
-    @test all(isfinite, DataFrame(prof_avg_response).estimate)
+    @test nrow(DataFrame(pop_link)) == 1
+    @test nrow(DataFrame(pop_response)) == 1
+    @test all(isfinite, DataFrame(pop_link).estimate)
+    @test all(isfinite, DataFrame(pop_response).estimate)
 end
 
 @testset "Edge Cases and Error Handling" begin
@@ -208,10 +205,8 @@ end
     
     @testset "Single Scenario Profile" begin
         # Test with single scenario (should work)
-        single_scenario = Dict(:x => [0.0])
-        
-        pred_link = profile_margins(m, df; at=single_scenario, type=:predictions, scale=:link)
-        pred_response = profile_margins(m, df; at=single_scenario, type=:predictions, scale=:response)
+        pred_link = profile_margins(m, df, cartesian_grid(df; x=[0.0]); type=:predictions, scale=:link)
+        pred_response = profile_margins(m, df, cartesian_grid(df; x=[0.0]); type=:predictions, scale=:response)
         
         @test nrow(DataFrame(pred_link)) == 1
         @test nrow(DataFrame(pred_response)) == 1
@@ -221,10 +216,8 @@ end
     
     @testset "Extreme Scenarios" begin
         # Test with extreme values (should still work)
-        extreme_scenarios = Dict(:x => [-5.0, 5.0])
-        
-        pred_link = profile_margins(m, df; at=extreme_scenarios, type=:predictions, scale=:link)
-        pred_response = profile_margins(m, df; at=extreme_scenarios, type=:predictions, scale=:response)
+        pred_link = profile_margins(m, df, cartesian_grid(df; x=[-5.0, 5.0]); type=:predictions, scale=:link)
+        pred_response = profile_margins(m, df, cartesian_grid(df; x=[-5.0, 5.0]); type=:predictions, scale=:response)
         
         @test nrow(DataFrame(pred_link)) == 2
         @test nrow(DataFrame(pred_response)) == 2

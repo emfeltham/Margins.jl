@@ -51,12 +51,12 @@ include("testing_utilities.jl")
                         @test result.estimates_agree
                         @test result.ses_agree
                         
-                        # Log maximum differences for monitoring
+                        # Check maximum differences for monitoring
                         if result.max_estimate_diff > 1e-12
-                            @info "$(name) $(quadrant_name): Max estimate diff = $(result.max_estimate_diff)"
+                            # Difference noted but within acceptable tolerance for testing
                         end
                         if result.max_se_diff > 1e-10  
-                            @info "$(name) $(quadrant_name): Max SE diff = $(result.max_se_diff)"
+                            # SE difference noted but within acceptable tolerance for testing
                         end
                     else
                         @error "$(quadrant_name) failed for $name: $(get(result, :error, "Unknown error"))"

@@ -63,7 +63,6 @@ using Margins
         # After warmup, :fd backend should achieve much reduced allocations (target is significant reduction)
         # Note: Complete zero allocations may not be achievable due to DataFrame creation and other infrastructure
         @test minimum(bench).allocs < 10000  # Relaxed from zero to a reasonable target
-        @info "Population margins (:fd) allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Population margins with :ad backend (minimal allocations)" begin
@@ -75,31 +74,28 @@ using Margins
         
         # AD backend should have reasonable allocations (no recompilation after warmup)
         @test minimum(bench).allocs < 200000  # Allow AD-related allocations but test for no recompilation
-        @info "Population margins (:ad) allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Profile margins with :fd backend (zero allocations)" begin
         # Warmup run
-        result_warmup = profile_margins(model, data; at=:means, backend=:fd, vars=[:x1, :x2])
+        result_warmup = profile_margins(model, data, means_grid(data); backend=:fd, vars=[:x1, :x2])
         
         # Benchmark the allocation count
-        bench = @benchmark profile_margins($model, $data; at=:means, backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
+        bench = @benchmark profile_margins($model, $data, means_grid($data); backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
         
         # Profile margins with :fd should achieve reduced allocations after warmup
         @test minimum(bench).allocs < 300000  # Reasonable target given profile grid creation
-        @info "Profile margins (:fd) allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Profile margins with :ad backend (minimal allocations)" begin
         # Warmup run
-        result_warmup = profile_margins(model, data; at=:means, backend=:ad, vars=[:x1, :x2])
+        result_warmup = profile_margins(model, data, means_grid(data); backend=:ad, vars=[:x1, :x2])
         
         # Benchmark the allocation count
-        bench = @benchmark profile_margins($model, $data; at=:means, backend=:ad, vars=[:x1, :x2]) samples=100 evals=1
+        bench = @benchmark profile_margins($model, $data, means_grid($data); backend=:ad, vars=[:x1, :x2]) samples=100 evals=1
         
         # Profile margins with :ad should have reasonable allocations
         @test minimum(bench).allocs < 350000  # Allow AD-related allocations
-        @info "Profile margins (:ad) allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Population predictions (zero allocations after warmup)" begin
@@ -111,19 +107,17 @@ using Margins
         
         # Predictions should use pre-allocated buffers with reduced allocations
         @test minimum(bench).allocs < 15000  # Allow for DataFrame creation overhead
-        @info "Population predictions allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Profile predictions (zero allocations after warmup)" begin
         # Warmup run  
-        result_warmup = profile_margins(model, data; at=:means, type=:predictions)
+        result_warmup = profile_margins(model, data, means_grid(data); type=:predictions)
         
         # Benchmark the allocation count
-        bench = @benchmark profile_margins($model, $data; at=:means, type=:predictions) samples=100 evals=1
+        bench = @benchmark profile_margins($model, $data, means_grid($data); type=:predictions) samples=100 evals=1
         
         # Profile predictions should use pre-allocated buffers with reduced allocations  
         @test minimum(bench).allocs < 50000  # Allow for profile grid creation overhead
-        @info "Profile predictions allocations after warmup: $(minimum(bench).allocs)"
     end
     
     @testset "Buffer reuse verification" begin
@@ -132,8 +126,10 @@ using Margins
         result2 = population_margins(model, data; backend=:fd, vars=[:x1])
         
         # Results should be identical (ensuring buffer reuse doesn't corrupt results)
-        @test result1.estimate ≈ result2.estimate rtol=1e-12
-        @test result1.se ≈ result2.se rtol=1e-12
+        df1 = DataFrame(result1)
+        df2 = DataFrame(result2)
+        @test df1.estimate ≈ df2.estimate rtol=1e-12
+        @test df1.se ≈ df2.se rtol=1e-12
     end
     
     @testset "Large dataset stress test" begin
@@ -153,6 +149,5 @@ using Margins
         bench = @benchmark population_margins($model_large, $data_large; backend=:fd, vars=[:x1]) samples=10 evals=1
         
         @test minimum(bench).allocs < 25000  # Should scale reasonably with dataset size
-        @info "Large dataset (n=$(n_large)) allocations: $(minimum(bench).allocs)"
     end
 end

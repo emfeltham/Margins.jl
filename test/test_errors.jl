@@ -17,7 +17,7 @@ using Margins
     # Test invalid type parameter
     @testset "Invalid type parameter" begin
         @test_throws ArgumentError population_margins(m, df; type=:invalid)
-        @test_throws ArgumentError profile_margins(m, df; type=:invalid, at=:means)
+        @test_throws ArgumentError profile_margins(m, df, means_grid(df); type=:invalid)
     end
 
     # Test invalid scale parameter (deprecated target parameter) 
@@ -47,9 +47,10 @@ using Margins
         @test_throws Exception population_margins(m, df_wrong; type=:effects)
     end
 
-    # Test invalid at parameter for profile_margins
-    @testset "Invalid at parameter" begin
-        @test_throws ArgumentError profile_margins(m, df; type=:effects, at=:invalid)
+    # Test invalid reference grid for profile_margins
+    @testset "Invalid reference grid" begin
+        invalid_grid = DataFrame(nonexistent_var=[1.0])  # Variable not in data
+        @test_throws Exception profile_margins(m, df, invalid_grid; type=:effects)
     end
 
     # Test data type compatibility
@@ -62,7 +63,7 @@ using Margins
         m_mixed = lm(@formula(y ~ x + z), df_mixed)
         
         # Mixed data types should work fine (Int/Bool are properly handled)
-        result = profile_margins(m_mixed, df_mixed; type=:effects, at=:means)
+        result = profile_margins(m_mixed, df_mixed, means_grid(df_mixed); type=:effects)
         @test nrow(DataFrame(result)) >= 1  # Should succeed
     end
 end

@@ -171,8 +171,8 @@ function test_sandwich_estimators_comprehensive(model, data)
             # Test that the estimator works across 2×2 framework
             pop_effects = population_margins(model, data; type=:effects, vars=[:x], vcov=estimator)
             pop_predictions = population_margins(model, data; type=:predictions, vcov=estimator)
-            prof_effects = profile_margins(model, data; type=:effects, vars=[:x], at=:means, vcov=estimator)
-            prof_predictions = profile_margins(model, data; type=:predictions, at=:means, vcov=estimator)
+            prof_effects = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x], vcov=estimator)
+            prof_predictions = profile_margins(model, data, means_grid(data); type=:predictions, vcov=estimator)
             
             # Validate all quadrants
             pop_effects_valid = all(DataFrame(pop_effects).se .> 0)
@@ -243,8 +243,8 @@ function test_clustered_se_validation(model, data, cluster_var)
         # Test across 2×2 framework
         pop_effects = population_margins(model, data; type=:effects, vars=[:x], vcov=clustered_vcov)
         pop_predictions = population_margins(model, data; type=:predictions, vcov=clustered_vcov)
-        prof_effects = profile_margins(model, data; type=:effects, vars=[:x], at=:means, vcov=clustered_vcov)
-        prof_predictions = profile_margins(model, data; type=:predictions, at=:means, vcov=clustered_vcov)
+        prof_effects = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x], vcov=clustered_vcov)
+        prof_predictions = profile_margins(model, data, means_grid(data); type=:predictions, vcov=clustered_vcov)
         
         framework_valid = (
             all(DataFrame(pop_effects).se .> 0) &&

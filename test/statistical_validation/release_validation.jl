@@ -60,7 +60,7 @@ include("testing_utilities.jl")
         @testset "Profile Margins Performance" begin
             # Measure performance of profile margins
             start_time = time()
-            result = profile_margins(model, df; type=:effects, vars=[:int_education], at=:means)
+            result = profile_margins(model, df, means_grid(df); type=:effects, vars=[:int_education])
             duration = time() - start_time
             
             @test validate_all_finite_positive(DataFrame(result)).all_valid
@@ -77,7 +77,7 @@ include("testing_utilities.jl")
             
             # Profile margins should remain O(1)
             start_time = time()
-            result = profile_margins(model_large, df_large; type=:effects, vars=[:int_education], at=:means)
+            result = profile_margins(model_large, df_large, means_grid(df_large); type=:effects, vars=[:int_education])
             duration = time() - start_time
             
             @test validate_all_finite_positive(DataFrame(result)).all_valid
@@ -114,7 +114,7 @@ include("testing_utilities.jl")
             model = lm(@formula(log_wage ~ int_education + float_wage), df)
             
             # Population vs manual calculation cross-check
-            pop_effects = population_margins(model, df; type=:effects, vars=[:int_education], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:int_education], scale=:link)
             manual_coeff = coef(model)[2]  # int_education coefficient
             
             @test DataFrame(pop_effects).estimate[1] ≈ manual_coeff atol=1e-12

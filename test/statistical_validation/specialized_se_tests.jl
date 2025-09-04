@@ -58,8 +58,8 @@ using Margins: mix
             @test validate_all_finite_positive(DataFrame(pop_float)).all_valid
             
             # Test profile effects SEs should be identical
-            prof_int = profile_margins(model_int, df_int; type=:effects, vars=[:x_int], at=:means)
-            prof_float = profile_margins(model_float, df_int; type=:effects, vars=[:x_float], at=:means)
+            prof_int = profile_margins(model_int, df_int, means_grid(df_int); type=:effects, vars=[:x_int])
+            prof_float = profile_margins(model_float, df_int, means_grid(df_int); type=:effects, vars=[:x_float])
             
             prof_se_int = DataFrame(prof_int).se[1]
             prof_se_float = DataFrame(prof_float).se[1]
@@ -86,7 +86,7 @@ using Margins: mix
             
             # Test that integer variables produce valid SEs in GLM context
             # Link scale (should be exact coefficient SEs)
-            eta_result = population_margins(model, df; type=:effects, vars=[:age_int, :edu_int], target=:eta)
+            eta_result = population_margins(model, df; type=:effects, vars=[:age_int, :edu_int], scale=:link)
             eta_df = DataFrame(eta_result)
             
             # Compare to analytical coefficient SEs
@@ -98,7 +98,7 @@ using Margins: mix
             @test validate_all_finite_positive(eta_df).all_valid
             
             # Response scale (chain rule SEs should be valid and finite)
-            mu_result = population_margins(model, df; type=:effects, vars=[:age_int, :edu_int], target=:mu)
+            mu_result = population_margins(model, df; type=:effects, vars=[:age_int, :edu_int], scale=:response)
             mu_df = DataFrame(mu_result)
             
             @test all(isfinite.(mu_df.se))
@@ -119,8 +119,7 @@ using Margins: mix
             
             # Test profile at specific integer values (not means)
             for test_val in [3, 7, 9]  # Different integer values
-                prof_result = profile_margins(model, df; type=:effects, vars=[:x_int], 
-                                           at=Dict(:x_int => test_val))
+                prof_result = profile_margins(model, df, DataFrame(x_int=[test_val], z=[mean(df.z)]); type=:effects, vars=[:x_int])
                 prof_df = DataFrame(prof_result)
                 
                 # SE should be coefficient SE (linear model)
@@ -155,8 +154,7 @@ using Margins: mix
             @test isfinite(elast_df.se[1])
             
             # Test profile elasticity SE
-            prof_elast = profile_margins(model, df; type=:effects, vars=[:x], 
-                                       at=:means, measure=:elasticity)
+            prof_elast = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x], measure=:elasticity)
             prof_elast_df = DataFrame(prof_elast)
             
             @test validate_all_finite_positive(prof_elast_df).all_valid
@@ -180,7 +178,7 @@ using Margins: mix
             model = lm(@formula(y ~ x + z), df)
             
             # Test x semi-elasticity (∂ln(y)/∂x)
-            semi_x = population_margins(model, df; type=:effects, vars=[:x], measure=:semielasticity_x)
+            semi_x = population_margins(model, df; type=:effects, vars=[:x], measure=:semielasticity_dyex)
             semi_x_df = DataFrame(semi_x)
             
             @test validate_all_finite_positive(semi_x_df).all_valid
@@ -188,7 +186,7 @@ using Margins: mix
             @test isfinite(semi_x_df.se[1])
             
             # Test y semi-elasticity (∂y/∂ln(x))  
-            semi_y = population_margins(model, df; type=:effects, vars=[:x], measure=:semielasticity_y)
+            semi_y = population_margins(model, df; type=:effects, vars=[:x], measure=:semielasticity_eydx)
             semi_y_df = DataFrame(semi_y)
             
             @test validate_all_finite_positive(semi_y_df).all_valid
@@ -242,9 +240,9 @@ using Margins: mix
             
             # Test elasticity SEs on both scales
             eta_elast = population_margins(model, df; type=:effects, vars=[:x], 
-                                         target=:eta, measure=:elasticity)
+                                         scale=:link, measure=:elasticity)
             mu_elast = population_margins(model, df; type=:effects, vars=[:x], 
-                                        target=:mu, measure=:elasticity)
+                                        scale=:response, measure=:elasticity)
             
             eta_df = DataFrame(eta_elast)
             mu_df = DataFrame(mu_elast)
@@ -283,7 +281,7 @@ using Margins: mix
                 :education => mix("High School" => 0.4, "College" => 0.4, "Graduate" => 0.2)
             )
             
-            mix_result = profile_margins(model, df; type=:effects, vars=[:x], at=mixture_spec)
+            mix_result = profile_margins(model, df, DataFrame(x=[mean(df.x)], education=[mix("High School" => 0.4, "College" => 0.4, "Graduate" => 0.2)]); type=:effects, vars=[:x])
             mix_df = DataFrame(mix_result)
             
             @test validate_all_finite_positive(mix_df).all_valid
@@ -292,7 +290,7 @@ using Margins: mix
             @test isfinite(mix_df.se[1])
             
             # Test categorical mixture for predictions
-            mix_pred = profile_margins(model, df; type=:predictions, at=mixture_spec)
+            mix_pred = profile_margins(model, df, DataFrame(x=[mean(df.x)], education=[mix("High School" => 0.4, "College" => 0.4, "Graduate" => 0.2)]); type=:predictions)
             mix_pred_df = DataFrame(mix_pred)
             
             @test validate_all_finite_positive(mix_pred_df).all_valid
@@ -320,7 +318,7 @@ using Margins: mix
                 :z => mean(df.z)
             )
             
-            bool_result = profile_margins(model, df; type=:effects, vars=[:x], at=bool_mixture)
+            bool_result = profile_margins(model, df, DataFrame(x=[0.0], treatment=[0.7], z=[mean(df.z)]); type=:effects, vars=[:x])
             bool_df = DataFrame(bool_result)
             
             @test validate_all_finite_positive(bool_df).all_valid
@@ -328,7 +326,7 @@ using Margins: mix
             @test isfinite(bool_df.se[1])
             
             # Test Boolean mixture predictions
-            bool_pred = profile_margins(model, df; type=:predictions, at=bool_mixture)
+            bool_pred = profile_margins(model, df, DataFrame(x=[0.0], treatment=[0.7], z=[mean(df.z)]); type=:predictions)
             bool_pred_df = DataFrame(bool_pred)
             
             @test validate_all_finite_positive(bool_pred_df).all_valid
@@ -366,7 +364,12 @@ using Margins: mix
                 :z => 0.0
             )
             
-            complex_result = profile_margins(model, df; type=:effects, vars=[:x], at=complex_mix)
+            complex_result = profile_margins(model, df, DataFrame(
+                x=[mean(df.x)], 
+                region=[mix("North" => 0.25, "South" => 0.25, "East" => 0.25, "West" => 0.25)],
+                gender=[mix("Male" => 0.48, "Female" => 0.52)],
+                z=[0.0]
+            ); type=:effects, vars=[:x])
             complex_df = DataFrame(complex_result)
             
             @test validate_all_finite_positive(complex_df).all_valid
@@ -374,7 +377,12 @@ using Margins: mix
             @test isfinite(complex_df.se[1])
             
             # Test multiple variables with mixture
-            multi_vars = profile_margins(model, df; type=:effects, vars=[:x, :z], at=complex_mix)
+            multi_vars = profile_margins(model, df, DataFrame(
+                x=[mean(df.x)], 
+                region=[mix("North" => 0.25, "South" => 0.25, "East" => 0.25, "West" => 0.25)],
+                gender=[mix("Male" => 0.48, "Female" => 0.52)],
+                z=[0.0]
+            ); type=:effects, vars=[:x, :z])
             multi_df = DataFrame(multi_vars)
             
             @test validate_all_finite_positive(multi_df).all_valid
@@ -408,10 +416,16 @@ using Margins: mix
             )
             
             # Effects on both scales
-            eta_mix = profile_margins(model, df; type=:effects, vars=[:x], 
-                                    at=glm_mix, target=:eta)
-            mu_mix = profile_margins(model, df; type=:effects, vars=[:x], 
-                                   at=glm_mix, target=:mu)
+            eta_mix = profile_margins(model, df, DataFrame(
+                x=[0.5], 
+                category=[mix("A" => 0.3, "B" => 0.5, "C" => 0.2)],
+                z=[-0.2]
+            ); type=:effects, vars=[:x], scale=:link)
+            mu_mix = profile_margins(model, df, DataFrame(
+                x=[0.5], 
+                category=[mix("A" => 0.3, "B" => 0.5, "C" => 0.2)],
+                z=[-0.2]
+            ); type=:effects, vars=[:x], scale=:response)
             
             eta_df = DataFrame(eta_mix)
             mu_df = DataFrame(mu_mix)
@@ -423,7 +437,11 @@ using Margins: mix
             @test eta_df.se[1] != mu_df.se[1]  # Different scales → different SEs
             
             # Test predictions with mixture
-            pred_mix = profile_margins(model, df; type=:predictions, at=glm_mix)
+            pred_mix = profile_margins(model, df, DataFrame(
+                x=[0.5], 
+                category=[mix("A" => 0.3, "B" => 0.5, "C" => 0.2)],
+                z=[-0.2]
+            ); type=:predictions)
             pred_df = DataFrame(pred_mix)
             
             @test validate_all_finite_positive(pred_df).all_valid
@@ -481,7 +499,7 @@ using Margins: mix
             @test all(result_df.se .> 0)
             
             # Profile margins should also work
-            prof_result = profile_margins(model, df; type=:effects, vars=[:x, :z], at=:means)
+            prof_result = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x, :z])
             prof_df = DataFrame(prof_result)
             
             @test validate_all_finite_positive(prof_df).all_valid

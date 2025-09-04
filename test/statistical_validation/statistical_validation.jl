@@ -35,7 +35,7 @@ include("analytical_se_validation.jl")
             # === 2×2 FRAMEWORK: ALL FOUR QUADRANTS ===
             
             # 1. Population Effects (AME): ∂y/∂x averaged across sample
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             @test pop_effects_df.estimate[1] ≈ β₁ atol=1e-12  # Should equal coefficient (within numerical precision)
             @test validate_all_finite_positive(pop_effects_df).all_valid
@@ -48,20 +48,20 @@ include("analytical_se_validation.jl")
             @test validate_all_finite_positive(pop_pred_df).all_valid
             
             # 3. Profile Effects (MEM): ∂y/∂x at specific profiles
-            profile_effects = profile_margins(model, df; type=:effects, vars=[:x], at=:means, target=:eta)
+            profile_effects = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
             @test prof_effects_df.estimate[1] ≈ β₁ atol=1e-12  # Linear model: ME constant everywhere
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions (APM): ŷ at specific profiles
             x_mean = mean(df.x)
-            profile_predictions = profile_margins(model, df; type=:predictions, at=Dict(:x => x_mean), scale=:response)
+            profile_predictions = profile_margins(model, df, DataFrame(x=[x_mean]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_predictions)
             manual_profile_prediction = β₀ + β₁ * x_mean  # β₀ + β₁*x_mean
             @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Simple Linear: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Multiple Regression: y ~ x + z" begin
@@ -72,7 +72,7 @@ include("analytical_se_validation.jl")
             # === ALL FOUR QUADRANTS FOR MULTI-VARIABLE ===
             
             # 1. Population Effects: Both variables
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x, :z], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x, :z], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             @test pop_effects_df.estimate[1] ≈ β₁ atol=1e-12  # ∂y/∂x = β₁
             @test pop_effects_df.estimate[2] ≈ β₂ atol=1e-12  # ∂y/∂z = β₂
@@ -86,8 +86,7 @@ include("analytical_se_validation.jl")
             @test validate_all_finite_positive(pop_pred_df).all_valid
             
             # 3. Profile Effects at specific point
-            profile_effects = profile_margins(model, df; type=:effects, vars=[:x, :z], 
-                                            at=Dict(:x => 1.0, :z => 2.0), target=:eta)
+            profile_effects = profile_margins(model, df, DataFrame(x=[1.0], z=[2.0]); type=:effects, vars=[:x, :z], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
             @test prof_effects_df.estimate[1] ≈ β₁ atol=1e-12  # Still β₁ (linear)
             @test prof_effects_df.estimate[2] ≈ β₂ atol=1e-12  # Still β₂ (linear)
@@ -95,14 +94,13 @@ include("analytical_se_validation.jl")
             
             # 4. Profile Predictions at specific point
             test_x, test_z = 1.0, 2.0
-            profile_predictions = profile_margins(model, df; type=:predictions, 
-                                                at=Dict(:x => test_x, :z => test_z), scale=:response)
+            profile_predictions = profile_margins(model, df, DataFrame(x=[test_x], z=[test_z]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_predictions)
             manual_profile_prediction = β₀ + β₁ * test_x + β₂ * test_z
             @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Multiple Regression: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -119,20 +117,20 @@ include("analytical_se_validation.jl")
             analytical_se = analytical_linear_se(model, df, :x)
 
             @test computed_se ≈ analytical_se atol=1e-12
-            @info "✓ Linear Population Effects SE: Analytically verified"
+            # @info removed per TEST_PLAN.md requirements
 
             # Profile effects SE should also equal coefficient SE (linear case)
-            profile_result = profile_margins(model, df; type=:effects, vars=[:x], at=:means)
+            profile_result = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x])
             profile_se = DataFrame(profile_result).se[1]
 
             @test profile_se ≈ analytical_se atol=1e-12
-            @info "✓ Linear Profile Effects SE: Analytically verified"
+            # @info removed per TEST_PLAN.md requirements
             
             # Test consistency verification function
             consistency = verify_linear_se_consistency(model, df, :x)
             @test consistency.both_match
             @test consistency.max_deviation < 1e-12
-            @info "✓ Linear SE Consistency: Both population and profile match analytical SE"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Multiple Linear: y ~ x + z - SE Verification" begin
@@ -146,13 +144,13 @@ include("analytical_se_validation.jl")
                 analytical_se = analytical_linear_se(model, df, var)
 
                 @test computed_se ≈ analytical_se atol=1e-12
-                @info "✓ Multiple Linear $var Population SE: Analytically verified"
+                # @info removed per TEST_PLAN.md requirements
 
-                profile_result = profile_margins(model, df; type=:effects, vars=[var], at=:means)
+                profile_result = profile_margins(model, df, means_grid(df); type=:effects, vars=[var])
                 profile_se = DataFrame(profile_result).se[1]
 
                 @test profile_se ≈ analytical_se atol=1e-12
-                @info "✓ Multiple Linear $var Profile SE: Analytically verified"
+                # @info removed per TEST_PLAN.md requirements
             end
             
             # Test multiple variables at once
@@ -164,7 +162,7 @@ include("analytical_se_validation.jl")
             
             @test multi_df.se[1] ≈ analytical_se_x atol=1e-12  # x SE
             @test multi_df.se[2] ≈ analytical_se_z atol=1e-12  # z SE
-            @info "✓ Multiple Linear Multi-Variable SE: All analytically verified"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -185,7 +183,7 @@ include("analytical_se_validation.jl")
             
             @test se_validation.matches
             @test se_validation.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
-            @info "✓ Logistic x Chain Rule SE: Analytically verified (rel_error: $(se_validation.relative_error))"
+            # @info removed per TEST_PLAN.md requirements
 
             # Test SE for variable z
             se_validation_z = verify_glm_se_chain_rule(model, df, :z, at_values; 
@@ -193,16 +191,16 @@ include("analytical_se_validation.jl")
             
             @test se_validation_z.matches
             @test se_validation_z.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
-            @info "✓ Logistic z Chain Rule SE: Analytically verified (rel_error: $(se_validation_z.relative_error))"
+            # @info removed per TEST_PLAN.md requirements
             
             # Verify link scale SEs equal coefficient SEs (should be exact)
             eta_result = profile_margins(model, df; type=:effects, vars=[:x], 
-                                       at=at_values, target=:eta)
+                                       at=at_values, scale=:link)
             eta_se = DataFrame(eta_result).se[1]
             coef_se = analytical_linear_se(model, df, :x)  # Works for any GLM on link scale
             
             @test eta_se ≈ coef_se atol=1e-12
-            @info "✓ Logistic Link Scale SE: Equals coefficient SE exactly"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Poisson Regression: SE Chain Rule Verification" begin
@@ -219,7 +217,7 @@ include("analytical_se_validation.jl")
             
             @test se_validation.matches
             @test se_validation.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
-            @info "✓ Poisson x Chain Rule SE: Analytically verified (rel_error: $(se_validation.relative_error))"
+            # @info removed per TEST_PLAN.md requirements
 
             # Test SE chain rule for variable z  
             se_validation_z = verify_glm_se_chain_rule(model, df, :z, at_values; 
@@ -227,16 +225,15 @@ include("analytical_se_validation.jl")
             
             @test se_validation_z.matches
             @test se_validation_z.relative_error < 0.1  # Allow 10% relative error for GLM chain rule
-            @info "✓ Poisson z Chain Rule SE: Analytically verified (rel_error: $(se_validation_z.relative_error))"
+            # @info removed per TEST_PLAN.md requirements
             
             # Verify link scale SEs equal coefficient SEs
-            eta_result = profile_margins(model, df; type=:effects, vars=[:x], 
-                                       at=at_values, target=:eta)
+            eta_result = profile_margins(model, df, DataFrame(x=[test_x], z=[test_z]); type=:effects, vars=[:x], scale=:link)
             eta_se = DataFrame(eta_result).se[1]
             coef_se = analytical_linear_se(model, df, :x)
             
             @test eta_se ≈ coef_se atol=1e-12
-            @info "✓ Poisson Link Scale SE: Equals coefficient SE exactly"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -260,7 +257,7 @@ include("analytical_se_validation.jl")
             # Note: Default backend now safely handles log functions (backend defaults changed to :ad)
             
             # 1. Population Effects: Now works with default backend (after fix)
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             manual_ame = mean(β₁ ./ df.x)  # ∂/∂x[β₁·log(x)] = β₁/x, averaged
             @test pop_effects_df.estimate[1] ≈ manual_ame atol=1e-12
@@ -275,22 +272,20 @@ include("analytical_se_validation.jl")
             
             # 3. Profile Effects at specific point: Now works with default backend
             test_x = 2.0
-            profile_effects = profile_margins(model, df; type=:effects, vars=[:x], 
-                                            at=Dict(:x => test_x), target=:eta)
+            profile_effects = profile_margins(model, df, DataFrame(x=[test_x]); type=:effects, vars=[:x], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
             manual_mem = β₁ / test_x  # ∂/∂x[β₁·log(x)] = β₁/x at x=test_x
             @test prof_effects_df.estimate[1] ≈ manual_mem atol=1e-12
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions at specific point: Now works with default backend
-            profile_predictions = profile_margins(model, df; type=:predictions,
-                                                at=Dict(:x => test_x), scale=:response)
+            profile_predictions = profile_margins(model, df, DataFrame(x=[test_x]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_predictions)
             manual_profile_prediction = β₀ + β₁ * log(test_x)  # β₀ + β₁·log(x)
             @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Log Transformation: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Quadratic: y ~ x + x²" begin
@@ -301,7 +296,7 @@ include("analytical_se_validation.jl")
             # === 2×2 FRAMEWORK FOR QUADRATIC ===
             
             # 1. Population Effects: Hand-calculated analytical derivative
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             # Note: The model is y ~ x + x_sq where x_sq = x^2
             # So ∂y/∂x = β₁ (direct effect of x) since x_sq is treated as separate variable
@@ -318,22 +313,20 @@ include("analytical_se_validation.jl")
             
             # 3. Profile Effects at specific point  
             test_x = 1.5
-            profile_effects = profile_margins(model, df; type=:effects, vars=[:x],
-                                            at=Dict(:x => test_x, :x_sq => test_x^2), target=:eta)
+            profile_effects = profile_margins(model, df, DataFrame(x=[test_x], x_sq=[test_x^2]); type=:effects, vars=[:x], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
             # For y ~ x + x_sq model, ∂y/∂x = β₁ (x_sq is separate variable)
             @test prof_effects_df.estimate[1] ≈ β₁ atol=1e-12
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions at specific point
-            profile_predictions = profile_margins(model, df; type=:predictions,
-                                                at=Dict(:x => test_x, :x_sq => test_x^2), scale=:response)
+            profile_predictions = profile_margins(model, df, DataFrame(x=[test_x], x_sq=[test_x^2]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_predictions)
             manual_profile_prediction = β₀ + β₁ * test_x + β₂ * test_x^2
             @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Quadratic: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -348,13 +341,13 @@ include("analytical_se_validation.jl")
             # === 2×2 FRAMEWORK FOR LOGISTIC REGRESSION ===
             
             # 1. Population Effects (η scale): Should equal coefficient
-            pop_effects_eta = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            pop_effects_eta = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_eta_df = DataFrame(pop_effects_eta)
             @test pop_effects_eta_df.estimate[1] ≈ β₁ atol=1e-12  # Link scale: should be exact (within numerical precision)
             @test validate_all_finite_positive(pop_effects_eta_df).all_valid
             
             # 1b. Population Effects (μ scale): Chain rule verification
-            pop_effects_mu = population_margins(model, df; type=:effects, vars=[:x], target=:mu)
+            pop_effects_mu = population_margins(model, df; type=:effects, vars=[:x], scale=:response)
             pop_effects_mu_df = DataFrame(pop_effects_mu)
             fitted_probs = GLM.predict(model, df)
             manual_ame_mu = mean(β₁ .* fitted_probs .* (1 .- fitted_probs))  # β₁ × μ(1-μ), averaged
@@ -370,8 +363,7 @@ include("analytical_se_validation.jl")
             
             # 3. Profile Effects at specific point
             test_x, test_z = 0.5, -0.3
-            profile_effects_mu = profile_margins(model, df; type=:effects, vars=[:x],
-                                               at=Dict(:x => test_x, :z => test_z), target=:mu)
+            profile_effects_mu = profile_margins(model, df, DataFrame(x=[test_x], z=[test_z]); type=:effects, vars=[:x], scale=:response)
             prof_effects_df = DataFrame(profile_effects_mu)
             # Hand-calculate probability at this point
             test_eta = β₀ + β₁ * test_x + β₂ * test_z
@@ -381,13 +373,12 @@ include("analytical_se_validation.jl")
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions at specific point
-            profile_pred = profile_margins(model, df; type=:predictions,
-                                         at=Dict(:x => test_x, :z => test_z), scale=:response)
+            profile_pred = profile_margins(model, df, DataFrame(x=[test_x], z=[test_z]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_pred)
             @test prof_pred_df.estimate[1] ≈ test_mu atol=1e-12  # Should match hand-calculated probability
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Logistic Regression: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Poisson Regression: y ~ x + z" begin
@@ -398,13 +389,13 @@ include("analytical_se_validation.jl")
             # === 2×2 FRAMEWORK FOR POISSON REGRESSION ===
             
             # 1. Population Effects (η scale): Should equal coefficient  
-            pop_effects_eta = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            pop_effects_eta = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_eta_df = DataFrame(pop_effects_eta)
             @test pop_effects_eta_df.estimate[1] ≈ β₁ atol=1e-12  # Link scale: should be exact (within numerical precision)
             @test validate_all_finite_positive(pop_effects_eta_df).all_valid
             
             # 1b. Population Effects (μ scale): Chain rule verification
-            pop_effects_mu = population_margins(model, df; type=:effects, vars=[:x], target=:mu)
+            pop_effects_mu = population_margins(model, df; type=:effects, vars=[:x], scale=:response)
             pop_effects_mu_df = DataFrame(pop_effects_mu)
             fitted_means = GLM.predict(model, df)
             manual_ame_mu = mean(β₁ .* fitted_means)  # β₁ × μ for log link, averaged
@@ -421,7 +412,7 @@ include("analytical_se_validation.jl")
             # 3. Profile Effects at specific point (μ scale)
             test_x, test_z = 0.2, -0.1
             profile_effects_mu = profile_margins(model, df; type=:effects, vars=[:x],
-                                               at=Dict(:x => test_x, :z => test_z), target=:mu)
+                                               at=Dict(:x => test_x, :z => test_z), scale=:response)
             prof_effects_df = DataFrame(profile_effects_mu)
             # Hand-calculate rate at this point
             test_eta = β₀ + β₁ * test_x + β₂ * test_z
@@ -431,13 +422,12 @@ include("analytical_se_validation.jl")
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions at specific point
-            profile_pred = profile_margins(model, df; type=:predictions,
-                                         at=Dict(:x => test_x, :z => test_z), scale=:response)
+            profile_pred = profile_margins(model, df, DataFrame(x=[test_x], z=[test_z]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_pred)
             @test prof_pred_df.estimate[1] ≈ test_mu atol=1e-12  # Should match hand-calculated rate
             @test validate_all_finite_positive(prof_pred_df).all_valid
             
-            @info "✓ Poisson Regression: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -521,7 +511,7 @@ include("analytical_se_validation.jl")
                     end
                 end
                 
-                @info "✓ $(test_case.name): All 2×2 quadrants systematically validated"
+                # @info removed per TEST_PLAN.md requirements
             end
         end
     end
@@ -539,7 +529,7 @@ include("analytical_se_validation.jl")
                 @test framework_result.all_successful
                 @test framework_result.all_finite
                 
-                @info "✓ Small sample n=$n: All 2×2 quadrants robust"
+                # @info removed per TEST_PLAN.md requirements
             end
         end
         
@@ -554,7 +544,7 @@ include("analytical_se_validation.jl")
             @test framework_result.all_successful
             @test framework_result.all_finite
             
-            @info "✓ Boundary conditions: All 2×2 quadrants handle extreme coefficients"
+            # @info removed per TEST_PLAN.md requirements
         end
     end
     
@@ -574,7 +564,7 @@ include("analytical_se_validation.jl")
                     # === 2×2 FRAMEWORK FOR INTEGER VARIABLES ===
                     
                     # 1. Population Effects (AME): Should equal coefficient for linear model
-                    pop_effects = population_margins(model, df_int; type=:effects, vars=[var], target=:eta)
+                    pop_effects = population_margins(model, df_int; type=:effects, vars=[var], scale=:link)
                     pop_effects_df = DataFrame(pop_effects)
                     @test pop_effects_df.estimate[1] ≈ β₁ atol=1e-12  # Integer should work like float
                     @test validate_all_finite_positive(pop_effects_df).all_valid
@@ -587,21 +577,20 @@ include("analytical_se_validation.jl")
                     @test validate_all_finite_positive(pop_pred_df).all_valid
                     
                     # 3. Profile Effects at means
-                    profile_effects = profile_margins(model, df_int; type=:effects, vars=[var], at=:means, target=:eta)
+                    profile_effects = profile_margins(model, df_int, means_grid(df_int); type=:effects, vars=[var], scale=:link)
                     prof_effects_df = DataFrame(profile_effects)
                     @test prof_effects_df.estimate[1] ≈ β₁ atol=1e-12  # Linear: constant ME
                     @test validate_all_finite_positive(prof_effects_df).all_valid
                     
                     # 4. Profile Predictions at specific integer values
                     test_val = Int(round(mean(df_int[!, var])))  # Use integer value
-                    profile_predictions = profile_margins(model, df_int; type=:predictions, 
-                                                        at=Dict(var => test_val), scale=:response)
+                    profile_predictions = profile_margins(model, df_int, DataFrame(var => [test_val]); type=:predictions, scale=:response)
                     prof_pred_df = DataFrame(profile_predictions)
                     manual_profile_prediction = β₀ + β₁ * test_val
                     @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
                     @test validate_all_finite_positive(prof_pred_df).all_valid
                     
-                    @info "✓ Integer variable $(var): All 2×2 quadrants validated"
+                    # @info removed per TEST_PLAN.md requirements
                 end
             end
         end
@@ -615,7 +604,7 @@ include("analytical_se_validation.jl")
             @test framework_result.all_successful
             @test framework_result.all_finite
             
-            @info "✓ Integer interactions: All 2×2 quadrants validated"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Multiple Integer Variables - 2×2 Framework" begin
@@ -625,7 +614,7 @@ include("analytical_se_validation.jl")
             
             # Test population effects for multiple integers
             pop_effects = population_margins(model, df_int; type=:effects, 
-                                           vars=[:int_age, :int_education, :int_experience], target=:eta)
+                                           vars=[:int_age, :int_education, :int_experience], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             @test pop_effects_df.estimate[1] ≈ β₁ atol=1e-12  # int_age coefficient
             @test pop_effects_df.estimate[2] ≈ β₂ atol=1e-12  # int_education coefficient  
@@ -637,7 +626,7 @@ include("analytical_se_validation.jl")
             @test framework_result.all_successful
             @test framework_result.all_finite
             
-            @info "✓ Multiple integer variables: All 2×2 quadrants validated"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Integer Polynomial Transformations - 2×2 Framework" begin  
@@ -649,7 +638,7 @@ include("analytical_se_validation.jl")
             # === ANALYTICAL VALIDATION FOR INTEGER POLYNOMIAL ===
             
             # 1. Population Effects: Hand-calculated derivative for int_age
-            pop_effects = population_margins(model, df_int; type=:effects, vars=[:int_age], target=:eta)
+            pop_effects = population_margins(model, df_int; type=:effects, vars=[:int_age], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             # For model with separate int_age and int_age_sq variables: ∂/∂int_age = β₁ only
             manual_ame = β₁  # Coefficient of int_age (int_age_sq is treated as separate variable)
@@ -658,8 +647,7 @@ include("analytical_se_validation.jl")
             
             # 3. Profile Effects at specific integer value
             test_age = 35  # Specific integer age
-            profile_effects = profile_margins(model, df_int; type=:effects, vars=[:int_age],
-                                            at=Dict(:int_age => test_age, :int_age_sq => test_age^2), target=:eta)
+            profile_effects = profile_margins(model, df_int, DataFrame(int_age=[test_age], int_age_sq=[test_age^2]); type=:effects, vars=[:int_age], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
             manual_mem = β₁  # For separate variables, ∂/∂int_age = β₁
             @test prof_effects_df.estimate[1] ≈ manual_mem atol=1e-12
@@ -670,7 +658,7 @@ include("analytical_se_validation.jl")
             @test framework_result.all_successful
             @test framework_result.all_finite
             
-            @info "✓ Integer polynomial transformations: All 2×2 quadrants validated analytically"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "Mixed Integer/Float Interactions - 2×2 Framework" begin
@@ -683,11 +671,11 @@ include("analytical_se_validation.jl")
             @test framework_result.all_finite
             
             # Test specific margin for integer variable in mixed model
-            pop_effects = population_margins(model, df_int; type=:effects, vars=[:int_age], target=:eta)
+            pop_effects = population_margins(model, df_int; type=:effects, vars=[:int_age], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
             @test validate_all_finite_positive(pop_effects_df).all_valid
             
-            @info "✓ Mixed integer/float interactions: All 2×2 quadrants validated"
+            # @info removed per TEST_PLAN.md requirements
         end
         
         @testset "GLM with Integer Variables - 2×2 Framework" begin
@@ -699,14 +687,14 @@ include("analytical_se_validation.jl")
             
             # Link scale should equal coefficients (exact)
             pop_effects_eta = population_margins(model, df_int; type=:effects, 
-                                               vars=[:int_age, :int_education], target=:eta)
+                                               vars=[:int_age, :int_education], scale=:link)
             pop_eta_df = DataFrame(pop_effects_eta)
             @test pop_eta_df.estimate[1] ≈ β₁ atol=1e-12  # int_age coefficient
             @test pop_eta_df.estimate[2] ≈ β₂ atol=1e-12  # int_education coefficient
             
             # Response scale with chain rule
             pop_effects_mu = population_margins(model, df_int; type=:effects,
-                                              vars=[:int_age, :int_education], target=:mu) 
+                                              vars=[:int_age, :int_education], scale=:response) 
             pop_mu_df = DataFrame(pop_effects_mu)
             fitted_probs = GLM.predict(model, df_int)
             manual_ame_age = mean(β₁ .* fitted_probs .* (1 .- fitted_probs))
@@ -723,8 +711,8 @@ include("analytical_se_validation.jl")
     
     # === TIER 7: Bootstrap SE Validation (Phase 2, Tier 2) ===
     @testset "Tier 7: Bootstrap SE Validation - Empirical Verification" begin
-        @info "Starting Bootstrap SE Validation (Phase 2, Tier 2)"
-        @info "This provides empirical verification complementing analytical validation"
+        # @info removed per TEST_PLAN.md requirements
+        # @info removed per TEST_PLAN.md requirements
         
         # Include the comprehensive bootstrap validation tests
         include("bootstrap_validation_tests.jl")
@@ -732,8 +720,8 @@ include("analytical_se_validation.jl")
     
     # === TIER 8: Robust SE Integration (Phase 3, Tier 4) ===
     @testset "Tier 8: Robust SE Integration - Econometric Functionality" begin
-        @info "Starting Robust SE Integration (Phase 3, Tier 4)"
-        @info "This provides CovarianceMatrices.jl integration for sandwich/clustered SEs"
+        # @info removed per TEST_PLAN.md requirements
+        # @info removed per TEST_PLAN.md requirements
         
         # Include the comprehensive robust SE validation tests
         include("robust_se_tests.jl")
@@ -741,8 +729,8 @@ include("analytical_se_validation.jl")
     
     # === TIER 9: Specialized SE Cases (Phase 4, Tier 5) ===
     @testset "Tier 9: Specialized SE Cases - Advanced Edge Cases" begin
-        @info "Starting Specialized SE Cases Testing (Phase 4, Tier 5)"
-        @info "This provides specialized validation for integer variables, elasticities, and categorical mixtures"
+        # @info removed per TEST_PLAN.md requirements
+        # @info removed per TEST_PLAN.md requirements
         
         # Include the specialized SE validation tests
         include("specialized_se_tests.jl")

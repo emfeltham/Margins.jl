@@ -133,8 +133,8 @@ include("backend_reliability_guide.jl")
             df = make_glm_test_data(n=400, family=:binomial, seed=888)
             model = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
             
-            fd_result = population_margins(model, df; type=:effects, vars=[:x], target=:mu, backend=:fd)
-            ad_result = population_margins(model, df; type=:effects, vars=[:x], target=:mu, backend=:ad)
+            fd_result = population_margins(model, df; type=:effects, vars=[:x], scale=:response, backend=:fd)
+            ad_result = population_margins(model, df; type=:effects, vars=[:x], scale=:response, backend=:ad)
             
             fd_df = DataFrame(fd_result)
             ad_df = DataFrame(ad_result)

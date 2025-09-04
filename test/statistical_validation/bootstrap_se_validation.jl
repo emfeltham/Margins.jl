@@ -67,10 +67,28 @@ function bootstrap_margins_computation(model_func, formula, data, margins_func;
             end
             
             # Compute margins on bootstrap sample
-            if vars !== nothing
-                result = margins_func(boot_model, boot_data; vars=vars, backend=:fd, kwargs...)
+            if haskey(kwargs, :reference_grid) && margins_func === profile_margins
+                # Handle profile_margins with reference grid as positional argument
+                reference_grid = kwargs[:reference_grid]
+                remaining_kwargs = Dict(k => v for (k, v) in kwargs if k !== :reference_grid)
+                # Use :ad backend by default unless explicitly overridden
+                backend = get(remaining_kwargs, :backend, :ad)
+                remaining_kwargs_no_backend = Dict(k => v for (k, v) in remaining_kwargs if k !== :backend)
+                if vars !== nothing
+                    result = margins_func(boot_model, boot_data, reference_grid; vars=vars, backend=backend, remaining_kwargs_no_backend...)
+                else
+                    result = margins_func(boot_model, boot_data, reference_grid; backend=backend, remaining_kwargs_no_backend...)
+                end
             else
-                result = margins_func(boot_model, boot_data; backend=:fd, kwargs...)
+                # Handle population_margins or other functions with keyword arguments
+                # Use :ad backend by default unless explicitly overridden
+                backend = get(kwargs, :backend, :ad)
+                kwargs_no_backend = Dict(k => v for (k, v) in kwargs if k !== :backend)
+                if vars !== nothing
+                    result = margins_func(boot_model, boot_data; vars=vars, backend=backend, kwargs_no_backend...)
+                else
+                    result = margins_func(boot_model, boot_data; backend=backend, kwargs_no_backend...)
+                end
             end
             
             boot_estimates = DataFrame(result).estimate
@@ -215,19 +233,25 @@ function bootstrap_validate_population_predictions(model_func, formula, data; n_
 end
 
 """
-    bootstrap_validate_profile_effects(model_func, formula, data; vars=nothing, at=:means, n_bootstrap=200)
+    bootstrap_validate_profile_effects(model_func, formula, data; vars=nothing, reference_grid=nothing, n_bootstrap=200)
 
 Bootstrap validation for profile marginal effects (MEM).
+Uses means_grid(data) as default reference grid if not provided.
 """
-function bootstrap_validate_profile_effects(model_func, formula, data; vars=nothing, at=:means, n_bootstrap=200)
+function bootstrap_validate_profile_effects(model_func, formula, data; vars=nothing, reference_grid=nothing, n_bootstrap=200)
     # Fit original model
     original_model = model_func(formula, data)
     
+    # Create reference grid if not provided
+    if reference_grid === nothing
+        reference_grid = means_grid(data)
+    end
+    
     # Compute original margins
     if vars !== nothing
-        original_result = profile_margins(original_model, data; type=:effects, vars=vars, at=at, backend=:fd)
+        original_result = profile_margins(original_model, data, reference_grid; type=:effects, vars=vars, backend=:ad)
     else
-        original_result = profile_margins(original_model, data; type=:effects, at=at, backend=:fd)
+        original_result = profile_margins(original_model, data, reference_grid; type=:effects, backend=:ad)
     end
     
     original_df = DataFrame(original_result)
@@ -237,7 +261,7 @@ function bootstrap_validate_profile_effects(model_func, formula, data; vars=noth
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(
         model_func, formula, data, profile_margins;
-        n_bootstrap=n_bootstrap, vars=vars, type=:effects, at=at
+        n_bootstrap=n_bootstrap, vars=vars, type=:effects, reference_grid=reference_grid, backend=:ad
     )
     
     # Validate agreement
@@ -253,23 +277,29 @@ function bootstrap_validate_profile_effects(model_func, formula, data; vars=noth
 end
 
 """
-    bootstrap_validate_profile_predictions(model_func, formula, data; at=:means, n_bootstrap=200)
+    bootstrap_validate_profile_predictions(model_func, formula, data; reference_grid=nothing, n_bootstrap=200)
 
 Bootstrap validation for profile predictions (APM).
+Uses means_grid(data) as default reference grid if not provided.
 """
-function bootstrap_validate_profile_predictions(model_func, formula, data; at=:means, n_bootstrap=200)
+function bootstrap_validate_profile_predictions(model_func, formula, data; reference_grid=nothing, n_bootstrap=200)
     # Fit original model
     original_model = model_func(formula, data)
     
+    # Create reference grid if not provided
+    if reference_grid === nothing
+        reference_grid = means_grid(data)
+    end
+    
     # Compute original margins
-    original_result = profile_margins(original_model, data; type=:predictions, at=at, backend=:fd)
+    original_result = profile_margins(original_model, data, reference_grid; type=:predictions, backend=:ad)
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
     
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(
         model_func, formula, data, profile_margins;
-        n_bootstrap=n_bootstrap, type=:predictions, at=at
+        n_bootstrap=n_bootstrap, type=:predictions, reference_grid=reference_grid, backend=:ad
     )
     
     # Validate agreement
@@ -349,7 +379,7 @@ function bootstrap_validate_2x2_framework(model_func, formula, data; vars=nothin
     if !isempty(vars)
         try
             results[:profile_effects] = bootstrap_validate_profile_effects(
-                model_func, formula, data; vars=vars, at=:means, n_bootstrap=n_bootstrap
+                model_func, formula, data; vars=vars, reference_grid=means_grid(data), n_bootstrap=n_bootstrap
             )
             results[:profile_effects] = merge(results[:profile_effects], (success=true,))
         catch e
@@ -362,7 +392,7 @@ function bootstrap_validate_2x2_framework(model_func, formula, data; vars=nothin
     # 4. Profile Predictions (APM)  
     try
         results[:profile_predictions] = bootstrap_validate_profile_predictions(
-            model_func, formula, data; at=:means, n_bootstrap=n_bootstrap
+            model_func, formula, data; reference_grid=means_grid(data), n_bootstrap=n_bootstrap
         )
         results[:profile_predictions] = merge(results[:profile_predictions], (success=true,))
     catch e

@@ -31,14 +31,14 @@ include("testing_utilities.jl")
             β₀, β₁, β₂ = coef(model)
             
             # Population effects must equal coefficients exactly
-            pop_effects = population_margins(model, df; type=:effects, vars=[:x, :z], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:x, :z], scale=:link)
             pop_df = DataFrame(pop_effects)
             @test pop_df.estimate[1] ≈ β₁ atol=1e-12
             @test pop_df.estimate[2] ≈ β₂ atol=1e-12
             @test validate_all_finite_positive(pop_df).all_valid
             
             # Profile effects must equal coefficients exactly
-            profile_effects = profile_margins(model, df; type=:effects, vars=[:x, :z], at=:means, target=:eta)
+            profile_effects = profile_margins(model, df, means_grid(df); type=:effects, vars=[:x, :z], scale=:link)
             prof_df = DataFrame(profile_effects)
             @test prof_df.estimate[1] ≈ β₁ atol=1e-12
             @test prof_df.estimate[2] ≈ β₂ atol=1e-12
@@ -54,13 +54,13 @@ include("testing_utilities.jl")
             β₁ = coef(model)[2]
             
             # Link scale must equal coefficient exactly
-            effects_eta = population_margins(model, df; type=:effects, vars=[:x], target=:eta)
+            effects_eta = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             eta_df = DataFrame(effects_eta)
             @test eta_df.estimate[1] ≈ β₁ atol=1e-12
             @test validate_all_finite_positive(eta_df).all_valid
             
             # Response scale must follow chain rule
-            effects_mu = population_margins(model, df; type=:effects, vars=[:x], target=:mu)
+            effects_mu = population_margins(model, df; type=:effects, vars=[:x], scale=:response)
             mu_df = DataFrame(effects_mu)
             fitted_probs = GLM.predict(model, df)
             manual_ame = mean(β₁ .* fitted_probs .* (1 .- fitted_probs))
@@ -81,16 +81,16 @@ include("testing_utilities.jl")
             β₁ = coef(model)[2]
             
             # Test all four quadrants work with integers
-            pop_effects = population_margins(model, df; type=:effects, vars=[:int_age], target=:eta)
+            pop_effects = population_margins(model, df; type=:effects, vars=[:int_age], scale=:link)
             @test DataFrame(pop_effects).estimate[1] ≈ β₁ atol=1e-12
             
             pop_pred = population_margins(model, df; type=:predictions)
             @test validate_all_finite_positive(DataFrame(pop_pred)).all_valid
             
-            prof_effects = profile_margins(model, df; type=:effects, vars=[:int_age], at=:means, target=:eta)
+            prof_effects = profile_margins(model, df, means_grid(df); type=:effects, vars=[:int_age], scale=:link)
             @test DataFrame(prof_effects).estimate[1] ≈ β₁ atol=1e-12
             
-            prof_pred = profile_margins(model, df; type=:predictions, at=:means)
+            prof_pred = profile_margins(model, df, means_grid(df); type=:predictions)
             @test validate_all_finite_positive(DataFrame(prof_pred)).all_valid
             
             @info "✓ CI: Integer variable support validated"

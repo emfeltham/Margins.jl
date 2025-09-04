@@ -6,6 +6,9 @@ using DataFrames, CategoricalArrays, GLM
 using StatsModels
 using Statistics
 using Margins
+using MixedModels
+using RDatasets
+using Distributions
 
 # Core functionality tests
 @testset "Core Functionality" begin
@@ -16,7 +19,7 @@ using Margins
     include("test_vcov.jl")
     include("test_errors.jl")
     include("test_automatic_variable_detection.jl")
-    # include("test_mixedmodels.jl") where is this?
+    include("test_mixedmodels.jl")
 end
 
 # Advanced Features (Phase 1 additions)
