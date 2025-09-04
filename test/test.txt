@@ -6,7 +6,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
      Testing Margins
 ┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StaticArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_fYEXaW/Project.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_5whQEA/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.0
 ⌅ [324d7699] CategoricalArrays v0.10.8
   [60f91f6f] CovarianceMatrices v0.22.0
@@ -25,7 +25,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [de0858da] Printf v1.11.0
   [9a3f8284] Random v1.11.0
   [8dfed614] Test v1.11.0
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_fYEXaW/Manifest.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_5whQEA/Manifest.toml`
   [a4c015fc] ANSIColoredPrinters v0.0.1
   [1520ce14] AbstractTrees v0.4.5
   [79e6a3ab] Adapt v4.3.0
@@ -202,9 +202,9 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [3f19e933] p7zip_jll v17.4.0+2
         Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
      Testing Running tests...
-Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
+Minimizing 2    Time: 0:00:00 ( 0.16  s/it)[K
    objective: 126.3474937319155[K[A
-[K[AMinimizing 73    Time: 0:00:00 ( 4.42 ms/it)[K
+[K[AMinimizing 73    Time: 0:00:00 ( 4.97 ms/it)[K
 WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
@@ -352,7 +352,6 @@ WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where name
 WARNING: Method definition analytical_derivative(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:431 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition logistic_chain_rule(Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:461 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition validate_all_finite_positive(Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:475 overwritten on the same line (check for duplicate calls to `include`).
-[ Info: Testing robust SE framework components
 [ Info: ✓ Heteroskedastic data generation working
 [ Info: ✓ Basic robust SE integration working
 [ Info: Running comprehensive sandwich estimator tests
@@ -360,25 +359,11 @@ WARNING: Method definition validate_all_finite_positive(Any) in module Main at /
 [ Info: ✓ GLM sandwich estimators: 4/4 successful
 [ Info: Running clustered standard errors tests
 ┌ Warning: ⚠️  Clustered SE test failed: UndefVarError(:CRHC0, Main)
-└ @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:136
+└ @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:135
 [ Info: Running comprehensive robust SE validation suite
 [ Info: ✓ Comprehensive robust SE suite: 2/3 tests successful
 [ Info:   Overall success rate: 66.7%
-[ Info: Testing robust SE edge cases and error handling
-[ Info: ✓ Small sample robust SE: Working
 [ Info: ✓ Invalid cluster variable handled gracefully: UndefVarError
-[ Info: 🎉 PHASE 3 TIER 4 ROBUST SE INTEGRATION: COMPLETE
-[ Info: 
-[ Info: Robust standard errors validation provides critical econometric functionality
-[ Info: with proper CovarianceMatrices.jl integration for real-world applications.
-[ Info: 
-[ Info: Key achievements:
-[ Info:   ✅ Sandwich estimators (HC0, HC1, HC2, HC3) validation
-[ Info:   ✅ Clustered standard errors testing
-[ Info:   ✅ Heteroskedasticity-robust SE validation
-[ Info:   ✅ 2×2 framework compatibility
-[ Info:   ✅ Edge case and error handling
-[ Info:   ✅ Integration with existing test infrastructure
 WARNING: Method definition make_econometric_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.make_econometric_data)) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:34 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition make_simple_test_data() in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/testing_utilities.jl:90 overwritten on the same line (check for duplicate calls to `include`).
@@ -401,11 +386,11 @@ WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where name
 WARNING: Method definition verify_glm_se_chain_rule(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:270 overwritten on the same line (check for duplicate calls to `include`).
 WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_glm_se_chain_rule), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:270 overwritten on the same line (check for duplicate calls to `include`).
 Test Summary:      | Pass  Total   Time
-Core Functionality |  113    113  35.6s
+Core Functionality |  113    113  40.6s
 Test Summary:     | Pass  Total   Time
-Advanced Features |  239    239  18.5s
+Advanced Features |  239    239  20.2s
 Test Summary: | Pass  Total  Time
-Performance   |   30     30  8.8s
+Performance   |   30     30  9.2s
 Test Summary:           | Pass  Total     Time
-Statistical Correctness |  714    714  1m47.9s
+Statistical Correctness |  714    714  1m49.4s
      Testing Margins tests passed 
