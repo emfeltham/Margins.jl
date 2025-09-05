@@ -53,13 +53,13 @@ It consolidates the repeated pattern of:
 """
 function compute_prediction_with_gradient(
     compiled, data_nt, row_idx::Int, β::Vector{Float64}, 
-    link, target::Symbol, row_buf::Vector{Float64}
+    link, scale::Symbol, row_buf::Vector{Float64}
 )
     # Core computation: build model row and compute linear predictor
     FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row_idx)
     η = dot(row_buf, β)
     
-    if target === :mu
+    if scale === :response
         # Response scale: apply inverse link function and chain rule
         μ = GLM.linkinv(link, η)
         dμ_dη = GLM.mueta(link, η)
@@ -67,11 +67,11 @@ function compute_prediction_with_gradient(
         # Chain rule: ∂μ/∂β = (∂μ/∂η) * (∂η/∂β) = dμ_dη * row_buf
         gradient = dμ_dη .* row_buf
         
-        return PredictionWithGradient(μ, gradient, :mu)
+        return PredictionWithGradient(μ, gradient, :response)
     else
         # Link scale: gradient is just the model row
         # Use copy to ensure gradient can be safely modified
-        return PredictionWithGradient(η, copy(row_buf), :eta)
+        return PredictionWithGradient(η, copy(row_buf), :link)
     end
 end
 
@@ -91,7 +91,7 @@ pre-allocated arrays to minimize allocation overhead.
 - `data_nt::NamedTuple`: Data in columntable format
 - `β::Vector{Float64}`: Model coefficients
 - `link`: GLM link function
-- `target::Symbol`: Either `:eta` or `:mu`
+- `scale::Symbol`: Either `:link` or `:response`
 - `row_buf::Vector{Float64}`: Pre-allocated buffer for model row
 
 # Performance
@@ -133,7 +133,7 @@ function compute_predictions_batch!(
 end
 
 """
-    compute_single_prediction(compiled, data_nt, row_idx, β, link, target, row_buf) -> Float64
+    compute_single_prediction(compiled, data_nt, row_idx, β, link, scale, row_buf) -> Float64
 
 Compute prediction for a single observation without gradient (lighter weight).
 
@@ -147,18 +147,18 @@ Same as `compute_prediction_with_gradient` but returns only the prediction value
 `Float64`: Predicted value at specified scale
 
 # Performance
-- Zero allocation regardless of target scale
+- Zero allocation regardless of scale
 - Fastest option when gradient not needed
 """
 function compute_single_prediction(
     compiled, data_nt, row_idx::Int, β::Vector{Float64},
-    link, target::Symbol, row_buf::Vector{Float64}
+    link, scale::Symbol, row_buf::Vector{Float64}
 )::Float64
     
     FormulaCompiler.modelrow!(row_buf, compiled, data_nt, row_idx)
     η = dot(row_buf, β)
     
-    if target === :mu
+    if scale === :response
         return GLM.linkinv(link, η)
     else
         return η
@@ -166,7 +166,7 @@ function compute_single_prediction(
 end
 
 """
-    compute_predictions_only!(results, compiled, data_nt, β, link, target, row_buf)
+    compute_predictions_only!(results, compiled, data_nt, β, link, scale, row_buf)
 
 Batch prediction computation without gradients (lighter weight).
 
@@ -184,12 +184,12 @@ not gradients. Use when standard errors are not needed.
 """
 function compute_predictions_only!(
     results::AbstractVector{T}, compiled, data_nt, β::Vector{Float64}, 
-    link, target::Symbol, row_buf::Vector{Float64}
+    link, scale::Symbol, row_buf::Vector{Float64}
 ) where T<:Real
     
     n_obs = length(results)
     
-    if target === :mu
+    if scale === :response
         for i in 1:n_obs
             FormulaCompiler.modelrow!(row_buf, compiled, data_nt, i)
             η = dot(row_buf, β)

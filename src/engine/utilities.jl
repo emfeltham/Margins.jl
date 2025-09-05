@@ -424,7 +424,7 @@ profiles = [Dict(:x1 => 0.0, :region => "North")]
 df, G = _mem_continuous_and_categorical(engine, profiles; scale=:response, backend=:ad)
 ```
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector; target=:mu, backend=:ad, measure=:effect) where L
+function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector; scale=:response, backend=:ad, measure=:effect) where L
     # Handle the case where we have only categorical variables (engine.de === nothing)
     # or mixed continuous/categorical variables
     
@@ -473,7 +473,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
         for var in requested_vars
             if var ∈ continuous_vars
                 # Continuous variable: compute derivative using FormulaCompiler
-                if target === :mu
+                if scale === :response
                     FormulaCompiler.marginal_effects_mu!(engine.g_buf, refgrid_de, engine.β, 1;
                                                         link=engine.link, backend=backend)
                 else
@@ -485,7 +485,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 effect_val = engine.g_buf[continuous_var_idx]
                 
                 # Compute parameter gradient for SE using refgrid derivative evaluator
-                if target === :mu
+                if scale === :response
                     FormulaCompiler.me_mu_grad_beta!(engine.gβ_accumulator, refgrid_de, engine.β, 1, var;
                                                    link=engine.link)
                 else
@@ -493,8 +493,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 end
             else
                 # Categorical variable: compute row-specific baseline contrast
-                effect_val = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, target, backend)
-                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, target)
+                effect_val = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, var, scale, backend)
+                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile, var, scale)
             end
             
             # Apply elasticity transformations for continuous variables if requested
@@ -510,7 +510,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                 FormulaCompiler.modelrow!(local_row_buf, local_compiled, refgrid_data, 1)
                 η = dot(local_row_buf, local_β)
                 
-                if target === :mu
+                if scale === :response
                     y_val = GLM.linkinv(local_link, η)                # Transform to μ scale
                 else
                     y_val = η                                          # Use η scale directly
@@ -709,7 +709,7 @@ using Dates: now
 using StatsBase: mode
 
 """
-    _compute_categorical_baseline_ame(engine, var, rows, target, backend) -> (Float64, Vector{Float64})
+    _compute_categorical_baseline_ame(engine, var, rows, scale, backend) -> (Float64, Vector{Float64})
 
 Compute traditional baseline contrasts for categorical variables in population margins.
 This computes the average marginal effect (AME) of changing from baseline to the modal level.
@@ -794,12 +794,12 @@ function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::
 end
 
 """
-    _predict_with_formulacompiler(engine, profile, target) -> Float64
+    _predict_with_formulacompiler(engine, profile, scale) -> Float64
 
 Make predictions using FormulaCompiler for categorical contrast computation.
 Helper function that properly uses FormulaCompiler instead of manual computation.
 """
-function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, target::Symbol) where L
+function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, scale::Symbol) where L
     # Create minimal reference data for this profile  
     profile_data = _build_refgrid_data(profile, engine.data_nt)
     profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
@@ -808,9 +808,9 @@ function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, 
     FormulaCompiler.modelrow!(engine.row_buf, profile_compiled, profile_data, 1)
     η = dot(engine.row_buf, engine.β)
     
-    if target === :eta
+    if scale === :link
         return η
-    else # :mu  
+    else # :response  
         return GLM.linkinv(engine.link, η)
     end
 end
@@ -828,7 +828,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 # Arguments
 - `engine`: Pre-built MarginsEngine with original data
 - `reference_grid`: DataFrame containing all profiles (with potential CategoricalMixture objects)
-- `target`: Target scale (:mu or :eta)
+- `scale`: Target scale (:response or :link)
 - `backend`: Computational backend (:ad or :fd) 
 - `measure`: Effect measure (:effect, :elasticity, etc.)
 

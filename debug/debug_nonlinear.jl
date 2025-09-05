@@ -38,11 +38,11 @@ println("\n" * repeat("=", 40))
 println("LOGISTIC MODEL MARGINAL EFFECTS")
 println(repeat("=", 40))
 
-base_result = population_margins(model_logit, data; type=:effects, vars=[:x1], target=:mu)
+base_result = population_margins(model_logit, data; type=:effects, vars=[:x1], scale=:response)
 println("Base (overall) result:")
 println(DataFrame(base_result))
 
-grouped_result = population_margins(model_logit, data; type=:effects, vars=[:x1], groups=:education, target=:mu)
+grouped_result = population_margins(model_logit, data; type=:effects, vars=[:x1], groups=:education, scale=:response)
 println("Grouped result:")
 grouped_df = DataFrame(grouped_result)
 println(grouped_df)

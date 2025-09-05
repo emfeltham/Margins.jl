@@ -24,13 +24,13 @@ println("=== POPULATION APPROACH ===")
 
 # Population marginal effects (AME) on response scale
 println("1. Population marginal effects (AME) - response scale:")
-pop_ame = population_margins(m, df; type=:effects, vars=[:x, :z], target=:mu)
+pop_ame = population_margins(m, df; type=:effects, vars=[:x, :z], scale=:response)
 println(DataFrame(pop_ame))
 println()
 
 # Population marginal effects on link scale (linear predictor)
 println("2. Population marginal effects - link scale (η):")
-pop_ame_eta = population_margins(m, df; type=:effects, vars=[:x, :z], target=:eta)
+pop_ame_eta = population_margins(m, df; type=:effects, vars=[:x, :z], scale=:link)
 println(DataFrame(pop_ame_eta))
 println()
 

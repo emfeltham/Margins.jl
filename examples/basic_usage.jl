@@ -78,7 +78,7 @@ println()
 # Example 7: GLM example with population approach
 println("7. GLM example - Urban residence probability (population effects):")
 urban_model = glm(@formula(urban ~ education + experience + wage), df, Binomial(), LogitLink())
-urban_effects = population_margins(urban_model, df; type=:effects, vars=[:education, :wage], target=:mu)
+urban_effects = population_margins(urban_model, df; type=:effects, vars=[:education, :wage], scale=:response)
 println(DataFrame(urban_effects))
 
 println("\n=== API SUMMARY ===")

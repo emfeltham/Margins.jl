@@ -172,8 +172,8 @@ career_scenarios = Dict(
     :female => [0, 1]
 )
 
-career_predictions = profile_margins(wage_model, data; at=career_scenarios, 
-                                   type=:predictions, target=:mu)
+career_predictions = profile_margins(wage_model, data, cartesian_grid(data; age=[25,35,45,55], experience=[2,12,22,32], education=["High School","Bachelor's","Graduate"], female=[0,1]);
+                                   type=:predictions, scale=:response)
 career_df = DataFrame(career_predictions)
 
 # Focus on wage levels by education and gender
@@ -183,10 +183,7 @@ wage_comparison.wage = exp.(wage_comparison.estimate)  # Convert from log wage
 println(wage_comparison[1:12, :])  # Show first 12 rows
 
 # Gender wage gap quantification
-gap_analysis = profile_margins(wage_model, data;
-    at=Dict(:education => ["High School", "Bachelor's", "Graduate"],
-            :experience => [5, 15, 25],
-            :female => [0, 1]),
+gap_analysis = profile_margins(wage_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
     type=:predictions
 )
 
@@ -217,8 +214,7 @@ println("Population average elasticities:")
 println(DataFrame(elasticities))
 
 # Elasticities by education level
-edu_elasticities = profile_margins(wage_model, data;
-    at=Dict(:education => ["High School", "Bachelor's", "Graduate"]),
+edu_elasticities = profile_margins(wage_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"]);
     type=:effects,
     measure=:elasticity,
     vars=[:age, :experience]
@@ -248,17 +244,14 @@ promotion_model = glm(@formula(promotion ~ age + education + experience +
 println("Promotion model fitted (logistic regression)")
 
 # Average marginal effects on probability scale
-promotion_ame = population_margins(promotion_model, data; type=:effects, target=:mu)
+promotion_ame = population_margins(promotion_model, data; type=:effects, scale=:response)
 println("\nAverage marginal effects on promotion probability:")
 println(DataFrame(promotion_ame))
 
 # Promotion probability by demographic scenarios
-promotion_scenarios = profile_margins(promotion_model, data;
-    at=Dict(:education => ["High School", "Bachelor's", "Graduate"],
-            :experience => [5, 15, 25],
-            :female => [0, 1]),
+promotion_scenarios = profile_margins(promotion_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
     type=:predictions,
-    target=:mu  # Probability scale
+    scale=:response  # Probability scale
 )
 
 promo_df = DataFrame(promotion_scenarios)
@@ -270,15 +263,15 @@ println(promo_df[!, [:at_education, :at_experience, :at_female, :estimate]])
 println("\n=== Policy Counterfactual Analysis ===")
 
 # Current vs. policy scenario: universal college education
-current_scenario = profile_margins(wage_model, data;
-    at=Dict(:education => mix("High School" => 0.35, "Some College" => 0.25, 
-                             "Bachelor's" => 0.30, "Graduate" => 0.10)),
+current_scenario = population_margins(wage_model, data;
+    scenarios=Dict(:education => mix("High School" => 0.35, "Some College" => 0.25, 
+                                    "Bachelor's" => 0.30, "Graduate" => 0.10)),
     type=:predictions
 )
 
-policy_scenario = profile_margins(wage_model, data;
-    at=Dict(:education => mix("High School" => 0.10, "Some College" => 0.15,
-                             "Bachelor's" => 0.60, "Graduate" => 0.15)),
+policy_scenario = population_margins(wage_model, data;
+    scenarios=Dict(:education => mix("High School" => 0.10, "Some College" => 0.15,
+                                    "Bachelor's" => 0.60, "Graduate" => 0.15)),
     type=:predictions
 )
 
