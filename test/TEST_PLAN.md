@@ -108,5 +108,45 @@ test/
 
 The `statistical_validation/` directory already demonstrates this organizational approach with 16+ specialized validation files grouped under the "Statistical Correctness" testset.
 
+## WARNING: Method definition - Minimal Solution Plan
+
+The test suite generates 100+ "Method definition overwritten" warnings due to utility functions being included multiple times across different test files. These warnings don't affect functionality but create noise that obscures real issues.
+
+### Minimal Solution: Centralized Include Strategy
+
+The cleanest, minimal fix is to **centralize utility includes** in `runtests.jl` while keeping all existing test file structure intact.
+
+**Current Problem:**
+- `testing_utilities.jl` included by 16+ files → functions redefined 16+ times
+- `bootstrap_se_validation.jl` included by 5+ files → functions redefined 5+ times  
+- `analytical_se_validation.jl` included by multiple files → more redefinitions
+
+**Proposed Solution:**
+
+- [x] 1. **Add utility includes to runtests.jl** (after existing using statements):
+   ```julia
+   include("statistical_validation/testing_utilities.jl")
+   include("statistical_validation/bootstrap_se_validation.jl") 
+   include("statistical_validation/analytical_se_validation.jl")
+   ```
+
+- [ ] 2. **Remove utility includes from test files** - Remove these lines from files in `statistical_validation/`:
+   - `include("testing_utilities.jl")`
+   - `include("bootstrap_se_validation.jl")`
+   - `include("analytical_se_validation.jl")`
+
+- [ ] 3. **Keep legitimate test includes** - Preserve includes that load actual test files:
+   - `include("multi_model_bootstrap_tests.jl")` ✓ Keep
+   - `include("bootstrap_validation_tests.jl")` ✓ Keep
+   - `include("robust_se_validation.jl")` ✓ Keep
+
+**Benefits:**
+- Zero method definition warnings (functions defined once, used everywhere)
+- Minimal changes (no file reorganization or architectural changes)
+- Preserved functionality (all existing tests intact)
+- Easy to revert (simple to undo if needed)
+
+**Expected result:** 100+ warnings → 0 warnings, 714/714 tests passing
+
 ## More testing?
 

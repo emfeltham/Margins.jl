@@ -17,8 +17,8 @@ using Margins
 using Printf
 
 # Load bootstrap utilities
-include("bootstrap_se_validation.jl")
-include("testing_utilities.jl")
+# Bootstrap SE validation loaded centrally in runtests.jl
+# Testing utilities loaded centrally in runtests.jl
 
 """
     make_categorical_test_data(; n=500, include_continuous=true, seed=42)

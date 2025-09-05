@@ -16,7 +16,7 @@ using Test
 using Printf
 
 # Load testing utilities
-include("testing_utilities.jl")
+# Testing utilities loaded centrally in runtests.jl
 
 """
     bootstrap_sample_with_replacement(data, n_obs)

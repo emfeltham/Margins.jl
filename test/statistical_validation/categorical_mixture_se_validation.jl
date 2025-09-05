@@ -19,8 +19,8 @@ using Test
 using Printf
 
 # Load testing utilities and bootstrap framework
-include("testing_utilities.jl")
-include("bootstrap_se_validation.jl")
+# Testing utilities loaded centrally in runtests.jl
+# Bootstrap SE validation loaded centrally in runtests.jl
 include("categorical_bootstrap_tests.jl")
 
 """

@@ -14,8 +14,7 @@ using GLM
 using Statistics
 using Margins
 
-# Load testing utilities
-include("testing_utilities.jl")
+# Testing utilities loaded centrally in runtests.jl
 
 @testset "Backend Consistency Tests - AD vs FD Validation" begin
     Random.seed!(789)  # Different seed from main validation for independence

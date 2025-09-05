@@ -16,8 +16,8 @@ using Margins
 using Printf
 
 # Load bootstrap utilities
-include("bootstrap_se_validation.jl")
-include("testing_utilities.jl")
+# Bootstrap SE validation loaded centrally in runtests.jl
+# Testing utilities loaded centrally in runtests.jl
 
 """
     create_glm_model_func(family, link)

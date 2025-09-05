@@ -15,7 +15,7 @@ using Statistics
 using Margins
 
 # Load testing utilities and core validation
-include("testing_utilities.jl")
+# Testing utilities loaded centrally in runtests.jl
 
 @testset "Release Statistical Validation - Complete Suite" begin
     Random.seed!(06515)

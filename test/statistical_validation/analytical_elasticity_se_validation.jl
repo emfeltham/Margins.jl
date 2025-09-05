@@ -20,7 +20,7 @@ using Random
 using Margins
 
 # Load existing analytical validation utilities
-include("analytical_se_validation.jl")
+# Analytical SE validation loaded centrally in runtests.jl
 
 """
     analytical_linear_elasticity_se(model, data, var_symbol, at_values)

@@ -10,7 +10,7 @@ using GLM
 using Margins
 
 # Load testing utilities and reliability guide
-include("testing_utilities.jl")
+# Testing utilities loaded centrally in runtests.jl
 include("backend_reliability_guide.jl")
 
 @testset "Backend Reliability Validation" begin

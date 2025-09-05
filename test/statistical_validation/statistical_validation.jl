@@ -18,8 +18,8 @@ using StatsModels
 using Margins
 
 # Load testing utilities
-include("testing_utilities.jl")
-include("analytical_se_validation.jl")
+# Testing utilities loaded centrally in runtests.jl
+# Analytical SE validation loaded centrally in runtests.jl
 
 @testset "Comprehensive Statistical Validation - 2×2 Framework Coverage" begin
     Random.seed!(06515)

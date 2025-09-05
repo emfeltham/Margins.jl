@@ -13,21 +13,9 @@ using Statistics
 using GLM
 using StatsModels
 using Margins
+using CovarianceMatrices
 
-# Load testing utilities
-include("testing_utilities.jl")
-
-# Conditional CovarianceMatrices.jl support
-const COVARIANCE_MATRICES_AVAILABLE = try
-    using CovarianceMatrices
-    true
-catch
-    false
-end
-
-if COVARIANCE_MATRICES_AVAILABLE
-    using CovarianceMatrices
-end
+# Testing utilities loaded centrally in runtests.jl
 
 """
     make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
@@ -151,9 +139,6 @@ Test all major sandwich estimators (HC0, HC1, HC2, HC3) for comprehensive valida
 - `NamedTuple` with results for each estimator type
 """
 function test_sandwich_estimators_comprehensive(model, data)
-    if !COVARIANCE_MATRICES_AVAILABLE
-        return (success=false, reason="CovarianceMatrices.jl not available")
-    end
     
     estimators = [
         (:HC0, HC0()),
@@ -221,9 +206,6 @@ Test clustered standard error computation and validation.
 - `NamedTuple` with clustered SE validation results
 """
 function test_clustered_se_validation(model, data, cluster_var)
-    if !COVARIANCE_MATRICES_AVAILABLE
-        return (success=false, reason="CovarianceMatrices.jl not available")
-    end
     
     try
         # Create cluster-robust covariance matrix
@@ -275,7 +257,6 @@ Run comprehensive robust SE validation across different model types and robust e
 function run_comprehensive_robust_se_test_suite(; verbose=true)
     if verbose
         @info "Starting Comprehensive Robust SE Validation Suite"
-        if COVARIANCE_MATRICES_AVAILABLE
             @info "CovarianceMatrices.jl available - full testing enabled"
         else
             @warn "CovarianceMatrices.jl not available - limited testing"
@@ -294,7 +275,6 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         data = make_heteroskedastic_data(n=400, heteroskedasticity_type=:linear)
         model = lm(@formula(y ~ x + z), data)
         
-        if COVARIANCE_MATRICES_AVAILABLE
             sandwich_results = test_sandwich_estimators_comprehensive(model, data)
             
             @test sandwich_results.overall_success
@@ -337,7 +317,6 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         data = make_heteroskedastic_data(n=500, heteroskedasticity_type=:quadratic)
         model = glm(@formula(binary_y ~ x + z), data, Binomial(), LogitLink())
         
-        if COVARIANCE_MATRICES_AVAILABLE
             sandwich_results = test_sandwich_estimators_comprehensive(model, data)
             
             @test sandwich_results.overall_success
@@ -369,7 +348,6 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         data = make_heteroskedastic_data(n=600, heteroskedasticity_type=:groupwise)
         model = lm(@formula(y ~ x + z), data)
         
-        if COVARIANCE_MATRICES_AVAILABLE
             cluster_results = test_clustered_se_validation(model, data, :group)
             
             if cluster_results.success
@@ -412,7 +390,6 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         @info "Total Tests: $(length(test_results))"
         @info "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
         
-        if COVARIANCE_MATRICES_AVAILABLE
             if overall_success_rate >= 0.75
                 @info "🎉 ROBUST SE VALIDATION: PASSED"
                 @info "Robust standard errors integration working correctly!"
@@ -430,7 +407,6 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         overall_success_rate = overall_success_rate,
         test_results = test_results,
         n_successful = length(successful_tests),
-        covariance_matrices_available = COVARIANCE_MATRICES_AVAILABLE
     )
 end
 

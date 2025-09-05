@@ -15,10 +15,10 @@ using GLM
 using Printf
 
 # Load all bootstrap validation components
-include("bootstrap_se_validation.jl")
+# Bootstrap SE validation loaded centrally in runtests.jl
 include("multi_model_bootstrap_tests.jl") 
 include("categorical_bootstrap_tests.jl")
-include("testing_utilities.jl")
+# Testing utilities loaded centrally in runtests.jl
 
 @testset "Systematic Bootstrap SE Validation" begin
     Random.seed!(06515)  

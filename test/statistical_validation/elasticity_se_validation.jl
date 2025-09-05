@@ -17,8 +17,8 @@ using Test
 using Printf
 
 # Load testing utilities and bootstrap framework
-include("testing_utilities.jl")
-include("bootstrap_se_validation.jl")
+# Testing utilities loaded centrally in runtests.jl
+# Bootstrap SE validation loaded centrally in runtests.jl
 
 """
     bootstrap_validate_population_elasticity(model_func, formula, data, measure; vars=nothing, n_bootstrap=200)

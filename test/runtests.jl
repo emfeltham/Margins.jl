@@ -10,6 +10,11 @@ using MixedModels
 using RDatasets
 using Distributions
 
+# Load testing utilities centrally to prevent method definition warnings
+include("statistical_validation/testing_utilities.jl")
+include("statistical_validation/bootstrap_se_validation.jl") 
+include("statistical_validation/analytical_se_validation.jl")
+
 # Core functionality tests
 @testset "Core Functionality" begin
     include("core/test_glm_basic.jl")
@@ -20,6 +25,7 @@ using Distributions
     include("core/test_errors.jl")
     include("core/test_automatic_variable_detection.jl")
     include("core/test_mixedmodels.jl")
+    include("core/test_weights.jl")
 end
 
 # Advanced Features

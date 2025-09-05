@@ -20,8 +20,8 @@ using LinearAlgebra
 using Distributions
 
 # Load testing utilities
-include("testing_utilities.jl")
-include("analytical_se_validation.jl")
+# Testing utilities loaded centrally in runtests.jl
+# Analytical SE validation loaded centrally in runtests.jl
 
 # Import required functions for mixture testing
 using Margins: mix
