@@ -1,77 +1,71 @@
 # API Reference
 
-*Complete reference for Margins.jl functions and types*
+*Comprehensive technical specification for Margins.jl functions and types*
 
-## Core Functions
+## Core Computational Functions
 
-Margins.jl provides a clean **two-function API** implementing the 2×2 framework (Population vs Profile × Effects vs Predictions):
+The package implements a systematic two-function API that operationalizes the unified analytical framework through distinct computational pathways for population-level and profile-specific marginal effects analysis:
 
 ### Population Analysis
 
 ### `population_margins`
 
-Population-level marginal effects or adjusted predictions.
+Computes population-level marginal effects or adjusted predictions through integration over the empirical distribution of observed covariates.
 
-This function averages effects/predictions across the observed sample distribution, providing true population parameters for your sample.
+The function implements population-averaged inference by computing marginal quantities for each observation in the sample and subsequently averaging these quantities according to the empirical distribution. This approach yields population parameters that reflect the heterogeneity present in the data generating process while providing appropriate standard errors through delta-method computation with full covariance matrix integration.
 
-**Key Use Cases:**
-- True population parameters (AME/AAP equivalent)
-- Policy evaluation requiring external validity  
-- When sample heterogeneity is important
-- Broad applications affecting diverse groups
+**Methodological Applications:**
+Population analysis provides unbiased estimates of population parameters suitable for policy evaluation requiring external validity to similar populations. The approach proves particularly valuable when sample heterogeneity represents important features of the underlying population, and when analytical applications affect diverse demographic or economic groups requiring representative inference.
 
-**Performance**: Low per-row computational cost for effects and predictions (O(n) scaling)
-*For performance comparison with profile margins and optimization strategies, see [Performance Guide](performance.md)*
+**Computational Characteristics**: Linear scaling with respect to sample size while maintaining minimal per-observation computational overhead through optimized implementations.
+*Detailed performance analysis and computational complexity comparisons are provided in the [Performance Guide](performance.md)*
 
 ### Profile Analysis
 
 ### `profile_margins`
 
-Profile-level marginal effects or adjusted predictions.
+Computes marginal effects or adjusted predictions evaluated at specified covariate combinations within the covariate space.
 
-This function evaluates effects/predictions at specific covariate scenarios, providing concrete, interpretable results for representative cases.
+The function implements profile-specific inference through evaluation of marginal quantities at predetermined points in the covariate space, typically at sample means or theoretically motivated scenario specifications. This approach yields concrete, interpretable estimates for specific covariate combinations while maintaining appropriate uncertainty quantification through delta-method standard error computation.
 
-**Key Use Cases:**  
-- Representative case analysis (MEM/APM equivalent)
-- Concrete, interpretable scenarios
-- Policy targeting specific demographics
-- Communication to non-technical audiences
+**Methodological Applications:**  
+Profile analysis provides representative case inference suitable for policy targeting specific demographic or economic profiles. The approach facilitates clear communication of quantitative results through concrete scenario interpretation, making it particularly valuable for stakeholder communication and policy applications requiring specific target group analysis.
 
-**Performance**: Constant time regardless of dataset size (O(1) scaling)
-*For detailed performance characteristics and memory management, see [Performance Guide](performance.md)*
+**Computational Characteristics**: Constant-time complexity independent of dataset size through optimized evaluation algorithms that avoid full dataset traversal.
+*Comprehensive performance benchmarking and memory allocation analysis are detailed in the [Performance Guide](performance.md)*
 
-## Result Types
+## Result Type Specifications
 
 ### `MarginsResult`
 
-Container for marginal effects results with Tables.jl interface.
+Structured container for marginal effects analysis results implementing the Tables.jl interface protocol.
 
-This type holds the results of marginal analysis and provides seamless integration with the DataFrames ecosystem.
+The result type encapsulates computed marginal effects or adjusted predictions along with associated statistical inference quantities including standard errors, confidence intervals, and hypothesis test statistics. The implementation adheres to the Tables.jl protocol to ensure seamless integration with the broader data analysis ecosystem while maintaining type stability and computational efficiency.
 
-**Tables.jl Integration:**
+**Data Integration Framework:**
 ```julia
-# Seamless DataFrame conversion
+# Tables.jl protocol implementation enables direct conversion
 result = population_margins(model, data)
 df = DataFrame(result)
 
-# Works with any Tables.jl sink
+# Compatible with all Tables.jl-compliant output formats
 CSV.write("results.csv", result)
 ```
 
-## Advanced Features
+## Extended Analytical Capabilities
 
-### Categorical Mixtures
+### Categorical Mixture Specifications
 
-Margins.jl supports categorical mixtures for realistic policy scenario analysis through the `mix` function and `CategoricalMixture` type. These are internal implementation details that work through the standard API.
+The package implements sophisticated categorical mixture functionality to enable realistic policy scenario analysis through fractional category specifications. The `CategoricalMixture` type facilitates the specification of probability-weighted categorical distributions that reflect realistic population compositions rather than arbitrary baseline categories.
 
-**Policy Analysis Applications:**
+**Policy Counterfactual Analysis:**
 ```julia
-# Realistic population scenarios
-current = profile_margins(model, data; 
+# Current population educational composition
+baseline = profile_margins(model, data; 
     at=Dict(:education => mix("HS" => 0.4, "College" => 0.4, "Graduate" => 0.2)))
 
-# Policy scenario: increased graduation rates  
-future = profile_margins(model, data;
+# Policy counterfactual: educational attainment improvement
+intervention = profile_margins(model, data;
     at=Dict(:education => mix("HS" => 0.2, "College" => 0.5, "Graduate" => 0.3)))
 ```
 

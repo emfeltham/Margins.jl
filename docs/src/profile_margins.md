@@ -1,42 +1,42 @@
-# Profile Margins
+# Profile-Specific Marginal Effects Analysis
 
-Profile margins compute marginal effects or predictions at specific covariate profiles (combinations of variable values). This is ideal for understanding effects at representative scenarios like "typical cases" or specific policy counterfactuals.
+Profile-specific marginal effects analysis evaluates marginal quantities at predetermined points within the covariate space, providing inference for representative scenarios and policy counterfactuals. This methodological approach facilitates concrete interpretation of marginal effects through evaluation at theoretically motivated or practically relevant covariate combinations.
 
-## Reference Grid Approach
+## Reference Grid Methodology
 
-Margins.jl uses an explicit reference grid approach for maximum flexibility and clarity. The core function signature is:
+The implementation employs an explicit reference grid specification to ensure methodological transparency and computational flexibility. The core analytical function utilizes the following signature specification:
 
 ```julia
 profile_margins(model, data, reference_grid; type=:effects, vars=nothing, ...)
 ```
 
-## Reference Grid Builders
+## Reference Grid Construction Framework
 
-The package provides several builder functions to create reference grids easily:
+The package implements systematic reference grid construction through specialized builder functions that accommodate diverse analytical requirements:
 
 ### 1. Sample Means - `means_grid()`
 
-The most common case: effects/predictions at sample means for continuous variables and frequency-weighted mixtures for categorical variables.
+The canonical approach evaluates marginal quantities at empirical sample means for continuous variables while incorporating frequency-weighted probability mixtures for categorical variables.
 
 ```julia
-# Effects at sample means (MEM)
+# Marginal effects at sample means (MEM)
 result = profile_margins(model, data, means_grid(data); type=:effects)
 
-# Predictions at sample means (APM)
+# Adjusted predictions at sample means (APM)
 result = profile_margins(model, data, means_grid(data); type=:predictions)
 ```
 
 ### 2. Cartesian Product - `cartesian_grid()`
 
-Create all combinations of specified values across variables:
+Systematic construction of reference grids through Cartesian product enumeration of specified covariate values across multiple dimensions:
 
 ```julia
-# 3×2 = 6 scenarios: all combinations of x and education values
+# Complete factorial design: 3×2 = 6 scenarios
 result = profile_margins(model, data, 
     cartesian_grid(data; x=[-1, 0, 1], education=["High School", "College"]); 
     type=:effects)
 
-# Single variable varying, others at typical values
+# Single-variable sensitivity analysis with typical values for remaining covariates
 result = profile_margins(model, data,
     cartesian_grid(data; age=20:10:70); 
     type=:predictions)
@@ -44,10 +44,10 @@ result = profile_margins(model, data,
 
 ### 3. Balanced Factorial - `balanced_grid()`
 
-Create balanced (equal-weight) mixtures for categorical variables:
+Construction of balanced factorial designs utilizing equal-weight probability mixtures for categorical variable specifications:
 
 ```julia
-# Balanced factorial design for categorical variables
+# Balanced factorial design for comprehensive categorical analysis
 result = profile_margins(model, data,
     balanced_grid(data; education=:all, region=:all); 
     type=:effects)
@@ -55,21 +55,21 @@ result = profile_margins(model, data,
 
 ### 4. Quantile-Based - `quantile_grid()`
 
-Use quantiles of continuous variables:
+Reference grid construction based on empirical quantiles of continuous variable distributions:
 
 ```julia
-# Effects at income quartiles
+# Marginal effects evaluated at income distribution quartiles
 result = profile_margins(model, data,
     quantile_grid(data; income=[0.25, 0.5, 0.75]); 
     type=:effects)
 ```
 
-## DataFrame Input (Maximum Control)
+## Direct DataFrame Specification (Complete Analytical Control)
 
-For complete control, provide a DataFrame directly:
+Maximum analytical flexibility is achieved through direct DataFrame specification of reference grid points:
 
 ```julia
-# Custom reference grid
+# Custom reference grid with explicit covariate specifications
 reference_grid = DataFrame(
     age=[25, 35, 45], 
     education=["High School", "College", "Graduate"],
@@ -78,65 +78,65 @@ reference_grid = DataFrame(
 result = profile_margins(model, data, reference_grid; type=:effects)
 ```
 
-## Key Features
+## Advanced Methodological Features
 
-### Frequency-Weighted Categorical Defaults
+### Population-Representative Categorical Composition
 
-When categorical variables are unspecified, they use actual population composition rather than arbitrary defaults:
+The implementation addresses the methodological limitation of arbitrary baseline category selection through empirical frequency-weighted categorical mixtures that reflect actual population composition:
 
 ```julia
-# Your data: education = 40% HS, 45% College, 15% Graduate
-#           region = 75% Urban, 25% Rural
+# Data characteristics: education = 40% HS, 45% College, 15% Graduate
+#                      region = 75% Urban, 25% Rural
 
-# Sample means with realistic categorical composition
+# Sample means incorporating realistic categorical composition
 result = profile_margins(model, data, means_grid(data); type=:effects)
-# → age: sample mean
+# → age: empirical sample mean
 # → education: frequency-weighted mixture (40% HS, 45% College, 15% Graduate)  
 # → region: frequency-weighted mixture (75% Urban, 25% Rural)
 ```
 
-### Categorical Mixtures
+### Fractional Categorical Specifications
 
-Use `mix()` for fractional specifications in reference grids:
+Policy counterfactual analysis utilizes fractional categorical specifications through the categorical mixture interface:
 
 ```julia
 using Margins: mix
 
-# Policy scenario with specific treatment rates
+# Policy scenario incorporating specific treatment probability distributions
 reference_grid = DataFrame(
     age=[35, 45, 55],
-    treated=[mix(0 => 0.3, 1 => 0.7)]  # 70% treatment rate
+    treated=[mix(0 => 0.3, 1 => 0.7)]  # 70% treatment probability
 )
 result = profile_margins(model, data, reference_grid; type=:predictions)
 ```
 
-### Elasticity Analysis
+### Profile-Specific Elasticity Analysis
 
-Compute elasticities at specific profiles:
+Elasticity computation at predetermined covariate profiles enables sensitivity analysis across representative scenarios:
 
 ```julia
-# Elasticities at sample means
+# Elasticities evaluated at sample means
 result = profile_margins(model, data, means_grid(data); 
     type=:effects, measure=:elasticity)
 
-# Semi-elasticities at specific scenarios
+# Semi-elasticities across income distribution quantiles
 result = profile_margins(model, data,
     cartesian_grid(data; income=[25000, 50000, 75000]); 
     type=:effects, measure=:semielasticity_dyex)
 ```
 
-## Performance Characteristics
+## Computational Performance Analysis
 
-Profile margins achieve **O(1) constant-time complexity** - execution time is independent of dataset size:
+Profile-specific marginal effects analysis exhibits constant-time computational complexity with execution time independent of dataset dimensionality:
 
 ```julia
-# Same computational cost regardless of data size
+# Computational cost remains invariant to dataset size
 @time profile_margins(model, small_data, means_grid(small_data))   # ~100μs
 @time profile_margins(model, large_data, means_grid(large_data))   # ~100μs
 
-# Complex scenarios also maintain O(1) scaling
+# Complex factorial designs maintain constant-time scaling properties
 scenarios = cartesian_grid(data; x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
-@time profile_margins(model, huge_data, scenarios)  # Still ~100μs
+@time profile_margins(model, huge_data, scenarios)  # Maintains ~100μs complexity
 ```
 
 ## Migration from Old API

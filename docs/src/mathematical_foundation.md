@@ -1,81 +1,59 @@
 # Mathematical Foundation
 
-*Understanding the conceptual framework underlying marginal analysis*
+*Theoretical exposition of the analytical framework underlying marginal effects analysis*
 
-## The 2×2 Framework for Marginal Analysis
+## Unified Framework for Marginal Effects Analysis
 
-Margins.jl is built around a clean **2×2 conceptual framework** that resolves the terminology confusion plaguing marginal effects across disciplines. Rather than memorizing acronyms like MEM, AME, APE, MER, etc., the framework organizes all approaches around two key choices:
+The theoretical foundation of marginal effects analysis rests upon a systematic decomposition of the inferential problem into two fundamental analytical dimensions. This framework addresses the terminological inconsistencies that have historically impeded methodological clarity across econometric and statistical disciplines through the establishment of a unified conceptual structure.
 
-1. **Where to evaluate**: Profile (specific scenarios) vs Population (across sample distribution)
-2. **What to compute**: Effects (derivatives) vs Predictions (levels)
+The analytical framework distinguishes between two orthogonal methodological choices that completely characterize the space of marginal effects approaches. The evaluation context determines whether inference targets population-level parameters or profile-specific estimates, while the analytical target specifies whether the quantity of interest represents marginal effects or adjusted predictions.
 
-### The Complete Framework
+### Complete Methodological Taxonomy
 
-|                    | **Effects**            | **Predictions**              |
+|                    | **Effects Analysis**            | **Predictions Analysis**              |
 |--------------------|------------------------|------------------------------|
-| **Profile**        | Marginal Effects at Representative Points | Adjusted Predictions at Representative Points |
-| **Population**     | Average Marginal Effects | Average Adjusted Predictions |
+| **Profile Context**        | Marginal Effects at Representative Scenarios | Adjusted Predictions at Representative Scenarios |
+| **Population Context**     | Average Marginal Effects | Average Adjusted Predictions |
 
-*The key question: Do you want inference for a typical case or across your entire population?*
+This taxonomic structure eliminates the ambiguity inherent in discipline-specific terminological conventions while preserving the essential methodological distinctions that govern appropriate analytical application.
 
-## Terminology Mapping
+## Cross-Disciplinary Terminological Unification
 
-This framework unifies terminology across disciplines:
+The proposed framework establishes a systematic correspondence between the established terminology employed across econometric, biostatistical, and computational disciplines. This mapping preserves the essential methodological content while eliminating the terminological inconsistencies that have impeded interdisciplinary communication and methodological clarity.
 
-### Profile Approaches
-- **Marginal Effects at the Mean (MEM)** → Profile Effects
-- **Adjusted Predictions at the Mean (APM)** → Profile Predictions  
+### Profile Context Methodologies
+The profile evaluation context encompasses analytical approaches that evaluate marginal quantities at representative or theoretically motivated points in the covariate space. Traditional terminological variants include Marginal Effects at the Mean and Adjusted Predictions at the Mean, which are unified under the profile effects and profile predictions categories respectively.
 
-### Population Approaches  
-- **Average Marginal Effects (AME)** → Population Effects
-- **Average Partial Effects (APE)** → Population Effects
-- **Average Predictions** → Population Predictions
+### Population Context Methodologies  
+The population evaluation context encompasses approaches that compute marginal quantities averaged across the empirical distribution of observed covariates. This category unifies Average Marginal Effects, Average Partial Effects, and related population-averaged measures under a coherent methodological framework that emphasizes the distributional basis of the inference.
 
-## Mathematical Definitions
+## Formal Mathematical Specification
 
-### Effects vs Predictions
+### Marginal Effects and Adjusted Predictions
 
-**Effects** measure how the expected outcome changes with covariates:
-- **Mathematical form**: ∂E[Y|X]/∂X (for continuous variables)
-- **Interpretation**: "How much does Y change per unit increase in X?"
-- **Units**: Same as Y per unit of X
+Marginal effects analysis concerns the derivative of the conditional expectation function with respect to the covariates of interest. For continuous covariates, this quantity is formally defined as ∂E[Y|X]/∂X, representing the instantaneous rate of change in the expected outcome with respect to marginal changes in the explanatory variable. The interpretation centers on the magnitude of response in the dependent variable per unit increase in the independent variable, with measurement units corresponding to the dependent variable scaled by the units of the explanatory variable.
 
-**Predictions** measure the expected outcome level:
-- **Mathematical form**: E[Y|X] 
-- **Interpretation**: "What is the predicted value of Y?"
-- **Units**: Same as Y
+Adjusted predictions represent the conditional expectation E[Y|X] evaluated at specified covariate configurations. This quantity provides the expected value of the outcome variable conditional on particular covariate realizations, maintaining the same units as the dependent variable. The analytical focus shifts from rates of change to levels of the outcome under specific conditioning scenarios.
 
-### Profile vs Population
+### Evaluation Context Specifications
 
-**Profile approaches** evaluate at specific covariate scenarios:
-- **At sample means**: X̄ (most common)
-- **At user scenarios**: Specific combinations like Dict(:age => 30, :education => "College")
-- **Advantage**: Concrete, interpretable results for specific cases
-- **Limitation**: May not represent broader population
+Profile approaches evaluate marginal quantities at predetermined points in the covariate space, most commonly at sample means X̄ or at theoretically motivated scenario specifications. This approach yields concrete, interpretable estimates for specific covariate combinations, facilitating clear communication of results and policy implications for particular demographic or economic profiles. The limitation lies in the potential lack of representativeness relative to the broader population distribution.
 
-**Population approaches** average across observed sample distribution:
-- **Across all observations**: Average effects/predictions weighted by sample composition
-- **Advantage**: True population parameters for your sample
-- **Limitation**: May not describe any individual case well
+Population approaches compute marginal quantities averaged across the empirical distribution of observed covariates, weighting each observation according to its sample frequency. This methodology yields population-averaged parameters that reflect the heterogeneity present in the data generating process, providing estimates that characterize the broader population represented by the sample. The limitation concerns the potential difficulty in interpreting results that may not correspond to any particular individual or realistic scenario within the population.
 
-## The Marginal Effects Terminology Problem
+## Methodological Inconsistencies Across Disciplines
 
-The terminology for marginal effects varies dramatically across disciplines, creating unnecessary confusion:
+The absence of standardized terminological conventions across quantitative disciplines has generated substantial methodological confusion that impedes both theoretical development and practical implementation. This inconsistency manifests through the use of discipline-specific acronyms and conceptual frameworks that obscure the underlying mathematical equivalence of analytical approaches.
 
-### Cross-Disciplinary Inconsistencies
-- **Economics**: MEM (Marginal Effects at Mean), AME (Average Marginal Effects)
-- **Biostatistics**: APE (Average Partial Effects) for the same concept as AME
-- **Machine Learning**: "Partial effects" as catch-all, often conflated with SHAP values
-- **Software packages**: Mix terminologies to accommodate different user bases
+### Disciplinary Terminological Variations
 
-### Core Problems
-1. **Identical concepts with different names** across fields
-2. **Same terms meaning different things** in different contexts  
-3. **Poor distinction** between predictions and effects
-4. **Inconsistent treatment** of "at-the-mean" versus "average" approaches
-5. **Conflation** of statistical associations with causal effects
+Economics employs Marginal Effects at the Mean and Average Marginal Effects as primary analytical categories, while biostatistics utilizes Average Partial Effects to denote methodologically identical procedures. Machine learning contexts frequently employ "partial effects" as an umbrella term that may conflate distinct analytical approaches including SHAP values and traditional marginal effects. Statistical software packages compound these inconsistencies through accommodation of diverse terminological preferences across user communities.
 
-This terminology chaos hampers reproducibility, creates learning barriers, and impedes interdisciplinary collaboration.
+### Fundamental Methodological Impediments
+
+The proliferation of terminological variants generates several significant barriers to methodological advancement. Identical analytical concepts receive different nomenclature across disciplines, while the same terminological constructs may denote different methodological approaches in alternative contexts. The distinction between predictions and effects becomes obscured through inconsistent usage patterns, and the conceptual difference between evaluation at representative points versus population averaging receives inadequate attention.
+
+These inconsistencies hamper reproducibility across research contexts, create unnecessary learning barriers for practitioners attempting to apply methods across disciplines, and impede productive interdisciplinary collaboration through the introduction of artificial communication barriers.
 
 ## Statistical vs Causal Interpretation
 

@@ -1,16 +1,16 @@
-# Reference Grid Specification
+# Reference Grid Methodology and Implementation
 
-Reference grids define the covariate scenarios where marginal effects and predictions are evaluated in profile-based analysis. Margins.jl provides a flexible system for specifying reference grids through builder functions and direct DataFrame specification.
+Reference grid specification constitutes the methodological foundation for covariate scenario definition in profile-based marginal effects analysis. The implementation provides a systematic framework for scenario specification through structured builder functions and direct tabular specification interfaces.
 
-## Core Approach
+## Methodological Foundation
 
-The fundamental interface uses explicit reference grids:
+The analytical framework employs explicit reference grid specification to ensure transparency and computational precision:
 
 ```julia
 profile_margins(model, data, reference_grid; type=:effects, ...)
 ```
 
-Where `reference_grid` is a DataFrame specifying the covariate combinations for analysis.
+The `reference_grid` parameter accepts DataFrame specifications that enumerate the covariate combinations where marginal effects are computed.
 
 ## Reference Grid Builders
 
