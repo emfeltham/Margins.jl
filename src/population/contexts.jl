@@ -572,9 +572,58 @@ end
 Compute categorical baseline AME for a single variable in context using FormulaCompiler.
 """
 function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol) where L
-    # For now, delegate to continuous implementation (placeholder)
-    # TODO: Implement proper categorical contrast computation
-    return _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend)
+    # Get the variable data from the original engine data (not context_data)
+    var_col = getproperty(engine.data_nt, var)
+    
+    # Get baseline level from model  
+    baseline_level = _get_baseline_level(engine.model, var)
+    
+    # Find the modal (most frequent) non-baseline level among the context indices
+    level_counts = Dict()
+    for row in context_indices
+        level = var_col[row]
+        if level != baseline_level
+            level_counts[level] = get(level_counts, level, 0) + 1
+        end
+    end
+    
+    if isempty(level_counts)
+        # All observations are at baseline level
+        return (0.0, zeros(length(engine.β)))
+    end
+    
+    # Get the most frequent non-baseline level
+    modal_level = argmax(level_counts)
+    
+    # Compute average discrete change: E[Y|var=modal] - E[Y|var=baseline] for this context
+    ame_sum = 0.0
+    grad_sum = zeros(length(engine.β))
+    
+    # For each observation in this context, compute the discrete change if we switched from baseline to modal
+    for row in context_indices
+        # Create profiles for this observation using the original engine data
+        baseline_profile = Dict(Symbol(k) => v[row] for (k, v) in pairs(engine.data_nt))
+        modal_profile = copy(baseline_profile)
+        
+        # Set the categorical variable to baseline and modal levels
+        baseline_profile[var] = baseline_level
+        modal_profile[var] = modal_level
+        
+        # Compute predictions using the existing helper function
+        baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, scale, backend)
+        modal_pred, modal_grad = _profile_prediction_with_gradient(engine, modal_profile, scale, backend)
+        
+        # Accumulate the discrete change
+        ame_sum += (modal_pred - baseline_pred)
+        grad_sum .+= (modal_grad .- baseline_grad)
+    end
+    
+    # Average over all observations in the context
+    n_obs = length(context_indices)
+    ame_val = ame_sum / n_obs
+    gβ_avg = grad_sum ./ n_obs
+    
+    return (ame_val, gβ_avg)
 end
 
 """
