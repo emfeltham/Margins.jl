@@ -8,7 +8,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
 ┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_ODj4fd/Project.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_B8bG68/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.0
 ⌅ [324d7699] CategoricalArrays v0.10.8
   [60f91f6f] CovarianceMatrices v0.22.0
@@ -28,7 +28,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [de0858da] Printf v1.11.0
   [9a3f8284] Random v1.11.0
   [8dfed614] Test v1.11.0
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_ODj4fd/Manifest.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_B8bG68/Manifest.toml`
   [a4c015fc] ANSIColoredPrinters v0.0.1
   [1520ce14] AbstractTrees v0.4.5
   [79e6a3ab] Adapt v4.3.0
@@ -204,8 +204,570 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [8e850ede] nghttp2_jll v1.59.0+0
   [3f19e933] p7zip_jll v17.4.0+2
         Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
-Precompiling project for configuration --code-coverage=none --color=auto --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none...
-    Margins Being precompiled by another process (pid: 49701, pidfile: /Users/emf/.julia/compiled/v1.11/Margins/VhyXK_2OwNO.ji.pidfile)
-   3249.4 ms  ✓ Margins
-  1 dependency successfully precompiled in 4 seconds. 189 already precompiled.
      Testing Running tests...
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
+   objective: 126.3474937319155[K[A
+[K[AMinimizing 73    Time: 0:00:00 ( 4.44 ms/it)[K
+[ Info: Buffer allocation fallback: g_buf too small for 18 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 6 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 6 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
+ERROR: LoadError: Some tests did not pass: 683 passed, 9 failed, 6 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/runtests.jl:44
+Test Summary:      | Pass  Total   Time
+Core Functionality |  187    187  47.2s
+Test Summary:     | Pass  Total   Time
+Advanced Features |  239    239  17.8s
+Test Summary: | Pass  Total  Time
+Performance   |   30     30  8.9s
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:499
+  Expression: framework_result.all_finite
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:499 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
+  Expression: result.finite_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
+  Expression: result.positive_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
+  Expression: result.finite_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
+  Expression: result.positive_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
+  Expression: result.finite_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
+  Expression: result.positive_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
+  Expression: result.finite_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
+  Expression: result.positive_ses
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] macro expansion
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
+ [7] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [8] top-level scope
+   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+Basic Robust SE Integration: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:43
+  Got exception outside of a @test
+  UndefVarError: `validate_robust_se_integration` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:47 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:44 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:24 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+Linear Model Sandwich Estimators: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59
+  Got exception outside of a @test
+  UndefVarError: `test_sandwich_estimators_comprehensive` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:63 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:60 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+GLM Sandwich Estimators: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:79
+  Got exception outside of a @test
+  UndefVarError: `test_sandwich_estimators_comprehensive` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:83 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:80 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+Linear Model Clustered SEs: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101
+  Got exception outside of a @test
+  UndefVarError: `test_clustered_se_validation` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:105 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:102 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+Variable Cluster Sizes: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:112
+  Got exception outside of a @test
+  UndefVarError: `test_clustered_se_validation` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:123 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:114 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+Comprehensive Robust SE Test Suite: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:130
+  Got exception outside of a @test
+  UndefVarError: `run_comprehensive_robust_se_test_suite` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:133 [inlined]
+    [2] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:133 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
+    [6] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+   [14] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [15] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:45
+   [16] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [17] top-level scope
+      @ none:6
+   [18] eval
+      @ ./boot.jl:430 [inlined]
+   [19] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [20] _start()
+      @ Base ./client.jl:531
+Test Summary:                                                   | Pass  Fail  Error  Total     Time
+Statistical Correctness                                         |  683     9      6    698  1m45.7s
+  Backend Consistency Tests - AD vs FD Validation               |   95                  95     9.6s
+  Comprehensive Statistical Validation - 2×2 Framework Coverage |  583     9      6    598  1m28.7s
+    Tier 1: Direct Coefficient Cases - All 2×2 Quadrants        |   18                  18     0.9s
+    Tier 1A: Analytical SE Validation - Linear Models           |   10                  10     0.6s
+    Tier 1B: Analytical SE Validation - GLM Chain Rules         |   10                  10     0.9s
+    Tier 2: Function Transformations - 2×2 Coverage             |   16                  16     2.3s
+    Tier 3: GLM Chain Rules - 2×2 Coverage                      |   20                  20     0.8s
+    Tier 4: Systematic Model Coverage - FormulaCompiler Style   |  289     9           298    47.6s
+      LM: Simple continuous - 2×2 Framework                     |   14                  14     1.5s
+      LM: Simple categorical - 2×2 Framework                    |    8                   8     0.5s
+      LM: Multiple continuous - 2×2 Framework                   |   14                  14     1.0s
+      LM: Multiple categorical - 2×2 Framework                  |    8                   8     0.5s
+      LM: Mixed types - 2×2 Framework                           |   14                  14     0.9s
+      LM: Simple interaction - 2×2 Framework                    |   14                  14     1.4s
+      LM: Interaction w/o main - 2×2 Framework                  |   14                  14     1.3s
+      LM: Function transform - 2×2 Framework                    |    8                   8     0.4s
+      LM: Function in interaction - 2×2 Framework               |   14                  14     1.8s
+      LM: Three-way interaction - 2×2 Framework                 |   14                  14     7.0s
+      LM: Four-way interaction - 2×2 Framework                  |   14                  14    11.7s
+      LM: Four-way w/ function - 2×2 Framework                  |    5     9            14     9.2s
+      LM: Complex interaction - 2×2 Framework                   |   14                  14     1.9s
+      GLM: Logistic simple - 2×2 Framework                      |   14                  14     0.7s
+      GLM: Logistic mixed - 2×2 Framework                       |   14                  14     0.4s
+      GLM: Logistic interaction - 2×2 Framework                 |   14                  14     0.3s
+      GLM: Logistic function - 2×2 Framework                    |    8                   8     0.7s
+      GLM: Logistic complex - 2×2 Framework                     |   14                  14     2.0s
+      GLM: Poisson simple - 2×2 Framework                       |   14                  14     0.6s
+      GLM: Poisson mixed - 2×2 Framework                        |   14                  14     0.3s
+      GLM: Poisson interaction - 2×2 Framework                  |   14                  14     0.2s
+      GLM: Gamma mixed - 2×2 Framework                          |   14                  14     1.3s
+      GLM: Gaussian LogLink - 2×2 Framework                     |   14                  14     0.5s
+    Tier 5: Edge Cases and Statistical Robustness               |    8                   8     0.0s
+    Tier 6: Integer Variable Systematic Coverage - CRITICAL     |   47                  47    11.3s
+    Tier 7: Bootstrap SE Validation - Empirical Verification    |   66                  66    11.1s
+    Tier 8: Robust SE Integration - Econometric Functionality   |   18            6     24     2.8s
+      Robust Standard Errors Integration                        |   18            6     24     2.1s
+        Robust SE Framework Tests                               |   15            1     16     0.5s
+          Heteroskedastic Data Generation                       |   15                  15     0.1s
+          Basic Robust SE Integration                           |                 1      1     0.4s
+        Comprehensive Sandwich Estimator Testing                |                 2      2     0.2s
+          Linear Model Sandwich Estimators                      |                 1      1     0.0s
+          GLM Sandwich Estimators                               |                 1      1     0.2s
+        Clustered Standard Errors Testing                       |                 2      2     0.2s
+          Linear Model Clustered SEs                            |                 1      1     0.0s
+          Variable Cluster Sizes                                |                 1      1     0.2s
+        Comprehensive Robust SE Test Suite                      |                 1      1     0.0s
+        Robust SE Edge Cases and Error Handling                 |    3                   3     1.2s
+    Tier 9: Specialized SE Cases - Advanced Edge Cases          |   81                  81    10.4s
+  Robust SE Validation                                          |    5                   5     7.1s
+ERROR: Package Margins errored during testing
+Stacktrace:
+ [1] pkgerror(msg::String)
+   @ Pkg.Types ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Types.jl:68
+ [2] test(ctx::Pkg.Types.Context, pkgs::Vector{Pkg.Types.PackageSpec}; coverage::Bool, julia_args::Cmd, test_args::Cmd, test_fn::Nothing, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool)
+   @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:2111
+ [3] test
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1996 [inlined]
+ [4] test(ctx::Pkg.Types.Context, pkgs::Vector{Pkg.Types.PackageSpec}; coverage::Bool, test_fn::Nothing, julia_args::Cmd, test_args::Cmd, force_latest_compatible_version::Bool, allow_earlier_backwards_compatible_versions::Bool, allow_reresolve::Bool, kwargs::@Kwargs{io::IOContext{IO}})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:475
+ [5] test(pkgs::Vector{Pkg.Types.PackageSpec}; io::IOContext{IO}, kwargs::@Kwargs{})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:159
+ [6] test(pkgs::Vector{Pkg.Types.PackageSpec})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:148
+ [7] test(; name::Nothing, uuid::Nothing, version::Nothing, url::Nothing, rev::Nothing, path::Nothing, mode::Pkg.Types.PackageMode, subdir::Nothing, kwargs::@Kwargs{})
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:174
+ [8] test()
+   @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:165
+ [9] top-level scope
+   @ none:1

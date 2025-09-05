@@ -23,9 +23,9 @@ using Margins
         
         # Test across different model complexities (FormulaCompiler pattern)
         test_models = [
-            (name="Simple LM", model=lm(@formula(log_wage ~ int_education), df)),
-            (name="Multiple LM", model=lm(@formula(log_wage ~ int_education + int_experience), df)),
-            (name="Quadratic LM", model=lm(@formula(log_wage ~ int_education + experience_sq), df)),
+            (name="Simple LM", model=lm(@formula(log(wage) ~ int_education), df)),
+            (name="Multiple LM", model=lm(@formula(log(wage) ~ int_education + int_experience), df)),
+            (name="Quadratic LM", model=lm(@formula(log(wage) ~ int_education + int_experience^2), df)),
             (name="Simple Logistic", model=glm(@formula(union_member ~ int_education), df, Binomial(), LogitLink())),
             (name="Multiple Logistic", model=glm(@formula(union_member ~ int_education + int_experience), df, Binomial(), LogitLink())),
         ]
@@ -165,7 +165,7 @@ using Margins
     # === PERFORMANCE CONSISTENCY (Following FormulaCompiler Pattern) ===
     @testset "Performance Characteristics - FD Zero Allocation" begin
         df = make_econometric_data(n=300, seed=999)
-        model = lm(@formula(log_wage ~ int_education + int_experience), df)
+        model = lm(@formula(log(wage) ~ int_education + int_experience), df)
         
         # Warm-up to ensure compilation (FormulaCompiler pattern)
         warmup_result = population_margins(model, df; backend=:fd, vars=[:int_education])
@@ -178,7 +178,7 @@ using Margins
         @testset "Scaling Consistency" begin
             for n in [100, 200, 500]
                 df_scaled = make_econometric_data(n=n, seed=n)
-                model_scaled = lm(@formula(log_wage ~ int_education), df_scaled)
+                model_scaled = lm(@formula(log(wage) ~ int_education), df_scaled)
                 
                 # Both backends should produce consistent results regardless of scale
                 ad_scaled = population_margins(model_scaled, df_scaled; type=:effects, vars=[:int_education], backend=:ad)

@@ -70,7 +70,13 @@ function run_development_validation(; focus=:all)
             # Test key integer variable scenarios
             for int_var in [:int_age, :int_education, :int_experience]
                 @testset "$(int_var) validation" begin
-                    model = lm(Term(:log_wage) ~ Term(int_var), df)
+                    if int_var == :int_age
+                        model = lm(@formula(log(wage) ~ int_age), df)
+                    elseif int_var == :int_education  
+                        model = lm(@formula(log(wage) ~ int_education), df)
+                    elseif int_var == :int_experience
+                        model = lm(@formula(log(wage) ~ int_experience), df)
+                    end
                     framework_result = test_2x2_framework_quadrants(model, df; test_name="$int_var development")
                     @test framework_result.all_successful
                     @test framework_result.all_finite
@@ -89,10 +95,10 @@ function run_development_validation(; focus=:all)
             
             # Test key model types
             key_models = [
-                (name="Simple LM", model=lm(@formula(log_wage ~ float_wage), df)),
-                (name="Mixed LM", model=lm(@formula(log_wage ~ float_wage + gender), df)),
-                (name="Interaction LM", model=lm(@formula(log_wage ~ float_wage * gender), df)),
-                (name="Simple GLM", model=glm(@formula(union_member ~ float_wage), df, Binomial(), LogitLink())),
+                (name="Simple LM", model=lm(@formula(log(wage) ~ wage), df)),
+                (name="Mixed LM", model=lm(@formula(log(wage) ~ wage + gender), df)),
+                (name="Interaction LM", model=lm(@formula(log(wage) ~ wage * gender), df)),
+                (name="Simple GLM", model=glm(@formula(union_member ~ wage), df, Binomial(), LogitLink())),
             ]
             
             for (name, model) in key_models

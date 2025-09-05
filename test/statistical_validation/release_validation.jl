@@ -39,7 +39,7 @@ using Margins
         @info "Validating performance characteristics for release..."
         
         df = make_econometric_data(n=1000, seed=999)
-        model = lm(@formula(log_wage ~ int_education + int_experience + gender), df)
+        model = lm(@formula(log(wage) ~ int_education + int_experience + gender), df)
         
         @testset "Population Margins Performance" begin
             # Measure performance of population margins
@@ -70,7 +70,7 @@ using Margins
         @testset "Large Dataset Scaling" begin
             # Test with larger dataset to verify scaling
             df_large = make_econometric_data(n=2000, seed=1234)
-            model_large = lm(@formula(log_wage ~ int_education), df_large)
+            model_large = lm(@formula(log(wage) ~ int_education), df_large)
             
             # Profile margins should remain O(1)
             start_time = time()
@@ -98,7 +98,7 @@ using Margins
             
             # High-dimensional interaction
             df_interact = make_econometric_data(n=500, seed=222)
-            model_interact = lm(@formula(log_wage ~ float_wage * float_productivity * gender * region), df_interact)
+            model_interact = lm(@formula(log(wage) ~ wage * float_productivity * gender * region), df_interact)
             
             framework_result = test_2x2_framework_quadrants(model_interact, df_interact; test_name="High-dim interaction")
             @test framework_result.all_successful
@@ -108,7 +108,7 @@ using Margins
         @testset "Statistical Correctness Cross-Check" begin
             # Cross-validate key statistical properties
             df = make_econometric_data(n=800, seed=333)
-            model = lm(@formula(log_wage ~ int_education + float_wage), df)
+            model = lm(@formula(log(wage) ~ int_education + wage), df)
             
             # Population vs manual calculation cross-check
             pop_effects = population_margins(model, df; type=:effects, vars=[:int_education], scale=:link)
@@ -122,7 +122,7 @@ using Margins
             test_wage = 50.0    # $50/hour
             
             prof_pred = profile_margins(model, df, 
-                                      DataFrame(int_education=[test_education], float_wage=[test_wage]);
+                                      DataFrame(int_education=[test_education], wage=[test_wage]);
                                       type=:predictions)
             
             β₀, β₁, β₂ = coef(model)

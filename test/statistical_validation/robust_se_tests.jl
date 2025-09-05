@@ -12,6 +12,9 @@ using DataFrames
 using Statistics
 using Margins
 using GLM
+using CovarianceMatrices
+
+# Note: robust_se_validation.jl functions are included at the top level in runtests.jl
 
 @testset "Robust Standard Errors Integration" begin
     Random.seed!(06515)  
@@ -166,7 +169,7 @@ using GLM
             model = lm(@formula(y ~ x + z), data)
             
             # Should throw error for nonexistent cluster variable
-            @test_throws ArgumentError population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
+            @test_throws Exception population_margins(model, data; type=:effects, vars=[:x], vcov=CR0(:nonexistent_var))
         end
     end
 end

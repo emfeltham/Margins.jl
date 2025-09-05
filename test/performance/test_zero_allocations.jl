@@ -148,6 +148,74 @@ using Margins
         @test df1.se ≈ df2.se rtol=1e-12
     end
     
+    @testset "Function-based formula allocation tests" begin
+        # Phase 2.2: Verify that function-heavy formulas maintain same performance
+        # as simple variable references (addressing CHEATING.md concerns)
+        
+        @testset "Log function allocation test" begin
+            # Test @formula(log(y) ~ x1 + x2) maintains zero allocations
+            # Create modified data to ensure positive values for log
+            data_log = copy(data)
+            data_log.y = abs.(data_log.y) .+ 0.1  # Ensure positive for log
+            
+            model_log = lm(@formula(log(y) ~ x1 + x2), data_log)
+            
+            # Warmup run
+            result_warmup = population_margins(model_log, data_log; backend=:fd, vars=[:x1, :x2])
+            
+            # Benchmark allocation count
+            bench = @benchmark population_margins($model_log, $data_log; backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
+            
+            min_allocs = minimum(bench).allocs
+            @debug "Log function allocation performance" formula="log(y) ~ x1 + x2" min_allocations=min_allocs threshold=10000
+            
+            # Should maintain same allocation threshold as simple variable formulas
+            @test minimum(bench).allocs < 10000  # Same threshold as existing FD tests
+        end
+        
+        @testset "Nested function performance test" begin
+            # Test @formula(y ~ log(x1) + sqrt(abs(x2) + 1)) for nested function performance
+            # Create modified data to ensure positive values for log
+            data_nested = copy(data)
+            data_nested.x1 = abs.(data_nested.x1) .+ 0.1  # Ensure positive for log
+            data_nested.y = 0.5 * log.(data_nested.x1) + 0.3 * sqrt.(abs.(data_nested.x2) .+ 1) + randn(n) * 0.1
+            
+            model_nested = lm(@formula(y ~ log(x1) + sqrt(abs(x2) + 1)), data_nested)
+            
+            # Warmup run
+            result_warmup = population_margins(model_nested, data_nested; backend=:fd, vars=[:x1, :x2])
+            
+            # Benchmark allocation count
+            bench = @benchmark population_margins($model_nested, $data_nested; backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
+            
+            min_allocs = minimum(bench).allocs
+            @debug "Nested function allocation performance" formula="y ~ log(x1) + sqrt(abs(x2) + 1)" min_allocations=min_allocs threshold=10000
+            
+            # Should maintain same allocation threshold as simple formulas
+            @test minimum(bench).allocs < 10000  # Same threshold as existing FD tests
+        end
+        
+        @testset "Complex expression performance test" begin
+            # Test @formula(y ~ exp(x1/20) + x2^2) for complex expressions
+            data_complex = copy(data)
+            data_complex.y = 0.5 * exp.(data_complex.x1 / 20) + 0.3 * data_complex.x2.^2 + randn(n) * 0.1
+            
+            model_complex = lm(@formula(y ~ exp(x1/20) + x2^2), data_complex)
+            
+            # Warmup run
+            result_warmup = population_margins(model_complex, data_complex; backend=:fd, vars=[:x1, :x2])
+            
+            # Benchmark allocation count
+            bench = @benchmark population_margins($model_complex, $data_complex; backend=:fd, vars=[:x1, :x2]) samples=100 evals=1
+            
+            min_allocs = minimum(bench).allocs
+            @debug "Complex expression allocation performance" formula="y ~ exp(x1/20) + x2^2" min_allocations=min_allocs threshold=10000
+            
+            # Should maintain same allocation threshold as simple formulas
+            @test minimum(bench).allocs < 10000  # Same threshold as existing FD tests
+        end
+    end
+    
     @testset "Large dataset stress test" begin
         # Test with larger dataset to ensure allocation behavior scales properly
         n_large = 10000

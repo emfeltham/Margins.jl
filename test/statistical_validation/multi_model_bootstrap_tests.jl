@@ -95,7 +95,7 @@ function multi_model_bootstrap_test_suite()
             name = "Linear: Multiple variables",
             model_func = lm,
             data_func = () -> make_econometric_data(n=600),
-            formula = @formula(log_wage ~ float_wage + int_education + int_experience),
+            formula = @formula(log(wage) ~ wage + int_education + int_experience),
             vars = [:float_wage, :int_education],
             expected_agreement = 0.85  # Good for econometric spec
         ),
@@ -103,7 +103,7 @@ function multi_model_bootstrap_test_suite()
             name = "Logistic: Econometric spec",
             model_func = create_glm_model_func(Binomial(), LogitLink()),
             data_func = () -> make_econometric_data(n=800), 
-            formula = @formula(union_member ~ float_wage + int_education),
+            formula = @formula(union_member ~ wage + int_education),
             vars = [:float_wage, :int_education],
             expected_agreement = 0.75  # Moderate for complex GLM
         )

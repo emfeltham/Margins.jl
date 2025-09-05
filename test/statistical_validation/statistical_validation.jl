@@ -288,7 +288,7 @@ using Margins
         
         @testset "Quadratic: y ~ x + x²" begin
             df = make_simple_test_data(n=600, formula_type=:quadratic)
-            model = lm(@formula(y ~ x + x_sq), df)
+            model = lm(@formula(y ~ x + x^2), df)
             β₀, β₁, β₂ = coef(model)
             
             # === 2×2 FRAMEWORK FOR QUADRATIC ===
@@ -296,10 +296,12 @@ using Margins
             # 1. Population Effects: Hand-calculated analytical derivative
             pop_effects = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
-            # Note: The model is y ~ x + x_sq where x_sq = x^2
-            # So ∂y/∂x = β₁ (direct effect of x) since x_sq is treated as separate variable
-            # This tests the computational correctness, not the analytical derivative of x²
-            @test pop_effects_df.estimate[1] ≈ β₁ atol=1e-12
+            # Note: The model is y ~ x + x^2 
+            # So ∂y/∂x = β₁ + 2*β₂*x (true derivative of quadratic function)
+            # This tests the computational correctness of automatic differentiation for x²
+            # For quadratic y ~ x + x^2, AME = average of (β₁ + 2*β₂*x) over all x values
+            expected_ame = β₁ + 2*β₂*mean(df.x)
+            @test pop_effects_df.estimate[1] ≈ expected_ame atol=1e-10
             @test validate_all_finite_positive(pop_effects_df).all_valid
             
             # 2. Population Predictions
@@ -311,14 +313,15 @@ using Margins
             
             # 3. Profile Effects at specific point  
             test_x = 1.5
-            profile_effects = profile_margins(model, df, DataFrame(x=[test_x], x_sq=[test_x^2]); type=:effects, vars=[:x], scale=:link)
+            profile_effects = profile_margins(model, df, DataFrame(x=[test_x]); type=:effects, vars=[:x], scale=:link)
             prof_effects_df = DataFrame(profile_effects)
-            # For y ~ x + x_sq model, ∂y/∂x = β₁ (x_sq is separate variable)
-            @test prof_effects_df.estimate[1] ≈ β₁ atol=1e-12
+            # For y ~ x + x^2 model, ∂y/∂x = β₁ + 2*β₂*x at the specific point
+            expected_marginal_effect = β₁ + 2*β₂*test_x
+            @test prof_effects_df.estimate[1] ≈ expected_marginal_effect atol=1e-12
             @test validate_all_finite_positive(prof_effects_df).all_valid
             
             # 4. Profile Predictions at specific point
-            profile_predictions = profile_margins(model, df, DataFrame(x=[test_x], x_sq=[test_x^2]); type=:predictions, scale=:response)
+            profile_predictions = profile_margins(model, df, DataFrame(x=[test_x]); type=:predictions, scale=:response)
             prof_pred_df = DataFrame(profile_predictions)
             manual_profile_prediction = β₀ + β₁ * test_x + β₂ * test_x^2
             @test prof_pred_df.estimate[1] ≈ manual_profile_prediction atol=1e-12
@@ -435,19 +438,19 @@ using Margins
         # === LINEAR MODEL SYSTEMATIC COVERAGE (13 patterns following FormulaCompiler) ===
         lm_test_cases = [
             # Basic patterns (matching FC's linear_formulas exactly)
-            (name="LM: Simple continuous", formula=@formula(log_wage ~ float_wage)),
-            (name="LM: Simple categorical", formula=@formula(log_wage ~ gender)),
-            (name="LM: Multiple continuous", formula=@formula(log_wage ~ float_wage + float_productivity)),
-            (name="LM: Multiple categorical", formula=@formula(log_wage ~ gender + region)),
-            (name="LM: Mixed types", formula=@formula(log_wage ~ float_wage + gender)),
-            (name="LM: Simple interaction", formula=@formula(log_wage ~ float_wage * gender)),
-            (name="LM: Interaction w/o main", formula=@formula(log_wage ~ float_wage & gender)),
-            (name="LM: Function transform", formula=@formula(income ~ log(float_wage))),
-            (name="LM: Function in interaction", formula=@formula(income ~ exp(float_wage/20) * float_productivity)),
-            (name="LM: Three-way interaction", formula=@formula(log_wage ~ float_wage * float_productivity * gender)),
-            (name="LM: Four-way interaction", formula=@formula(log_wage ~ float_wage * float_productivity * gender * region)),
-            (name="LM: Four-way w/ function", formula=@formula(log_wage ~ exp(float_wage/20) * float_productivity * gender * region)),
-            (name="LM: Complex interaction", formula=@formula(log_wage ~ float_wage * float_productivity * gender + log(wage) * region)),
+            (name="LM: Simple continuous", formula=@formula(log(wage) ~ wage)),
+            (name="LM: Simple categorical", formula=@formula(log(wage) ~ gender)),
+            (name="LM: Multiple continuous", formula=@formula(log(wage) ~ wage + float_productivity)),
+            (name="LM: Multiple categorical", formula=@formula(log(wage) ~ gender + region)),
+            (name="LM: Mixed types", formula=@formula(log(wage) ~ wage + gender)),
+            (name="LM: Simple interaction", formula=@formula(log(wage) ~ wage * gender)),
+            (name="LM: Interaction w/o main", formula=@formula(log(wage) ~ wage & gender)),
+            (name="LM: Function transform", formula=@formula(income ~ log(wage))),
+            (name="LM: Function in interaction", formula=@formula(income ~ exp(wage/20) * float_productivity)),
+            (name="LM: Three-way interaction", formula=@formula(log(wage) ~ wage * float_productivity * gender)),
+            (name="LM: Four-way interaction", formula=@formula(log(wage) ~ wage * float_productivity * gender * region)),
+            (name="LM: Four-way w/ function", formula=@formula(log(wage) ~ exp(wage/20) * float_productivity * gender * region)),
+            (name="LM: Complex interaction", formula=@formula(log(wage) ~ wage * float_productivity * gender + log(wage) * region)),
         ]
         
         # === GLM SYSTEMATIC COVERAGE (following FormulaCompiler patterns) ===
@@ -456,16 +459,16 @@ using Margins
         
         glm_test_cases = [
             # Logistic regression patterns
-            (name="GLM: Logistic simple", formula=@formula(union_member ~ float_wage), family=Binomial(), link=LogitLink()),
-            (name="GLM: Logistic mixed", formula=@formula(union_member ~ float_wage + gender), family=Binomial(), link=LogitLink()),
-            (name="GLM: Logistic interaction", formula=@formula(union_member ~ float_wage * gender), family=Binomial(), link=LogitLink()),
+            (name="GLM: Logistic simple", formula=@formula(union_member ~ wage), family=Binomial(), link=LogitLink()),
+            (name="GLM: Logistic mixed", formula=@formula(union_member ~ wage + gender), family=Binomial(), link=LogitLink()),
+            (name="GLM: Logistic interaction", formula=@formula(union_member ~ wage * gender), family=Binomial(), link=LogitLink()),
             (name="GLM: Logistic function", formula=@formula(union_member ~ log(wage) + gender), family=Binomial(), link=LogitLink()),
-            (name="GLM: Logistic complex", formula=@formula(union_member ~ float_wage * float_productivity * gender + log(wage) + region), family=Binomial(), link=LogitLink()),
+            (name="GLM: Logistic complex", formula=@formula(union_member ~ wage * float_productivity * gender + log(wage) + region), family=Binomial(), link=LogitLink()),
             
             # Poisson regression patterns (matching FC's coverage)
-            (name="GLM: Poisson simple", formula=@formula(count_response ~ float_wage), family=Poisson(), link=LogLink()),
-            (name="GLM: Poisson mixed", formula=@formula(count_response ~ float_wage + gender), family=Poisson(), link=LogLink()),
-            (name="GLM: Poisson interaction", formula=@formula(count_response ~ float_wage * gender), family=Poisson(), link=LogLink()),
+            (name="GLM: Poisson simple", formula=@formula(count_response ~ wage), family=Poisson(), link=LogLink()),
+            (name="GLM: Poisson mixed", formula=@formula(count_response ~ wage + gender), family=Poisson(), link=LogLink()),
+            (name="GLM: Poisson interaction", formula=@formula(count_response ~ wage * gender), family=Poisson(), link=LogLink()),
             
             # Gamma regression patterns (using positive continuous outcome)
             (name="GLM: Gamma mixed", formula=@formula(wage ~ float_productivity + gender), family=Gamma(), link=LogLink()),
@@ -554,7 +557,13 @@ using Margins
             
             for var in integer_vars
                 @testset "$(var) - 2×2 Framework" begin
-                    model = lm(Term(:log_wage) ~ Term(var), df_int)
+                    if var == :int_age
+                        model = lm(@formula(log(wage) ~ int_age), df_int)
+                    elseif var == :int_education  
+                        model = lm(@formula(log(wage) ~ int_education), df_int)
+                    elseif var == :int_experience
+                        model = lm(@formula(log(wage) ~ int_experience), df_int)
+                    end
                     β₀, β₁ = coef(model)
                     
                     # === 2×2 FRAMEWORK FOR INTEGER VARIABLES ===
@@ -593,7 +602,7 @@ using Margins
         
         @testset "Integer Interactions - 2×2 Framework" begin
             # Test integer × categorical interactions (common in econometrics)
-            model = lm(@formula(log_wage ~ int_age * gender), df_int)
+            model = lm(@formula(log(wage) ~ int_age * gender), df_int)
             
             # Validate all quadrants work with integer interactions
             framework_result = test_2x2_framework_quadrants(model, df_int; test_name="Integer × Categorical")
@@ -605,7 +614,7 @@ using Margins
         
         @testset "Multiple Integer Variables - 2×2 Framework" begin
             # Multiple integer predictors (common econometric specification)
-            model = lm(@formula(log_wage ~ int_age + int_education + int_experience), df_int)
+            model = lm(@formula(log(wage) ~ int_age + int_education + int_experience), df_int)
             β₀, β₁, β₂, β₃ = coef(model)
             
             # Test population effects for multiple integers
@@ -628,7 +637,7 @@ using Margins
         @testset "Integer Polynomial Transformations - 2×2 Framework" begin  
             # Polynomial transformations with integers (x² pattern - avoids function variable name issues)
             df_int.int_age_sq = df_int.int_age .^ 2  # Create polynomial term
-            model = lm(@formula(log_wage ~ int_age + int_age_sq), df_int)
+            model = lm(@formula(log(wage) ~ int_age + int_age_sq), df_int)
             β₀, β₁, β₂ = coef(model)
             
             # === ANALYTICAL VALIDATION FOR INTEGER POLYNOMIAL ===
@@ -659,7 +668,7 @@ using Margins
         
         @testset "Mixed Integer/Float Interactions - 2×2 Framework" begin
             # Mixed integer/float interactions (critical for econometric realism)
-            model = lm(@formula(log_wage ~ int_age * float_productivity + int_education), df_int)
+            model = lm(@formula(log(wage) ~ int_age * float_productivity + int_education), df_int)
             
             # This tests the critical case where integers and floats interact
             framework_result = test_2x2_framework_quadrants(model, df_int; test_name="Mixed Integer/Float")

@@ -74,7 +74,7 @@ using Margins
         
         @testset "Simple Integer Variable" begin
             # Critical for econometric data
-            model = lm(@formula(log_wage ~ int_age), df)
+            model = lm(@formula(log(wage) ~ int_age), df)
             β₁ = coef(model)[2]
             
             # Test all four quadrants work with integers
@@ -95,7 +95,7 @@ using Margins
         
         @testset "Integer × Categorical Interaction" begin
             # Critical mixed-type interaction
-            model = lm(@formula(log_wage ~ int_age * gender), df)
+            model = lm(@formula(log(wage) ~ int_age * gender), df)
             framework_result = test_2x2_framework_quadrants(model, df; test_name="Integer × Categorical")
             @test framework_result.all_successful
             @test framework_result.all_finite
@@ -126,11 +126,11 @@ using Margins
         
         # Sample of most important model types for CI
         critical_models = [
-            (name="Simple LM", model=lm(@formula(log_wage ~ float_wage), df)),
-            (name="Multiple LM", model=lm(@formula(log_wage ~ float_wage + gender), df)),
-            (name="Interaction LM", model=lm(@formula(log_wage ~ float_wage * gender), df)),
-            (name="Simple Logistic", model=glm(@formula(union_member ~ float_wage), df, Binomial(), LogitLink())),
-            (name="Logistic Interaction", model=glm(@formula(union_member ~ float_wage * gender), df, Binomial(), LogitLink())),
+            (name="Simple LM", model=lm(@formula(log(wage) ~ wage), df)),
+            (name="Multiple LM", model=lm(@formula(log(wage) ~ wage + gender), df)),
+            (name="Interaction LM", model=lm(@formula(log(wage) ~ wage * gender), df)),
+            (name="Simple Logistic", model=glm(@formula(union_member ~ wage), df, Binomial(), LogitLink())),
+            (name="Logistic Interaction", model=glm(@formula(union_member ~ wage * gender), df, Binomial(), LogitLink())),
         ]
         
         for (name, model) in critical_models

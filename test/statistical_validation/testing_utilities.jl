@@ -27,7 +27,6 @@ across all statistical validation components.
 - `gender`: Categorical variable ("Male", "Female")
 - `region`: Categorical variable ("North", "South", "East", "West")
 - `union_member`: Boolean union membership
-- `log_wage`: Log transformation of wage
 - `experience_sq`: Quadratic experience term
 - `income`: Alternative continuous outcome variable
 """
@@ -59,17 +58,15 @@ function make_econometric_data(; n = 500, seed = 42)
         income = 40000 .+ 5000 .* randn(n)
     )
     
-    # Derived variables for testing transformations
-    df.log_wage = log.(df.wage)
-    df.experience_sq = df.int_experience .^ 2           # Use integer experience
-    
     # Create realistic relationships using integer variables
     df.income = 30000 .+ 2000 .* df.int_education .+ 500 .* df.int_experience .+ 
                 1000 .* df.int_age .+ 5000 .* (df.gender .== "Male") .+ 3000 .* randn(n)
                 
-    # Log wage relationship with integers
-    df.log_wage = 2.5 .+ 0.08 .* df.int_education .+ 0.02 .* df.int_experience .+ 
-                  0.01 .* df.int_age .+ 0.15 .* (df.gender .== "Male") .+ 0.1 .* randn(n)
+    # Generate wage with realistic log-wage structure (but keep wage, not log_wage)
+    # This creates wage values that follow: log(wage) = 2.5 + 0.08*education + 0.02*experience + 0.01*age + 0.15*male + error
+    log_wage_linear = 2.5 .+ 0.08 .* df.int_education .+ 0.02 .* df.int_experience .+ 
+                      0.01 .* df.int_age .+ 0.15 .* (df.gender .== "Male") .+ 0.1 .* randn(n)
+    df.wage = exp.(log_wage_linear)  # Generate wage from log-wage relationship
     
     return df
 end
@@ -102,7 +99,6 @@ function make_simple_test_data(; n = 100, formula_type = :linear, seed = 42)
         df.y = 0.5 * log.(df.x) + 0.3 * df.z + 0.1 * randn(n)
     elseif formula_type == :quadratic
         df.y = 0.5 * df.x + 0.3 * df.x.^2 + 0.2 * df.z + 0.1 * randn(n)
-        df.x_sq = df.x .^ 2
     elseif formula_type == :interaction
         df.y = 0.5 * df.x + 0.3 * df.z + 0.2 * df.x .* df.z + 0.1 * randn(n)
     end
