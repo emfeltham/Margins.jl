@@ -26,18 +26,18 @@ try
     
     if !isempty(continuous_vars)
         de = FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars=continuous_vars)
-        println("✅ Derivative evaluator built successfully")
+        println(" Derivative evaluator built successfully")
         println("  typeof(de.base_data.group): $(typeof(de.base_data.group))")
         
         # Test evaluation with original data
         g_buf = Vector{Float64}(undef, length(continuous_vars))
         FormulaCompiler.marginal_effects_mu!(g_buf, de, coef(model), 1; link=GLM.IdentityLink())
-        println("✅ Marginal effects with original data: $g_buf")
+        println(" Marginal effects with original data: $g_buf")
     else
         println("  No continuous variables found")
     end
 catch e
-    println("❌ Error: $e")
+    println(" Error: $e")
 end
 
 # Test 2: Create scenario and try to use derivative evaluator
@@ -59,12 +59,12 @@ try
         
         # This should fail because de was built with original data, not scenario data
         FormulaCompiler.marginal_effects_mu!(g_buf, de, coef(model), 1; link=GLM.IdentityLink())
-        println("✅ Marginal effects with scenario data: $g_buf")
+        println(" Marginal effects with scenario data: $g_buf")
     else
         println("  No continuous variables found")
     end
 catch e
-    println("❌ Error during scenario evaluation:")
+    println(" Error during scenario evaluation:")
     println("  Error: $e")
     println("  This error is EXPECTED - derivative evaluator built with original data can't use scenario data")
 end
@@ -78,16 +78,16 @@ try
     
     if !isempty(continuous_vars)
         de_scenario = FormulaCompiler.build_derivative_evaluator(compiled_scenario, scenario.data; vars=continuous_vars)
-        println("✅ Derivative evaluator built with scenario data")
+        println(" Derivative evaluator built with scenario data")
         
         g_buf = Vector{Float64}(undef, length(continuous_vars))
         FormulaCompiler.marginal_effects_mu!(g_buf, de_scenario, coef(model), 1; link=model.model.rr.d.link)
-        println("✅ Marginal effects with scenario evaluator: $g_buf")
+        println(" Marginal effects with scenario evaluator: $g_buf")
     else
         println("  No continuous variables found")
     end
 catch e
-    println("❌ Error: $e")
+    println(" Error: $e")
 end
 
 println("\\n=== Test Complete ===")

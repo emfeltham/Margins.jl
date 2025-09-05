@@ -381,14 +381,14 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         @info "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
         
             if overall_success_rate >= 0.75
-                @info "🎉 ROBUST SE VALIDATION: PASSED"
+                @info " ROBUST SE VALIDATION: PASSED"
                 @info "Robust standard errors integration working correctly!"
             else
-                @warn "⚠️  ROBUST SE VALIDATION: MIXED RESULTS"
+                @warn "  ROBUST SE VALIDATION: MIXED RESULTS"
                 @info "Some robust SE tests failed - detailed investigation recommended"
             end
         else
-            @warn "⚠️  ROBUST SE VALIDATION: DEPENDENCY MISSING"
+            @warn "  ROBUST SE VALIDATION: DEPENDENCY MISSING"
             @info "Install CovarianceMatrices.jl for full robust SE support"
         end
     end

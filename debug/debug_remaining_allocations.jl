@@ -8,7 +8,7 @@ using Tables
 import FormulaCompiler
 
 function debug_remaining_allocations()
-    println("🔍 DEBUGGING REMAINING O(n) ALLOCATIONS")
+    println(" DEBUGGING REMAINING O(n) ALLOCATIONS")
     println("=" ^ 60)
     
     # Create test data
@@ -44,9 +44,9 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
@@ -62,9 +62,9 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
@@ -80,9 +80,9 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
@@ -113,9 +113,9 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
@@ -151,9 +151,9 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
@@ -173,14 +173,14 @@ function debug_remaining_allocations()
     scaling_ratio = allocs_large / allocs_small
     print("\$allocs_small\\t\\t| \$allocs_large\\t\\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - 5.0) < 1.0
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("\$(round(scaling_ratio, digits=1))x")
     end
     
-    println("\\n🎯 CONCLUSION:")
+    println("\\n CONCLUSION:")
     println("The O(n) source should be identified above.")
     println("If Tables.columntable is O(n), the issue is data conversion.")
     println("If _ame_continuous_and_categorical is O(n), the issue is in our implementation.")

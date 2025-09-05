@@ -8,7 +8,7 @@ using Tables
 import FormulaCompiler
 
 function debug_remaining_allocations()
-    println("🔍 DEBUGGING REMAINING O(n) ALLOCATIONS")
+    println(" DEBUGGING REMAINING O(n) ALLOCATIONS")
     println("=" ^ 60)
     
     # Create test data
@@ -66,9 +66,9 @@ function debug_remaining_allocations()
     println("  Small: $allocs_small allocs, Large: $allocs_large allocs, Ratio: $(round(scaling_ratio, digits=1))x")
     
     if scaling_ratio > 2.0
-        println("  🔥 FOUND THE CULPRIT: _ame_continuous_and_categorical is allocating O(n)")
+        println("   FOUND THE CULPRIT: _ame_continuous_and_categorical is allocating O(n)")
     else
-        println("  ✅ This step is not the problem")
+        println("   This step is not the problem")
     end
 end
 

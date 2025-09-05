@@ -28,24 +28,24 @@ println("  typeof(data_nt.group): $(typeof(data_nt.group))")
 println("\\nTesting scenario creation with string override...")
 try
     scenario = FormulaCompiler.create_scenario("test", data_nt; group = "B")
-    println("✅ Scenario created successfully")
+    println("Scenario created successfully")
     println("  typeof(scenario.data.group): $(typeof(scenario.data.group))")
     
     # Try to fit model and compile
     model = lm(@formula(y ~ x + group), df)
-    println("✅ Model fitted successfully")
+    println("Model fitted successfully")
     
     compiled = FormulaCompiler.compile_formula(model, scenario.data)
-    println("✅ Formula compiled successfully")
+    println("Formula compiled successfully")
     
     # Try evaluation
     output = Vector{Float64}(undef, length(compiled))
     compiled(output, scenario.data, 1)
-    println("✅ Evaluation successful")
+    println("Evaluation successful")
     println("  Output: $(output)")
     
 catch e
-    println("❌ Error during scenario creation/evaluation:")
+    println("Error during scenario creation/evaluation:")
     println("  Error type: $(typeof(e))")
     println("  Error message: $e")
     

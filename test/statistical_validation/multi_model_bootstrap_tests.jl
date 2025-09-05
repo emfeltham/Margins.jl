@@ -162,7 +162,7 @@ function run_single_model_bootstrap_test(model_config; n_bootstrap=150, verbose=
                 end
             end
             
-            status = meets_expectation ? "✅ PASSED" : "❌ BELOW EXPECTATION"
+            status = meets_expectation ? " PASSED" : " BELOW EXPECTATION"
             @info "  Result: $status"
         end
         
@@ -239,10 +239,10 @@ function run_comprehensive_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
         @info "Mean Agreement Rate: $(round(mean_agreement_rate * 100, digits=1))%"
         
         if expectation_success_rate >= 0.80
-            @info "🎉 BOOTSTRAP VALIDATION SUITE: PASSED"
+            @info " BOOTSTRAP VALIDATION SUITE: PASSED"
             @info "Standard errors show good bootstrap agreement across model types!"
         else
-            @warn "⚠️  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
+            @warn "  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
             @info "Some models below expectation - detailed investigation recommended"
         end
     end

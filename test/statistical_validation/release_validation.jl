@@ -17,21 +17,21 @@ using Margins
 @testset "Release Statistical Validation - Complete Suite" begin
     Random.seed!(06515)
     
-    @info "🎯 Starting comprehensive release validation..."
+    @info "Starting comprehensive release validation..."
     @info "This includes all statistical correctness tests for production release"
     
     # === COMPLETE STATISTICAL VALIDATION ===
     @testset "Complete Statistical Correctness" begin
         @info "Running complete statistical validation..."
         include("statistical_validation.jl")
-        @info "✓ Complete statistical validation included"
+        @info "Complete statistical validation included"
     end
     
     # === COMPLETE BACKEND CONSISTENCY ===
     @testset "Complete Backend Consistency" begin
         @info "Running complete backend consistency validation..."
         include("backend_consistency.jl") 
-        @info "✓ Complete backend consistency validated"
+        @info "Complete backend consistency validated"
     end
     
     # === RELEASE-SPECIFIC PERFORMANCE VALIDATION ===
@@ -94,7 +94,7 @@ using Margins
             
             result = population_margins(model_small, df_small; type=:effects, vars=[:x])
             @test validate_all_finite_positive(DataFrame(result)).all_valid
-            @info "✓ Small dataset (n=20) robustness verified"
+            @info "Small dataset (n=20) robustness verified"
             
             # High-dimensional interaction
             df_interact = make_econometric_data(n=500, seed=222)
@@ -102,7 +102,7 @@ using Margins
             
             framework_result = test_2x2_framework_quadrants(model_interact, df_interact; test_name="High-dim interaction")
             @test framework_result.all_successful
-            @info "✓ High-dimensional interaction robustness verified"
+            @info "High-dimensional interaction robustness verified"
         end
         
         @testset "Statistical Correctness Cross-Check" begin
@@ -115,7 +115,7 @@ using Margins
             manual_coeff = coef(model)[2]  # int_education coefficient
             
             @test DataFrame(pop_effects).estimate[1] ≈ manual_coeff atol=1e-12
-            @info "✓ Population vs manual coefficient cross-check verified"
+            @info "Population vs manual coefficient cross-check verified"
             
             # Profile vs manual prediction cross-check
             test_education = 16  # 16 years
@@ -129,7 +129,7 @@ using Margins
             manual_pred = β₀ + β₁ * test_education + β₂ * test_wage
             
             @test DataFrame(prof_pred).estimate[1] ≈ manual_pred atol=1e-12
-            @info "✓ Profile vs manual prediction cross-check verified"
+            @info "Profile vs manual prediction cross-check verified"
         end
     end
     
@@ -148,9 +148,9 @@ using Margins
             "Production Robustness"
         ]
         
-        @info "📊 Release Validation Coverage:"
+        @info " Release Validation Coverage:"
         for category in validation_categories
-            @info "  ✓ $category"
+            @info "   $category"
         end
         
         # Key statistical guarantees confirmed
@@ -163,18 +163,18 @@ using Margins
             "Cross-platform numerical consistency"
         ]
         
-        @info "📋 Statistical Guarantees Confirmed:"
+        @info " Statistical Guarantees Confirmed:"
         for guarantee in statistical_guarantees
-            @info "  ✅ $guarantee"
+            @info "   $guarantee"
         end
     end
     
-    @info "🎉 RELEASE STATISTICAL VALIDATION: COMPLETE"
+    @info " RELEASE STATISTICAL VALIDATION: COMPLETE"
     @info ""
-    @info "📦 RELEASE READINESS: VERIFIED"
+    @info " RELEASE READINESS: VERIFIED"
     @info "All statistical correctness tests passed for production release"
     @info "Package meets publication-grade standards for econometric analysis"
     @info "Zero-tolerance policy for invalid statistical results: ENFORCED"
     @info ""
-    @info "🚀 Ready for production release with full statistical guarantees"
+    @info " Ready for production release with full statistical guarantees"
 end

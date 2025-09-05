@@ -75,7 +75,7 @@ include("categorical_bootstrap_tests.jl")
         # Check that we have reasonable success rates
         @test results.overall_success_rate >= 0.60  # At least 60% of models should work
         
-        @debug  "✓ Multi-model bootstrap validation: $(results.n_successful)/$(results.n_models_tested) models successful"
+        @debug  " Multi-model bootstrap validation: $(results.n_successful)/$(results.n_models_tested) models successful"
         @debug "  Mean agreement rate: $(round(results.mean_agreement_rate * 100, digits=1))%"
         
         # Individual model type tests
@@ -87,7 +87,7 @@ include("categorical_bootstrap_tests.jl")
             successful_linear = [r for r in linear_results if r.success && r.agreement_rate >= 0.60]
             @test length(successful_linear) >= 1  # At least one linear model should perform reasonably
             
-            @debug "✓ Linear model bootstrap validation: $(length(successful_linear))/$(length(linear_results)) with good agreement"
+            @debug " Linear model bootstrap validation: $(length(successful_linear))/$(length(linear_results)) with good agreement"
         end
         
         @testset "GLM Bootstrap Validation" begin  
@@ -98,7 +98,7 @@ include("categorical_bootstrap_tests.jl")
             successful_glm = [r for r in glm_results if r.success]
             @test length(successful_glm) >= 1  # At least some GLM models should work
             
-            @debug "✓ GLM bootstrap validation: $(length(successful_glm))/$(length(glm_results)) successful"
+            @debug " GLM bootstrap validation: $(length(successful_glm))/$(length(glm_results)) successful"
         end
     end
     
@@ -116,7 +116,7 @@ include("categorical_bootstrap_tests.jl")
         # Note: Categorical bootstrap validation has known limitations - this tests the framework not the success rate
         @test categorical_results.overall_success_rate >= 0.0  # Framework should run (success rate may be low for categorical edge cases)
         
-        @debug "✓ Categorical bootstrap validation: $(round(categorical_results.overall_success_rate * 100, digits=1))% models successful"
+        @debug " Categorical bootstrap validation: $(round(categorical_results.overall_success_rate * 100, digits=1))% models successful"
         if categorical_results.mean_agreement_rate > 0
             @debug "  Mean agreement rate: $(round(categorical_results.mean_agreement_rate * 100, digits=1))%"
         end
@@ -157,7 +157,7 @@ include("categorical_bootstrap_tests.jl")
             @test small_result.n_bootstrap_successful >= 10  # At least some bootstraps should work
         end
         
-        # "✓ Small dataset bootstrap: $(small_result.n_bootstrap_successful)/20 bootstrap samples successful"
+        # " Small dataset bootstrap: $(small_result.n_bootstrap_successful)/20 bootstrap samples successful"
         
         # Test handling for problematic data
         problematic_data = DataFrame(

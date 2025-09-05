@@ -17,26 +17,26 @@ For researchers familiar with Stata's `margins` command, Margins.jl provides equ
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` | Average marginal effects (AME) |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data; at=:means, type=:effects)` | Marginal effects at means (MEM) |
+| `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type=:effects)` | Marginal effects at means (MEM) |
 | `margins` | `population_margins(model, data; type=:predictions)` | Average adjusted predictions |
-| `margins, at(means)` | `profile_margins(model, data; at=:means, type=:predictions)` | Adjusted predictions at means |
+| `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` | Adjusted predictions at means |
 
 ### Advanced Command Translation
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins, at(x=0 x=1 x=2)` | `profile_margins(model, data; at=Dict(:x => [0,1,2]))` | Multiple evaluation points |
-| `margins, at(x=0 z=1) at(x=1 z=2)` | `profile_margins(model, data; at=[Dict(:x=>0, :z=>1), Dict(:x=>1, :z=>2)])` | Custom scenarios |
+| `margins, at(x=0 x=1 x=2)` | `profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:predictions)` | Multiple evaluation points |
+| `margins, at(x=0 z=1) at(x=1 z=2)` | `profile_margins(model, data, DataFrame(x=[0,1], z=[1,2]); type=:predictions)` | Custom scenarios |
 | `margins, over(group)` | `population_margins(model, data; groups=:group)` | Subgroup analysis |
-| `margins, dydx(x) at(z=(0 1))` | `profile_margins(model, data; at=Dict(:z=>[0,1]), vars=[:x])` | Specific variables |
+| `margins, dydx(x) at(z=(0 1))` | `profile_margins(model, data, cartesian_grid(data; z=[0,1]); type=:effects, vars=[:x])` | Specific variables |
 
 ### Elasticity Commands
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
 | `margins, eyex(*)` | `population_margins(model, data; type=:effects, measure=:elasticity)` | Elasticities |
-| `margins, eydx(*)` | `population_margins(model, data; measure=:semielasticity_eydx)` | Y semi-elasticity |
-| `margins, dyex(*)` | `population_margins(model, data; measure=:semielasticity_dyex)` | X semi-elasticity |
+| `margins, eydx(*)` | `population_margins(model, data; type=:effects, measure=:semielasticity_eydx)` | Y semi-elasticity |
+| `margins, dyex(*)` | `population_margins(model, data; type=:effects, measure=:semielasticity_dyex)` | X semi-elasticity |
 
 ### Conceptual Differences
 
@@ -47,7 +47,7 @@ For researchers familiar with Stata's `margins` command, Margins.jl provides equ
 **Margins.jl approach**: Separate functions for different purposes
 - `population_margins()` for sample-wide averages (AME/AAP)
 - `profile_margins()` for scenario-specific analysis (MEM/APM)
-- Clean parameter separation: `type` (effects/predictions), `measure` (elasticity type), `at` (scenarios)
+- Clean parameter separation: `type` (effects/predictions), `measure` (elasticity type), reference grids for scenarios
 
 ### Migration Example
 
@@ -80,12 +80,12 @@ ame = population_margins(model, data; type=:effects)
 DataFrame(ame)
 
 # Effects at means
-mem = profile_margins(model, data; at=:means, type=:effects) 
+mem = profile_margins(model, data, means_grid(data); type=:effects) 
 DataFrame(mem)
 
 # Effects at specific ages
-age_effects = profile_margins(model, data; 
-    at=Dict(:age => [25, 35, 45, 55]), 
+age_effects = profile_margins(model, data, 
+    cartesian_grid(data; age=[25, 35, 45, 55]); 
     vars=[:education], 
     type=:effects
 )
@@ -123,34 +123,34 @@ Margins.jl was designed with several key principles:
 
 | Feature | Margins.jl | Effects.jl | R margins | Stata margins | Python statsmodels |
 |---------|------------|------------|-----------|---------------|-------------------|
-| Population marginal effects (AME) | ✓ | ✗ | ✓ | ✓ | ✓ |
-| Profile marginal effects (MEM/MER) | ✓ | ✓ | ✓ | ✓ | ✓ (at='mean' only) |
-| Elasticities | ✓ (3 types) | ✗ | ✗ | ✓ (basic) | ✗ |
-| Flexible profile specification | ✓ (Dict + table) | ✓ (kwargs) | ✓ (at=) | ✓ (at()) | ✗ |
-| Categorical contrasts | ✓ (baseline/pairwise) | ✓ (basic) | ✓ (basic) | ✓ | ✓ (basic) |
-| Grouping/stratification | ✓ (over/within/by) | ✗ | ✓ (basic) | ✓ (over/by) | ✗ |
-| Observation weights | ✓ | ✗ | ✓ | ✓ | ✓ |
-| Robust standard errors | ✓ (via CovarianceMatrices) | ✓ (via vcov) | ✓ (sandwich) | ✓ (vce()) | ✓ (limited) |
+| Population marginal effects (AME) |  | ✗ |  |  |  |
+| Profile marginal effects (MEM/MER) |  |  |  |  |  (at='mean' only) |
+| Elasticities |  (3 types) | ✗ | ✗ |  (basic) | ✗ |
+| Flexible profile specification |  (Dict + table) |  (kwargs) |  (at=) |  (at()) | ✗ |
+| Categorical contrasts |  (baseline/pairwise) |  (basic) |  (basic) |  |  (basic) |
+| Grouping/stratification |  (over/within/by) | ✗ |  (basic) |  (over/by) | ✗ |
+| Observation weights |  | ✗ |  |  |  |
+| Robust standard errors |  (via CovarianceMatrices) |  (via vcov) |  (sandwich) |  (vce()) |  (limited) |
 
 ### Advanced Features
 
 | Feature | Margins.jl | Effects.jl | R margins | Stata margins | Python statsmodels |
 |---------|------------|------------|-----------|---------------|-------------------|
-| Mixed models | ✓ (automatic) | ✓ | ✓ (manual) | ✓ | ✓ (limited) |
-| Multiple backends (FD/AD) | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Zero-allocation paths | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Compiled evaluation | ✓ | ✗ | ✗ | ✓ | ✗ |
-| Table-based profiles | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Multiple comparison adjustments | ✓ | ✓ | ✓ | ✓ | ✓ (basic) |
+| Mixed models |  (automatic) |  |  (manual) |  |  (limited) |
+| Multiple backends (FD/AD) |  | ✗ | ✗ | ✗ | ✗ |
+| Zero-allocation paths |  | ✗ | ✗ | ✗ | ✗ |
+| Compiled evaluation |  | ✗ | ✗ |  | ✗ |
+| Table-based profiles |  | ✗ | ✗ | ✗ | ✗ |
+| Multiple comparison adjustments |  |  |  |  |  (basic) |
 
 ### Model Support
 
 | Models | Margins.jl | Effects.jl | R margins | Stata margins | Python statsmodels |
 |--------|------------|------------|-----------|---------------|-------------------|
-| Linear/GLM | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Mixed effects | ✓ (via StatsAPI) | ✓ | ✓ (some) | ✓ | ✓ (limited) |
-| Survival models | Future | Future | ✓ | ✓ | ✓ |
-| Custom models | ✓ (via StatsAPI) | ✓ (via StatsAPI) | Varies | Limited | Varies |
+| Linear/GLM |  |  |  |  |  |
+| Mixed effects |  (via StatsAPI) |  |  (some) |  |  (limited) |
+| Survival models | Future | Future |  |  |  |
+| Custom models |  (via StatsAPI) |  (via StatsAPI) | Varies | Limited | Varies |
 
 ## Performance Characteristics
 
@@ -196,7 +196,7 @@ Zero-allocation approaches can help AME computation scale with dataset size by a
 **Margins.jl**: Uses Population vs Profile framework with orthogonal parameters:
 ```julia
 population_margins(model, data; type=:effects, measure=:elasticity)
-profile_margins(model, data; at=:means, type=:effects)
+profile_margins(model, data, means_grid(data); type=:effects)
 ```
 
 **Effects.jl**: Function-based approach with keyword arguments:

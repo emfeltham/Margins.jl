@@ -107,7 +107,7 @@ println("\nPer-row performance vs target (150ns/row):")
 for n in sizes
     actual = per_row_times[n] * 1000
     ratio = actual / target_per_row
-    status = ratio < 1.5 ? "✓ GOOD" : "⚠ REVIEW"
+    status = ratio < 1.5 ? "GOOD" : "REVIEW"
     @printf("n=%6d: %.0f ns/row (%.1fx target) %s\n", n, actual, ratio, status)
 end
 

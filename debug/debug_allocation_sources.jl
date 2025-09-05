@@ -6,7 +6,7 @@ using DataFrames
 using Margins
 
 function debug_allocation_sources()
-    println("🔍 DEBUGGING O(n) ALLOCATION SOURCES")
+    println(" DEBUGGING O(n) ALLOCATION SOURCES")
     println("=" ^ 60)
     
     # Create two test sizes to compare
@@ -43,9 +43,9 @@ function debug_allocation_sources()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌") 
+        println("O(n) ") 
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -66,9 +66,9 @@ function debug_allocation_sources()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -92,9 +92,9 @@ function debug_allocation_sources()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -116,18 +116,18 @@ function debug_allocation_sources()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) ")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
     
-    println("\n🔍 DETAILED ANALYSIS:")
+    println("\n DETAILED ANALYSIS:")
     println("=" ^ 60)
     
     # The O(n) scaling is most likely coming from:
-    println("🎯 LIKELY O(n) SOURCES:")
+    println(" LIKELY O(n) SOURCES:")
     println("1. FormulaCompiler modelrow() calls in loops")
     println("   → Each row needs design matrix computation")
     println("   → X_row = FormulaCompiler.modelrow(compiled, data_nt, i)")
@@ -145,7 +145,7 @@ function debug_allocation_sources()
     println("   → Our buffer reuse may not be working as expected")
     println("   → views() might still allocate in some contexts")
     
-    println("\n💡 INVESTIGATION NEEDED:")
+    println("\n INVESTIGATION NEEDED:")
     println("• Profile FormulaCompiler.modelrow() allocation behavior")
     println("• Check if GLM functions allocate per call") 
     println("• Verify buffer reuse is actually working")

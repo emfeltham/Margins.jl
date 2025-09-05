@@ -130,13 +130,13 @@ For well-conditioned problems, both backends produce statistically equivalent re
 fd_result = population_margins(model, data; backend=:fd)
 ad_result = population_margins(model, data; backend=:ad)
 
-DataFrame(fd_result).estimate ≈ DataFrame(ad_result).estimate  # rtol=1e-12 ✓
+DataFrame(fd_result).estimate ≈ DataFrame(ad_result).estimate  # rtol=1e-12 PASS
 
 # GLM models - equivalent within appropriate tolerances  
 fd_glm = population_margins(glm_model, data; backend=:fd)
 ad_glm = population_margins(glm_model, data; backend=:ad)
 
-DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 ✓
+DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
 ```
 
 ### AD May Be More Accurate For
@@ -211,19 +211,19 @@ end
 #### DomainError with FD Backend
 ```julia
 # Error: DomainError with -1.23e-6: log was called with a negative real number
-result = population_margins(model, data; backend=:fd)  # ❌ Fails
+result = population_margins(model, data; backend=:fd)  #  Fails
 
 # Solution: Use AD backend for log functions
-result = population_margins(model, data; backend=:ad)  # ✓ Works
+result = population_margins(model, data; backend=:ad)  # Works
 ```
 
 #### Memory Pressure with AD Backend
 ```julia
 # Large dataset causing memory issues with AD
-huge_result = population_margins(model, huge_data; backend=:ad)  # ⚠ May run out of memory
+huge_result = population_margins(model, huge_data; backend=:ad)  # May run out of memory
 
 # Solution: Use FD backend for memory efficiency
-huge_result = population_margins(model, huge_data; backend=:fd)  # ✓ Constant memory
+huge_result = population_margins(model, huge_data; backend=:fd)  # Constant memory
 ```
 
 ### Backend Validation Testing

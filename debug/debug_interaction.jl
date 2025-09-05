@@ -59,6 +59,6 @@ if nrow(grouped_df) >= 2
     println("HS: ", hs_result)
     
     println("\nDifference check:")
-    println("Expected College: ", β[2], " vs Actual: ", college_result, " → ", abs(β[2] - college_result) < 1e-10 ? "✅ MATCH" : "❌ DIFFERENT")
-    println("Expected HS: ", β[2] + β[4], " vs Actual: ", hs_result, " → ", abs(β[2] + β[4] - hs_result) < 1e-10 ? "✅ MATCH" : "❌ DIFFERENT")
+    println("Expected College: ", β[2], " vs Actual: ", college_result, " → ", abs(β[2] - college_result) < 1e-10 ? " MATCH" : " DIFFERENT")
+    println("Expected HS: ", β[2] + β[4], " vs Actual: ", hs_result, " → ", abs(β[2] + β[4] - hs_result) < 1e-10 ? " MATCH" : " DIFFERENT")
 end

@@ -8,14 +8,14 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
       Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_Zal8gu/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.0
-⌅ [324d7699] CategoricalArrays v0.10.8
+ [324d7699] CategoricalArrays v0.10.8
   [60f91f6f] CovarianceMatrices v0.22.0
   [a93c6f00] DataFrames v1.7.1
   [31c24e10] Distributions v0.25.120
   [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
   [38e38edf] GLM v1.9.0
   [883ce5cb] Margins v0.1.0 `~/.julia/dev/Margins`
-⌅ [ff71e718] MixedModels v4.38.1
+ [ff71e718] MixedModels v4.38.1
   [ce6b1742] RDatasets v0.7.7
   [10745b16] Statistics v1.11.1
   [2913bbd2] StatsBase v0.34.6
@@ -39,7 +39,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [c3b6d118] BitIntegers v0.3.5
   [fa961155] CEnum v0.5.0
   [336ed68f] CSV v0.10.15
-⌅ [324d7699] CategoricalArrays v0.10.8
+ [324d7699] CategoricalArrays v0.10.8
   [da1fd8a2] CodeTracking v2.0.0
   [5ba52731] CodecLz4 v0.4.6
   [944b1d66] CodecZlib v0.7.8
@@ -54,7 +54,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [a8cc5b0e] Crayons v4.1.1
   [9a962f9c] DataAPI v1.16.0
   [a93c6f00] DataFrames v1.7.1
-⌅ [864edb3b] DataStructures v0.18.22
+ [864edb3b] DataStructures v0.18.22
   [e2d170a0] DataValueInterfaces v1.0.0
   [85a47980] Dictionaries v0.4.5
   [163ba53b] DiffResults v1.1.0
@@ -93,7 +93,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [883ce5cb] Margins v0.1.0 `~/.julia/dev/Margins`
   [d0879d2d] MarkdownAST v0.1.2
   [e1d29d7a] Missings v1.2.0
-⌅ [ff71e718] MixedModels v4.38.1
+ [ff71e718] MixedModels v4.38.1
   [7e9fb7ac] MixedModelsDatasets v0.1.2
   [78c3b35d] Mocking v0.8.1
   [76087f3c] NLopt v1.2.1
@@ -102,13 +102,13 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [90014a1f] PDMats v0.11.35
   [69de0a69] Parsers v2.8.3
   [2dfb63ee] PooledArrays v1.4.3
-⌅ [aea7be01] PrecompileTools v1.2.1
+ [aea7be01] PrecompileTools v1.2.1
   [21216c6a] Preferences v1.5.0
-⌅ [08abe8d2] PrettyTables v2.4.0
+ [08abe8d2] PrettyTables v2.4.0
   [92933f4c] ProgressMeter v1.11.0
   [43287f4e] PtrArrays v1.3.0
   [1fd47b50] QuadGK v2.11.2
-⌅ [df47a6cb] RData v0.8.3
+ [df47a6cb] RData v0.8.3
   [ce6b1742] RDatasets v0.7.7
   [189a3867] Reexport v1.2.2
   [2792f1a3] RegistryInstances v0.1.0
@@ -200,7 +200,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [8e850b90] libblastrampoline_jll v5.11.0+0
   [8e850ede] nghttp2_jll v1.59.0+0
   [3f19e933] p7zip_jll v17.4.0+2
-        Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
+        Info Packages marked with  have new versions available but compatibility constraints restrict them from upgrading.
      Testing Running tests...
 
 Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
@@ -210,12 +210,12 @@ Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
 [K[A
 Minimizing 73    Time: 0:00:00 ( 4.37 ms/it)[K
 
-┌ Warning: ⚠️  Clustered SE test failed: UndefVarError(:CRHC0, Main)
-└ @ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:135
+┌ Warning: WARNING  Clustered SE test failed: UndefVarError(:CRHC0, Main)
+@ Main ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:135
 [ Info: Running comprehensive robust SE validation suite
-[ Info: ✓ Comprehensive robust SE suite: 2/3 tests successful
+[ Info: Comprehensive robust SE suite: 2/3 tests successful
 [ Info:   Overall success rate: 66.7%
-[ Info: ✓ Invalid cluster variable handled gracefully: UndefVarError
+[ Info: Invalid cluster variable handled gracefully: UndefVarError
 Test Summary:      | Pass  Total   Time
 Core Functionality |  113    113  35.0s
 Test Summary:     | Pass  Total   Time

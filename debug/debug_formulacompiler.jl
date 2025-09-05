@@ -9,7 +9,7 @@ using LinearAlgebra
 import FormulaCompiler
 
 function debug_formulacompiler_allocations()
-    println("🔍 DEBUGGING FORMULACOMPILER ALLOCATION SOURCES")
+    println(" DEBUGGING FORMULACOMPILER ALLOCATION SOURCES")
     println("=" ^ 60)
     
     # Create test data
@@ -129,7 +129,7 @@ function debug_formulacompiler_allocations()
     
     print_result("delta_method_se", allocs_small, allocs_large, n_small, n_large)
     
-    println("\n🎯 ANALYSIS:")
+    println("\n ANALYSIS:")
     println("If any of the above show O(n) scaling, that's the allocation source.")
     println("Expected: accumulate_ame_gradient! and delta_method_se should be O(1)")
     println("Suspect: marginal_effects_eta! loop or modelrow! loop may be O(n)")
@@ -144,13 +144,13 @@ function print_result(name, allocs_small, allocs_large, n_small, n_large)
     println("  Scaling: $(round(scaling_ratio, digits=1))x (expected $(round(size_ratio, digits=1))x for O(n))")
     
     if allocs_small == 0 && allocs_large == 0
-        println("  ✅ Zero allocations - perfect!")
+        println("   Zero allocations - perfect!")
     elseif scaling_ratio < 1.5
-        println("  ✅ O(1) scaling - not the problem")
+        println("   O(1) scaling - not the problem")
     elseif abs(scaling_ratio - size_ratio) < 0.5
-        println("  🔥 O(n) scaling - THIS IS THE CULPRIT!")
+        println("   O(n) scaling - THIS IS THE CULPRIT!")
     else
-        println("  ⚠️  Unclear scaling pattern")
+        println("    Unclear scaling pattern")
     end
     println()
 end

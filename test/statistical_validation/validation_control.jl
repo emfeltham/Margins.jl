@@ -20,12 +20,12 @@ Expected duration: < 30 seconds
 Coverage: Critical mathematical correctness, integer variables, backend consistency
 """
 function run_ci_validation()
-    @info "🚀 Running CI Statistical Validation (Fast Critical Subset)"
+    @info " Running CI Statistical Validation (Fast Critical Subset)"
     @info "Expected duration: < 30 seconds"
     
     include("ci_validation.jl")
     
-    @info "✅ CI validation complete - ready for pipeline"
+    @info " CI validation complete - ready for pipeline"
     return true
 end
 
@@ -46,7 +46,7 @@ Arguments:
 Expected duration: 30 seconds to 5 minutes depending on focus
 """
 function run_development_validation(; focus=:all)
-    @info "🔧 Running Development Statistical Validation"
+    @info " Running Development Statistical Validation"
     @info "Focus area: $focus"
     
     if focus == :all
@@ -77,7 +77,7 @@ function run_development_validation(; focus=:all)
                 end
             end
             
-            @info "✓ Integer variable development validation complete"
+            @info " Integer variable development validation complete"
         end
     elseif focus == :systematic
         @info "Running systematic model coverage validation..."
@@ -103,13 +103,13 @@ function run_development_validation(; focus=:all)
                 end
             end
             
-            @info "✓ Systematic model development validation complete"
+            @info " Systematic model development validation complete"
         end
     else
         error("Unknown focus area: $focus. Use :all, :core, :backend, :integers, or :systematic")
     end
     
-    @info "✅ Development validation complete"
+    @info " Development validation complete"
     return true
 end
 
@@ -123,13 +123,13 @@ Expected duration: ~5 minutes
 Coverage: Complete statistical correctness validation with performance monitoring
 """
 function run_release_validation()
-    @info "📦 Running Release Statistical Validation (Complete Suite)"
+    @info " Running Release Statistical Validation (Complete Suite)"
     @info "Expected duration: ~5 minutes"
     @info "This is the complete validation required for production release"
     
     include("release_validation.jl")
     
-    @info "✅ Release validation complete - ready for production"
+    @info " Release validation complete - ready for production"
     return true
 end
 
@@ -140,37 +140,37 @@ Generate a status report of the statistical validation framework.
 Useful for understanding what tests are available and their purposes.
 """
 function validation_status_report()
-    @info "📊 Statistical Validation Framework Status Report"
+    @info " Statistical Validation Framework Status Report"
     @info ""
     @info "Available Validation Levels:"
-    @info "  🚀 CI Validation (run_ci_validation())"
+    @info "   CI Validation (run_ci_validation())"
     @info "     - Duration: < 30 seconds"
     @info "     - Purpose: Fast critical validation for CI/CD pipelines"
     @info "     - Coverage: Mathematical correctness, integers, backend consistency"
     @info ""
-    @info "  🔧 Development Validation (run_development_validation(; focus=...))"
+    @info "   Development Validation (run_development_validation(; focus=...))"
     @info "     - Duration: 30 seconds - 5 minutes"
     @info "     - Purpose: Targeted validation during development"
     @info "     - Focus areas: :all, :core, :backend, :integers, :systematic"
     @info ""
-    @info "  📦 Release Validation (run_release_validation())"
+    @info "   Release Validation (run_release_validation())"
     @info "     - Duration: ~5 minutes"  
     @info "     - Purpose: Complete validation for production release"
     @info "     - Coverage: Full statistical correctness + performance monitoring"
     @info ""
     @info "Framework Components:"
-    @info "  ✓ ci_validation.jl - Fast critical subset"
-    @info "  ✓ statistical_validation.jl - Complete 6-tier validation"
-    @info "  ✓ backend_consistency.jl - AD vs FD consistency"
-    @info "  ✓ release_validation.jl - Release-ready comprehensive suite"
-    @info "  ✓ testing_utilities.jl - Core testing infrastructure"
+    @info "   ci_validation.jl - Fast critical subset"
+    @info "   statistical_validation.jl - Complete 6-tier validation"
+    @info "   backend_consistency.jl - AD vs FD consistency"
+    @info "   release_validation.jl - Release-ready comprehensive suite"
+    @info "   testing_utilities.jl - Core testing infrastructure"
     @info ""
     @info "Statistical Guarantees:"
-    @info "  🎯 Publication-grade precision (1e-12 analytical validation)"
+    @info "   Publication-grade precision (1e-12 analytical validation)"
     @info "  🔢 Complete integer variable support for econometric data"
-    @info "  ⚡ FormulaCompiler-level systematic coverage (23 scenarios)"
+    @info "   FormulaCompiler-level systematic coverage (23 scenarios)"
     @info "  🚫 Zero-tolerance policy for invalid statistical results"
-    @info "  📊 Cross-platform numerical consistency"
+    @info "   Cross-platform numerical consistency"
 end
 
 # Export main control functions

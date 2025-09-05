@@ -98,16 +98,19 @@ population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)
 - Delta-method standard errors use full covariance matrix
 - All gradient computations maintain mathematical precision
 - Bootstrap validation ensures statistical accuracy
+- Never change estimators, gradients, or SE math to "optimize"
 
 **Zero-Allocation Patterns**: Eliminate unnecessary memory allocations
 - Pre-allocated buffers reused across computations
 - FormulaCompiler.jl provides zero-allocation evaluation primitives
 - Constant memory footprint regardless of dataset size
+- O(1) allocations in production paths: constant allocation count w.r.t. sample size
 
 **Computational Efficiency**: Optimize hot paths without changing methodology
 - Compiled formula evaluation with caching
 - Efficient gradient accumulation patterns
 - Scalar operations over broadcast temporaries
+- Zero dynamic growth: avoid `push!` in hot paths; size outputs up-front
 
 ### Backend Performance Characteristics
 
@@ -183,6 +186,104 @@ for model in models
 end
 ```
 
+## Performance Best Practices
+
+### High-Performance Usage Patterns
+
+For optimal performance in production environments, follow these proven patterns:
+
+#### Compilation and Caching
+```julia
+# Good: Compile once, use multiple times
+compiled = FormulaCompiler.compile_formula(model, data)  # Expensive, do once
+de = FormulaCompiler.build_derivative_evaluator(compiled, data; vars=vars)  # Do once
+
+# Multiple analysis calls reuse compiled objects automatically
+result1 = population_margins(model, data; type=:effects)     
+result2 = profile_margins(model, data, means_grid(data); type=:effects)
+
+# Avoid: Forcing recompilation in loops
+for subset in data_subsets
+    # Each call may recompile unnecessarily
+    result = population_margins(fit_model(subset), subset)  
+end
+```
+
+#### Memory-Efficient Data Processing
+```julia
+# Good: Pre-allocate result structures for known sizes
+n_effects = length(vars) * length(scenarios)
+result_buffer = DataFrame(
+    term = Vector{String}(undef, n_effects),
+    estimate = Vector{Float64}(undef, n_effects),
+    se = Vector{Float64}(undef, n_effects)
+)
+
+# Good: Use scalar operations in hot paths
+for i in eachindex(estimates)
+    μ = GLM.linkinv(link, η[i])      # Scalar operation
+    se[i] = sqrt(gradients[i]' * Σ * gradients[i])
+end
+
+# Avoid: Growing DataFrames with push! in loops
+results = DataFrame()
+for scenario in scenarios
+    result = population_margins(model, scenario_data)
+    push!(results, DataFrame(result))  # Expensive growth
+end
+```
+
+#### FormulaCompiler Integration Patterns
+```julia
+# Good: Let FormulaCompiler handle the optimization
+# Use built-in primitives for zero-allocation paths
+population_margins(model, data; backend=:fd)  # Uses optimized accumulation
+
+# Good: Cache compiled objects for batch processing
+models = [model1, model2, model3]
+cached_compilations = Dict()
+
+for model in models
+    # Compilation is cached automatically by model signature
+    result = population_margins(model, data; backend=:ad)
+end
+```
+
+### Performance Validation
+
+#### Checking Allocation Patterns
+```julia
+# Verify zero-allocation performance
+using BenchmarkTools
+
+# Both backends should show 0 allocation after warmup
+@allocated population_margins(model, data; backend=:ad)  # Expected: 0 bytes  
+@allocated population_margins(model, data; backend=:fd)  # Expected: 0 bytes
+
+# Profile margins should have constant allocation regardless of data size
+@allocated profile_margins(model, small_data, means_grid(small_data))  # Small constant
+@allocated profile_margins(model, large_data, means_grid(large_data))  # Same constant
+```
+
+#### Performance Monitoring
+```julia
+# Production monitoring pattern
+function monitored_margins(model, data; max_alloc_kb=10, kwargs...)
+    alloc_before = Base.gc_num().poolalloc
+    
+    result = population_margins(model, data; kwargs...)
+    
+    alloc_after = Base.gc_num().poolalloc
+    alloc_kb = (alloc_after - alloc_before) / 1024
+    
+    if alloc_kb > max_alloc_kb
+        @warn "Excessive allocation detected: $(alloc_kb)KB"
+    end
+    
+    return result
+end
+```
+
 ## Troubleshooting Performance Issues
 
 ### Diagnostic Tools
@@ -212,32 +313,69 @@ Profile.print()
 ### Common Issues and Solutions
 
 #### Issue: Profile margins slower than expected
-**Diagnosis**: Likely using wrong dispatch or DataFrame confusion
-**Solution**: Ensure proper at parameter specification
+**Diagnosis**: Reference grid specification or DataFrame dispatch issues
+**Solution**: Use proper reference grid builders
 ```julia
-# Correct: O(1) performance
-profile_margins(model, data; at=:means, type=:effects)
+# Correct: O(1) performance with reference grids
+profile_margins(model, data, means_grid(data); type=:effects)
+profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)
 
-# Avoid: DataFrame method confusion  
-# Use Dict or NamedTuple for 'at' parameter
+# Avoid: Improper reference grid specification
+# Always use reference grid builders or explicit DataFrames
 ```
 
 #### Issue: Population margins allocating excessively
-**Diagnosis**: Potential struct field access in hot loops
-**Solution**: Verify backend selection and data format
+**Diagnosis**: Hot loop allocation patterns or data format issues
+**Solution**: Check backend and use efficient data formats
 ```julia
-# Efficient approach
-data_nt = Tables.columntable(data)  # Convert once
-result = population_margins(model, data_nt; backend=:fd)
+# Efficient: Both backends should be zero allocation
+result = population_margins(model, data; backend=:ad)  # Recommended
+result = population_margins(model, data; backend=:fd)  # Also zero allocation
+
+# Efficient data format
+data_nt = Tables.columntable(data)  # Convert once for multiple analyses
+result = population_margins(model, data_nt; backend=:ad)
 ```
 
 #### Issue: Inconsistent performance across runs
-**Diagnosis**: Compilation effects or memory pressure
-**Solution**: Warmup runs and consistent backend selection
+**Diagnosis**: Compilation effects, memory pressure, or GC interference
+**Solution**: Proper warmup and consistent configuration
 ```julia
-# Warmup for consistent benchmarking
-population_margins(model, small_data)  # Warmup
-@btime population_margins($model, $data)  # Benchmark
+# Proper benchmarking protocol
+# 1. Warmup run
+population_margins(model, small_sample)  
+
+# 2. Clear compilation effects  
+GC.gc()
+
+# 3. Consistent benchmark
+@btime population_margins($model, $data; backend=:ad)  
+```
+
+#### Issue: Memory allocation growing with dataset size
+**Diagnosis**: O(n) allocation pattern indicating performance regression
+**Solution**: Verify zero-allocation backends and check for loops
+```julia
+# Expected: constant allocation across dataset sizes
+@allocated population_margins(model, data_1k; backend=:ad)    # Should be 0 bytes
+@allocated population_margins(model, data_10k; backend=:ad)   # Should be 0 bytes  
+@allocated population_margins(model, data_100k; backend=:ad)  # Should be 0 bytes
+
+# If allocations grow with n:
+# 1. Check backend selection (:ad and :fd both should be zero allocation)  
+# 2. Verify data format (Tables.jl-compatible)
+# 3. Check for custom vcov functions that may allocate
+```
+
+#### Issue: Slow compilation on first run
+**Diagnosis**: Normal FormulaCompiler compilation overhead
+**Solution**: Accept first-run cost, subsequent runs benefit from caching
+```julia
+# Expected pattern:
+@time population_margins(model, data)        # Slower (compilation)
+@time population_margins(model, data)        # Faster (cached)
+
+# For production: accept compilation cost or precompile key models
 ```
 
 ## FormulaCompiler.jl Integration

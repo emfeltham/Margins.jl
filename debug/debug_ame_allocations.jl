@@ -8,7 +8,7 @@ import FormulaCompiler
 using LinearAlgebra
 
 function test_ame_components()
-    println("🔍 DEBUGGING AME ALLOCATION SOURCES")
+    println("DEBUGGING AME ALLOCATION SOURCES")
     println("=" ^ 60)
     
     # Create test data
@@ -59,9 +59,9 @@ function test_ame_components()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) PASS")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -91,9 +91,9 @@ function test_ame_components()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) PASS")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌") 
+        println("O(n) ") 
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -123,9 +123,9 @@ function test_ame_components()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) PASS")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
@@ -163,14 +163,14 @@ function test_ame_components()
     
     print("$allocs_small\t\t| $allocs_large\t\t| ")
     if scaling_ratio < 1.5
-        println("O(1) ✅")
+        println("O(1) PASS")
     elseif abs(scaling_ratio - size_ratio) < 0.3
-        println("O(n) ❌")
+        println("O(n) ")
     else
         println("$(round(scaling_ratio, digits=1))x")
     end
     
-    println("\n🎯 CONCLUSION:")
+    println("\nCONCLUSION:")
     println("If FC accumulate_ame_gradient! is O(n), the allocations are coming from FormulaCompiler")
     println("If elasticity computation is O(n), the allocations are from our modelrow! loop")
     println("If both are O(1), then the allocations are elsewhere in the pipeline")

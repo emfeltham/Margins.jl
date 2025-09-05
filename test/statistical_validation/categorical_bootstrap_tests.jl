@@ -245,7 +245,7 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
                     @info "  Categorical Terms Tested: $(length(result.categorical_terms))"
                     @info "  Bootstrap Samples: $(result.n_bootstrap_successful)/$n_bootstrap successful"
                     
-                    status = meets_expectation ? "✅ PASSED" : "❌ BELOW EXPECTATION"
+                    status = meets_expectation ? " PASSED" : " BELOW EXPECTATION"
                     @info "  Result: $status"
                 end
                 
@@ -313,10 +313,10 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
         end
         
         if expectation_success_rate >= 0.70  # Lower threshold for categorical effects
-            @info "🎉 CATEGORICAL BOOTSTRAP VALIDATION: PASSED"
+            @info " CATEGORICAL BOOTSTRAP VALIDATION: PASSED"
             @info "Categorical effects show acceptable bootstrap agreement!"
         else
-            @warn "⚠️  CATEGORICAL BOOTSTRAP VALIDATION: NEEDS IMPROVEMENT"
+            @warn "  CATEGORICAL BOOTSTRAP VALIDATION: NEEDS IMPROVEMENT"
             @info "Some categorical models below expectation"
         end
     end

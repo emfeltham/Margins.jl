@@ -58,10 +58,10 @@ if nrow(grouped_df) >= 2
     println("Difference: ", abs(college_result - hs_result))
     
     if abs(college_result - hs_result) > 1e-6
-        println("✅ SUCCESS: Different marginal effects between groups!")
+        println(" SUCCESS: Different marginal effects between groups!")
         println("This confirms that subgroup computation is working correctly.")
     else
-        println("⚠️  WARNING: Marginal effects are still identical")
+        println("  WARNING: Marginal effects are still identical")
         println("This suggests there may still be an issue with subgroup computation")
     end
 end

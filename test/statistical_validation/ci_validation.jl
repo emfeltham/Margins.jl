@@ -41,7 +41,7 @@ using Margins
             @test prof_df.estimate[2] ≈ β₂ atol=1e-12
             @test validate_all_finite_positive(prof_df).all_valid
             
-            @info "✓ CI: Linear model coefficient validation passed"
+            @info " CI: Linear model coefficient validation passed"
         end
         
         @testset "GLM Chain Rule Validation" begin
@@ -64,7 +64,7 @@ using Margins
             @test mu_df.estimate[1] ≈ manual_ame atol=1e-12
             @test validate_all_finite_positive(mu_df).all_valid
             
-            @info "✓ CI: GLM chain rule validation passed"
+            @info " CI: GLM chain rule validation passed"
         end
     end
     
@@ -90,7 +90,7 @@ using Margins
             prof_pred = profile_margins(model, df, means_grid(df); type=:predictions)
             @test validate_all_finite_positive(DataFrame(prof_pred)).all_valid
             
-            @info "✓ CI: Integer variable support validated"
+            @info " CI: Integer variable support validated"
         end
         
         @testset "Integer × Categorical Interaction" begin
@@ -100,7 +100,7 @@ using Margins
             @test framework_result.all_successful
             @test framework_result.all_finite
             
-            @info "✓ CI: Integer × categorical interaction validated"
+            @info " CI: Integer × categorical interaction validated"
         end
     end
     
@@ -117,7 +117,7 @@ using Margins
         @test consistency_result.all_estimates_agree
         @test consistency_result.all_ses_agree
         
-        @info "✓ CI: Backend consistency validated"
+        @info " CI: Backend consistency validated"
     end
     
     # === TIER 4: SYSTEMATIC MODEL SAMPLING ===
@@ -139,15 +139,15 @@ using Margins
                 @test framework_result.all_successful
                 @test framework_result.all_finite
                 
-                @info "✓ CI: $(name) validated"
+                @info " CI: $(name) validated"
             end
         end
     end
     
-    @info "🚀 CI STATISTICAL VALIDATION: COMPLETE"
+    @info " CI STATISTICAL VALIDATION: COMPLETE"
     @info "Critical statistical correctness verified for CI/CD pipeline"
-    @info "✓ Mathematical correctness (coefficient validation)"
-    @info "✓ Integer variable support (econometric data)"
-    @info "✓ Backend consistency (computational reliability)"
-    @info "✓ Core model types (systematic sampling)"
+    @info " Mathematical correctness (coefficient validation)"
+    @info " Integer variable support (econometric data)"
+    @info " Backend consistency (computational reliability)"
+    @info " Core model types (systematic sampling)"
 end
