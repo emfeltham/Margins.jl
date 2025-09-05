@@ -315,7 +315,12 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:r
     n_params = length(engine.β)
     
     # Reuse η_buf for predictions if possible
-    predictions = length(engine.η_buf) >= n_profiles ? view(engine.η_buf, 1:n_profiles) : Vector{Float64}(undef, n_profiles)
+    if length(engine.η_buf) >= n_profiles
+        predictions = view(engine.η_buf, 1:n_profiles)
+    else
+        @info "Buffer allocation fallback: η_buf too small for $n_profiles profiles (size=$(length(engine.η_buf)))"
+        predictions = Vector{Float64}(undef, n_profiles)
+    end
     G = zeros(n_profiles, n_params)  # One row per profile
     
     # Compile with reference grid (like effects rework)
@@ -332,6 +337,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:r
     if length(engine.g_buf) >= n_profiles
         se_vals = view(engine.g_buf, 1:n_profiles)  # Reuse g_buf if large enough
     else
+        @info "Buffer allocation fallback: g_buf too small for $n_profiles profiles (size=$(length(engine.g_buf)))"
         se_vals = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
     end
     for i in 1:n_profiles

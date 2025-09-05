@@ -114,6 +114,7 @@ function compute_multiple_profile_contrasts(
     if length(engine.η_buf) >= n_profiles
         effects = view(engine.η_buf, 1:n_profiles)  # Reuse η_buf if large enough
     else
+        @info "Buffer allocation fallback: η_buf too small for $n_profiles profiles (size=$(length(engine.η_buf)))"
         effects = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
     end
     gradients = Matrix{Float64}(undef, n_profiles, n_params)
@@ -138,6 +139,7 @@ function compute_multiple_profile_contrasts(
     if length(engine.g_buf) >= n_profiles
         ses = view(engine.g_buf, 1:n_profiles)  # Reuse g_buf if large enough
     else
+        @info "Buffer allocation fallback: g_buf too small for $n_profiles profiles (size=$(length(engine.g_buf)))"
         ses = Vector{Float64}(undef, n_profiles)  # Fall back to allocation
     end
     for i in 1:n_profiles

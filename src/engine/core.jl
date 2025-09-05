@@ -69,7 +69,8 @@ The engine pre-allocates four key buffers to minimize runtime allocations:
 
 These buffers are safely reused across computations using bounds-checked views.
 When buffer size is insufficient, functions allocate additional memory
-to prevent bounds errors while maintaining correctness.
+to prevent bounds errors while maintaining correctness. An @info message
+is logged when buffer allocation fallback occurs for performance visibility.
 
 # Performance Notes
 - Compilation is expensive (~milliseconds), so cache engines when possible
