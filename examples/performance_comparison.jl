@@ -55,7 +55,7 @@ for n in sizes
     model = models[n]
     
     # Benchmark profile margins at sample means
-    result = @benchmark profile_margins($model, $data; at=:means, type=:effects) samples=10 seconds=30
+    result = @benchmark profile_margins($model, $data, means_grid($data); type=:effects) samples=10 seconds=30
     profile_times[n] = median(result.times) / 1000  # Convert to microseconds
     profile_allocations[n] = median(result.allocs)
     
@@ -132,7 +132,7 @@ for n in [1_000, 50_000, 100_000]  # Test on different sizes
     data = datasets[n]
     model = models[n]
     
-    result = @benchmark profile_margins($model, $data; at=$complex_scenarios, type=:effects) samples=5
+    result = @benchmark profile_margins($model, $data, $complex_scenarios; type=:effects) samples=5
     complex_times[n] = median(result.times) / 1000
     
     @printf("n=%6d: %8.0f μs for %d scenarios\n", n, complex_times[n], total_scenarios)
@@ -189,7 +189,7 @@ for backend in backends
     pop_allocs = median(pop_result.allocs)
     
     # Profile margins  
-    prof_result = @benchmark profile_margins($test_model, $test_data; at=:means, backend=$backend, type=:effects) samples=10
+    prof_result = @benchmark profile_margins($test_model, $test_data, means_grid($test_data); backend=$backend, type=:effects) samples=10
     prof_time = median(prof_result.times) / 1000
     prof_allocs = median(prof_result.allocs)
     
@@ -226,9 +226,8 @@ exploration_model = models[100_000]
 
 # Fast exploration with profiles
 exploration_time = @elapsed begin
-    scenarios = Dict(:x1 => [-1, 0, 1], :treatment => [0, 1])
-    exploration_result = profile_margins(exploration_model, exploration_data; 
-                                       at=scenarios, type=:effects)
+    scenarios = cartesian_grid(exploration_data; x1=[-1, 0, 1], treatment=[0, 1])
+    exploration_result = profile_margins(exploration_model, exploration_data, scenarios; type=:effects)
 end
 
 # Final analysis with population (subset of variables)  

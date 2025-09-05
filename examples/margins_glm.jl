@@ -43,11 +43,10 @@ println()
 println("=== PROFILE APPROACH ===")
 
 println("4. Profile approach (at specific covariate values):")
-println("   Note: profile_margins() has some compatibility issues being resolved")
 println("   
-   Conceptual examples:
-   • profile_margins(m, df; at=:means, type=:effects, vars=[:x])
-   • profile_margins(m, df; at=Dict(:x=>[-2,0,2]), type=:predictions)
+   Current examples:
+   • profile_margins(m, df, means_grid(df); type=:effects, vars=[:x])
+   • profile_margins(m, df, cartesian_grid(df; x=[-2,0,2]); type=:predictions)
    
    This evaluates effects/predictions at specific covariate combinations
    rather than averaging across the observed data distribution.

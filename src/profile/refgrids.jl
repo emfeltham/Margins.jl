@@ -573,7 +573,7 @@ end
     cartesian_grid(data; vars...) -> DataFrame
 
 Build Cartesian product reference grid from variable specifications.
-This replaces the current `at=Dict(...)` functionality with a cleaner builder approach.
+This provides a cleaner builder approach for reference grid specification.
 
 # Arguments
 - `data`: DataFrame or NamedTuple containing the data

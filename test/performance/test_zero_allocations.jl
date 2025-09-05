@@ -12,7 +12,7 @@
 #
 # 2. ALLOCATION SOURCES THAT REMAIN:
 #    - DataFrame creation and manipulation for results
-#    - Profile grid construction (at=:means processing)  
+#    - Profile grid construction (means_grid() processing)  
 #    - String allocations for term names and formatting
 #    - Julia compilation and type inference overhead
 #    - BenchmarkTools.jl measurement infrastructure

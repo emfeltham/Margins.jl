@@ -101,8 +101,8 @@ println("-" * 40)
 
 # Stata: margins, at(means) dydx(*)
 println("Stata command: margins, at(means) dydx(*)")
-stata_at_means = profile_margins(linear_model, data; at=:means, type=:effects)
-println("Margins.jl:   profile_margins(model, data; at=:means, type=:effects)")
+stata_at_means = profile_margins(linear_model, data, means_grid(data); type=:effects)
+println("Margins.jl:   profile_margins(model, data, means_grid(data); type=:effects)")
 println(DataFrame(stata_at_means)[!, [:term, :estimate, :se, :p_value]])
 
 # ### 3. Predictions (Fitted Values)
@@ -118,8 +118,8 @@ println(DataFrame(stata_predictions))
 
 # Stata: margins, at(means)
 println("\nStata command: margins, at(means)")
-stata_pred_means = profile_margins(linear_model, data; at=:means, type=:predictions)
-println("Margins.jl:   profile_margins(model, data; at=:means, type=:predictions)")
+stata_pred_means = profile_margins(linear_model, data, means_grid(data); type=:predictions)
+println("Margins.jl:   profile_margins(model, data, means_grid(data); type=:predictions)")
 println(DataFrame(stata_pred_means))
 
 # ### 4. At Specific Values
@@ -129,19 +129,19 @@ println("-" * 40)
 
 # Stata: margins, at(age=(25 35 45) female=(0 1))
 println("Stata command: margins, at(age=(25 35 45) female=(0 1))")
-stata_at_values = profile_margins(linear_model, data; 
-    at=Dict(:age => [25, 35, 45], :female => [0, 1]), 
+stata_at_values = profile_margins(linear_model, data,
+    cartesian_grid(data; age=[25, 35, 45], female=[0, 1]);
     type=:predictions)
-println("Margins.jl:   profile_margins(model, data; at=Dict(:age => [25,35,45], :female => [0,1]), type=:predictions)")
+println("Margins.jl:   profile_margins(model, data, cartesian_grid(data; age=[25,35,45], female=[0,1]); type=:predictions)")
 at_df = DataFrame(stata_at_values)
 println(at_df[!, [:at_age, :at_female, :estimate, :se]])
 
 # Stata: margins, at(age=(25 35 45) female=(0 1)) dydx(experience)
 println("\nStata command: margins, at(age=(25 35 45) female=(0 1)) dydx(experience)")
-stata_at_dydx = profile_margins(linear_model, data;
-    at=Dict(:age => [25, 35, 45], :female => [0, 1]),
+stata_at_dydx = profile_margins(linear_model, data,
+    cartesian_grid(data; age=[25, 35, 45], female=[0, 1]);
     type=:effects, vars=[:experience])
-println("Margins.jl:   profile_margins(model, data; at=Dict(...), type=:effects, vars=[:experience])")
+println("Margins.jl:   profile_margins(model, data, cartesian_grid(data; age=[25,35,45], female=[0,1]); type=:effects, vars=[:experience])")
 println(DataFrame(stata_at_dydx)[!, [:at_age, :at_female, :estimate, :se]])
 
 # ### 5. Over Groups (Subgroup Analysis)
@@ -177,22 +177,22 @@ println("-" * 40)
 
 # Stata: margins, dydx(*) (after logit)
 println("Stata command: margins, dydx(*) [after logit]")
-logit_margins = population_margins(logit_model, data; type=:effects, target=:mu)  # Probability scale
-println("Margins.jl:   population_margins(logit_model, data; type=:effects, target=:mu)")
+logit_margins = population_margins(logit_model, data; type=:effects, scale=:response)  # Probability scale
+println("Margins.jl:   population_margins(logit_model, data; type=:effects, scale=:response)")
 println(DataFrame(logit_margins))
 
 # Stata: margins, at(means) (after logit)  
 println("\nStata command: margins, at(means) [after logit]")
-logit_at_means = profile_margins(logit_model, data; at=:means, type=:predictions, target=:mu)
-println("Margins.jl:   profile_margins(logit_model, data; at=:means, type=:predictions, target=:mu)")
+logit_at_means = profile_margins(logit_model, data, means_grid(data); type=:predictions, scale=:response)
+println("Margins.jl:   profile_margins(logit_model, data, means_grid(data); type=:predictions, scale=:response)")
 println(DataFrame(logit_at_means))
 
 # Stata: margins female, at(age=35 education=3)
 println("\nStata command: margins female, at(age=35 education=3)")
-logit_scenarios = profile_margins(logit_model, data;
-    at=Dict(:age => [35], :education => [3], :female => [0, 1]),
-    type=:predictions, target=:mu)
-println("Margins.jl:   profile_margins(logit_model, data; at=Dict(:age=>[35], :education=>[3], :female=>[0,1]), type=:predictions, target=:mu)")
+logit_scenarios = profile_margins(logit_model, data,
+    cartesian_grid(data; age=[35], education=[3], female=[0, 1]);
+    type=:predictions, scale=:response)
+println("Margins.jl:   profile_margins(logit_model, data, cartesian_grid(data; age=[35], education=[3], female=[0,1]); type=:predictions, scale=:response)")
 println(DataFrame(logit_scenarios)[!, [:at_female, :estimate]])
 
 # ## Advanced Stata Equivalencies
@@ -208,8 +208,8 @@ println("-" * 40)
 
 # Stata approach: margins treatment, pwcompare
 # Margins.jl approach: compute at different treatment levels
-treatment_contrast = profile_margins(linear_model, data;
-    at=Dict(:treated => [0, 1]), type=:predictions)
+treatment_contrast = profile_margins(linear_model, data,
+    cartesian_grid(data; treated=[0, 1]); type=:predictions)
 contrast_df = DataFrame(treatment_contrast)
 
 treated_effect = contrast_df[contrast_df.at_treated .== 1, :estimate][1] - 
@@ -217,7 +217,7 @@ treated_effect = contrast_df[contrast_df.at_treated .== 1, :estimate][1] -
 
 println("Treatment effect (contrast):")
 @printf("Treated - Control = %.4f log points\n", treated_effect)
-println("Margins.jl:   profile_margins(model, data; at=Dict(:treated => [0,1]), type=:predictions)")
+println("Margins.jl:   profile_margins(model, data, cartesian_grid(data; treated=[0,1]); type=:predictions)")
 
 # ### 8. Multiple Group Analysis  
 
@@ -280,14 +280,14 @@ println("="^60)
 
 migration_guide = [
     ("margins, dydx(*)", "population_margins(model, data; type=:effects)"),
-    ("margins, at(means) dydx(*)", "profile_margins(model, data; at=:means, type=:effects)"),
+    ("margins, at(means) dydx(*)", "profile_margins(model, data, means_grid(data); type=:effects)"),
     ("margins", "population_margins(model, data; type=:predictions)"),
-    ("margins, at(means)", "profile_margins(model, data; at=:means, type=:predictions)"),
-    ("margins, at(var=values)", "profile_margins(model, data; at=Dict(:var => values), type=:predictions)"),
+    ("margins, at(means)", "profile_margins(model, data, means_grid(data); type=:predictions)"),
+    ("margins, at(var=values)", "profile_margins(model, data, cartesian_grid(data; var=values); type=:predictions)"),
     ("margins, over(group)", "population_margins(model, data; groups=:group, type=:predictions)"),
     ("margins, dydx(*) over(group)", "population_margins(model, data; type=:effects, groups=:group)"),
-    ("margins [after logit]", "population_margins(logit_model, data; target=:mu, type=:predictions)"),
-    ("margins, dydx(*) [after logit]", "population_margins(logit_model, data; target=:mu, type=:effects)")
+    ("margins [after logit]", "population_margins(logit_model, data; scale=:response, type=:predictions)"),
+    ("margins, dydx(*) [after logit]", "population_margins(logit_model, data; scale=:response, type=:effects)")
 ]
 
 println("\nQuick Reference:")
@@ -307,9 +307,9 @@ println("• Publication-grade statistical rigor with delta-method standard erro
 println("• Extensible to custom model types through StatsModels.jl interface")
 
 println("\nSyntax Considerations:")
-println("• Use Dict(:var => values) instead of at(var=values)")
-println("• Specify target=:mu for probability scale in logistic models")  
-println("• Use over parameter instead of over() option")
+println("• Use cartesian_grid(data; var=values) for specific value combinations")
+println("• Specify scale=:response for probability scale in logistic models")  
+println("• Use groups parameter instead of over() option")
 println("• DataFrame(result) converts to standard data table")
 
 println("\n=== Migration Guide Complete ===")

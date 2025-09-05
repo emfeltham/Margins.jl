@@ -136,16 +136,17 @@ function _extract_context_profile_values(results)
 end
 
 """
-    _parse_at_specification(at) -> Vector{Dict}
+    _parse_at_specification(scenarios) -> Vector{Dict}
 
-Parse at specification (counterfactual scenarios).
-Creates all combinations of at values for Cartesian product expansion.
+Parse scenarios specification (counterfactual scenarios).
+Creates all combinations of scenario values for Cartesian product expansion.
+Note: Function name preserved for compatibility, but now processes 'scenarios' parameter.
 """
-function _parse_at_specification(at)
-    if at isa Dict
-        # Create all combinations of at values
-        var_names = collect(keys(at))
-        var_values = [at[k] isa Vector ? at[k] : [at[k]] for k in var_names]  # Ensure vectors
+function _parse_at_specification(scenarios)
+    if scenarios isa Dict
+        # Create all combinations of scenario values
+        var_names = collect(keys(scenarios))
+        var_values = [scenarios[k] isa Vector ? scenarios[k] : [scenarios[k]] for k in var_names]  # Ensure vectors
         contexts = []
         for combo in Iterators.product(var_values...)
             context = Dict(zip(var_names, combo))
@@ -153,7 +154,7 @@ function _parse_at_specification(at)
         end
         return contexts
     else
-        error("at parameter must be a Dict specifying variable values")
+        error("scenarios parameter must be a Dict specifying variable values")
     end
 end
 

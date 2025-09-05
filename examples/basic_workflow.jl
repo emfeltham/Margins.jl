@@ -81,12 +81,12 @@ println(DataFrame(aap_result))
 println("\n--- Profile Analysis ---")
 
 # Marginal Effects at Sample Means (MEM)
-mem_result = profile_margins(model, data; at=:means, type=:effects)
+mem_result = profile_margins(model, data, means_grid(data); type=:effects)
 println("Marginal Effects at Sample Means:")
 println(DataFrame(mem_result))
 
 # Adjusted Predictions at Sample Means (APM)
-apm_result = profile_margins(model, data; at=:means, type=:predictions)
+apm_result = profile_margins(model, data, means_grid(data); type=:predictions)
 println("\nAdjusted Predictions at Sample Means:")
 println(DataFrame(apm_result))
 
@@ -97,13 +97,10 @@ println("\n=== Profile Specification Examples ===")
 # ### Scenario Analysis
 # Effects at specific policy scenarios
 
-scenarios = Dict(
-    :age => [30, 45, 60],           # Different age groups
-    :treatment => [0, 1],           # With/without treatment
-    :education => ["High School", "College", "Graduate"]  # Education levels
-)
+# Using cartesian grid for systematic exploration
+# Creates all combinations of specified values
 
-scenario_effects = profile_margins(model, data; at=scenarios, type=:effects)
+scenario_effects = profile_margins(model, data, cartesian_grid(data; age=[30, 45, 60], treatment=[0, 1], education=["High School", "College", "Graduate"]); type=:effects)
 scenario_df = DataFrame(scenario_effects)
 
 println("Treatment effects across age and education scenarios:")
@@ -121,7 +118,7 @@ custom_grid = DataFrame(
     treatment = [1, 1, 1]  # All treated
 )
 
-custom_predictions = profile_margins(model, custom_grid; type=:predictions)
+custom_predictions = profile_margins(model, data, custom_grid; type=:predictions)
 println("\nPredictions at custom scenarios:")
 println(DataFrame(custom_predictions))
 
@@ -148,7 +145,7 @@ println("\n=== Population vs Profile Comparison ===")
 
 # For linear models, these should be very similar
 pop_treatment = DataFrame(population_margins(model, data; type=:effects, vars=[:treatment]))
-prof_treatment = DataFrame(profile_margins(model, data; at=:means, type=:effects, vars=[:treatment]))
+prof_treatment = DataFrame(profile_margins(model, data, means_grid(data); type=:effects, vars=[:treatment]))
 
 println("Treatment effect comparison:")
 println("Population (AME): $(round(pop_treatment.estimate[1], digits=3)) ± $(round(pop_treatment.se[1], digits=3))")

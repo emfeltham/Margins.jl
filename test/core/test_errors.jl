@@ -24,8 +24,8 @@ using LinearAlgebra
         @test_throws ArgumentError profile_margins(m, df, means_grid(df); type=:invalid)
     end
 
-    # Test invalid scale parameter (deprecated target parameter) 
-    @testset "Invalid scale parameter (deprecated target)" begin
+    # Test deprecated target parameter rejection (defensive testing)
+    @testset "Deprecated target parameter rejection" begin
         @debug "Testing deprecated target parameter error handling" test_input=:invalid expected_error=MethodError
         @test_throws MethodError population_margins(m, df; type=:effects, target=:invalid)  # target param no longer exists
     end

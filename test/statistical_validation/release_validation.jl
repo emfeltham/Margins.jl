@@ -121,8 +121,9 @@ using Margins
             test_education = 16  # 16 years
             test_wage = 50.0    # $50/hour
             
-            prof_pred = profile_margins(model, df; type=:predictions,
-                                      at=Dict(:int_education => test_education, :float_wage => test_wage))
+            prof_pred = profile_margins(model, df, 
+                                      DataFrame(int_education=[test_education], float_wage=[test_wage]);
+                                      type=:predictions)
             
             β₀, β₁, β₂ = coef(model)
             manual_pred = β₀ + β₁ * test_education + β₂ * test_wage
