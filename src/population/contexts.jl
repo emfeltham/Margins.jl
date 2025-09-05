@@ -1,14 +1,17 @@
 # population/contexts.jl - Handle at/over parameters for population contexts (Stata-compatible)
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights; type, scale, backend)
 
 Handle population margins with scenarios/groups contexts (unified API).
 
 This function implements the complex logic for counterfactual scenarios (scenarios) and 
 subgroup analysis (groups) in population margins computation.
+
+# Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing)
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend)
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights; type, scale, backend)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     
@@ -34,7 +37,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     end
     
     for scenario_spec in scenario_specs, group_spec in group_specs
-        context_data, context_indices = _create_context_data(data_nt, scenario_spec, group_spec)
+        context_data, context_indices, context_weights = _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
         
         if type === :effects
             # Process each variable
@@ -45,7 +48,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                 end
                 
                 # Compute effect in this context
-                var_result, var_gradients = _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend)
+                var_result, var_gradients = _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend, context_weights)
                 
                 # Add context identifiers
                 for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
@@ -63,7 +66,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
             end
         else # :predictions
             # Compute prediction in this context
-            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_data, context_indices, scale)
+            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_data, context_indices, scale, context_weights)
             
             # Add context identifiers
             for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
@@ -418,6 +421,30 @@ function _create_continuous_subgroups(col, specified_values)
 end
 
 """
+    _create_context_data_with_weights(data_nt, at_spec, over_spec, weights) -> (NamedTuple, Vector{Int}, Union{Vector{Float64}, Nothing})
+
+Create context data with weights subset to match filtered observations.
+Returns the filtered data, the indices of original rows, and subset weights.
+
+# Arguments
+- `weights`: Original weights vector (Vector{Float64} or nothing)
+
+# Returns
+- `context_data`: Filtered/modified NamedTuple 
+- `context_indices`: Original row indices that were kept
+- `context_weights`: Full weights array (Vector{Float64} or nothing) - functions will index using context_indices
+"""
+function _create_context_data_with_weights(data_nt, at_spec, over_spec, weights)
+    # Use existing function to get context data and indices
+    context_data, context_indices = _create_context_data(data_nt, at_spec, over_spec)
+    
+    # Pass full weights array - computation functions will index into it using context_indices
+    context_weights = weights  # No subsetting! Functions expect full array with original indexing
+    
+    return context_data, context_indices, context_weights
+end
+
+"""
     _create_context_data(data_nt, at_spec, over_spec) -> (NamedTuple, Vector{Int})
 
 Create context data (counterfactual overrides + subgroup filtering).
@@ -480,11 +507,14 @@ function _create_context_data(data_nt, at_spec, over_spec)
 end
 
 """
-    _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend) -> (DataFrame, Matrix{Float64})
+    _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend, weights) -> (DataFrame, Matrix{Float64})
 
 Compute population marginal effect for a single variable in a specific context.
+
+# Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
-function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, var::Symbol, scale::Symbol, backend::Symbol) where L
+function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, var::Symbol, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
     # Create a temporary engine for this single variable to reuse existing AME infrastructure
     n_obs = length(first(context_data))
     n_params = length(engine.β)
@@ -504,10 +534,10 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     
     if is_categorical
         # Use existing categorical AME computation
-        ame_val, gβ_avg = _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend)
+        ame_val, gβ_avg = _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend, weights)
     else
         # Use existing continuous AME computation for single variable
-        ame_val, gβ_avg = _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend)
+        ame_val, gβ_avg = _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend, weights)
     end
     
     # Compute delta-method SE
@@ -530,11 +560,14 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
 end
 
 """
-    _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend) -> (Float64, Vector{Float64})
+    _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend, weights) -> (Float64, Vector{Float64})
 
 Compute continuous AME for a single variable in context using FormulaCompiler.
+
+# Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
-function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol) where L
+function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
     # Get variable index for AME computation
     var_idx = findfirst(v -> v == var, engine.de.vars)
     if var_idx === nothing
@@ -549,29 +582,44 @@ function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, 
     # Clear accumulator buffer
     fill!(engine.gβ_accumulator, 0.0)
     
-    # Use FormulaCompiler to compute AME gradient with original data and engine
-    FormulaCompiler.accumulate_ame_gradient!(
-        engine.gβ_accumulator, engine.de, engine.β, rows, var;
-        link=(scale === :response ? engine.link : GLM.IdentityLink()), 
-        backend=backend
-    )
+    # Use appropriate AME computation based on whether weights are provided
+    if isnothing(weights)
+        # Use unweighted FormulaCompiler computation
+        FormulaCompiler.accumulate_ame_gradient!(
+            engine.gβ_accumulator, engine.de, engine.β, rows, var;
+            link=(scale === :response ? engine.link : GLM.IdentityLink()), 
+            backend=backend
+        )
+        # Compute unweighted AME value
+        ame_val = _accumulate_me_value(engine.g_buf, engine.de, engine.β, engine.link, rows, scale, backend, var_idx, nothing)
+        ame_val /= length(rows)  # Average across context observations
+    else
+        # Use weighted computation from existing infrastructure
+        _accumulate_weighted_ame_gradient!(
+            engine.gβ_accumulator, engine.de, engine.β, rows, var, weights;
+            link=(scale === :response ? engine.link : GLM.IdentityLink()), 
+            backend=backend
+        )
+        # Compute weighted AME value 
+        ame_val = _accumulate_me_value(engine.g_buf, engine.de, engine.β, engine.link, rows, scale, backend, var_idx, weights)
+        # No need to divide by length(rows) - weighted functions handle proper normalization
+    end
     
-    # The gradient is already averaged by accumulate_ame_gradient!
+    # The gradient is already properly averaged (weighted or unweighted)
     gβ_avg = copy(engine.gβ_accumulator)  # Copy to avoid mutation
-    
-    # Compute AME value
-    ame_val = _accumulate_me_value(engine.g_buf, engine.de, engine.β, engine.link, rows, scale, backend, var_idx)
-    ame_val /= length(rows)  # Average across context observations
     
     return (ame_val, gβ_avg)
 end
 
 """
-    _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend) -> (Float64, Vector{Float64})
+    _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend, weights) -> (Float64, Vector{Float64})
 
 Compute categorical baseline AME for a single variable in context using FormulaCompiler.
+
+# Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
-function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol) where L
+function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
     # Get the variable data from the original engine data (not context_data)
     var_col = getproperty(engine.data_nt, var)
     
@@ -579,11 +627,23 @@ function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var
     baseline_level = _get_baseline_level(engine.model, var)
     
     # Find the modal (most frequent) non-baseline level among the context indices
+    # Use weights if provided for frequency calculation
     level_counts = Dict()
-    for row in context_indices
-        level = var_col[row]
-        if level != baseline_level
-            level_counts[level] = get(level_counts, level, 0) + 1
+    if isnothing(weights)
+        # Unweighted frequency counts
+        for row in context_indices
+            level = var_col[row]
+            if level != baseline_level
+                level_counts[level] = get(level_counts, level, 0) + 1
+            end
+        end
+    else
+        # Weighted frequency counts - weights is full array, use row indices
+        for row in context_indices
+            level = var_col[row]
+            if level != baseline_level
+                level_counts[level] = get(level_counts, level, 0.0) + weights[row]
+            end
         end
     end
     
@@ -599,6 +659,9 @@ function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var
     ame_sum = 0.0
     grad_sum = zeros(length(engine.β))
     
+    # Compute weighted or unweighted sum
+    total_weight = isnothing(weights) ? length(context_indices) : sum(weights[row] for row in context_indices)
+    
     # For each observation in this context, compute the discrete change if we switched from baseline to modal
     for row in context_indices
         # Create profiles for this observation using the original engine data
@@ -613,25 +676,30 @@ function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var
         baseline_pred, baseline_grad = _profile_prediction_with_gradient(engine, baseline_profile, scale, backend)
         modal_pred, modal_grad = _profile_prediction_with_gradient(engine, modal_profile, scale, backend)
         
-        # Accumulate the discrete change
-        ame_sum += (modal_pred - baseline_pred)
-        grad_sum .+= (modal_grad .- baseline_grad)
+        # Get weight for this observation - weights is full array, use row index
+        w = isnothing(weights) ? 1.0 : weights[row]
+        
+        # Accumulate the weighted discrete change
+        ame_sum += w * (modal_pred - baseline_pred)
+        grad_sum .+= w .* (modal_grad .- baseline_grad)
     end
     
-    # Average over all observations in the context
-    n_obs = length(context_indices)
-    ame_val = ame_sum / n_obs
-    gβ_avg = grad_sum ./ n_obs
+    # Properly weighted average
+    ame_val = ame_sum / total_weight
+    gβ_avg = grad_sum ./ total_weight
     
     return (ame_val, gβ_avg)
 end
 
 """
-    _compute_population_prediction_in_context(engine, context_data, context_indices, scale) -> (DataFrame, Matrix{Float64})
+    _compute_population_prediction_in_context(engine, context_data, context_indices, scale, weights) -> (DataFrame, Matrix{Float64})
 
 Compute population average prediction in a specific context.
+
+# Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
-function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol) where L
+function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
     # Use the same logic as _population_predictions but with context_data
     n_obs = length(first(context_data))
     n_params = length(engine.β)
@@ -640,8 +708,8 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     work = view(engine.η_buf, 1:n_obs)
     G = zeros(1, n_params)  # Single row for population average
     
-    # Delegate hot loop to the same helper but with context data
-    mean_prediction = _compute_population_predictions!(G, work, engine, context_data, scale, nothing)
+    # Delegate hot loop to the same helper but with context data and weights
+    mean_prediction = _compute_population_predictions!(G, work, engine, context_data, scale, weights)
     
     # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])

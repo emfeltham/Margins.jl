@@ -132,9 +132,12 @@ function population_margins(
     # Process weights parameter
     weights_vec = _process_weights_parameter(weights, data, data_nt)
     
+    # Extract weight column name for variable filtering
+    weight_col = weights isa Symbol ? weights : nothing
+    
     # Handle vars parameter with improved validation
     if type === :effects
-        vars = _process_vars_parameter(model, vars, data_nt)
+        vars = _process_vars_parameter(model, vars, data_nt, weight_col)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
@@ -144,11 +147,7 @@ function population_margins(
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if !isnothing(scenarios) || !isnothing(groups)
-        # TODO: Add weights support to contexts (future enhancement)
-        if !isnothing(weights_vec)
-            throw(ArgumentError("weights parameter not yet supported with scenarios/groups. Please use basic population_margins() for now."))
-        end
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups; type, scale, backend)
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec; type, scale, backend)
     end
     
     if type === :effects
@@ -194,11 +193,14 @@ end
 
 
 """
-    _get_continuous_variables(model, data_nt) -> Vector{Symbol}
+    _get_continuous_variables(model, data_nt, weight_col=nothing) -> Vector{Symbol}
 
-Extract continuous explanatory variables from data, filtering out categorical types and the dependent variable.
+Extract continuous explanatory variables from data, filtering out categorical types, the dependent variable, and weight columns.
+
+# Arguments
+- `weight_col`: Weight column name to exclude (Symbol or nothing)
 """
-function _get_continuous_variables(model, data_nt::NamedTuple)
+function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothing)
     # Get dependent variable from model formula
     dependent_var = Symbol(model.mf.f.lhs)
     
@@ -206,6 +208,11 @@ function _get_continuous_variables(model, data_nt::NamedTuple)
     for (name, col) in pairs(data_nt)
         # Skip dependent variable - we only want explanatory variables for marginal effects
         if name == dependent_var
+            continue
+        end
+        
+        # Skip weight column - it's not a model variable
+        if !isnothing(weight_col) && name == weight_col
             continue
         end
         
@@ -387,13 +394,16 @@ function _validate_groups_parameter(groups)
 end
 
 """
-    _process_vars_parameter(model, vars, data_nt) -> Vector{Symbol}
+    _process_vars_parameter(model, vars, data_nt, weight_col) -> Vector{Symbol}
 
-Process and validate the vars parameter with model awareness to exclude dependent variable.
+Process and validate the vars parameter with model awareness to exclude dependent variable and weight columns.
+
+# Arguments  
+- `weight_col`: Weight column name to exclude (Symbol or nothing)
 """
-function _process_vars_parameter(model, vars, data_nt::NamedTuple)
+function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
     if vars === nothing || vars === :all_continuous
-        continuous_vars = _get_continuous_variables(model, data_nt)
+        continuous_vars = _get_continuous_variables(model, data_nt, weight_col)
         if isempty(continuous_vars)
             throw(MarginsError("No continuous explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
         end
