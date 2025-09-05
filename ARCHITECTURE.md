@@ -18,7 +18,7 @@ N.B., Rewrite existing functions and directories to this plan's spec.
 
 Margins.jl implements a clean **2×2 framework** for marginal effects computation, built on FormulaCompiler.jl's zero-allocation foundation. The architecture prioritizes statistical correctness, performance, Julian style, and proper FormulaCompiler integration.
 
-## 🏗️ **System Architecture**
+##  **System Architecture**
 
 ### **The 2×2 Framework**
 
@@ -76,9 +76,9 @@ src/
 
 **Design Principle**: Organized simplification from 17+ files to 12 well-structured files with logical grouping.
 
-**📋 Detailed Implementation**: See **[FILE_PLAN.md](FILE_PLAN.md)** for complete function specifications, implementation timeline, and success metrics.
+** Detailed Implementation**: See **[FILE_PLAN.md](FILE_PLAN.md)** for complete function specifications, implementation timeline, and success metrics.
 
-## 🔧 **Core Components**
+##  **Core Components**
 
 ### **MarginsEngine (engine.jl)**
 
@@ -193,7 +193,7 @@ function profile_margins(model, data::DataFrame; at::Dict, kwargs...)
 end
 ```
 
-## 📊 **Data Flow Architecture**
+##  **Data Flow Architecture**
 
 ### **Population Margins Flow (AME/AAP)**
 
@@ -304,7 +304,7 @@ DerivativeEvaluator.*_buffer     # FormulaCompiler's internal buffers
 
 **Zero Allocation Strategy:** All buffers pre-allocated once, reused throughout computation.
 
-## 🎯 **FormulaCompiler Integration Strategy**
+##  **FormulaCompiler Integration Strategy**
 
 ### **When to Use Reference Grids vs Scenario Overrides**
 
@@ -373,7 +373,7 @@ FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link)
 FormulaCompiler.delta_method_se(gradient, Σ)
 ```
 
-## 🚀 **Performance Architecture**
+##  **Performance Architecture**
 
 ### **Zero-Allocation Targets**
 
@@ -421,7 +421,7 @@ end
 
 **Cache Invalidation:** Automatic via hash-based keys including model and data signature.
 
-## 🧪 **Testing & Validation Architecture**
+##  **Testing & Validation Architecture**
 
 ### **Performance Tests** 
 ```julia
@@ -454,7 +454,7 @@ end
 end
 ```
 
-## 📋 **API Design Philosophy**
+##  **API Design Philosophy**
 
 ### **Dual Interface Pattern (FormulaCompiler Style)**
 
@@ -546,11 +546,11 @@ population_margins(model, data; vars=[:education, :income], at=Dict(:income => [
 ### **vars Parameter Usage**
 ```julia
 # vars only needed for type=:effects (computing derivatives/contrasts)
-population_margins(model, data; type=:effects, vars=[:x1, :catvar])  # ✅ Need vars (mixed types supported)
-population_margins(model, data; type=:predictions)                  # ✅ No vars needed
+population_margins(model, data; type=:effects, vars=[:x1, :catvar])  #  Need vars (mixed types supported)
+population_margins(model, data; type=:predictions)                  #  No vars needed
 
-profile_margins(model, refgrid; type=:effects, vars=[:x1, :catvar])  # ✅ Need vars (baseline contrasts for categorical)
-profile_margins(model, refgrid; type=:predictions)                  # ✅ No vars needed
+profile_margins(model, refgrid; type=:effects, vars=[:x1, :catvar])  #  Need vars (baseline contrasts for categorical)
+profile_margins(model, refgrid; type=:predictions)                  #  No vars needed
 ```
 
 ### **Categorical Variable Behavior**
@@ -615,7 +615,7 @@ catch e
 end
 ```
 
-## 🎯 **Design Trade-offs & Decisions**
+##  **Design Trade-offs & Decisions**
 
 ### **Why Reference Grids Over Scenario Overrides?**
 - **Memory efficiency**: Minimal synthetic data vs full data copying
