@@ -411,15 +411,40 @@ function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=no
     elseif vars isa Symbol
         vars_vec = [vars]
         _validate_variables(data_nt, vars_vec)
+        _validate_vars_weight_conflict(vars_vec, weight_col)
         return vars_vec
     elseif vars isa Vector{Symbol}
         if isempty(vars)
             throw(ArgumentError("vars cannot be an empty vector. Use vars=nothing or vars=:all_continuous to auto-detect variables, or specify at least one variable."))
         end
         _validate_variables(data_nt, vars)
+        _validate_vars_weight_conflict(vars, weight_col)
         return vars
     else
         throw(ArgumentError("vars must be Symbol, Vector{Symbol}, or :all_continuous"))
+    end
+end
+
+"""
+    _validate_vars_weight_conflict(vars, weight_col)
+
+Validate that no variable in vars conflicts with the weight column.
+
+# Arguments
+- `vars`: Vector{Symbol} of variables for effects analysis
+- `weight_col`: Weight column name (Symbol or nothing)
+
+# Throws
+- `ArgumentError`: If any variable in vars matches the weight column
+"""
+function _validate_vars_weight_conflict(vars::Vector{Symbol}, weight_col)
+    if !isnothing(weight_col) && weight_col in vars
+        throw(ArgumentError(
+            "Variable :$weight_col cannot be used both as a weight (weights=:$weight_col) " *
+            "and as a variable for effects analysis (vars includes :$weight_col). " *
+            "A column cannot serve both roles simultaneously. " *
+            "Choose different columns for weights and effects, or remove :$weight_col from vars."
+        ))
     end
 end
 
