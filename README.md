@@ -25,62 +25,65 @@ DataFrame(ame_result)
 DataFrame(mem_result)
 ```
 
-## Core API
+## Conceptual Framework
 
-Margins.jl provides two main functions with a clean conceptual framework:
+### Two-by-Two Analysis Structure
 
-**Population vs Profile:**
-- **`population_margins()`** - Average effects/predictions across observed sample
-- **`profile_margins()`** - Effects/predictions at specific evaluation points
+Margins.jl organizes marginal effects analysis around two orthogonal dimensions:
+
+**Population vs Profile Analysis:**
+- **Population**: Average effects/predictions across the observed sample distribution
+- **Profile**: Effects/predictions evaluated at specific covariate combinations
 
 **Effects vs Predictions:**
-- **`type=:effects`** - Marginal effects (derivatives/contrasts)
-- **`type=:predictions`** - Adjusted predictions (fitted values)
+- **Effects**: Marginal effects (derivatives for continuous, contrasts for categorical)
+- **Predictions**: Adjusted predictions (fitted values at specified conditions)
+
+### Core Functions
 
 ```julia
-# Four core combinations:
-population_margins(model, data; type=:effects)      # Average Marginal Effects (AME)
+# Population analysis
+population_margins(model, data; type=:effects)      # Average Marginal Effects
 population_margins(model, data; type=:predictions)  # Average Adjusted Predictions
-profile_margins(model, data; type=:effects)         # Marginal Effects at Means (MEM)
-profile_margins(model, data; type=:predictions)     # Adjusted Predictions at Means
+
+# Profile analysis
+profile_margins(model, data; type=:effects)         # Effects at Representative Points
+profile_margins(model, data; type=:predictions)     # Predictions at Representative Points
 ```
 
-## Key Features
+## Advanced Features
 
-### Elasticities
+### Effect Measures
 ```julia
-# Average elasticities
-population_margins(model, data; type=:effects, measure=:elasticity)
+# Standard marginal effects
+population_margins(model, data; type=:effects, measure=:effect)
 
-# Semi-elasticities
-population_margins(model, data; measure=:semielasticity_dyex)
-population_margins(model, data; measure=:semielasticity_eydx)
+# Elasticity measures
+population_margins(model, data; type=:effects, measure=:elasticity)
+population_margins(model, data; measure=:semielasticity_dyex)  # d(y)/d(ln x)
+population_margins(model, data; measure=:semielasticity_eydx)  # d(ln y)/dx
 ```
 
 ### Profile Specifications
 ```julia
-# At sample means
+# Representative points
 profile_margins(model, data; at=:means, type=:effects)
-
-# At specific values
 profile_margins(model, data; at=Dict(:x1 => [0, 1, 2], :x2 => mean), type=:effects)
 
-# Categorical mixtures
+# Categorical scenarios
 profile_margins(model, data; at=Dict(:group => mix("A" => 0.3, "B" => 0.7)), type=:effects)
 ```
 
-### Grouping and Stratification
+### Stratified Analysis
 ```julia
-# Basic grouping
+# Group-wise analysis
 population_margins(model, data; type=:effects, groups=:education)
-
-# Cross-tabulation
 population_margins(model, data; type=:effects, groups=[:education, :gender])
 
-# Hierarchical grouping
+# Hierarchical structures
 population_margins(model, data; type=:effects, groups=:region => :education)
 
-# Continuous binning
+# Continuous stratification
 population_margins(model, data; type=:effects, groups=(:income, 4))
 ```
 
@@ -128,21 +131,25 @@ Pkg.add("Margins")
 
 **Requirements**: Julia ≥ 1.9
 
-## Technical Details
+## Implementation Details
 
-**Statistical Methods:**
-- Delta-method standard errors with full covariance matrices
-- Bootstrap-validated across GLM families
+### Statistical Foundation
+- Delta-method standard errors computed using full covariance matrices
+- Bootstrap validation across GLM model families
+- Zero-tolerance policy for statistical approximations
 
-**Integration:**
-- GLM.jl and MixedModels.jl support
-- Tables.jl interface for data input/output
-- CovarianceMatrices.jl for robust standard errors
+### System Integration
+- Native support for GLM.jl and MixedModels.jl fitted models
+- Tables.jl interface for flexible data input and result output
+- CovarianceMatrices.jl integration for robust standard error computation
+- FormulaCompiler.jl backend for high-performance evaluation
 
-## Stata Compatibility
+## Migration Reference
 
-| Stata | Margins.jl |
-|-------|------------|
+### From Stata
+
+| Stata Command | Margins.jl Equivalent |
+|---------------|----------------------|
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` |
 | `margins, at(means) dydx(*)` | `profile_margins(model, data; at=:means, type=:effects)` |
 | `margins, at(x=0 1 2)` | `profile_margins(model, data; at=Dict(:x => [0,1,2]), type=:effects)` |
