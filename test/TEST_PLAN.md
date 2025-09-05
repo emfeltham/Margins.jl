@@ -12,152 +12,149 @@ This document serves two purposes:
 1. **Comprehensive Test Plan**: Specifies a correctness-focused test suite for Margins.jl
 2. **Current Status Analysis**: Analysis of the ~80 existing test files and integration recommendations
 
-## Reorganization plan
+## Cheating on tests
 
-The current flat test directory structure should be reorganized to mirror the logical structure of `runtests.jl`, creating subdirectories that group related functionality:
+**PROBLEM**: Several test patterns violate the "no skip logic" principle by masking failures with warnings, `@test_nowarn`, skipped results, and silent try/catch blocks.
 
-### Proposed Directory Structure
+### 🚨 **Critical Test Cheating Patterns Found**
 
+#### **1. Silent Try/Catch Blocks** - **HIGH SEVERITY** 
+```julia
+# robust_se_tests.jl:173-178
+# TODO: THIS SHOULD FAIL?
+try
+    result = population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
+catch e
+    # Silent failure - should be @test_throws
+end
+
+# bootstrap_validation_tests.jl:175-179  
+catch e
+    # Graceful failure is acceptable for degenerate cases
+    @debug "✓ Problematic data handled gracefully: $(typeof(e))"
+    # TODO: THESE SHOULD BE REAL ERRORS
+end
 ```
-test/
-├── runtests.jl                     # Main test runner
-├── core/                          # Core Functionality testset
-│   ├── test_glm_basic.jl
-│   ├── test_profiles.jl
-│   ├── test_grouping.jl
-│   ├── test_contrasts.jl
-│   ├── test_vcov.jl
-│   ├── test_errors.jl
-│   ├── test_automatic_variable_detection.jl
-│   └── test_mixedmodels.jl
-├── features/                      # Advanced Features testset
-│   ├── test_elasticities.jl
-│   ├── test_categorical_mixtures.jl
-│   ├── test_bool_profiles.jl
-│   ├── test_table_profiles.jl
-│   └── test_prediction_scales.jl
-├── performance/                   # Performance testset
-│   ├── test_performance.jl
-│   └── test_zero_allocations.jl
-└── statistical_validation/        # Statistical Correctness testset (already organized)
-    ├── backend_consistency.jl
-    ├── statistical_validation.jl
-    └── [other validation files...]
+**Impact**: Tests pass even when functionality fails, hiding real bugs.
+
+#### **2. Fake Success via Skipped Results** - **HIGH SEVERITY**
+```julia
+# testing_utilities.jl:244
+results[:population_effects] = (success = true, skipped = true, reason = "No continuous variables for effects testing")
+
+# testing_utilities.jl:303  
+results[:profile_predictions] = (success = true, skipped = true, reason = "Profile predictions at :means not supported for categorical-only models")
 ```
+**Impact**: Skipped tests marked as `success = true` artificially inflate success rates.
 
-### Implementation Plan
+#### **3. Warning Instead of Failing** - **MEDIUM SEVERITY**
+```julia  
+# categorical_bootstrap_tests.jl:320
+@warn "⚠️  CATEGORICAL BOOTSTRAP VALIDATION: NEEDS IMPROVEMENT"
 
-1. **Create subdirectories**: `mkdir -p test/{core,features,performance}`
+# robust_se_validation.jl:397
+@warn "⚠️  ROBUST SE VALIDATION: MIXED RESULTS"
 
-2. **Move files to appropriate subdirectories**:
-   ```bash
-   # Core functionality
-   mv test/test_glm_basic.jl test/core/
-   mv test/test_profiles.jl test/core/
-   mv test/test_grouping.jl test/core/
-   mv test/test_contrasts.jl test/core/
-   mv test/test_vcov.jl test/core/
-   mv test/test_errors.jl test/core/
-   mv test/test_automatic_variable_detection.jl test/core/
-   mv test/test_mixedmodels.jl test/core/
-   
-   # Advanced features
-   mv test/test_elasticities.jl test/features/
-   mv test/test_categorical_mixtures.jl test/features/
-   mv test/test_bool_profiles.jl test/features/
-   mv test/test_table_profiles.jl test/features/
-   mv test/test_prediction_scales.jl test/features/
-   
-   # Performance
-   mv test/test_performance.jl test/performance/
-   mv test/test_zero_allocations.jl test/performance/
-   ```
+# multi_model_bootstrap_tests.jl:249
+@warn "⚠️  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
+```
+**Impact**: Statistical validation failures generate warnings instead of test failures.
 
-3. **Update `runtests.jl`** to use new paths:
+#### **4. @test_nowarn Overuse** - **LOW SEVERITY**
+```julia
+# test_weights.jl:24-26 
+@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=data.sampling_weight)
+@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=:sampling_weight)
+@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=nothing)
+```
+**Impact**: Limited - acceptable for API stability tests, but should verify actual functionality.
+
+### 📊 **Test Cheating Audit Results**
+
+**Files with cheating patterns**: 8+ files
+**Silent failures**: 4+ locations  
+**Fake success via skipping**: 3+ locations
+**Warning instead of failing**: 6+ locations
+**@test_nowarn overuse**: 8+ locations
+
+### 🔧 **Remediation Plan**
+
+#### **Phase 1: Eliminate Silent Failures** - **URGENT**
+1. **Convert try/catch to @test_throws**:
    ```julia
-   # Core functionality tests
-   @testset "Core Functionality" begin
-       include("core/test_glm_basic.jl")
-       include("core/test_profiles.jl")
-       # ... etc
+   # BEFORE (cheating)
+   try
+       population_margins(model, data; vcov=CRHC0(:nonexistent_var))
+   catch e
+       # silent
    end
    
-   # Advanced Features 
-   @testset "Advanced Features" begin
-       include("features/test_elasticities.jl")
-       include("features/test_categorical_mixtures.jl")
-       # ... etc
-   end
-   
-   # Performance
-   @testset "Performance" begin
-       include("performance/test_performance.jl")
-       include("performance/test_zero_allocations.jl")
-   end
+   # AFTER (proper)
+   @test_throws ArgumentError population_margins(model, data; vcov=CRHC0(:nonexistent_var))
    ```
 
-### Benefits
+2. **Fix files**:
+   - `robust_se_tests.jl:173-178` - Convert to `@test_throws`
+   - `bootstrap_validation_tests.jl:175-179` - Convert to `@test_throws`
+   - All statistical validation try/catch blocks
 
-- **Logical organization**: Test structure mirrors conceptual framework
-- **Easy navigation**: Related tests grouped together
-- **Scalability**: Easy to add new tests to appropriate categories
-- **Maintainability**: Clear separation of concerns
-- **Consistency**: Follows existing `statistical_validation/` pattern
-
-### Precedent
-
-The `statistical_validation/` directory already demonstrates this organizational approach with 16+ specialized validation files grouped under the "Statistical Correctness" testset.
-
-## WARNING: Method definition - Minimal Solution Plan
-
-The test suite generates 100+ "Method definition overwritten" warnings due to utility functions being included multiple times across different test files. These warnings don't affect functionality but create noise that obscures real issues.
-
-### Minimal Solution: Centralized Include Strategy
-
-The cleanest, minimal fix is to **centralize utility includes** in `runtests.jl` while keeping all existing test file structure intact.
-
-**Current Problem:**
-- `testing_utilities.jl` included by 16+ files → functions redefined 16+ times
-- `bootstrap_se_validation.jl` included by 5+ files → functions redefined 5+ times  
-- `analytical_se_validation.jl` included by multiple files → more redefinitions
-
-**Proposed Solution:**
-
-- [x] 1. **Add utility includes to runtests.jl** (after existing using statements):
+#### **Phase 2: Fix Skipped Success Logic** - **URGENT**  
+1. **Separate skipped from success**:
    ```julia
-   include("statistical_validation/testing_utilities.jl")
-   include("statistical_validation/bootstrap_se_validation.jl") 
-   include("statistical_validation/analytical_se_validation.jl")
+   # BEFORE (cheating)
+   results[:test] = (success = true, skipped = true, reason = "...")
+   
+   # AFTER (honest)
+   results[:test] = (skipped = true, reason = "...")
+   # OR implement proper test for the case
    ```
 
-- [x] 2. **Remove utility includes from test files** - Remove these lines from files in `statistical_validation/`:
-   - `include("testing_utilities.jl")`
-   - `include("bootstrap_se_validation.jl")`
-   - `include("analytical_se_validation.jl")`
+2. **Update success calculation logic**:
+   ```julia
+   # testing_utilities.jl:312
+   all_finite = all_successful && all(
+       haskey(r, :skipped) || (r.finite_estimates && r.finite_ses && r.positive_ses)
+       # Remove "haskey(r, :skipped) && r.skipped ||" - skipped ≠ success
+   )
+   ```
 
-- [x] 3. **Keep legitimate test includes** - Preserve includes that load actual test files:
-   - `include("multi_model_bootstrap_tests.jl")` ✓ Keep
-   - `include("bootstrap_validation_tests.jl")` ✓ Keep
-   - `include("robust_se_validation.jl")` ✓ Keep
+#### **Phase 3: Convert Warnings to Test Failures** - **HIGH PRIORITY**
+1. **Statistical validation warnings must fail tests**:
+   ```julia  
+   # BEFORE (cheating)
+   @warn "⚠️  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
+   
+   # AFTER (proper)
+   @test false "Bootstrap validation failed: mixed results indicate statistical errors"
+   ```
 
-**Benefits:**
-- Zero method definition warnings (functions defined once, used everywhere)
-- Minimal changes (no file reorganization or architectural changes)
-- Preserved functionality (all existing tests intact)
-- Easy to revert (simple to undo if needed)
+2. **Files to fix**:
+   - `categorical_bootstrap_tests.jl:320`
+   - `robust_se_validation.jl:397`  
+   - `multi_model_bootstrap_tests.jl:249`
 
-**Expected result:** 100+ warnings → 0 warnings, 714/714 tests passing
+#### **Phase 4: Audit @test_nowarn Usage** - **LOWER PRIORITY**
+1. **Replace with specific assertions where possible**:
+   ```julia
+   # BEFORE (weak)
+   @test_nowarn population_margins(model, data; weights=:sampling_weight)
+   
+   # AFTER (stronger)  
+   result = population_margins(model, data; weights=:sampling_weight)
+   @test isa(result, MarginsResult)
+   @test all(isfinite, DataFrame(result).estimate)
+   ```
 
-### ✅ **SOLUTION COMPLETE** (September 2025)
+### 🎯 **Success Criteria**
 
-**Status**: All 3 steps implemented successfully. Method definition warnings eliminated.
+**ZERO TOLERANCE for test cheating**:
+- ✅ No silent try/catch blocks in tests
+- ✅ Skipped tests not marked as successful  
+- ✅ Statistical validation failures cause test failures
+- ✅ All try/catch converted to @test_throws with specific exception types
+- ✅ Clear separation between legitimate skips and masked failures
 
-**Verification**: 
-- ✅ Utility functions loaded once in runtests.jl (lines 14-16)  
-- ✅ No utility includes found in statistical_validation/ files
-- ✅ Only legitimate test includes preserved (verified via grep)
-- ✅ Zero method definition warnings confirmed via testing
-- ✅ All utility functions remain accessible across test suite
+**Expected impact**: More honest test results, easier debugging, higher confidence in statistical correctness.
 
 ## More testing?
 
