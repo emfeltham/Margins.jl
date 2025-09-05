@@ -1,6 +1,7 @@
-# robust_se_validation.jl - Comprehensive Robust Standard Error Validation
+# robust_se_validation.jl
+# Comprehensive Robust Standard Error Validation
 #
-# Phase 3, Tier 4: Robust SE Integration Testing
+# Robust SE Integration Testing
 #
 # This file implements comprehensive validation for robust/heteroskedasticity-consistent
 # standard errors integration with CovarianceMatrices.jl, covering sandwich estimators,
@@ -14,62 +15,6 @@ using GLM
 using StatsModels
 using Margins
 using CovarianceMatrices
-
-"""
-    make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
-
-Generate test data with known heteroskedasticity patterns for robust SE validation.
-
-# Arguments
-- `n`: Sample size
-- `heteroskedasticity_type`: Type of heteroskedasticity pattern
-  - `:linear` - Variance proportional to x
-  - `:quadratic` - Variance proportional to x²
-  - `:groupwise` - Different variances by group
-- `seed`: Random seed for reproducibility
-
-# Returns
-- `DataFrame` with heteroskedastic error structure
-"""
-function make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
-    Random.seed!(seed)
-    
-    df = DataFrame(
-        x = randn(n),
-        z = randn(n),
-        group = rand(1:5, n)  # For clustered/grouped heteroskedasticity
-    )
-    
-    # Base linear relationship
-    linear_pred = 2.0 .+ 0.5 .* df.x .+ 0.3 .* df.z
-    
-    # Generate heteroskedastic errors
-    if heteroskedasticity_type == :linear
-        # Variance proportional to |x| + 1 (to avoid zero variance)
-        error_scale = 0.2 .* (abs.(df.x) .+ 1.0)
-        errors = randn(n) .* error_scale
-    elseif heteroskedasticity_type == :quadratic
-        # Variance proportional to x²
-        error_scale = 0.1 .* (df.x.^2 .+ 1.0)
-        errors = randn(n) .* error_scale
-    elseif heteroskedasticity_type == :groupwise
-        # Different error variances by group
-        group_scales = [0.1, 0.3, 0.5, 0.8, 1.2]  # Different scales for each group
-        errors = [randn() * group_scales[g] for g in df.group]
-    else
-        # Homoskedastic baseline
-        errors = 0.2 .* randn(n)
-    end
-    
-    df.y = linear_pred .+ errors
-    
-    # For logistic models
-    logit_linear_pred = -0.5 .+ 0.4 .* df.x .+ 0.3 .* df.z
-    probs = 1 ./ (1 .+ exp.(-logit_linear_pred))
-    df.binary_y = [rand() < p for p in probs]
-    
-    return df
-end
 
 """
     validate_robust_se_integration(model, data, robust_vcov; tolerance=0.05)
@@ -252,14 +197,11 @@ end
 
 Run comprehensive robust SE validation across different model types and robust estimators.
 """
-function run_comprehensive_robust_se_test_suite(; verbose=true)
+function run_comprehensive_robust_se_test_suite(; verbose=false)
     if verbose
-        @info "Starting Comprehensive Robust SE Validation Suite"
-            @info "CovarianceMatrices.jl available - full testing enabled"
-        else
-            @warn "CovarianceMatrices.jl not available - limited testing"
-        end
-        @info "="^60
+        @debug "Starting Comprehensive Robust SE Validation Suite"
+        @debug "CovarianceMatrices.jl available - full testing enabled"
+        @debug "="^60
     end
     
     test_results = []
@@ -267,7 +209,7 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
     # Test 1: Linear model with heteroskedasticity
     @testset "Linear Model with Heteroskedasticity" begin
         if verbose
-            @info "Testing linear model robust SEs"
+            @debug "Testing linear model robust SEs"
         end
         
         data = make_heteroskedastic_data(n=400, heteroskedasticity_type=:linear)
@@ -294,77 +236,63 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         ))
         
         if verbose
-            @info "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
+            @debug "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
         end
     end
     
     # Test 2: GLM with robust SEs
     @testset "GLM Logistic with Robust SEs" begin
         if verbose
-            @info "Testing GLM logistic robust SEs"
+            @debug "Testing GLM logistic robust SEs"
         end
         
         data = make_heteroskedastic_data(n=500, heteroskedasticity_type=:quadratic)
         model = glm(@formula(binary_y ~ x + z), data, Binomial(), LogitLink())
         
-            sandwich_results = test_sandwich_estimators_comprehensive(model, data)
-            
-            @test sandwich_results.overall_success
-            
-            push!(test_results, (
-                model_type = "GLM Logistic with robust SEs",
-                success = sandwich_results.overall_success,
-                n_successful = sandwich_results.n_successful
-            ))
-            
-            if verbose
-                @info "  GLM sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
-            end
-        else
-            push!(test_results, (
-                model_type = "GLM Logistic with robust SEs",
-                success = false,
-                reason = "CovarianceMatrices.jl not available"
-            ))
+        sandwich_results = test_sandwich_estimators_comprehensive(model, data)
+        
+        @test sandwich_results.overall_success
+        
+        push!(test_results, (
+            model_type = "GLM Logistic with robust SEs",
+            success = sandwich_results.overall_success,
+            n_successful = sandwich_results.n_successful
+        ))
+        
+        if verbose
+            @debug "  GLM sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
         end
     end
     
     # Test 3: Clustered standard errors
     @testset "Clustered Standard Errors" begin
         if verbose
-            @info "Testing clustered standard errors"
+            @debug "Testing clustered standard errors"
         end
         
         data = make_heteroskedastic_data(n=600, heteroskedasticity_type=:groupwise)
         model = lm(@formula(y ~ x + z), data)
         
-            cluster_results = test_clustered_se_validation(model, data, :group)
+        cluster_results = test_clustered_se_validation(model, data, :group)
+        
+        if cluster_results.success
+            @test cluster_results.framework_valid
+            @test cluster_results.max_se_ratio >= 1.0  # Clustered SEs should be ≥ model SEs
             
-            if cluster_results.success
-                @test cluster_results.framework_valid
-                @test cluster_results.max_se_ratio >= 1.0  # Clustered SEs should be ≥ model SEs
-                
-                push!(test_results, (
-                    model_type = "Linear with clustered SEs",
-                    success = true,
-                    max_se_ratio = cluster_results.max_se_ratio
-                ))
-                
-                if verbose
-                    @info "  Clustered SEs: Framework valid, max SE ratio = $(round(cluster_results.max_se_ratio, digits=2))"
-                end
-            else
-                push!(test_results, (
-                    model_type = "Linear with clustered SEs",
-                    success = false,
-                    error = cluster_results.error
-                ))
+            push!(test_results, (
+                model_type = "Linear with clustered SEs",
+                success = true,
+                max_se_ratio = cluster_results.max_se_ratio
+            ))
+            
+            if verbose
+                @debug "  Clustered SEs: Framework valid, max SE ratio = $(round(cluster_results.max_se_ratio, digits=2))"
             end
         else
             push!(test_results, (
                 model_type = "Linear with clustered SEs",
                 success = false,
-                reason = "CovarianceMatrices.jl not available"
+                error = cluster_results.error
             ))
         end
     end
@@ -374,30 +302,31 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
     overall_success_rate = length(successful_tests) / length(test_results)
     
     if verbose
-        @info "="^60
-        @info "COMPREHENSIVE ROBUST SE VALIDATION SUMMARY"
-        @info "="^60
-        @info "Total Tests: $(length(test_results))"
-        @info "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
+        @debug "="^60
+        @debug "COMPREHENSIVE ROBUST SE VALIDATION SUMMARY"
+        @debug "="^60
+        @debug "Total Tests: $(length(test_results))"
+        @debug "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
         
-            if overall_success_rate >= 0.75
-                @info " ROBUST SE VALIDATION: PASSED"
-                @info "Robust standard errors integration working correctly!"
-            else
-                @warn "  ROBUST SE VALIDATION: MIXED RESULTS"
-                @info "Some robust SE tests failed - detailed investigation recommended"
-            end
+        if overall_success_rate >= 0.75
+            @debug "ROBUST SE VALIDATION: PASSED"
+            @debug "Robust standard errors integration working correctly!"
         else
-            @warn "  ROBUST SE VALIDATION: DEPENDENCY MISSING"
-            @info "Install CovarianceMatrices.jl for full robust SE support"
+            @debug "ROBUST SE VALIDATION: MIXED RESULTS"
+            @debug "Some robust SE tests failed - detailed investigation recommended"
         end
     end
     
     return (
         overall_success_rate = overall_success_rate,
         test_results = test_results,
-        n_successful = length(successful_tests),
+        n_successful = length(successful_tests)
     )
+end
+
+# Run the test suite
+@testset "Robust SE Validation" begin
+    run_comprehensive_robust_se_test_suite()
 end
 
 # Export robust SE validation functions

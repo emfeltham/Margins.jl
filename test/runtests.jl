@@ -1,4 +1,5 @@
 # runtests.jl
+# julia --project="." -e "import Pkg; Pkg.test()" > test/test.txt 2>&1
 
 using Test
 using Random
@@ -15,7 +16,6 @@ include("statistical_validation/testing_utilities.jl")
 include("statistical_validation/bootstrap_se_validation.jl") 
 include("statistical_validation/analytical_se_validation.jl")
 
-# Core functionality tests
 @testset "Core Functionality" begin
     include("core/test_glm_basic.jl")
     include("core/test_profiles.jl")
@@ -28,7 +28,6 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_weights.jl")
 end
 
-# Advanced Features
 @testset "Advanced Features" begin
     include("features/test_elasticities.jl")
     include("features/test_categorical_mixtures.jl") 
@@ -37,14 +36,13 @@ end
     include("features/test_prediction_scales.jl")
 end
 
-# Performance (critical for regression prevention)
 @testset "Performance" begin
     include("performance/test_performance.jl")
     include("performance/test_zero_allocations.jl")
 end
 
-# Statistical validation tests
 @testset "Statistical Correctness" begin
     include("statistical_validation/backend_consistency.jl")
     include("statistical_validation/statistical_validation.jl")
+    include("statistical_validation/robust_se_validation.jl")
 end

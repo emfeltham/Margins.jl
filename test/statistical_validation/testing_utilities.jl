@@ -485,7 +485,64 @@ function validate_all_finite_positive(result_df)
     )
 end
 
+"""
+    make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
+
+Generate test data with known heteroskedasticity patterns for robust SE validation.
+
+# Arguments
+- `n`: Sample size
+- `heteroskedasticity_type`: Type of heteroskedasticity pattern
+  - `:linear` - Variance proportional to x
+  - `:quadratic` - Variance proportional to x²
+  - `:groupwise` - Different variances by group
+- `seed`: Random seed for reproducibility
+
+# Returns
+- `DataFrame` with heteroskedastic error structure
+"""
+function make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
+    Random.seed!(seed)
+    
+    df = DataFrame(
+        x = randn(n),
+        z = randn(n),
+        group = rand(1:5, n)  # For clustered/grouped heteroskedasticity
+    )
+    
+    # Base linear relationship
+    linear_pred = 2.0 .+ 0.5 .* df.x .+ 0.3 .* df.z
+    
+    # Generate heteroskedastic errors
+    if heteroskedasticity_type == :linear
+        # Variance proportional to |x| + 1 (to avoid zero variance)
+        error_scale = 0.2 .* (abs.(df.x) .+ 1.0)
+        errors = randn(n) .* error_scale
+    elseif heteroskedasticity_type == :quadratic
+        # Variance proportional to x²
+        error_scale = 0.1 .* (df.x.^2 .+ 1.0)
+        errors = randn(n) .* error_scale
+    elseif heteroskedasticity_type == :groupwise
+        # Different error variances by group
+        group_scales = [0.1, 0.3, 0.5, 0.8, 1.2]  # Different scales for each group
+        errors = [randn() * group_scales[g] for g in df.group]
+    else
+        # Homoskedastic baseline
+        errors = 0.2 .* randn(n)
+    end
+    
+    df.y = linear_pred .+ errors
+    
+    # For logistic models
+    logit_linear_pred = -0.5 .+ 0.4 .* df.x .+ 0.3 .* df.z
+    probs = 1 ./ (1 .+ exp.(-logit_linear_pred))
+    df.binary_y = [rand() < p for p in probs]
+    
+    return df
+end
+
 # Export key functions for use in test files
 export make_econometric_data, make_simple_test_data, make_glm_test_data
 export test_2x2_framework_quadrants, test_backend_consistency
 export analytical_derivative, logistic_chain_rule, validate_all_finite_positive
+export make_heteroskedastic_data

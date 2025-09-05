@@ -1,6 +1,6 @@
 using Test
 using Random
-using DataFrames, GLM, Statistics
+using DataFrames, GLM, Statistics, CategoricalArrays
 using Margins
 
 @testset "Elasticity Features" begin
@@ -10,7 +10,7 @@ using Margins
         y = randn(n),
         x1 = randn(n),
         x2 = randn(n),
-        g = rand(["A", "B"], n)
+        g = categorical(rand(["A", "B"], n))
     )
     m = lm(@formula(y ~ x1 + x2), df)
     

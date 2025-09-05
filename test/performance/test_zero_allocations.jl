@@ -34,7 +34,7 @@
 using Test
 using BenchmarkTools
 using GLM
-using DataFrames
+using DataFrames, CategoricalArrays
 using Margins
 
 @testset "Zero-Allocation Path Verification" begin
@@ -44,7 +44,7 @@ using Margins
         x1 = randn(n),
         x2 = randn(n),
         x3 = rand([0, 1], n),
-        cat_var = rand(["A", "B", "C"], n)
+        cat_var = categorical(rand(["A", "B", "C"], n))
     )
     
     # Add response variable
