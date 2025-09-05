@@ -2,9 +2,18 @@
 
 *Comprehensive technical specification for Margins.jl functions and types*
 
-## Core Computational Functions
+## Conceptual Foundation
 
-The package implements a systematic two-function API that operationalizes the unified analytical framework through distinct computational pathways for population-level and profile-specific marginal effects analysis:
+### Two-Function Architecture
+
+The package implements a systematic two-function API that operationalizes the unified analytical framework through distinct computational pathways for population-level and profile-specific marginal effects analysis.
+
+### Analysis Type Distinction
+
+- **Population Analysis**: Integration over empirical covariate distributions
+- **Profile Analysis**: Evaluation at specified covariate combinations
+
+## Function Specifications
 
 ### Population Analysis
 

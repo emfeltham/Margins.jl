@@ -8,7 +8,7 @@ Margins.jl provides a rigorous computational framework for marginal effects anal
 
 The package integrates seamlessly with the established JuliaStats ecosystem, providing compatibility with [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification, [GLM.jl](https://github.com/JuliaStats/GLM.jl) for generalized linear models, and [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard errors. The implementation builds upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) to achieve efficient and mathematically precise marginal effect computation suitable for publication-grade econometric analysis.
 
-## Quick Start
+## Implementation Overview
 
 ```julia
 using CategoricalArrays, DataFrames, GLM, Margins
@@ -19,17 +19,17 @@ df = DataFrame(
     y = randn(n),
     x1 = randn(n), 
     x2 = randn(n),
-    group = categorical(rand(["A", "B", "C"], n)) # Raw string input not (yet) supported
+    group = categorical(rand(["A", "B", "C"], n))
 )
 
 # Fit model
 model = lm(@formula(y ~ x1 + x2 + group), df)
 
-# Population average marginal effects (AME)
+# Population analysis: effects averaged across sample distribution
 ame_result = population_margins(model, df; type=:effects)
 DataFrame(ame_result)
 
-# Marginal effects at sample means (MEM)  
+# Profile analysis: effects at representative points
 mem_result = profile_margins(model, df, means_grid(df); type=:effects)
 DataFrame(mem_result)
 ```
@@ -46,7 +46,7 @@ The choice of evaluation context determines the distributional properties of the
 
 The analytical target specifies the statistical quantity of interest within the chosen evaluation context. Effects analysis computes marginal effects through appropriate differentiation of the conditional expectation function, utilizing analytical derivatives for continuous variables and discrete contrasts for categorical variables. Predictions analysis evaluates adjusted predictions, providing fitted values that incorporate the full uncertainty structure of the estimated model.
 
-### Complete Methodological Implementation
+### Analytical Framework Implementation
 
 ```julia
 # Population Analysis: Sample Distribution Averaging
@@ -72,7 +72,7 @@ Statistical inference employs rigorous delta-method standard error computation w
 
 The package supports comprehensive elasticity analysis through parametric specification of effect measures, including standard elasticities and semi-elasticity variants for both dependent and independent variable transformations. Policy analysis applications are supported through categorical mixture specifications that enable realistic population composition modeling. The inference framework accommodates robust and clustered standard error computation through integration with CovarianceMatrices.jl, while flexible subgroup analysis capabilities facilitate stratified inference across multiple dimensions of heterogeneity. Comprehensive coverage of these advanced methodological features is provided in [Advanced Features](advanced.md).
 
-## Advanced Usage
+## Implementation Examples
 
 ### Profile Specification
 
@@ -186,11 +186,22 @@ Population analysis exhibits optimal linear scaling characteristics with respect
 @time population_margins(model, data_100k)  # maintained efficiency at scale
 ```
 
-## Documentation and Support Resources
+## Documentation Organization
 
-Comprehensive documentation provides detailed coverage of the package's mathematical foundations, computational implementation, and empirical applications. The API reference contains complete function specifications with theoretical background and practical usage examples. Executable workflows in the examples directory demonstrate representative econometric applications across diverse modeling contexts.
+### Conceptual Foundation
+- **[Mathematical Foundation](mathematical_foundation.md)**: Theoretical basis and statistical properties
+- **[Comparison Guide](comparison.md)**: Methodological comparison with alternative approaches
 
-Technical support and bug reports should be directed to the project's [GitHub Issues](https://github.com/emfeltham/Margins.jl/issues) repository. Migration documentation provides detailed comparison with alternative packages and software implementations, facilitating transition from existing econometric workflows.
+### Implementation Reference
+- **[API Reference](api.md)**: Complete function specifications and parameters
+- **[Performance Guide](performance.md)**: Computational characteristics and benchmarks
+- **[Examples](examples.md)**: Executable workflows and application demonstrations
+
+### Migration and Integration
+- **[Stata Migration](stata_migration.md)**: Command equivalence and workflow translation
+- **[Advanced Features](advanced.md)**: Extended analytical capabilities
+
+Technical support and bug reports should be directed to the [GitHub Issues](https://github.com/emfeltham/Margins.jl/issues) repository.
 
 ## Installation
 

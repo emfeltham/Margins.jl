@@ -1,16 +1,20 @@
 # Performance Guide
 
-*Optimizing marginal effects analysis for computational efficiency*
+*Computational characteristics and optimization strategies*
 
-## Performance Overview
+## Conceptual Framework
 
-Margins.jl achieves efficient computation through careful optimization while maintaining statistical correctness. The package provides:
+### Performance Design Principles
 
-- **Profile margins**: O(1) constant time regardless of dataset size
-- **Population margins**: O(n) scaling with low per-row computational cost and constant memory footprint  
-  *See [Mathematical Foundation](mathematical_foundation.md) for conceptual understanding of when to choose population vs profile approaches*  
-- **Zero-allocation core**: FormulaCompiler.jl foundation eliminates unnecessary allocations
-- **Statistical integrity**: Performance optimizations maintain statistical validity
+Margins.jl achieves computational efficiency through architectural design that respects the fundamental mathematical structure of marginal effects analysis. Performance optimization preserves statistical correctness while exploiting the distinct computational requirements of population versus profile analysis.
+
+### Algorithmic Complexity Characteristics
+
+- **Profile Analysis**: O(1) constant-time complexity independent of dataset size
+- **Population Analysis**: O(n) linear scaling with optimized per-observation computational cost
+- **Statistical Integrity**: All performance optimizations maintain mathematical validity
+
+## Implementation Performance
 
 ## Performance Characteristics
 
