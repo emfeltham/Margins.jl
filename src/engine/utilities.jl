@@ -35,6 +35,96 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
     end
 end
 
+"""
+    _accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, weights; link=IdentityLink(), backend=:fd)
+
+Accumulate parameter gradients across rows for weighted average marginal effects.
+This is the proper weighted version that accounts for weights in both point estimates and gradients.
+
+For statistical rigor, this function computes:
+- Weighted point estimate: Σ(w_i * g_i) / Σ(w_i) 
+- Weighted gradient: Σ(w_i * ∇g_i) / Σ(w_i)
+
+Where g_i is the marginal effect at observation i, and ∇g_i is its parameter gradient.
+
+# Arguments
+- `gβ_sum::Vector{Float64}`: Preallocated accumulator (modified in-place)
+- `de::DerivativeEvaluator`: Built evaluator from FormulaCompiler
+- `β::Vector{Float64}`: Model coefficients
+- `rows::AbstractVector{Int}`: Row indices to average over
+- `var::Symbol`: Variable for marginal effect
+- `weights::Vector{Float64}`: Observation weights
+- `link`: GLM link function for μ effects
+- `backend::Symbol`: `:fd` (finite differences) or `:ad` (automatic differentiation)
+
+# Returns
+- The same `gβ_sum` buffer, containing weighted average gradient
+"""
+function _accumulate_weighted_ame_gradient!(
+    gβ_sum::Vector{Float64},
+    de::Union{Nothing, FormulaCompiler.DerivativeEvaluator},
+    β::Vector{Float64}, 
+    rows::AbstractVector{Int},
+    var::Symbol,
+    weights::Vector{Float64};
+    link=GLM.IdentityLink(),
+    backend::Symbol=:fd
+)
+    # Handle case where de is nothing (no continuous variables)
+    if de === nothing
+        fill!(gβ_sum, 0.0)
+        return gβ_sum
+    end
+    
+    @assert length(gβ_sum) == length(de)
+    
+    # Use evaluator's fd_yminus buffer as temporary storage
+    gβ_temp = de.fd_yminus
+    fill!(gβ_sum, 0.0)
+    
+    # Compute total weight for proper weighted averaging
+    total_weight = sum(weights[row] for row in rows if weights[row] > 0)
+    
+    # Accumulate weighted gradients across rows
+    for row in rows
+        w = weights[row]
+        if w > 0  # Skip zero-weight observations
+            if link isa GLM.IdentityLink
+                # η case: gβ = J_k (single Jacobian column)
+                if backend === :fd
+                    # Zero-allocation single-column FD (optimal for AME)
+                    FormulaCompiler.fd_jacobian_column!(gβ_temp, de, row, var)
+                elseif backend === :ad
+                    # Compute full Jacobian then extract column
+                    FormulaCompiler.derivative_modelrow!(de.jacobian_buffer, de, row)
+                    var_idx = findfirst(==(var), de.vars)
+                    var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+                    gβ_temp .= view(de.jacobian_buffer, :, var_idx)
+                else
+                    throw(ArgumentError("Invalid backend: $backend. Use :fd or :ad"))
+                end
+            else
+                # μ case: use existing FD-based chain rule function
+                FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
+            end
+            
+            # Apply weight and accumulate
+            for j in eachindex(gβ_sum)
+                gβ_sum[j] += w * gβ_temp[j]
+            end
+        end
+    end
+    
+    # Weighted average
+    if total_weight > 0
+        gβ_sum ./= total_weight
+    else
+        fill!(gβ_sum, 0.0)  # All weights are zero
+    end
+    
+    return gβ_sum
+end
+
 # Helper: accumulate marginal effect value across rows using concrete arguments (with weights support)
 function _accumulate_me_value(g_buf::Vector{Float64}, de, β::Vector{Float64}, link, rows, scale::Symbol, backend::Symbol, idx::Int, weights::Union{Vector{Float64}, Nothing}=nothing)
     if isnothing(weights)
@@ -225,18 +315,14 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 )
                 gβ_avg = engine.gβ_accumulator  # Use directly without copying
             else
-                # Weighted case - use unweighted gradients for now (TODO: improve)
-                # This is a simplification that provides weighted point estimates but 
-                # uses unweighted gradients for standard errors
-                accumulate_ame_gradient!(
-                    engine.gβ_accumulator, local_de, local_β, rows, var;
+                # Weighted case - implement proper weighted gradient computation
+                # This provides both weighted point estimates AND weighted gradients for standard errors
+                _accumulate_weighted_ame_gradient!(
+                    engine.gβ_accumulator, local_de, local_β, rows, var, weights;
                     link=(scale === :response ? local_link : GLM.IdentityLink()), 
                     backend=backend
                 )
                 gβ_avg = engine.gβ_accumulator
-                
-                # TODO: Implement proper weighted gradient computation
-                # For full statistical rigor, we need FormulaCompiler support for weighted gradients
             end
             
             # Compute AME value via helper with concrete arguments
