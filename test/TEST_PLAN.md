@@ -130,12 +130,12 @@ The cleanest, minimal fix is to **centralize utility includes** in `runtests.jl`
    include("statistical_validation/analytical_se_validation.jl")
    ```
 
-- [ ] 2. **Remove utility includes from test files** - Remove these lines from files in `statistical_validation/`:
+- [x] 2. **Remove utility includes from test files** - Remove these lines from files in `statistical_validation/`:
    - `include("testing_utilities.jl")`
    - `include("bootstrap_se_validation.jl")`
    - `include("analytical_se_validation.jl")`
 
-- [ ] 3. **Keep legitimate test includes** - Preserve includes that load actual test files:
+- [x] 3. **Keep legitimate test includes** - Preserve includes that load actual test files:
    - `include("multi_model_bootstrap_tests.jl")` ✓ Keep
    - `include("bootstrap_validation_tests.jl")` ✓ Keep
    - `include("robust_se_validation.jl")` ✓ Keep
@@ -147,6 +147,17 @@ The cleanest, minimal fix is to **centralize utility includes** in `runtests.jl`
 - Easy to revert (simple to undo if needed)
 
 **Expected result:** 100+ warnings → 0 warnings, 714/714 tests passing
+
+### ✅ **SOLUTION COMPLETE** (September 2025)
+
+**Status**: All 3 steps implemented successfully. Method definition warnings eliminated.
+
+**Verification**: 
+- ✅ Utility functions loaded once in runtests.jl (lines 14-16)  
+- ✅ No utility includes found in statistical_validation/ files
+- ✅ Only legitimate test includes preserved (verified via grep)
+- ✅ Zero method definition warnings confirmed via testing
+- ✅ All utility functions remain accessible across test suite
 
 ## More testing?
 
