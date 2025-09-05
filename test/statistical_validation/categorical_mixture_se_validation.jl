@@ -18,8 +18,6 @@ using Margins
 using Test
 using Printf
 
-# Load testing utilities and bootstrap framework
-# Testing utilities loaded centrally in runtests.jl
 # Bootstrap SE validation loaded centrally in runtests.jl
 include("categorical_bootstrap_tests.jl")
 

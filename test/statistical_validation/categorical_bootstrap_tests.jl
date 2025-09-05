@@ -18,7 +18,6 @@ using Printf
 
 # Load bootstrap utilities
 # Bootstrap SE validation loaded centrally in runtests.jl
-# Testing utilities loaded centrally in runtests.jl
 
 """
     make_categorical_test_data(; n=500, include_continuous=true, seed=42)

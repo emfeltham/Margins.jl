@@ -335,11 +335,13 @@ function _get_typical_value_optimized(col, typical)
         # For Bool, use mean (O(n) but necessary for statistical correctness)
         return mean(col)
     elseif eltype(col) <: AbstractString
-        # For strings, use first value as heuristic (O(1))
-        return first(col)
+        throw(MarginsError("String variables are not supported in optimized reference grids. " *
+                          "Statistical correctness cannot be guaranteed for arbitrary string data types. " *
+                          "Consider using CategoricalArray for categorical string variables."))
     else
-        # Fallback to first value (O(1))
-        return first(col)
+        throw(MarginsError("Unsupported data type $(eltype(col)) for variable in reference grid. " *
+                          "Statistical correctness cannot be guaranteed for unknown data types. " *
+                          "Supported types: numeric (Int64, Float64), Bool, CategoricalArray."))
     end
 end
 

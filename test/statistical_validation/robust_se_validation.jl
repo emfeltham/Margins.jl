@@ -15,8 +15,6 @@ using StatsModels
 using Margins
 using CovarianceMatrices
 
-# Testing utilities loaded centrally in runtests.jl
-
 """
     make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, seed=42)
 

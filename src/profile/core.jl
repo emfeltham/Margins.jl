@@ -287,6 +287,12 @@ function profile_margins(
         throw(ArgumentError("reference_grid cannot be empty"))
     end
     
+    # Validate data types in reference grid - explicit error policy
+    for col_name in names(reference_grid)
+        col = reference_grid[!, col_name]
+        _validate_reference_grid_column_type(col, col_name)
+    end
+    
     if ncol(reference_grid) == 0
         throw(ArgumentError("reference_grid must have at least one column"))
     end

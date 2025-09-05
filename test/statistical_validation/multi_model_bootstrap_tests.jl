@@ -15,10 +15,6 @@ using StatsModels
 using Margins
 using Printf
 
-# Load bootstrap utilities
-# Bootstrap SE validation loaded centrally in runtests.jl
-# Testing utilities loaded centrally in runtests.jl
-
 """
     create_glm_model_func(family, link)
     

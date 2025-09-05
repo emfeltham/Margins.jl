@@ -17,10 +17,6 @@ using Statistics
 using StatsModels
 using Margins
 
-# Load testing utilities
-# Testing utilities loaded centrally in runtests.jl
-# Analytical SE validation loaded centrally in runtests.jl
-
 @testset "Comprehensive Statistical Validation - 2×2 Framework Coverage" begin
     Random.seed!(06515)
     

@@ -135,15 +135,21 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
             # Collect gradients for this term and average them
             term_gradients = Vector{Float64}[]
             for (i, row_idx) in enumerate(term_rows)
-                # Find corresponding gradient - handle different key formats
+                # Find corresponding gradient - require consistent format
                 for (key, grad) in gradients
-                    # Handle both tuple and simple key formats
-                    if isa(key, Tuple)
-                        g_term, g_prof_idx = key
+                    if isa(key, Tuple) && length(key) >= 3
+                        # New consistent format: (term, group_key, profile_idx)
+                        g_term, g_group_key, g_prof_idx = key[1], key[2], key[3]
                         if g_term == term && g_prof_idx == i
                             push!(term_gradients, grad)
                             break
                         end
+                    elseif isa(key, Tuple) && length(key) == 2
+                        # Error-first policy: no more old format usage anywhere
+                        throw(MarginsError("Inconsistent gradient format detected: 2-tuple format $(key). " *
+                                          "Statistical correctness requires uniform gradient key format. " *
+                                          "All gradient keys must use (term, group_key, profile_idx) format " *
+                                          "even in simple cases for consistency."))
                     else
                         # Simple key format - just use the gradient if it exists
                         if haskey(gradients, i)
@@ -223,12 +229,11 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
                                 break
                             end
                         elseif isa(grad_key, Tuple) && length(grad_key) == 2
-                            # Fallback to old format if available
-                            g_term, g_prof_idx = grad_key
-                            if g_term == term && g_prof_idx == i
-                                push!(term_gradients, grad)
-                                break
-                            end
+                            # Error-first policy: explicit failure for old gradient format
+                            throw(MarginsError("Incompatible gradient format detected: 2-tuple format $(grad_key). " *
+                                              "Statistical correctness cannot be guaranteed with outdated gradient formats. " *
+                                              "Profile averaging requires group-aware gradient keys (term, group_key, profile_idx). " *
+                                              "This indicates an internal consistency error in gradient storage."))
                         end
                     end
                 end

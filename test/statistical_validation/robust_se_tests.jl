@@ -13,10 +13,6 @@ using Statistics
 using Margins
 using GLM
 
-# Load robust SE validation components
-include("robust_se_validation.jl")
-# Testing utilities loaded centrally in runtests.jl
-
 @testset "Robust Standard Errors Integration" begin
     Random.seed!(06515)  
     

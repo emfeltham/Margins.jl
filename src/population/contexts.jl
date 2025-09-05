@@ -19,16 +19,18 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     # Create all combinations of contexts
     total_combinations = length(scenario_specs) * length(group_specs)
     
-    # Warn about potential combination explosion
+    # Enforce hard limits to prevent statistical computation failures
+    # Following error-first policy: explicit errors better than incomplete/invalid results
     if total_combinations > 1000
-        error("Combination explosion detected ($total_combinations combinations). " *
-              "This would likely exhaust system memory. " *
-              "Please reduce the number of groups or scenarios. " *
-              "Maximum recommended: 1000 combinations.")
-    elseif total_combinations > 100
-        @warn "Large number of combinations detected ($total_combinations). " *
-              "This may result in slow computation and large output. " *
-              "Consider reducing grouping complexity or scenario count if performance is poor."
+        throw(MarginsError("Combination explosion detected ($total_combinations combinations). " *
+                          "This would likely exhaust system memory and produce incomplete results. " *
+                          "Statistical correctness cannot be guaranteed with excessive combinations. " *
+                          "Please reduce the number of groups or scenarios (maximum recommended: 1000)."))
+    elseif total_combinations > 250
+        throw(MarginsError("Large combination count detected ($total_combinations combinations). " *
+                          "This may exhaust memory or produce unreliable results. " *
+                          "Statistical correctness requires manageable computation complexity. " *
+                          "Please reduce grouping/scenario complexity (maximum recommended: 250)."))
     end
     
     for scenario_spec in scenario_specs, group_spec in group_specs
@@ -619,33 +621,21 @@ function _append_results_with_missing_columns(results::DataFrame, new_result::Da
         return new_result
     end
     
-    # Simple approach: use vcat with cols=:union to let DataFrames handle missing columns
+    # Use DataFrames.jl built-in column union for compatible structures
     try
         return vcat(results, new_result; cols=:union)
     catch e
-        # Fallback: manual column alignment with string-based missing values
-        all_cols = union(names(results), names(new_result))
+        # Error-first policy: explicit failure instead of silent data corruption
+        results_cols = names(results)
+        new_cols = names(new_result)
+        missing_in_results = setdiff(new_cols, results_cols)
+        missing_in_new = setdiff(results_cols, new_cols)
         
-        # Ensure all columns exist in both DataFrames, using string "missing" for consistency
-        for col in all_cols
-            if !(col in names(results))
-                results[!, col] = fill("missing", nrow(results))
-            end
-        end
-        
-        new_result_copy = copy(new_result)
-        for col in all_cols
-            if !(col in names(new_result_copy))
-                new_result_copy[!, col] = fill("missing", nrow(new_result_copy))
-            end
-        end
-        
-        # Reorder columns to match
-        results = results[!, all_cols]
-        new_result_copy = new_result_copy[!, all_cols]
-        
-        # Now append
-        append!(results, new_result_copy)
-        return results
+        throw(MarginsError("DataFrame structure incompatibility detected during result aggregation. " *
+                          "Statistical correctness cannot be guaranteed when result structures don't align. " *
+                          "This indicates inconsistent grouping/scenario specifications. " *
+                          "Missing in existing results: $(missing_in_results). " *
+                          "Missing in new results: $(missing_in_new). " *
+                          "Original error: $(e)"))
     end
 end

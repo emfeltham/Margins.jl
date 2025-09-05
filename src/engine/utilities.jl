@@ -594,7 +594,9 @@ function _get_typical_value(col)
     elseif eltype(col) <: AbstractString
         return mode(col)  # Simple mode for string categoricals (not the main use case)
     else
-        return first(col)  # Fallback to first value
+        throw(MarginsError("Unsupported data type $(eltype(col)) for variable. " *
+                          "Statistical correctness cannot be guaranteed for unknown data types. " *
+                          "Supported types: numeric (Int64, Float64), Bool, CategoricalArray, AbstractString."))
     end
 end
 

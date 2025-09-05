@@ -29,6 +29,52 @@ function validate_scale_parameter(scale::Symbol)
 end
 
 """
+    _validate_reference_grid_column_type(col, col_name::Symbol)
+
+Validate that a column in a reference grid has a supported data type.
+Implements explicit error policy - fails fast with clear message for unsupported types.
+
+# Supported types:
+- Numeric: Int64, Float64 (continuous variables)
+- Bool (categorical via frequency mixture)
+- CategoricalArray (categorical variables)
+- AbstractString (limited support in non-optimized paths only)
+
+# Throws
+- `MarginsError`: For unsupported data types that could produce invalid statistical results
+"""
+function _validate_reference_grid_column_type(col, col_name)
+    eltype_val = eltype(col)
+    
+    # Check for supported types - order matters, check specific cases first
+    if col isa CategoricalArray
+        # CategoricalArray - supported (check this first before eltype checks)
+        return
+    elseif any(x -> x isa FormulaCompiler.CategoricalMixture, col)
+        # Column contains CategoricalMixture objects - supported for fractional specifications
+        return
+    elseif eltype_val <: CategoricalArrays.CategoricalValue
+        # Vector of CategoricalValue objects (extracted from CategoricalArray) - supported
+        return
+    elseif eltype_val <: Real && !(eltype_val <: Bool)
+        # Numeric types (Int64, Float64, etc.) - supported
+        return
+    elseif eltype_val <: Bool
+        # Bool - supported as categorical
+        return  
+    elseif eltype_val <: AbstractString
+        # String - limited support but allowed in reference grids
+        return
+    else
+        # Unsupported types - explicit error
+        throw(MarginsError("Unsupported data type $(eltype_val) for variable '$col_name' in reference grid. " *
+                          "Statistical correctness cannot be guaranteed for unknown data types. " *
+                          "Supported types: numeric (Int64, Float64), Bool, CategoricalArray, AbstractString, CategoricalMixture. " *
+                          "Consider converting complex types to supported categorical or numeric formats."))
+    end
+end
+
+"""
     validate_backend_parameter(backend::Symbol)
 
 Validate the `backend` parameter for derivative computation.

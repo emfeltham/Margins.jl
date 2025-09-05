@@ -64,7 +64,6 @@ function run_development_validation(; focus=:all)
         # Run subset focusing on integer variables
         @testset "Integer Variable Development Validation" begin
             Random.seed!(06515)
-            # Testing utilities loaded centrally in runtests.jl
             
             df = make_econometric_data(n=500, seed=123)
             
@@ -85,7 +84,6 @@ function run_development_validation(; focus=:all)
         # Run subset of systematic model tests
         @testset "Systematic Model Development Validation" begin
             Random.seed!(06515)
-            # Testing utilities loaded centrally in runtests.jl
             
             df = make_econometric_data(n=400, seed=456)
             

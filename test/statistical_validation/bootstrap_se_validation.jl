@@ -15,9 +15,6 @@ using Margins
 using Test
 using Printf
 
-# Load testing utilities
-# Testing utilities loaded centrally in runtests.jl
-
 """
     bootstrap_sample_with_replacement(data, n_obs)
     

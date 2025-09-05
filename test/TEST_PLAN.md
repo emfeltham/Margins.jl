@@ -18,7 +18,7 @@ This document serves two purposes:
 
 ### 🚨 Statistical Correctness Violations Found
 
-#### 1. **Silent Fallbacks in Link Function Detection** (`src/engine/core.jl:147, 160-163`)
+- [x] #### 1. **Silent Fallbacks in Link Function Detection** (`src/engine/core.jl:147, 160-163`)
 
 **VIOLATION**: Link function extraction uses try-catch with fallback that could silently fail:
 ```julia
@@ -34,7 +34,7 @@ end
 
 **Documentation claims**: "Returns IdentityLink() fallback" but code actually errors - documentation is misleading.
 
-#### 2. **Silent First-Value Fallbacks** (`src/engine/utilities.jl:597, src/profile/refgrids.jl:341-342`)
+- [x] #### 2. **Silent First-Value Fallbacks** (`src/engine/utilities.jl:597, src/profile/refgrids.jl:341-342`)
 
 **CRITICAL VIOLATION**: Multiple locations use silent fallbacks to `first(col)`:
 ```julia
@@ -54,7 +54,9 @@ end
 
 **REQUIRED FIX**: Should error with explicit message about unsupported data types rather than silent fallback.
 
-#### 3. **Warning Instead of Error for Large Combinations** (`src/population/contexts.jl:29-31`)
+- [-] #### 3. **Warning Instead of Error for Large Combinations** (`src/population/contexts.jl:29-31`)
+
+NOTE: THIS ONE IS FINE
 
 **VIOLATION**: Performance warnings instead of hard limits:
 ```julia
@@ -67,7 +69,7 @@ end
 
 **REQUIRED FIX**: Should have configurable hard limits with clear error messages.
 
-#### 4. **Silent DataFrame Concatenation Fallback** (`src/population/contexts.jl:623-634`)
+- [x] #### 4. **Silent DataFrame Concatenation Fallback** (`src/population/contexts.jl:623-634`)
 
 **CRITICAL VIOLATION**: DataFrame concatenation with silent fallback:
 ```julia
@@ -84,7 +86,7 @@ end
 
 **REQUIRED FIX**: Should error explicitly when DataFrame structures are incompatible rather than silent string-based missing value injection.
 
-#### 5. **Gradient Format Fallback** (`src/features/averaging.jl:225-231`)
+- [x] #### 5. **Gradient Format Fallback** (`src/features/averaging.jl:225-231`)
 
 **VIOLATION**: Silent fallback to old gradient format:
 ```julia
@@ -94,6 +96,8 @@ elseif isa(grad_key, Tuple) && length(grad_key) == 2
 ```
 
 **STATISTICAL RISK**: Format mismatches could lead to incorrect gradient associations and invalid standard errors.
+
+NOTE: did we remove the old Gradient format?
 
 **REQUIRED FIX**: Should error when gradient format is unexpected rather than attempting compatibility.
 

@@ -15,9 +15,6 @@ using Statistics
 using StatsModels
 using Margins
 
-# Load testing utilities
-# Testing utilities loaded centrally in runtests.jl
-
 @testset "CI Statistical Validation - Critical Subset" begin
     Random.seed!(06515)  
     
