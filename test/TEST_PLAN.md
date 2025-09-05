@@ -12,149 +12,122 @@ This document serves two purposes:
 1. **Comprehensive Test Plan**: Specifies a correctness-focused test suite for Margins.jl
 2. **Current Status Analysis**: Analysis of the ~80 existing test files and integration recommendations
 
-## Cheating on tests
+## Explicit errors
 
-**PROBLEM**: Several test patterns violate the "no skip logic" principle by masking failures with warnings, `@test_nowarn`, skipped results, and silent try/catch blocks.
+**PRIORITY: CRITICAL** - The codebase contains multiple violations of the package's zero-tolerance error policy. These patterns produce potentially invalid statistical results without clear user notification, violating the core principle that "wrong standard errors are worse than no standard errors."
 
-### 🚨 **Critical Test Cheating Patterns Found**
+### 🚨 Statistical Correctness Violations Found
 
-#### **1. Silent Try/Catch Blocks** - **HIGH SEVERITY** 
+#### 1. **Silent Fallbacks in Link Function Detection** (`src/engine/core.jl:147, 160-163`)
+
+**VIOLATION**: Link function extraction uses try-catch with fallback that could silently fail:
 ```julia
-# robust_se_tests.jl:173-178
-# TODO: THIS SHOULD FAIL?
 try
-    result = population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
+    # Try to extract link from GLM.jl...
 catch e
-    # Silent failure - should be @test_throws
-end
-
-# bootstrap_validation_tests.jl:175-179  
-catch e
-    # Graceful failure is acceptable for degenerate cases
-    @debug "✓ Problematic data handled gracefully: $(typeof(e))"
-    # TODO: THESE SHOULD BE REAL ERRORS
+    error("Failed to extract link function from model: $e. " *
+          "Statistical correctness cannot be guaranteed without proper link function.")
 end
 ```
-**Impact**: Tests pass even when functionality fails, hiding real bugs.
 
-#### **2. Fake Success via Skipped Results** - **HIGH SEVERITY**
+**GOOD**: This actually **does error explicitly** - this is correct behavior that should be maintained.
+
+**Documentation claims**: "Returns IdentityLink() fallback" but code actually errors - documentation is misleading.
+
+#### 2. **Silent First-Value Fallbacks** (`src/engine/utilities.jl:597, src/profile/refgrids.jl:341-342`)
+
+**CRITICAL VIOLATION**: Multiple locations use silent fallbacks to `first(col)`:
 ```julia
-# testing_utilities.jl:244
-results[:population_effects] = (success = true, skipped = true, reason = "No continuous variables for effects testing")
+# src/engine/utilities.jl:597
+else
+    return first(col)  # Fallback to first value
+end
 
-# testing_utilities.jl:303  
-results[:profile_predictions] = (success = true, skipped = true, reason = "Profile predictions at :means not supported for categorical-only models")
+# src/profile/refgrids.jl:341-342  
+else
+    # Fallback to first value (O(1))
+    return first(col)
+end
 ```
-**Impact**: Skipped tests marked as `success = true` artificially inflate success rates.
 
-#### **3. Warning Instead of Failing** - **MEDIUM SEVERITY**
-```julia  
-# categorical_bootstrap_tests.jl:320
-@warn "⚠️  CATEGORICAL BOOTSTRAP VALIDATION: NEEDS IMPROVEMENT"
+**STATISTICAL RISK**: Using first value for unknown data types could produce statistically meaningless reference grids without user awareness.
 
-# robust_se_validation.jl:397
-@warn "⚠️  ROBUST SE VALIDATION: MIXED RESULTS"
+**REQUIRED FIX**: Should error with explicit message about unsupported data types rather than silent fallback.
 
-# multi_model_bootstrap_tests.jl:249
-@warn "⚠️  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
-```
-**Impact**: Statistical validation failures generate warnings instead of test failures.
+#### 3. **Warning Instead of Error for Large Combinations** (`src/population/contexts.jl:29-31`)
 
-#### **4. @test_nowarn Overuse** - **LOW SEVERITY**
+**VIOLATION**: Performance warnings instead of hard limits:
 ```julia
-# test_weights.jl:24-26 
-@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=data.sampling_weight)
-@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=:sampling_weight)
-@test_nowarn population_margins(model, data; type=:effects, vars=[:x1], weights=nothing)
+@warn "Large number of combinations detected ($total_combinations). " *
+      "This may result in slow computation and large output. " *
+      "Consider reducing grouping complexity..."
 ```
-**Impact**: Limited - acceptable for API stability tests, but should verify actual functionality.
 
-### 📊 **Test Cheating Audit Results**
+**STATISTICAL RISK**: Allows computations that may not complete or exhaust memory, leading to incomplete/invalid results.
 
-**Files with cheating patterns**: 8+ files
-**Silent failures**: 4+ locations  
-**Fake success via skipping**: 3+ locations
-**Warning instead of failing**: 6+ locations
-**@test_nowarn overuse**: 8+ locations
+**REQUIRED FIX**: Should have configurable hard limits with clear error messages.
 
-### 🔧 **Remediation Plan**
+#### 4. **Silent DataFrame Concatenation Fallback** (`src/population/contexts.jl:623-634`)
 
-#### **Phase 1: Eliminate Silent Failures** - **URGENT**
-1. **Convert try/catch to @test_throws**:
-   ```julia
-   # BEFORE (cheating)
-   try
-       population_margins(model, data; vcov=CRHC0(:nonexistent_var))
-   catch e
-       # silent
-   end
-   
-   # AFTER (proper)
-   @test_throws ArgumentError population_margins(model, data; vcov=CRHC0(:nonexistent_var))
-   ```
+**CRITICAL VIOLATION**: DataFrame concatenation with silent fallback:
+```julia
+try
+    return vcat(results, new_result; cols=:union)
+catch e
+    # Fallback: manual column alignment with string-based missing values
+    all_cols = union(names(results), names(new_result))
+    # ... fills with "missing" strings
+end
+```
 
-2. **Fix files**:
-   - `robust_se_tests.jl:173-178` - Convert to `@test_throws`
-   - `bootstrap_validation_tests.jl:175-179` - Convert to `@test_throws`
-   - All statistical validation try/catch blocks
+**STATISTICAL RISK**: Silent data structure failures could corrupt results or misalign statistical estimates with their metadata.
 
-#### **Phase 2: Fix Skipped Success Logic** - **URGENT**  
-1. **Separate skipped from success**:
-   ```julia
-   # BEFORE (cheating)
-   results[:test] = (success = true, skipped = true, reason = "...")
-   
-   # AFTER (honest)
-   results[:test] = (skipped = true, reason = "...")
-   # OR implement proper test for the case
-   ```
+**REQUIRED FIX**: Should error explicitly when DataFrame structures are incompatible rather than silent string-based missing value injection.
 
-2. **Update success calculation logic**:
-   ```julia
-   # testing_utilities.jl:312
-   all_finite = all_successful && all(
-       haskey(r, :skipped) || (r.finite_estimates && r.finite_ses && r.positive_ses)
-       # Remove "haskey(r, :skipped) && r.skipped ||" - skipped ≠ success
-   )
-   ```
+#### 5. **Gradient Format Fallback** (`src/features/averaging.jl:225-231`)
 
-#### **Phase 3: Convert Warnings to Test Failures** - **HIGH PRIORITY**
-1. **Statistical validation warnings must fail tests**:
-   ```julia  
-   # BEFORE (cheating)
-   @warn "⚠️  BOOTSTRAP VALIDATION SUITE: MIXED RESULTS"
-   
-   # AFTER (proper)
-   @test false "Bootstrap validation failed: mixed results indicate statistical errors"
-   ```
+**VIOLATION**: Silent fallback to old gradient format:
+```julia
+elseif isa(grad_key, Tuple) && length(grad_key) == 2
+    # Fallback to old format if available
+    g_term, g_prof_idx = grad_key
+```
 
-2. **Files to fix**:
-   - `categorical_bootstrap_tests.jl:320`
-   - `robust_se_validation.jl:397`  
-   - `multi_model_bootstrap_tests.jl:249`
+**STATISTICAL RISK**: Format mismatches could lead to incorrect gradient associations and invalid standard errors.
 
-#### **Phase 4: Audit @test_nowarn Usage** - **LOWER PRIORITY**
-1. **Replace with specific assertions where possible**:
-   ```julia
-   # BEFORE (weak)
-   @test_nowarn population_margins(model, data; weights=:sampling_weight)
-   
-   # AFTER (stronger)  
-   result = population_margins(model, data; weights=:sampling_weight)
-   @test isa(result, MarginsResult)
-   @test all(isfinite, DataFrame(result).estimate)
-   ```
+**REQUIRED FIX**: Should error when gradient format is unexpected rather than attempting compatibility.
 
-### 🎯 **Success Criteria**
+### 🎯 Required Test Coverage for Error-First Policy
 
-**ZERO TOLERANCE for test cheating**:
-- ✅ No silent try/catch blocks in tests
-- ✅ Skipped tests not marked as successful  
-- ✅ Statistical validation failures cause test failures
-- ✅ All try/catch converted to @test_throws with specific exception types
-- ✅ Clear separation between legitimate skips and masked failures
+#### Tests Needed:
 
-**Expected impact**: More honest test results, easier debugging, higher confidence in statistical correctness.
+1. **Link Function Failure Tests**:
+   - Verify error (not silent fallback) for unsupported model types
+   - Test with models lacking proper link function methods
+   - Validate error message clarity and statistical rationale
+
+2. **Data Type Validation Tests**:
+   - Test unsupported data types cause explicit errors
+   - Verify no silent `first(col)` fallbacks occur
+   - Test mixed-type columns error appropriately
+
+3. **Resource Limit Tests**:
+   - Test combinations above memory/time limits cause errors
+   - Verify user gets actionable error messages
+   - Test graceful degradation boundaries
+
+4. **DataFrame Structure Tests**:
+   - Test incompatible result structures cause explicit errors
+   - Verify no silent data corruption via string "missing" injection
+   - Test metadata alignment validation
+
+5. **Gradient Format Tests**:
+   - Test gradient format mismatches cause explicit errors
+   - Verify no silent fallbacks to old formats
+   - Test standard error validity when gradients are malformed
+
+#### Implementation Principle:
+**EVERY statistical computation failure MUST produce explicit error with clear explanation rather than silent approximation or fallback.**
 
 ## More testing?
 

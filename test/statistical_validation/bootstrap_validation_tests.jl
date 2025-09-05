@@ -160,23 +160,18 @@ include("categorical_bootstrap_tests.jl")
         
         # "✓ Small dataset bootstrap: $(small_result.n_bootstrap_successful)/20 bootstrap samples successful"
         
-        # Test error handling for problematic data
+        # Test handling for problematic data
         problematic_data = DataFrame(
             x = [1, 2, 3, 4, 5],  # Very small sample
             y = [1, 1, 1, 1, 1]   # No variation
         )
         
-        # This might fail, but should fail gracefully
-        try
-            problematic_result = bootstrap_validate_population_effects(
-                lm, @formula(y ~ x), problematic_data; n_bootstrap=10
-            )
-            @test haskey(problematic_result, :validation)  # Should have some structure even if failed
-        catch e
-            # Graceful failure is acceptable for degenerate cases
-            @debug "✓ Problematic data handled gracefully: $(typeof(e))"
-            # TODO: THESE SHOULD BE REAL ERRORS
-        end
+        # Should succeed but produce poor validation results for degenerate data
+        problematic_result = bootstrap_validate_population_effects(
+            lm, @formula(y ~ x), problematic_data; n_bootstrap=10
+        )
+        @test haskey(problematic_result, :validation)
+        @test problematic_result.validation.agreement_rate < 0.5  # Poor agreement expected for degenerate data
     end
     
     #=

@@ -275,36 +275,28 @@ function run_comprehensive_robust_se_test_suite(; verbose=true)
         data = make_heteroskedastic_data(n=400, heteroskedasticity_type=:linear)
         model = lm(@formula(y ~ x + z), data)
         
-            sandwich_results = test_sandwich_estimators_comprehensive(model, data)
-            
-            @test sandwich_results.overall_success
-            @test sandwich_results.n_successful >= 3  # Most estimators should work
-            
-            # Test specific estimators
-            if haskey(sandwich_results.estimator_results, :HC1)
-                hc1_result = sandwich_results.estimator_results[:HC1]
-                if hc1_result.success
-                    @test hc1_result.all_quadrants_valid
-                    @test hc1_result.validation.meaningfully_different  # Should be different from model SEs
-                end
+        sandwich_results = test_sandwich_estimators_comprehensive(model, data)
+        
+        @test sandwich_results.overall_success
+        @test sandwich_results.n_successful >= 3  # Most estimators should work
+        
+        # Test specific estimators
+        if haskey(sandwich_results.estimator_results, :HC1)
+            hc1_result = sandwich_results.estimator_results[:HC1]
+            if hc1_result.success
+                @test hc1_result.all_quadrants_valid
+                @test hc1_result.validation.meaningfully_different  # Should be different from model SEs
             end
-            
-            push!(test_results, (
-                model_type = "Linear with heteroskedasticity",
-                success = sandwich_results.overall_success,
-                n_successful = sandwich_results.n_successful
-            ))
-            
-            if verbose
-                @info "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
-            end
-        else
-            @warn "Skipping sandwich estimator tests - CovarianceMatrices.jl not available"
-            push!(test_results, (
-                model_type = "Linear with heteroskedasticity",
-                success = false,
-                reason = "CovarianceMatrices.jl not available"
-            ))
+        end
+        
+        push!(test_results, (
+            model_type = "Linear with heteroskedasticity",
+            success = sandwich_results.overall_success,
+            n_successful = sandwich_results.n_successful
+        ))
+        
+        if verbose
+            @info "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
         end
     end
     

@@ -169,12 +169,8 @@ include("robust_se_validation.jl")
             data = make_heteroskedastic_data(n=100)
             model = lm(@formula(y ~ x + z), data)
             
-            # This should fail gracefully
-            # TODO: THIS SHOULD FAIL?
-            try
-                result = population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
-            catch e
-            end
+            # Should throw error for nonexistent cluster variable
+            @test_throws ArgumentError population_margins(model, data; type=:effects, vars=[:x], vcov=CRHC0(:nonexistent_var))
         end
     end
 end
