@@ -625,8 +625,8 @@ Maintains identical API for contexts while achieving ~900x performance improveme
 """
 function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
     # Use optimal unified contrast system with baseline contrasts for this context
-    # This delegates to _compute_categorical_contrasts_optimal which uses DataScenario
-    results = _compute_categorical_contrasts_optimal(engine, var, context_indices, scale, backend, :baseline)
+    # This delegates to _compute_categorical_contrasts which uses DataScenario
+    results = _compute_categorical_contrasts(engine, var, context_indices, scale, backend, :baseline)
     
     # Extract first (and only) result for baseline contrast
     if isempty(results)
