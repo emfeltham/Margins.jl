@@ -67,6 +67,7 @@ export means_grid, balanced_grid, cartesian_grid, quantile_grid
 # Include all submodules in dependency order
 include("types.jl")
 include("core/validation.jl")
+include("core/margins_validation.jl")
 include("computation/predictions.jl")
 include("computation/statistics.jl")
 include("engine/measures.jl")  # Measure transformation utilities

@@ -1289,7 +1289,8 @@ function _gradient_with_scenario!(out::AbstractVector{Float64}, compiled, scenar
     FormulaCompiler.modelrow!(row_buf, compiled, scenario.data, row)
     if scale === :response
         η = dot(row_buf, β)
-        d = GLM.mueta(link, η)
+        # Use FormulaCompiler's link derivative utility to avoid any allocation
+        d = FormulaCompiler._dmu_deta(link, η)
         @inbounds @fastmath for i in eachindex(row_buf)
             out[i] = d * row_buf[i]
         end

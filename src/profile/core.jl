@@ -276,11 +276,13 @@ function profile_margins(
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
-    # Input validation for reference grid approach
-    _validate_profile_inputs_refgrid(
-        model, data_nt, reference_grid, type,
-        vars, scale, backend, measure, vcov
-    )
+    # Shared input validation for common parameters  
+    validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
+    
+    # Profile-specific validation for reference grid
+    if isnothing(reference_grid)
+        throw(ArgumentError("reference_grid cannot be nothing"))
+    end
     
     # Reference grid specific validation
     if nrow(reference_grid) == 0
@@ -376,48 +378,6 @@ function _compute_profile_predictions!(
     return nothing
 end
 
-"""
-    _validate_profile_inputs_refgrid(model, data, reference_grid, type, vars, scale, backend, measure, vcov)
-
-Validate inputs to profile_margins() with reference grid approach.
-"""
-function _validate_profile_inputs_refgrid(
-    model, data, reference_grid, type::Symbol, vars,
-    scale::Symbol, backend::Symbol, measure::Symbol, vcov
-)
-
-    # Validate required arguments
-    if isnothing(model)
-        throw(ArgumentError("model cannot be nothing"))
-    end
-    
-    if isnothing(data)
-        throw(ArgumentError("data cannot be nothing"))
-    end
-    
-    if isnothing(reference_grid)
-        throw(ArgumentError("reference_grid cannot be nothing"))
-    end
-    
-    # Use centralized validation for common parameters (without the at parameter)
-    validate_population_parameters(type, scale, backend, measure, vars)  # Reuse population validation
-    
-    # Validate vcov parameter
-    validate_vcov_parameter(vcov, model)
-    
-    # Validate model has required methods
-    try
-        coef(model)
-    catch e
-        throw(ArgumentError("model must support coef() method (fitted statistical model required)"))
-    end
-    
-    try
-        GLM.vcov(model)
-    catch e
-        throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
-    end
-end
 
 """
     _convert_profile_terms_to_strings(df::DataFrame)

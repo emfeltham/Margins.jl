@@ -124,8 +124,19 @@ function population_margins(
     contrasts::Symbol=:baseline,
     ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing
 )
-    # Input validation with new scale parameter and weights
-    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov, weights)
+    # Shared input validation for common parameters
+    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
+    
+    # Population-specific validation
+    if !isnothing(scenarios)
+        _validate_scenarios_specific(scenarios, vars, type)
+    end
+    if !isnothing(groups)
+        _validate_groups_parameter(groups)
+    end
+    if !isnothing(weights)
+        _validate_weights_parameter(weights, data)
+    end
     # Single data conversion (consistent format throughout)
     data_nt = Tables.columntable(data)
     
@@ -201,14 +212,27 @@ filtering out the dependent variable and weight columns.
 # Arguments  
 - `weight_col`: Weight column name to exclude (Symbol or nothing)
 """
+
+"""
+    _get_model_formula_variables(model) -> Set{Symbol}
+
+Extract explanatory variables from model formula, excluding the dependent variable.
+Only returns variables that are actually in the model specification.
+"""
+function _get_model_formula_variables(model)
+    # Extract all terms from the model formula RHS 
+    formula_terms = StatsModels.termvars(model.mf.f.rhs)
+    return Set{Symbol}(formula_terms)
+end
+
 function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing)
-    # Get dependent variable from model formula
-    dependent_var = Symbol(model.mf.f.lhs)
+    # Get variables that are actually in the model formula
+    model_vars = _get_model_formula_variables(model)
     
     effect_vars = Symbol[]
     for (name, col) in pairs(data_nt)
-        # Skip dependent variable - we only want explanatory variables for marginal effects
-        if name == dependent_var
+        # CRITICAL FIX: Only process variables that are in the model formula
+        if !(name in model_vars)
             continue
         end
         
@@ -238,13 +262,13 @@ Extract continuous explanatory variables from data, filtering out categorical ty
 - `weight_col`: Weight column name to exclude (Symbol or nothing)
 """
 function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothing)
-    # Get dependent variable from model formula
-    dependent_var = Symbol(model.mf.f.lhs)
+    # Get variables that are actually in the model formula
+    model_vars = _get_model_formula_variables(model)
     
     continuous_vars = Symbol[]
     for (name, col) in pairs(data_nt)
-        # Skip dependent variable - we only want explanatory variables for marginal effects
-        if name == dependent_var
+        # CRITICAL FIX: Only process variables that are in the model formula
+        if !(name in model_vars)
             continue
         end
         
@@ -261,67 +285,6 @@ function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothin
     return continuous_vars
 end
 
-"""
-    _validate_population_inputs(model, data, type, vars, scale, backend, scenarios, measure, groups, vcov, weights)
-
-Validate inputs to population_margins() with clear Julia-style error messages.
-"""
-function _validate_population_inputs(model, data, type::Symbol, vars, scale::Symbol, backend::Symbol, scenarios, measure::Symbol, groups, vcov, weights)
-    # Validate required arguments
-    if model === nothing
-        throw(ArgumentError("model cannot be nothing"))
-    end
-    
-    if data === nothing
-        throw(ArgumentError("data cannot be nothing"))
-    end
-    
-    # Use centralized validation for common parameters
-    validate_population_parameters(type, scale, backend, measure, vars)
-    
-    # Validate vcov parameter
-    validate_vcov_parameter(vcov, model)
-    
-    # Validate vars parameter for effects
-    if type === :effects && vars !== nothing
-        if !(vars isa Symbol || vars isa Vector{Symbol} || vars === :all_continuous)
-            throw(ArgumentError("vars must be Symbol, Vector{Symbol}, or :all_continuous for effects analysis"))
-        end
-    end
-    
-    # Validate scenarios parameter (replaces 'at' for population margins)
-    if !isnothing(scenarios) && !(scenarios isa Dict)
-        throw(ArgumentError("scenarios parameter must be a Dict specifying counterfactual scenarios"))
-    end
-    
-    # Teaching validation: Check for vars/scenarios overlap
-    if !isnothing(scenarios) && !isnothing(vars) && type == :effects
-        _validate_vars_scenarios_overlap(vars, scenarios)
-    end
-    
-    # Validate groups parameter (unified grouping system)
-    if !isnothing(groups)
-        _validate_groups_parameter(groups)
-    end
-    
-    # Validate weights parameter
-    if !isnothing(weights)
-        _validate_weights_parameter(weights, data)
-    end
-    
-    # Validate model has required methods
-    try
-        coef(model)
-    catch e
-        throw(ArgumentError("model must support coef() method (fitted statistical model required)"))
-    end
-    
-    try
-        GLM.vcov(model)
-    catch e
-        throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
-    end
-end
 
 """
     _validate_vars_scenarios_overlap(vars, scenarios)
