@@ -10,14 +10,15 @@ Marginal effects and adjusted predictions for Julia statistical models.
 using Margins, DataFrames, GLM
 
 # Fit your model
-data = DataFrame(y = randn(1000), x1 = randn(1000), x2 = randn(1000))
+n = 1_000_00
+data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n))
 model = lm(@formula(y ~ x1 + x2), data)
 
 # Population average marginal effects (AME)
-ame_result = population_margins(model, data; type=:effects)
+@btime ame_result = population_margins(model, data; type=:effects)
 
 # Marginal effects at sample means (MEM) 
-mem_result = profile_margins(model, data; at=:means, type=:effects)
+mem_result = profile_margins(model, data, means_grid(data); type=:effects)
 
 # Convert to DataFrame for analysis
 DataFrame(ame_result)
@@ -47,8 +48,8 @@ population_margins(model, data; type=:effects)      # Average Marginal Effects
 population_margins(model, data; type=:predictions)  # Average Adjusted Predictions
 
 # Profile analysis
-profile_margins(model, data; type=:effects)         # Effects at Representative Points
-profile_margins(model, data; type=:predictions)     # Predictions at Representative Points
+profile_margins(model, data, means_grid(data); type=:effects)         # Effects at Representative Points
+profile_margins(model, data, means_grid(data); type=:predictions)     # Predictions at Representative Points
 ```
 
 ## Advanced Features
@@ -67,11 +68,12 @@ population_margins(model, data; measure=:semielasticity_eydx)  # d(ln y)/dx
 ### Profile Specifications
 ```julia
 # Representative points
-profile_margins(model, data; at=:means, type=:effects)
-profile_margins(model, data; at=Dict(:x1 => [0, 1, 2], :x2 => mean), type=:effects)
+profile_margins(model, data, means_grid(data); type=:effects)
+profile_margins(model, data, cartesian_grid(data; x1=[0, 1, 2], x2=[1.5]); type=:effects)
 
-# Categorical scenarios
-profile_margins(model, data; at=Dict(:group => mix("A" => 0.3, "B" => 0.7)), type=:effects)
+# Categorical scenarios using CategoricalMixture
+reference_grid = DataFrame(group=[mix("A" => 0.3, "B" => 0.7)])
+profile_margins(model, data, reference_grid; type=:effects)
 ```
 
 ### Stratified Analysis
@@ -111,14 +113,12 @@ model = glm(@formula(outcome ~ age + education + log(income) + treatment),
             df, Binomial(), LogitLink())
 
 # Average marginal effects
-ame = population_margins(model, df; type=:effects, target=:mu)
+ame = population_margins(model, df; type=:effects, scale=:response)
 DataFrame(ame)
 
 # Treatment effects by education
-treatment_by_edu = profile_margins(model, df;
-    at=Dict(:treatment => [true, false], :education => ["HS", "College", "Graduate"]),
-    type=:predictions, target=:mu
-)
+reference_grid = cartesian_grid(df; treatment=[true, false], education=["HS", "College", "Graduate"])
+treatment_by_edu = profile_margins(model, df, reference_grid; type=:predictions, scale=:response)
 DataFrame(treatment_by_edu)
 ```
 
@@ -151,8 +151,8 @@ Pkg.add("Margins")
 | Stata Command | Margins.jl Equivalent |
 |---------------|----------------------|
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data; at=:means, type=:effects)` |
-| `margins, at(x=0 1 2)` | `profile_margins(model, data; at=Dict(:x => [0,1,2]), type=:effects)` |
+| `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type=:effects)` |
+| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)` |
 | `margins` | `population_margins(model, data; type=:predictions)` |
-| `margins, at(means)` | `profile_margins(model, data; at=:means, type=:predictions)` |
+| `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` |
 

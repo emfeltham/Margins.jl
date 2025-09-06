@@ -112,8 +112,14 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
-    # Column widths for alignment
-    var_width = max(8, maximum(length.(mr.terms)) + 1)
+    # Column widths for alignment - defensive against undefined references
+    var_width = try
+        max(8, maximum(length.(mr.terms)) + 1)
+    catch e
+        # Fallback if terms have undefined references - use a safe default
+        @warn "Display issue with undefined terms, using default width" exception=e
+        20  # Safe default width
+    end
     num_width = 12
     
     # Header line
@@ -138,7 +144,12 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     
     # Data rows
     for i in 1:length(mr.estimates)
-        print(io, rpad(mr.terms[i], var_width))
+        term_str = try
+            mr.terms[i]
+        catch e
+            "undefined_term_$i"  # Fallback if term is undefined
+        end
+        print(io, rpad(term_str, var_width))
         print(io, lpad(sprintf("%.6f", mr.estimates[i]), num_width))
         print(io, lpad(sprintf("%.6f", mr.standard_errors[i]), num_width))
         print(io, lpad(sprintf("%.6f", lower[i]), num_width))

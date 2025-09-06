@@ -241,25 +241,115 @@ function _compute_continuous_ame(engine::MarginsEngine{L}, var::Symbol, rows, sc
     var_idx = findfirst(==(var), engine.de.vars)
     var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
     
+    # ZERO-ALLOCATION: Use scalar accumulation instead of vector allocation
     ame_sum = 0.0
+    
+    # Accumulate marginal effects across rows (zero additional allocations)
     for row in rows
         if scale === :response
             FormulaCompiler.marginal_effects_mu!(engine.g_buf, engine.de, engine.β, row; link=engine.link, backend=backend)
         else  # scale === :link
             FormulaCompiler.marginal_effects_eta!(engine.g_buf, engine.de, engine.β, row; backend=backend)
         end
-        ame_sum += engine.g_buf[var_idx]
+        ame_sum += engine.g_buf[var_idx]  # Scalar accumulation, no allocations
     end
+    
+    # Simple average
     ame_val = ame_sum / length(rows)
     
-    # FIXED: Use zero-allocation unweighted gradient accumulation instead of creating weights vector
-    _accumulate_unweighted_ame_gradient!(
+    # OPTIMAL: Use FormulaCompiler's native batch AME gradient accumulation
+    FormulaCompiler.accumulate_ame_gradient!(
         engine.gβ_accumulator, engine.de, engine.β, rows, var;
         link=(scale === :response ? engine.link : GLM.IdentityLink()), 
         backend=backend
     )
     
     return (ame_val, engine.gβ_accumulator)
+end
+
+"""
+    _compute_all_continuous_ame_batch(engine, vars, rows, scale, backend) -> (Vector{Float64}, Matrix{Float64})
+
+**ZERO-ALLOCATION BATCH**: Compute all continuous variable AMEs in a single pass.
+
+Instead of calling FormulaCompiler functions once per variable per row (O(vars×rows) calls),
+this computes all variables simultaneously in a single row loop (O(rows) calls).
+
+# Arguments
+- `engine::MarginsEngine`: Pre-built margins engine
+- `vars::Vector{Symbol}`: All continuous variables to compute
+- `rows`: Row indices to average over  
+- `scale::Symbol`: `:link` or `:response` scale
+- `backend::Symbol`: Computation backend (:fd or :ad)
+
+# Returns
+- `(Vector{Float64}, Matrix{Float64})`: AME values and gradients for all variables
+  - `ame_values[i]`: AME value for vars[i]
+  - `gradients[i, :]`: Parameter gradient for vars[i]
+"""
+function _compute_all_continuous_ame_batch(engine::MarginsEngine{L}, vars::Vector{Symbol}, rows, scale::Symbol, backend::Symbol) where L
+    n_vars = length(vars)
+    n_params = length(engine.β)
+    n_rows = length(rows)
+    
+    # Pre-allocate results
+    ame_values = zeros(Float64, n_vars)
+    gradients = zeros(Float64, n_vars, n_params)
+    
+    # Variable index mapping
+    var_indices = [findfirst(==(var), engine.de.vars) for var in vars]
+    
+    # SINGLE ROW LOOP: Compute all variables simultaneously
+    for row in rows
+        # Compute marginal effects for ALL variables at once
+        if scale === :response
+            FormulaCompiler.marginal_effects_mu!(engine.g_buf, engine.de, engine.β, row; link=engine.link, backend=backend)
+        else  # scale === :link
+            FormulaCompiler.marginal_effects_eta!(engine.g_buf, engine.de, engine.β, row; backend=backend)
+        end
+        
+        # Accumulate values for all variables from single FormulaCompiler call
+        for (result_idx, var_idx) in enumerate(var_indices)
+            ame_values[result_idx] += engine.g_buf[var_idx]
+        end
+        
+        # Compute gradients for all variables using full Jacobian (more efficient)
+        if scale === :response
+            # For μ effects: we still need per-variable gradient calls (chain rule complexity)
+            for (result_idx, var) in enumerate(vars)
+                FormulaCompiler.me_mu_grad_beta!(engine.de.fd_yminus, engine.de, engine.β, row, var; link=engine.link)
+                for j in 1:n_params
+                    gradients[result_idx, j] += engine.de.fd_yminus[j]
+                end
+            end
+        else  # scale === :link
+            # For η effects: compute full Jacobian once, extract all columns
+            if backend === :fd
+                # Still need per-variable calls for FD (no full Jacobian FD function)
+                for (result_idx, var) in enumerate(vars)
+                    FormulaCompiler.fd_jacobian_column!(engine.de.fd_yminus, engine.de, row, var)
+                    for j in 1:n_params
+                        gradients[result_idx, j] += engine.de.fd_yminus[j]
+                    end
+                end
+            else  # backend === :ad
+                # OPTIMIZATION: Compute full Jacobian once, extract all variable columns
+                FormulaCompiler.derivative_modelrow!(engine.de.jacobian_buffer, engine.de, row)
+                for (result_idx, var) in enumerate(vars)
+                    var_grad_idx = findfirst(==(var), engine.de.vars)
+                    for j in 1:n_params
+                        gradients[result_idx, j] += engine.de.jacobian_buffer[j, var_grad_idx]
+                    end
+                end
+            end
+        end
+    end
+    
+    # Average all results
+    ame_values ./= n_rows
+    gradients ./= n_rows
+    
+    return (ame_values, gradients)
 end
 
 """  
@@ -284,24 +374,52 @@ Follows the same architectural pattern as categorical variables:
 - `(ame_val, gradient)`: Average marginal effect value and parameter gradient
 """
 function _compute_boolean_ame(engine::MarginsEngine{L}, var::Symbol, rows, scale::Symbol, backend::Symbol) where L
-    # FOLLOW CATEGORICAL PATTERN: Use profile-based approach instead of per-row loops
-    
-    # Create representative profile using frequency-weighted approach (like categorical variables)
-    representative_profile = Dict{Symbol, Any}()
-    
-    # Build representative profile with mean values for continuous, mode for categorical  
-    for (col_name, col_data) in pairs(engine.data_nt)
-        if col_name == var
-            # Skip the boolean variable we're analyzing
-            continue
-        end
-        representative_profile[col_name] = _get_typical_value(col_data)
+    # Row-wise scenario-based discrete difference (true vs false), averaged across rows.
+    # Reuse compiled object; create scenarios once.
+    compiled = engine.compiled
+    data_nt = engine.data_nt
+    β = engine.β
+    link = engine.link
+    row_buf = engine.row_buf
+
+    scenario_false = FormulaCompiler.create_scenario("$(var)_false", data_nt, Dict(var => false))
+    scenario_true  = FormulaCompiler.create_scenario("$(var)_true",  data_nt, Dict(var => true))
+
+    ame_sum = 0.0
+    # Use engine accumulator as running sum to avoid per-row allocations
+    grad_sum = engine.gβ_accumulator
+    fill!(grad_sum, 0.0)
+    # Buffers for scenario gradients: reuse evaluator buffers if available, else allocate locals
+    if engine.de !== nothing && length(engine.de.fd_yplus) == length(β)
+        g_false = engine.de.fd_yplus    # Reuse existing buffer 1
+        g_true  = engine.de.fd_yminus   # Reuse existing buffer 2
+    else
+        g_false = Vector{Float64}(undef, length(β))
+        g_true  = Vector{Float64}(undef, length(β))
     end
-    
-    # Use categorical pattern: single contrast computation instead of per-row loop
-    effect, gradient = _compute_boolean_contrast_like_categorical(engine, var, representative_profile, scale)
-    
-    return (effect, gradient)
+
+    for row in rows
+        # Predictions for both scenarios
+        p_false = _predict_with_scenario(compiled, scenario_false, row, scale, β, link, row_buf)
+        p_true  = _predict_with_scenario(compiled, scenario_true,  row, scale, β, link, row_buf)
+
+        # Parameter gradients for both scenarios (in-place)
+        _gradient_with_scenario!(g_false, compiled, scenario_false, row, scale, β, link, row_buf)
+        _gradient_with_scenario!(g_true,  compiled, scenario_true,  row, scale, β, link, row_buf)
+
+        ame_sum += (p_true - p_false)
+        @inbounds @fastmath for i in eachindex(grad_sum)
+            grad_sum[i] += (g_true[i] - g_false[i])
+        end
+    end
+
+    n = length(rows)
+    # Average gradient in-place
+    invn = 1.0 / n
+    @inbounds @fastmath for i in eachindex(grad_sum)
+        grad_sum[i] *= invn
+    end
+    return (ame_sum / n, grad_sum)
 end
 
 """  
@@ -328,6 +446,56 @@ function _detect_variable_type(data_nt::NamedTuple, var::Symbol)
     else  # CategoricalArray, String, etc.
         return :categorical
     end
+end
+
+"""
+    _is_linear_model(model) -> Bool
+
+Determine if model is linear (LM/LMM) or nonlinear (GLM) to choose optimal computation strategy.
+
+Linear models can use FormulaCompiler's `modelrow_batch!` for perfect 0-byte performance
+since marginal effects = design matrix coefficients (constant across observations).
+
+Nonlinear models need row-wise evaluation with pre-allocated arrays.
+
+# Arguments
+- `model`: Statistical model (LinearModel, LinearMixedModel, GeneralizedLinearModel, etc.)
+
+# Returns  
+- `true`: Linear model, linear mixed model, or GLM with identity link
+- `false`: Nonlinear GLM requiring row-wise evaluation
+
+# Examples
+```julia
+lm_model = lm(@formula(y ~ x), data)
+lmm_model = fit(MixedModel, @formula(y ~ x + (1|subject)), data)
+glm_model = glm(@formula(y ~ x), data, Normal(), IdentityLink())
+logit_model = glm(@formula(y ~ x), data, Binomial(), LogitLink())
+
+_is_linear_model(lm_model)     # true - linear model
+_is_linear_model(lmm_model)    # true - linear mixed model
+_is_linear_model(glm_model)    # true - identity link 
+_is_linear_model(logit_model)  # false - nonlinear link
+```
+"""
+function _is_linear_model(model)
+    # LinearModel is always linear
+    if isa(model, LinearModel)
+        return true
+    end
+    
+    # LinearMixedModel is also linear (fixed effects part)
+    if typeof(model).name.name == :LinearMixedModel  # Check type name to avoid import
+        return true
+    end
+    
+    # GeneralizedLinearModel with identity link is effectively linear
+    if isa(model, GeneralizedLinearModel)
+        return isa(GLM.Link(model), GLM.IdentityLink)
+    end
+    
+    # Other model types - assume nonlinear for safety
+    return false
 end
 
 """  
@@ -485,10 +653,23 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     continuous_requested = engine.de === nothing ? Symbol[] : engine.de.vars
     categorical_requested = [v for v in engine.vars if v ∉ continuous_vars]
     
-    # Total number of variables to process
-    total_vars = length(continuous_requested) + length(categorical_requested)
+    # Count total number of result rows needed (categorical variables may have multiple contrasts)
+    total_rows = length(continuous_requested)
+    for var in categorical_requested
+        var_col = getproperty(engine.data_nt, var)
+        if _detect_variable_type(engine.data_nt, var) == :categorical
+            # Count non-baseline levels for this categorical variable
+            baseline_level = _get_baseline_level(engine.model, var)
+            unique_levels = unique(var_col)
+            non_baseline_count = sum(level != baseline_level for level in unique_levels)
+            total_rows += max(non_baseline_count, 1)  # At least 1 row even if all baseline
+        else
+            # Boolean variables get 1 row
+            total_rows += 1
+        end
+    end
     
-    if total_vars == 0
+    if total_rows == 0
         # No variables to process - return empty DataFrame
         empty_df = DataFrame(
             term = String[],
@@ -499,14 +680,14 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
         return (empty_df, Matrix{Float64}(undef, 0, length(engine.β)))
     end
     
-    # PRE-ALLOCATE results DataFrame to avoid dynamic growth
+    # PRE-ALLOCATE results DataFrame for the actual number of rows needed
     results = DataFrame(
-        term = Vector{String}(undef, total_vars),
-        estimate = Vector{Float64}(undef, total_vars), 
-        se = Vector{Float64}(undef, total_vars),
-        n = fill(n_obs, total_vars)  # Add sample size for all variables
+        term = Vector{String}(undef, total_rows),
+        estimate = Vector{Float64}(undef, total_rows), 
+        se = Vector{Float64}(undef, total_rows),
+        n = fill(n_obs, total_rows)  # Add sample size for all rows
     )
-    G = Matrix{Float64}(undef, total_vars, length(engine.β))
+    G = Matrix{Float64}(undef, total_rows, length(engine.β))
     
     # Process continuous variables with FC's built-in AME gradient accumulation (ZERO ALLOCATION!)
     cont_idx = 1
@@ -519,11 +700,57 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     
     # Process continuous variables (if any)
     if engine.de !== nothing
-        for var in continuous_requested
-            # Use unified dispatcher for consistency
-            if isnothing(weights)
-                ame_val, gβ_avg = _compute_variable_ame_unified(engine, var, rows, scale, backend)
-            else
+        # BATCH OPTIMIZATION: Compute ALL continuous variables at once instead of per-variable loops
+        if isnothing(weights)
+            all_ame_vals, all_gradients = _compute_all_continuous_ame_batch(engine, continuous_requested, rows, scale, backend)
+            
+            # Store results for all continuous variables
+            for (var_idx, var) in enumerate(continuous_requested)
+                ame_val = all_ame_vals[var_idx]
+                gβ_avg = all_gradients[var_idx, :]
+                
+                # Apply elasticity transformations if requested
+                final_val = ame_val
+                gradient_transform_factor = 1.0
+                
+                if measure !== :effect && engine.de !== nothing
+                    # Compute average x and y for elasticity measures (vectorized)
+                    xcol = getproperty(data_nt, var)
+                    
+                    # Step 1: Compute weighted average x
+                    x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
+                    
+                    # Step 2: Compute η/μ averages using helper with concrete arguments
+                    ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale, nothing)
+                    
+                    # Apply transformation based on measure type
+                    if measure === :elasticity
+                        gradient_transform_factor = x̄ / ȳ
+                        final_val = gradient_transform_factor * ame_val
+                    elseif measure === :semielasticity_dyex
+                        gradient_transform_factor = x̄
+                        final_val = gradient_transform_factor * ame_val
+                    elseif measure === :semielasticity_eydx
+                        gradient_transform_factor = 1 / ȳ
+                        final_val = gradient_transform_factor * ame_val
+                    end
+                end
+                
+                # Transform the gradient and compute SE with transformed gradient
+                gβ_avg .*= gradient_transform_factor
+                se = compute_se_only(gβ_avg, engine.Σ)
+                
+                # Direct assignment instead of push! to avoid reallocation
+                results.term[cont_idx] = string(var)
+                results.estimate[cont_idx] = final_val
+                results.se[cont_idx] = se
+                # Copy the transformed gradient to the output matrix
+                G[cont_idx, :] = gβ_avg
+                cont_idx += 1
+            end
+        else
+            # Fall back to old per-variable approach for weighted case
+            for var in continuous_requested
                 # Handle weighted case - for now, fall back to existing weighted implementation
                 # TODO: Extend unified dispatcher to support weights
                 _accumulate_weighted_ame_gradient!(
@@ -615,17 +842,34 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     
     # Process categorical and boolean variables (if any)
     for var in categorical_requested
-        # Use unified dispatcher for consistency
-        ame_val, gβ_avg = _compute_variable_ame_unified(engine, var, rows, scale, backend)
+        var_type = _detect_variable_type(engine.data_nt, var)
         
-        se = compute_se_only(gβ_avg, engine.Σ)
-        
-        # Direct assignment instead of push! to avoid reallocation  
-        results.term[cont_idx] = string(var)
-        results.estimate[cont_idx] = ame_val
-        results.se[cont_idx] = se
-        G[cont_idx, :] = gβ_avg
-        cont_idx += 1
+        if var_type == :boolean
+            # Boolean variables: single contrast (false vs true)
+            ame_val, gβ_avg = _compute_variable_ame_unified(engine, var, rows, scale, backend)
+            se = compute_se_only(gβ_avg, engine.Σ)
+            
+            results.term[cont_idx] = string(var)
+            results.estimate[cont_idx] = ame_val
+            results.se[cont_idx] = se
+            G[cont_idx, :] = gβ_avg
+            cont_idx += 1
+        else # var_type == :categorical
+            # Categorical variables: multiple baseline contrasts
+            contrast_results = _compute_categorical_contrasts(engine, var, rows, scale, backend, :baseline)
+            
+            baseline_level = _get_baseline_level(engine.model, var)
+            for (level1, level2, ame_val, gβ_avg) in contrast_results
+                se = compute_se_only(gβ_avg, engine.Σ)
+                
+                # Create descriptive term name: "var: level vs baseline"
+                results.term[cont_idx] = "$(var): $(level2) vs $(level1)"
+                results.estimate[cont_idx] = ame_val
+                results.se[cont_idx] = se
+                G[cont_idx, :] = gβ_avg
+                cont_idx += 1
+            end
+        end
     end
     
     return (results, G)
@@ -1035,6 +1279,28 @@ function _gradient_with_scenario(compiled, scenario, row, scale, β, link, row_b
 end
 
 """
+    _gradient_with_scenario!(out, compiled, scenario, row, scale, β, link, row_buf) -> out
+
+In-place parameter gradient at a row using FormulaCompiler's DataScenario system.
+
+Fills `out` with ∂prediction/∂β on the requested scale without allocating.
+"""
+function _gradient_with_scenario!(out::AbstractVector{Float64}, compiled, scenario, row, scale, β, link, row_buf)
+    FormulaCompiler.modelrow!(row_buf, compiled, scenario.data, row)
+    if scale === :response
+        η = dot(row_buf, β)
+        d = GLM.mueta(link, η)
+        @inbounds @fastmath for i in eachindex(row_buf)
+            out[i] = d * row_buf[i]
+        end
+    else
+        # Link scale: gradient equals model row
+        copyto!(out, row_buf)
+    end
+    return out
+end
+
+"""
     _compute_categorical_contrasts(engine, var, rows, scale, backend, contrasts) -> Vector{Tuple}
 
 **OPTIMAL SOLUTION**: Unified categorical contrasts using DataScenario system.
@@ -1077,24 +1343,28 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
             # For Bool variables: baseline=false, comparison=true
             [(false, true)]
         else
-            # For CategoricalArray variables: use model baseline
+            # For CategoricalArray variables: baseline contrasts for ALL non-baseline levels
             baseline_level = _get_baseline_level(engine.model, var)
-            # Find modal (most frequent) non-baseline level
-            level_counts = Dict()
+            # Get all unique levels in the data
+            all_levels = Set()
             for row in rows
-                level = var_col[row]
+                push!(all_levels, var_col[row])
+            end
+            
+            # Create baseline contrasts: baseline vs each non-baseline level
+            baseline_pairs = []
+            for level in all_levels
                 if level != baseline_level
-                    level_counts[level] = get(level_counts, level, 0) + 1
+                    push!(baseline_pairs, (baseline_level, level))
                 end
             end
             
-            if isempty(level_counts)
+            if isempty(baseline_pairs)
                 # All observations are at baseline level
                 return [(baseline_level, baseline_level, 0.0, zeros(length(engine.β)))]
             end
             
-            modal_level = argmax(level_counts)
-            [(baseline_level, modal_level)]  # Single comparison: baseline vs modal
+            baseline_pairs
         end
     elseif contrasts === :pairwise  
         [(level1, level2) for (i, level1) in enumerate(levels), (j, level2) in enumerate(levels) if i < j]  # All pairs
@@ -1121,28 +1391,43 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
     results = []
     for (level1, level2) in contrast_pairs
         scenario1, scenario2 = scenarios[level1], scenarios[level2]
-        
+
         ame_sum = 0.0
-        grad_sum = zeros(length(engine.β))
-        
+        # Reuse engine accumulator for gradient sum and allocate temporaries once
+        grad_sum = engine.gβ_accumulator
+        fill!(grad_sum, 0.0)
+        # Gradient buffers: must be sized for number of coefficients
+        if engine.de === nothing
+            # For categorical-only models, allocate temporary gradient buffers
+            g1 = Vector{Float64}(undef, length(engine.β))
+            g2 = Vector{Float64}(undef, length(engine.β))
+        else
+            # For mixed models, reuse derivative evaluator buffers
+            g1 = engine.de.fd_yplus
+            g2 = engine.de.fd_yminus
+        end
+
         # Unpack engine parameters for cleaner function calls
         (β, link, row_buf) = (engine.β, engine.link, engine.row_buf)
-        
+
         for row in rows
-            # Use scenario-based prediction and gradient (no recompilation!)
+            # Scenario-based predictions (no recompilation)
             pred1 = _predict_with_scenario(compiled, scenario1, row, scale, β, link, row_buf)
-            pred2 = _predict_with_scenario(compiled, scenario2, row, scale, β, link, row_buf) 
-            grad1 = _gradient_with_scenario(compiled, scenario1, row, scale, β, link, row_buf)
-            grad2 = _gradient_with_scenario(compiled, scenario2, row, scale, β, link, row_buf)
-            
-            # Accumulate the discrete change (level2 - level1 for standard baseline contrast)
+            pred2 = _predict_with_scenario(compiled, scenario2, row, scale, β, link, row_buf)
+            # In-place gradients for both scenarios (no per-row allocations)
+            _gradient_with_scenario!(g1, compiled, scenario1, row, scale, β, link, row_buf)
+            _gradient_with_scenario!(g2, compiled, scenario2, row, scale, β, link, row_buf)
+
             ame_sum += (pred2 - pred1)
-            grad_sum .+= (grad2 .- grad1)
+            @inbounds @fastmath for i in eachindex(grad_sum)
+                grad_sum[i] += (g2[i] - g1[i])
+            end
         end
-        
+
         # Average over all observations
-        ame_val = ame_sum / length(rows)
-        gβ_avg = grad_sum ./ length(rows)
+        n = length(rows)
+        ame_val = ame_sum / n
+        gβ_avg = (grad_sum ./ n)
         push!(results, (level1, level2, ame_val, gβ_avg))
     end
     

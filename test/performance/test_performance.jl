@@ -1,3 +1,5 @@
+# julia --project="." test/performance/test_performance.jl > test/test_performance.txt 2>&1
+
 using Test
 using Margins, GLM, DataFrames, StatsModels, BenchmarkTools
 using Random
@@ -15,7 +17,7 @@ using Random
     end
     
     @testset "O(1) Profile Margins Scaling" begin
-        dataset_sizes = [1000, 5000, 10000]
+        dataset_sizes = [1000, 5000, 10000, 1_000_000]
         profile_times = Float64[]
         
         for n in dataset_sizes

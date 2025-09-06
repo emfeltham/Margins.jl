@@ -193,6 +193,43 @@ end
 
 
 """
+    _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing) -> Vector{Symbol}
+
+Extract ALL explanatory variables that can have marginal effects computed (both continuous and categorical),
+filtering out the dependent variable and weight columns.
+
+# Arguments  
+- `weight_col`: Weight column name to exclude (Symbol or nothing)
+"""
+function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing)
+    # Get dependent variable from model formula
+    dependent_var = Symbol(model.mf.f.lhs)
+    
+    effect_vars = Symbol[]
+    for (name, col) in pairs(data_nt)
+        # Skip dependent variable - we only want explanatory variables for marginal effects
+        if name == dependent_var
+            continue
+        end
+        
+        # Skip weight column - it's not a model variable
+        if !isnothing(weight_col) && name == weight_col
+            continue
+        end
+        
+        # Include continuous variables (numeric types except Bool)
+        # Include categorical variables (Bool, CategoricalArray, etc.)
+        el_type = eltype(col)
+        if (el_type <: Real && !(el_type <: Bool)) ||  # Continuous (Int, Float, but not Bool)
+           el_type <: Bool ||                           # Bool (categorical)  
+           hasproperty(col, :pool)                      # CategoricalArray
+            push!(effect_vars, name)
+        end
+    end
+    return effect_vars
+end
+
+"""
     _get_continuous_variables(model, data_nt, weight_col=nothing) -> Vector{Symbol}
 
 Extract continuous explanatory variables from data, filtering out categorical types, the dependent variable, and weight columns.
@@ -402,7 +439,15 @@ Process and validate the vars parameter with model awareness to exclude dependen
 - `weight_col`: Weight column name to exclude (Symbol or nothing)
 """
 function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
-    if vars === nothing || vars === :all_continuous
+    if vars === nothing
+        # Auto-detect ALL effect variables (both continuous and categorical)
+        effect_vars = _get_all_effect_variables(model, data_nt, weight_col)
+        if isempty(effect_vars)
+            throw(MarginsError("No explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
+        end
+        return effect_vars
+    elseif vars === :all_continuous
+        # Backwards compatibility: only continuous variables
         continuous_vars = _get_continuous_variables(model, data_nt, weight_col)
         if isempty(continuous_vars)
             throw(MarginsError("No continuous explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))

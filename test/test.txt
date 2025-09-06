@@ -8,7 +8,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
 ┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_B8bG68/Project.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_1Z2Gdr/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.0
 ⌅ [324d7699] CategoricalArrays v0.10.8
   [60f91f6f] CovarianceMatrices v0.22.0
@@ -28,7 +28,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [de0858da] Printf v1.11.0
   [9a3f8284] Random v1.11.0
   [8dfed614] Test v1.11.0
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_B8bG68/Manifest.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_1Z2Gdr/Manifest.toml`
   [a4c015fc] ANSIColoredPrinters v0.0.1
   [1520ce14] AbstractTrees v0.4.5
   [79e6a3ab] Adapt v4.3.0
@@ -146,7 +146,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [76eceee3] WorkerUtilities v1.6.1
   [2e619515] Expat_jll v2.7.1+0
   [020c3dae] Git_LFS_jll v3.7.0+0
-  [f8c6e375] Git_jll v2.51.0+0
+⌃ [f8c6e375] Git_jll v2.51.0+0
   [94ce4f54] Libiconv_jll v1.18.0+0
   [5ced341a] Lz4_jll v1.10.1+0
   [079eb43e] NLopt_jll v2.10.0+0
@@ -203,493 +203,347 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [8e850b90] libblastrampoline_jll v5.11.0+0
   [8e850ede] nghttp2_jll v1.59.0+0
   [3f19e933] p7zip_jll v17.4.0+2
-        Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
+        Info Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading.
+Precompiling project for configuration --code-coverage=none --color=auto --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none...
+   4478.6 ms  ✓ Margins
+  1 dependency successfully precompiled in 5 seconds. 189 already precompiled.
      Testing Running tests...
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
-   objective: 126.3474937319155[K[A
-[K[AMinimizing 73    Time: 0:00:00 ( 4.44 ms/it)[K
-[ Info: Buffer allocation fallback: g_buf too small for 18 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 6 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 6 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
-[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
-ERROR: LoadError: Some tests did not pass: 683 passed, 9 failed, 6 errored, 0 broken.
-in expression starting at /Users/emf/.julia/dev/Margins/test/runtests.jl:44
-Test Summary:      | Pass  Total   Time
-Core Functionality |  187    187  47.2s
-Test Summary:     | Pass  Total   Time
-Advanced Features |  239    239  17.8s
-Test Summary: | Pass  Total  Time
-Performance   |   30     30  8.9s
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:499
-  Expression: framework_result.all_finite
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:499 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
-  Expression: result.finite_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
-  Expression: result.positive_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
-  Expression: result.finite_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
-  Expression: result.positive_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
-  Expression: result.finite_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
-  Expression: result.positive_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507
-  Expression: result.finite_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:507 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-LM: Four-way w/ function - 2×2 Framework: Test Failed at /Users/emf/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508
-  Expression: result.positive_ses
-
-Stacktrace:
- [1] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
- [2] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:508 [inlined]
- [3] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [4] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:485 [inlined]
- [5] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [6] macro expansion
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:436 [inlined]
- [7] macro expansion
-   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
- [8] top-level scope
-   @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-Basic Robust SE Integration: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:43
+Simple categorical groups: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_grouping.jl:22
   Got exception outside of a @test
-  UndefVarError: `validate_robust_se_integration` not defined in `Main`
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
   Suggestion: check for spelling errors or missing imports.
   Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:47 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:44 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{LogitLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{LogitLink}, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Symbol, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Symbol, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
     [5] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:24 [inlined]
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:29 [inlined]
     [6] macro expansion
       @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [7] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [8] include(fname::String)
-      @ Main ./sysimg.jl:38
-    [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [10] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [11] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [12] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [13] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-   [14] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [15] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
-   [16] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [17] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
-   [18] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [19] top-level scope
-      @ none:6
-   [20] eval
-      @ ./boot.jl:430 [inlined]
-   [21] exec_options(opts::Base.JLOptions)
-      @ Base ./client.jl:296
-   [22] _start()
-      @ Base ./client.jl:531
-Linear Model Sandwich Estimators: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59
-  Got exception outside of a @test
-  UndefVarError: `test_sandwich_estimators_comprehensive` not defined in `Main`
-  Suggestion: check for spelling errors or missing imports.
-  Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:63 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:60 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [5] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59 [inlined]
-    [6] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [7] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [8] include(fname::String)
-      @ Main ./sysimg.jl:38
-    [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [10] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [11] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [12] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [13] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-   [14] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [15] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
-   [16] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [17] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
-   [18] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [19] top-level scope
-      @ none:6
-   [20] eval
-      @ ./boot.jl:430 [inlined]
-   [21] exec_options(opts::Base.JLOptions)
-      @ Base ./client.jl:296
-   [22] _start()
-      @ Base ./client.jl:531
-GLM Sandwich Estimators: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:79
-  Got exception outside of a @test
-  UndefVarError: `test_sandwich_estimators_comprehensive` not defined in `Main`
-  Suggestion: check for spelling errors or missing imports.
-  Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:83 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:80 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [5] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:59 [inlined]
-    [6] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [7] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [8] include(fname::String)
-      @ Main ./sysimg.jl:38
-    [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [10] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [11] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [12] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [13] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-   [14] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [15] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
-   [16] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [17] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
-   [18] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [19] top-level scope
-      @ none:6
-   [20] eval
-      @ ./boot.jl:430 [inlined]
-   [21] exec_options(opts::Base.JLOptions)
-      @ Base ./client.jl:296
-   [22] _start()
-      @ Base ./client.jl:531
-Linear Model Clustered SEs: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101
-  Got exception outside of a @test
-  UndefVarError: `test_clustered_se_validation` not defined in `Main`
-  Suggestion: check for spelling errors or missing imports.
-  Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:105 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:102 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [5] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101 [inlined]
-    [6] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [7] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [8] include(fname::String)
-      @ Main ./sysimg.jl:38
-    [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [10] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [11] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [12] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [13] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-   [14] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [15] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
-   [16] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [17] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
-   [18] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [19] top-level scope
-      @ none:6
-   [20] eval
-      @ ./boot.jl:430 [inlined]
-   [21] exec_options(opts::Base.JLOptions)
-      @ Base ./client.jl:296
-   [22] _start()
-      @ Base ./client.jl:531
-Variable Cluster Sizes: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:112
-  Got exception outside of a @test
-  UndefVarError: `test_clustered_se_validation` not defined in `Main`
-  Suggestion: check for spelling errors or missing imports.
-  Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:123 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:114 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [5] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:101 [inlined]
-    [6] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [7] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [8] include(fname::String)
-      @ Main ./sysimg.jl:38
-    [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [10] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [11] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
-   [12] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [13] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
-   [14] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [15] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
-   [16] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-   [17] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
-   [18] include(fname::String)
-      @ Main ./sysimg.jl:38
-   [19] top-level scope
-      @ none:6
-   [20] eval
-      @ ./boot.jl:430 [inlined]
-   [21] exec_options(opts::Base.JLOptions)
-      @ Base ./client.jl:296
-   [22] _start()
-      @ Base ./client.jl:531
-Comprehensive Robust SE Test Suite: Error During Test at /Users/emf/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:130
-  Got exception outside of a @test
-  UndefVarError: `run_comprehensive_robust_se_test_suite` not defined in `Main`
-  Suggestion: check for spelling errors or missing imports.
-  Stacktrace:
-    [1] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:133 [inlined]
-    [2] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [3] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:133 [inlined]
-    [4] macro expansion
-      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
-    [5] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/robust_se_tests.jl:20
-    [6] include(fname::String)
-      @ Main ./sysimg.jl:38
     [7] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:24 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:7
+   [10] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:22 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] top-level scope
+      @ none:6
+   [16] eval
+      @ ./boot.jl:430 [inlined]
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [18] _start()
+      @ Base ./client.jl:531
+Multiple categorical groups: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_grouping.jl:35
+  Got exception outside of a @test
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{LogitLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{LogitLink}, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Vector{Symbol}, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Vector{Symbol}, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:36 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:36 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:7
+   [10] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:22 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] top-level scope
+      @ none:6
+   [16] eval
+      @ ./boot.jl:430 [inlined]
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [18] _start()
+      @ Base ./client.jl:531
+Continuous groups (quartiles): Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_grouping.jl:44
+  Got exception outside of a @test
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{LogitLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{LogitLink}, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Tuple{Symbol, Int64}, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Tuple{Symbol, Int64}, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:45 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:45 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:7
+   [10] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:22 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] top-level scope
+      @ none:6
+   [16] eval
+      @ ./boot.jl:430 [inlined]
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [18] _start()
+      @ Base ./client.jl:531
+Nested groups: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_grouping.jl:54
+  Got exception outside of a @test
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{LogitLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{LogitLink}, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Pair{Symbol, Symbol}, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Pair{Symbol, Symbol}, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:55 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:55 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:7
+   [10] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:22 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] top-level scope
+      @ none:6
+   [16] eval
+      @ ./boot.jl:430 [inlined]
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [18] _start()
+      @ Base ./client.jl:531
+Mixed continuous and categorical effects with grouping: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_grouping.jl:93
+  Got exception outside of a @test
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{LogitLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{LogitLink}, context_data::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Bool}, x::Vector{Float64}, z::Vector{Float64}, group1::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, group2::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, treatment::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}, binary_var::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Symbol, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, LinearAlgebra.CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Symbol, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:95 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:95 [inlined]
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [9] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_grouping.jl:7
+   [10] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:22 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] top-level scope
+      @ none:6
+   [16] eval
+      @ ./boot.jl:430 [inlined]
+   [17] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [18] _start()
+      @ Base ./client.jl:531
+Categorical marginal effects: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_contrasts.jl:25
+  Expression: "cat_var" in (DataFrame(cat_effects)).term
+   Evaluated: "cat_var" in ["cat_var: Low vs High", "cat_var: Medium vs High"]
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:25 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:20 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:7
+Binary categorical effects: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_contrasts.jl:35
+  Expression: "binary_var" in (DataFrame(binary_effects)).term
+   Evaluated: "binary_var" in ["binary_var: Yes vs No"]
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:35 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:30 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:7
+Mixed variable types: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_contrasts.jl:46
+  Expression: any(contains.("cat_var", (DataFrame(mixed_effects)).term))
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:46 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:40 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_contrasts.jl:7
+Data type compatibility: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_errors.jl:67
+  Got exception outside of a @test
+  ArgumentError: Could not find categorical variable z in model formula terms. Ensure the variable is categorical and present in the model.
+  Stacktrace:
+    [1] _get_baseline_level(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, var::Symbol)
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/core/utilities.jl:459
+    [2] compute_profile_categorical_contrast(engine::Margins.MarginsEngine{IdentityLink}, profile::Dict{Symbol, Float64}, var::Symbol, scale::Symbol; backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/profile/contrasts.jl:62
+    [3] compute_profile_categorical_contrast
+      @ ~/.julia/dev/Margins/src/profile/contrasts.jl:54 [inlined]
+    [4] _compute_row_specific_baseline_contrast(engine::Margins.MarginsEngine{IdentityLink}, refgrid_de::FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.LoadOp{:z, 3}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}, FormulaCompiler.CopyOp{3, 3}}, 3, 3, @NamedTuple{x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}}, @NamedTuple{x::FormulaCompiler.FDOverrideVector, y::Vector{Float64}, z::Vector{Float64}}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}, y::Vector{Float64}, z::Vector{Float64}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}, profile::Dict{Symbol, Float64}, var::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:1466
+    [5] _mem_continuous_and_categorical_refgrid(engine::Margins.MarginsEngine{IdentityLink}, reference_grid::DataFrame; scale::Symbol, backend::Symbol, measure::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:1642
+    [6] _profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data_nt::@NamedTuple{y::Vector{Float64}, x::Vector{Int64}, z::Vector{Bool}}, reference_grid::DataFrame, type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, measure::Symbol, vcov::typeof(vcov), at_spec::DataFrame, ci_alpha::Float64)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:169
+    [7] profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, reference_grid::DataFrame; type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, measure::Symbol, ci_alpha::Float64, vcov::Function)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:301
+    [8] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:76 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [10] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:68 [inlined]
+   [11] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [12] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:10
+   [13] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [14] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:25 [inlined]
+   [15] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [16] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [17] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [18] top-level scope
+      @ none:6
+   [19] eval
+      @ ./boot.jl:430 [inlined]
+   [20] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [21] _start()
+      @ Base ./client.jl:531
+Acceptable combination counts: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_errors.jl:190
+  Got exception outside of a @test
+  UndefVarError: `_accumulate_me_value` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _compute_continuous_ame_context(engine::Margins.MarginsEngine{IdentityLink}, var::Symbol, context_data::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, group1::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, context_indices::Vector{Int64}, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:595
+    [2] _compute_population_effect_in_context(engine::Margins.MarginsEngine{IdentityLink}, context_data::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, group1::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, context_indices::Vector{Int64}, var::Symbol, scale::Symbol, backend::Symbol, weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:541
+    [3] _population_margins_with_contexts(engine::Margins.MarginsEngine{IdentityLink}, data_nt::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, group1::CategoricalVector{Int64, UInt32, Int64, CategoricalValue{Int64, UInt32}, Union{}}}, vars::Vector{Symbol}, scenarios::Nothing, groups::Symbol, weights::Nothing; type::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/contexts.jl:51
+    [4] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Symbol, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Nothing)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:150
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:200 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:192 [inlined]
     [8] macro expansion
       @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
     [9] macro expansion
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:732 [inlined]
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:150 [inlined]
    [10] macro expansion
       @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
    [11] top-level scope
-      @ ~/.julia/dev/Margins/test/statistical_validation/statistical_validation.jl:21
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:10
    [12] include(fname::String)
       @ Main ./sysimg.jl:38
    [13] macro expansion
-      @ ~/.julia/dev/Margins/test/runtests.jl:46 [inlined]
+      @ ~/.julia/dev/Margins/test/runtests.jl:25 [inlined]
    [14] macro expansion
       @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
    [15] top-level scope
-      @ ~/.julia/dev/Margins/test/runtests.jl:45
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
    [16] include(fname::String)
       @ Main ./sysimg.jl:38
    [17] top-level scope
@@ -700,57 +554,512 @@ Comprehensive Robust SE Test Suite: Error During Test at /Users/emf/.julia/dev/M
       @ Base ./client.jl:296
    [20] _start()
       @ Base ./client.jl:531
-Test Summary:                                                   | Pass  Fail  Error  Total     Time
-Statistical Correctness                                         |  683     9      6    698  1m45.7s
-  Backend Consistency Tests - AD vs FD Validation               |   95                  95     9.6s
-  Comprehensive Statistical Validation - 2×2 Framework Coverage |  583     9      6    598  1m28.7s
-    Tier 1: Direct Coefficient Cases - All 2×2 Quadrants        |   18                  18     0.9s
-    Tier 1A: Analytical SE Validation - Linear Models           |   10                  10     0.6s
-    Tier 1B: Analytical SE Validation - GLM Chain Rules         |   10                  10     0.9s
-    Tier 2: Function Transformations - 2×2 Coverage             |   16                  16     2.3s
-    Tier 3: GLM Chain Rules - 2×2 Coverage                      |   20                  20     0.8s
-    Tier 4: Systematic Model Coverage - FormulaCompiler Style   |  289     9           298    47.6s
-      LM: Simple continuous - 2×2 Framework                     |   14                  14     1.5s
-      LM: Simple categorical - 2×2 Framework                    |    8                   8     0.5s
-      LM: Multiple continuous - 2×2 Framework                   |   14                  14     1.0s
-      LM: Multiple categorical - 2×2 Framework                  |    8                   8     0.5s
-      LM: Mixed types - 2×2 Framework                           |   14                  14     0.9s
-      LM: Simple interaction - 2×2 Framework                    |   14                  14     1.4s
-      LM: Interaction w/o main - 2×2 Framework                  |   14                  14     1.3s
-      LM: Function transform - 2×2 Framework                    |    8                   8     0.4s
-      LM: Function in interaction - 2×2 Framework               |   14                  14     1.8s
-      LM: Three-way interaction - 2×2 Framework                 |   14                  14     7.0s
-      LM: Four-way interaction - 2×2 Framework                  |   14                  14    11.7s
-      LM: Four-way w/ function - 2×2 Framework                  |    5     9            14     9.2s
-      LM: Complex interaction - 2×2 Framework                   |   14                  14     1.9s
-      GLM: Logistic simple - 2×2 Framework                      |   14                  14     0.7s
-      GLM: Logistic mixed - 2×2 Framework                       |   14                  14     0.4s
-      GLM: Logistic interaction - 2×2 Framework                 |   14                  14     0.3s
-      GLM: Logistic function - 2×2 Framework                    |    8                   8     0.7s
-      GLM: Logistic complex - 2×2 Framework                     |   14                  14     2.0s
-      GLM: Poisson simple - 2×2 Framework                       |   14                  14     0.6s
-      GLM: Poisson mixed - 2×2 Framework                        |   14                  14     0.3s
-      GLM: Poisson interaction - 2×2 Framework                  |   14                  14     0.2s
-      GLM: Gamma mixed - 2×2 Framework                          |   14                  14     1.3s
-      GLM: Gaussian LogLink - 2×2 Framework                     |   14                  14     0.5s
-    Tier 5: Edge Cases and Statistical Robustness               |    8                   8     0.0s
-    Tier 6: Integer Variable Systematic Coverage - CRITICAL     |   47                  47    11.3s
-    Tier 7: Bootstrap SE Validation - Empirical Verification    |   66                  66    11.1s
-    Tier 8: Robust SE Integration - Econometric Functionality   |   18            6     24     2.8s
-      Robust Standard Errors Integration                        |   18            6     24     2.1s
-        Robust SE Framework Tests                               |   15            1     16     0.5s
-          Heteroskedastic Data Generation                       |   15                  15     0.1s
-          Basic Robust SE Integration                           |                 1      1     0.4s
-        Comprehensive Sandwich Estimator Testing                |                 2      2     0.2s
-          Linear Model Sandwich Estimators                      |                 1      1     0.0s
-          GLM Sandwich Estimators                               |                 1      1     0.2s
-        Clustered Standard Errors Testing                       |                 2      2     0.2s
-          Linear Model Clustered SEs                            |                 1      1     0.0s
-          Variable Cluster Sizes                                |                 1      1     0.2s
-        Comprehensive Robust SE Test Suite                      |                 1      1     0.0s
-        Robust SE Edge Cases and Error Handling                 |    3                   3     1.2s
-    Tier 9: Specialized SE Cases - Advanced Edge Cases          |   81                  81    10.4s
-  Robust SE Validation                                          |    5                   5     7.1s
+Critical fix: old gradient format fallback removed: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_errors.jl:275
+  Got exception outside of a @test
+  ArgumentError: Could not find categorical variable group in model formula terms. Ensure the variable is categorical and present in the model.
+  Stacktrace:
+    [1] _get_baseline_level(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, var::Symbol)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 2 profiles (size=1)
+[ Info: Buffer allocation fallback: g_buf too small for 3 profiles (size=1)
+Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
+   objective: 126.3474937319155[K[A
+[K[AMinimizing 73    Time: 0:00:00 ( 4.41 ms/it)[K
+      @ FormulaCompiler ~/.julia/dev/FormulaCompiler/src/core/utilities.jl:459
+    [2] compute_profile_categorical_contrast(engine::Margins.MarginsEngine{IdentityLink}, profile::Dict{Symbol, Any}, var::Symbol, scale::Symbol; backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/profile/contrasts.jl:62
+    [3] compute_profile_categorical_contrast
+      @ ~/.julia/dev/Margins/src/profile/contrasts.jl:54 [inlined]
+    [4] _compute_row_specific_baseline_contrast(engine::Margins.MarginsEngine{IdentityLink}, refgrid_de::FormulaCompiler.DerivativeEvaluator{Float64, Tuple{FormulaCompiler.ConstantOp{1.0, 1}, FormulaCompiler.LoadOp{:x, 2}, FormulaCompiler.CopyOp{1, 1}, FormulaCompiler.CopyOp{2, 2}}, 2, 2, @NamedTuple{group::Vector{CategoricalMixture{Any}}, x::Vector{Float64}, y::Vector{Float64}}, @NamedTuple{group::Vector{CategoricalMixture{Any}}, x::FormulaCompiler.FDOverrideVector, y::Vector{Float64}}, 1, Tuple{FormulaCompiler.FDOverrideVector}, FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, ForwardDiff.JacobianConfig{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}, Float64}, Float64, 1}}}, FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, ForwardDiff.GradientConfig{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1, Vector{ForwardDiff.Dual{ForwardDiff.Tag{FormulaCompiler.GradClosure{FormulaCompiler.DerivClosure{FormulaCompiler.DerivativeEvaluator}}, Float64}, Float64, 1}}}, DiffResults.MutableDiffResult{1, Vector{Float64}, Tuple{Matrix{Float64}}}, DiffResults.MutableDiffResult{1, Float64, Tuple{Vector{Float64}}}, @NamedTuple{group::Vector{CategoricalMixture{Any}}, x::FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}, y::Vector{Float64}}, Vector{FormulaCompiler.TypedSingleRowOverrideVector{ForwardDiff.Dual{Nothing, Float64, 1}}}}, profile::Dict{Symbol, Any}, var::Symbol, scale::Symbol, backend::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:1466
+    [5] _mem_continuous_and_categorical_refgrid(engine::Margins.MarginsEngine{IdentityLink}, reference_grid::DataFrame; scale::Symbol, backend::Symbol, measure::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:1642
+    [6] _profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data_nt::@NamedTuple{y::Vector{Float64}, x::Vector{Float64}, group::CategoricalVector{String, UInt32, String, CategoricalValue{String, UInt32}, Union{}}}, reference_grid::DataFrame, type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, measure::Symbol, vcov::typeof(vcov), at_spec::DataFrame, ci_alpha::Float64)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:169
+    [7] profile_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame, reference_grid::DataFrame; type::Symbol, vars::Nothing, scale::Symbol, backend::Symbol, measure::Symbol, ci_alpha::Float64, vcov::Function)
+      @ Margins ~/.julia/dev/Margins/src/profile/core.jl:301
+    [8] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:300 [inlined]
+    [9] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [10] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:291 [inlined]
+   [11] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [12] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:273 [inlined]
+   [13] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [14] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_errors.jl:10
+   [15] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [16] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:25 [inlined]
+   [17] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [18] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [19] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [20] top-level scope
+      @ none:6
+   [21] eval
+      @ ./boot.jl:430 [inlined]
+   [22] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [23] _start()
+      @ Base ./client.jl:531
+Continuous dependent variable should be excluded: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:29
+  Expression: nrow(df_result) == 2
+   Evaluated: 3 == 2
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:29 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:15 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:11
+Mixed variable types with automatic detection: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:72
+  Expression: nrow(df_result) == 2
+   Evaluated: 5 == 2
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:72 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:58 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:11
+Mixed variable types with automatic detection: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:76
+  Expression: "available" ∉ df_result.term
+   Evaluated: "available" ∉ ["price", "quantity", "available", "category: Y vs X", "category: Z vs X"]
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:76 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:58 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:11
+All categorical explanatory variables: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:91
+  Expression: population_margins(model, df; type = :effects)
+    Expected: Margins.MarginsError
+  No exception thrown
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:91 [inlined]
+ [2] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [3] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:81 [inlined]
+ [4] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [5] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_automatic_variable_detection.jl:11
+Scenario 14: GLMM logistic random intercept on cbpp: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_mixedmodels.jl:107
+  Expression: size(df_result, 1) == 1
+   Evaluated: 3 == 1
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:107 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:98 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:32
+Scenario 14: GLMM logistic random intercept on cbpp: Test Failed at /Users/emf/.julia/dev/Margins/test/core/test_mixedmodels.jl:108
+  Expression: df_result.term[1] == "Period"
+   Evaluated: "Period: 4 vs 1" == "Period"
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:108 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:98 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/core/test_mixedmodels.jl:32
+Weight Parameter Validation: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:5
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{IdentityLink}, data_nt::@NamedTuple{y::Vector{Float64}, x1::Vector{Float64}, x2::Vector{Float64}, sampling_weight::Vector{Float64}, zero_weights::Vector{Float64}, negative_weights::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] (::var"#85#93"{StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, DataFrame})()
+      @ Main ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:924
+    [4] (::Base.RedirectStdStream)(thunk::var"#85#93"{StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, DataFrame}, stream::IOStream)
+      @ Base ./stream.jl:1464
+    [5] #84
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:923 [inlined]
+    [6] open(::var"#84#92"{StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, DataFrame}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+      @ Base ./io.jl:410
+    [7] open(::Function, ::String, ::String)
+      @ Base ./io.jl:407
+    [8] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:922 [inlined]
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:24 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:6 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+   [14] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [15] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [16] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [17] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [18] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [19] top-level scope
+      @ none:6
+   [20] eval
+      @ ./boot.jl:430 [inlined]
+   [21] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [22] _start()
+      @ Base ./client.jl:531
+Weighted vs Unweighted Results - Linear Model: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:36
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{IdentityLink}, data_nt::@NamedTuple{y::Vector{Float64}, x1::Vector{Float64}, x2::Vector{Float64}, weights_uniform::Vector{Float64}, weights_nonuniform::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{LinearModel{GLM.LmResp{Vector{Float64}}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:55 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:38 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Weighted vs Unweighted Results - GLM Model: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:79
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{x1::Vector{Float64}, x2::Vector{Float64}, y_binary::BitVector, weights_uniform::Vector{Float64}, weights_skewed::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:100 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:81 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Weighted Results - Extreme Weights: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:124
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{x1::Vector{Float64}, x2::Vector{Float64}, y_binary::BitVector}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] population_margins
+      @ ~/.julia/dev/Margins/src/population/core.jl:120 [inlined]
+    [4] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:141 [inlined]
+    [5] #91
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:924 [inlined]
+    [6] (::Base.RedirectStdStream)(thunk::var"#91#99"{Vector{Float64}, StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, DataFrame}, stream::IOStream)
+      @ Base ./stream.jl:1464
+    [7] #90
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:923 [inlined]
+    [8] open(::var"#90#98"{Vector{Float64}, StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, DataFrame}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+      @ Base ./io.jl:410
+    [9] open(::Function, ::String, ::String)
+      @ Base ./io.jl:407
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:922 [inlined]
+   [11] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:140 [inlined]
+   [12] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [13] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:125 [inlined]
+   [14] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [15] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+   [16] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [17] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [18] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [19] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [20] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [21] top-level scope
+      @ none:6
+   [22] eval
+      @ ./boot.jl:430 [inlined]
+   [23] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [24] _start()
+      @ Base ./client.jl:531
+Weighted Results - Both Effects and Predictions: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:159
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{x1::Vector{Float64}, x2::Vector{Float64}, y_binary::BitVector, survey_weights::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:172 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:160 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Weighted Gradients - Statistical Correctness: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:195
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{x1::Vector{Float64}, x2::Vector{Float64}, y::BitVector, weights::Vector{Float64}}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:212 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:197 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Weight Column Reference: Error During Test at /Users/emf/.julia/dev/Margins/test/core/test_weights.jl:236
+  Got exception outside of a @test
+  UndefVarError: `ame_val` not defined in `Margins`
+  Suggestion: check for spelling errors or missing imports.
+  Stacktrace:
+    [1] _ame_continuous_and_categorical(engine::Margins.MarginsEngine{LogitLink}, data_nt::@NamedTuple{y::Vector{Float64}, x1::Vector{Float64}, sampling_wt::Vector{Float64}, y_binary::BitVector}; scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol, weights::Vector{Float64})
+      @ Margins ~/.julia/dev/Margins/src/engine/utilities.jl:794
+    [2] population_margins(model::StatsModels.TableRegressionModel{GeneralizedLinearModel{GLM.GlmResp{Vector{Float64}, Binomial{Float64}, LogitLink}, GLM.DensePredChol{Float64, CholeskyPivoted{Float64, Matrix{Float64}, Vector{Int64}}}}, Matrix{Float64}}, data::DataFrame; type::Symbol, vars::Vector{Symbol}, scale::Symbol, backend::Symbol, scenarios::Nothing, groups::Nothing, measure::Symbol, contrasts::Symbol, ci_alpha::Float64, vcov::typeof(vcov), weights::Symbol)
+      @ Margins ~/.julia/dev/Margins/src/population/core.jl:154
+    [3] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:249 [inlined]
+    [4] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [5] macro expansion
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:238 [inlined]
+    [6] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+    [7] top-level scope
+      @ ~/.julia/dev/Margins/test/core/test_weights.jl:5
+    [8] include(fname::String)
+      @ Main ./sysimg.jl:38
+    [9] macro expansion
+      @ ~/.julia/dev/Margins/test/runtests.jl:28 [inlined]
+   [10] macro expansion
+      @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+   [11] top-level scope
+      @ ~/.julia/dev/Margins/test/runtests.jl:20
+   [12] include(fname::String)
+      @ Main ./sysimg.jl:38
+   [13] top-level scope
+      @ none:6
+   [14] eval
+      @ ./boot.jl:430 [inlined]
+   [15] exec_options(opts::Base.JLOptions)
+      @ Base ./client.jl:296
+   [16] _start()
+      @ Base ./client.jl:531
+Test Summary:                                               | Pass  Fail  Error  Total   Time
+Core Functionality                                          |  118     9     15    142  47.7s
+  GLM basics: Population and Profile Margins                |   16                  16   9.2s
+  Profile margins reference grid semantics                  |    7                   7   1.4s
+  Grouping functionality                                    |   20            5     25   3.9s
+    Simple categorical groups                               |    2            1      3   2.2s
+    Multiple categorical groups                             |                 1      1   0.1s
+    Continuous groups (quartiles)                           |                 1      1   0.3s
+    Nested groups                                           |                 1      1   0.1s
+    Groups with predictions                                 |    4                   4   0.3s
+    Categorical effects with simple grouping                |    4                   4   0.3s
+    Categorical effects with multiple groups                |    5                   5   0.1s
+    Mixed continuous and categorical effects with grouping  |                 1      1   0.0s
+    Categorical effects with nested grouping                |    5                   5   0.0s
+  Categorical contrasts                                     |    9     3            12   1.4s
+    Categorical marginal effects                            |    2     1             3   0.7s
+    Binary categorical effects                              |    2     1             3   0.0s
+    Mixed variable types                                    |    3     1             4   0.4s
+    Contrasts parameter                                     |    2                   2   0.0s
+  Covariance matrix handling                                |   15                  15   3.0s
+  Error handling and input validation                       |   21            3     24   6.1s
+    Invalid type parameter                                  |    2                   2   0.1s
+    Deprecated target parameter rejection                   |    1                   1   0.0s
+    Invalid scale parameter                                 |    1                   1   0.0s
+    Empty vars parameter                                    |    1                   1   0.0s
+    Invalid variable names                                  |    1                   1   0.0s
+    Mismatched model and data                               |    1                   1   0.2s
+    Invalid reference grid                                  |    1                   1   0.7s
+    Data type compatibility                                 |                 1      1   1.2s
+    Unsupported data types explicit errors                  |    5                   5   1.0s
+    Resource limit enforcement explicit errors              |    2            1      3   1.8s
+      Moderate combination limit (>250)                     |    1                   1   0.9s
+      High combination limit (>1000)                        |    1                   1   0.0s
+      Acceptable combination counts                         |                 1      1   0.8s
+ERROR: LoadError: Some tests did not pass: 118 passed, 9 failed, 15 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/runtests.jl:19
+    DataFrame structure validation explicit errors          |    6                   6   0.2s
+    Gradient format validation explicit errors              |                 1      1   0.9s
+      Critical fix: old gradient format fallback removed    |                 1      1   0.9s
+  Automatic Variable Detection                              |   19     4            23   5.3s
+    Continuous dependent variable should be excluded        |    4     1             5   0.7s
+    Profile margins with automatic detection                |    4                   4   0.9s
+    Mixed variable types with automatic detection           |    4     2             6   1.3s
+    All categorical explanatory variables                   |          1             1   0.7s
+    Explicit vars parameter bypasses automatic detection    |    3                   3   0.3s
+    Standard error consistency after fix                    |    4                   4   1.3s
+  MixedModels Integration Tests                             |   11     2            13   8.7s
+    Scenario 11: LMM random intercept only                  |    2                   2   2.8s
+    Scenario 12: LMM random slope on Days                   |    2                   2   0.2s
+    Scenario 13: LMM with transformation + random intercept |    2                   2   1.4s
+    Scenario 14: GLMM logistic random intercept on cbpp     |    3     2             5   2.1s
+    Scenario 15: GLMM logistic synthetic random intercept   |    2                   2   2.1s
+  Observation Weights                                       |                 7      7   5.5s
+    Weight Parameter Validation                             |                 1      1   0.8s
+    Weighted vs Unweighted Results - Linear Model           |                 1      1   0.7s
+    Weighted vs Unweighted Results - GLM Model              |                 1      1   1.0s
+    Weighted Results - Extreme Weights                      |                 1      1   0.7s
+    Weighted Results - Both Effects and Predictions         |                 1      1   0.7s
+    Weighted Gradients - Statistical Correctness            |                 1      1   0.8s
+    Weight Column Reference                                 |                 1      1   1.0s
 ERROR: Package Margins errored during testing
 Stacktrace:
  [1] pkgerror(msg::String)

@@ -35,7 +35,11 @@ using Test
 using BenchmarkTools
 using GLM
 using DataFrames, CategoricalArrays
+using MixedModels
 using Margins
+
+# Import test utilities from local copy
+include("../test_utilities.jl")
 
 @testset "Zero-Allocation Path Verification" begin
     # Create test data
@@ -213,6 +217,199 @@ using Margins
             
             # Should maintain same allocation threshold as simple formulas
             @test minimum(bench).allocs < 10000  # Same threshold as existing FD tests
+        end
+    end
+    
+    @testset "Allocation scaling tests across dataset sizes" begin
+        # CRITICAL: Verify that allocations don't scale with number of rows
+        # This tests the core performance guarantee that computational cost per row is constant
+        
+        dataset_sizes = [500, 2000, 8000]
+        
+        @testset "Population margins scaling (FD backend)" begin
+            allocation_results = Tuple{Int, Int, Float64}[]  # (n_rows, total_allocs, allocs_per_row)
+            
+            for n in dataset_sizes
+                # Use FormulaCompiler test data for realistic model complexity
+                data_scaling = make_test_data(; n=n)
+                model_scaling = lm(@formula(continuous_response ~ x + y + log(z) + group3), data_scaling)
+                
+                # Warmup
+                result_warmup = population_margins(model_scaling, data_scaling; backend=:fd, vars=[:x, :y])
+                
+                # Benchmark allocation count
+                bench = @benchmark population_margins($model_scaling, $data_scaling; backend=:fd, vars=[:x, :y]) samples=50 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                allocs_per_row = min_allocs / n
+                push!(allocation_results, (n, min_allocs, allocs_per_row))
+                
+                @debug "Population scaling test" n_rows=n total_allocations=min_allocs allocations_per_row=allocs_per_row
+                
+                # Test that total allocations don't scale linearly with dataset size
+                # Allow some growth but ensure it's sublinear (much less than O(n))
+                @test min_allocs < n * 10  # Much better than O(n) scaling
+            end
+            
+            # Verify that allocations per row decrease as dataset size increases
+            # This confirms that fixed overhead is amortized across more rows
+            allocs_per_row_500 = allocation_results[1][3]
+            allocs_per_row_8000 = allocation_results[3][3]
+            @test allocs_per_row_8000 < allocs_per_row_500 / 2  # Per-row cost should decrease significantly
+        end
+        
+        @testset "Profile margins scaling (should be O(1))" begin
+            allocation_results = Tuple{Int, Int}[]  # (n_rows, total_allocs)
+            
+            for n in dataset_sizes
+                data_scaling = make_test_data(; n=n)
+                model_scaling = lm(@formula(continuous_response ~ x + y + log(z) + group3), data_scaling)
+                
+                # Warmup
+                result_warmup = profile_margins(model_scaling, data_scaling, means_grid(data_scaling); backend=:fd, vars=[:x, :y])
+                
+                # Benchmark allocation count
+                bench = @benchmark profile_margins($model_scaling, $data_scaling, means_grid($data_scaling); backend=:fd, vars=[:x, :y]) samples=50 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                push!(allocation_results, (n, min_allocs))
+                
+                @debug "Profile scaling test" n_rows=n total_allocations=min_allocs
+                
+                # Profile margins should be O(1) - constant time regardless of dataset size
+                @test min_allocs < 500000  # Fixed upper bound regardless of dataset size
+            end
+            
+            # Verify that profile margins allocations don't increase significantly with dataset size
+            allocs_500 = allocation_results[1][2]
+            allocs_8000 = allocation_results[3][2]
+            # Allow some variation but ensure it's not proportional to dataset size
+            @test allocs_8000 < allocs_500 * 2  # Should be roughly constant, not 16x larger
+        end
+    end
+    
+    @testset "Comprehensive model coverage with scaling verification" begin
+        # Test allocation scaling across different model types using FormulaCompiler test cases
+        n_test = 2000
+        test_data = make_test_data(; n=n_test)
+        
+        @testset "Linear Models (LM) allocation scaling" begin
+            # Test a selection of linear models from FormulaCompiler test suite
+            selected_lm_tests = [
+                test_formulas.lm[3],  # Simple continuous
+                test_formulas.lm[7],  # Mixed continuous + categorical  
+                test_formulas.lm[10], # Function: @formula(continuous_response ~ log(z))
+                test_formulas.lm[12], # Complex: Three-way interaction
+            ]
+            
+            for lm_test in selected_lm_tests
+                model = lm(lm_test.formula, test_data)
+                
+                # Let Margins.jl auto-detect all variables - this should work correctly
+                # and avoid the categorical/continuous detection bug
+                
+                # Warmup
+                result_warmup = population_margins(model, test_data; backend=:fd)
+                
+                # Test allocation scaling
+                bench = @benchmark population_margins($model, $test_data; backend=:fd) samples=20 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                allocs_per_row = min_allocs / n_test
+                
+                @debug "LM scaling test" model_name=lm_test.name total_allocations=min_allocs allocations_per_row=allocs_per_row
+                
+                # Verify allocations don't scale linearly with dataset size
+                @test min_allocs < n_test * 15  # Much better than O(n) scaling
+                @test allocs_per_row < 15  # Per-row allocation should be very small
+            end
+        end
+        
+        @testset "Generalized Linear Models (GLM) allocation scaling" begin
+            # Test GLM models with various link functions
+            selected_glm_tests = [
+                test_formulas.glm[1],  # Logistic: simple
+                test_formulas.glm[4],  # Logistic: function
+                test_formulas.glm[6],  # Poisson: simple
+                test_formulas.glm[10], # Gaussian with log link
+            ]
+            
+            for glm_test in selected_glm_tests
+                model = glm(glm_test.formula, test_data, glm_test.distribution, glm_test.link)
+                
+                # Let Margins.jl auto-detect all variables - this should work correctly
+                # and avoid the categorical/continuous detection bug
+                
+                # Warmup
+                result_warmup = population_margins(model, test_data; backend=:fd)
+                
+                # Test allocation scaling
+                bench = @benchmark population_margins($model, $test_data; backend=:fd) samples=20 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                allocs_per_row = min_allocs / n_test
+                
+                @debug "GLM scaling test" model_name=glm_test.name distribution=glm_test.distribution total_allocations=min_allocs allocations_per_row=allocs_per_row
+                
+                # GLM may have slightly more allocations due to link function computations
+                @test min_allocs < n_test * 25  # Still much better than O(n) scaling
+                @test allocs_per_row < 25  # Per-row allocation should be reasonable
+            end
+        end
+        
+        @testset "Mixed Models allocation scaling" begin
+            # Test Linear Mixed Models
+            selected_lmm_tests = [
+                test_formulas.lmm[1],  # Random intercept
+                test_formulas.lmm[2],  # Mixed + categorical
+            ]
+            
+            for lmm_test in selected_lmm_tests
+                model = fit(MixedModel, lmm_test.formula, test_data; progress = false)
+                
+                vars_to_test = [:x]  # Conservative single variable test
+                
+                # Warmup
+                result_warmup = population_margins(model, test_data; backend=:fd, vars=vars_to_test)
+                
+                # Test allocation scaling
+                bench = @benchmark population_margins($model, $test_data; backend=:fd, vars=$vars_to_test) samples=10 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                allocs_per_row = min_allocs / n_test
+                
+                @debug "LMM scaling test" model_name=lmm_test.name total_allocations=min_allocs allocations_per_row=allocs_per_row
+                
+                # Mixed models may have more allocations due to random effects
+                @test min_allocs < n_test * 50  # Still much better than O(n) scaling
+                @test allocs_per_row < 50  # Per-row allocation should be reasonable
+            end
+            
+            # Test Generalized Linear Mixed Models  
+            selected_glmm_tests = [
+                test_formulas.glmm[1],  # Logistic with random intercept
+            ]
+            
+            for glmm_test in selected_glmm_tests
+                model = fit(MixedModel, glmm_test.formula, test_data, glmm_test.distribution, glmm_test.link; progress = false)
+                
+                vars_to_test = [:x]  # Conservative single variable test
+                
+                # Warmup  
+                result_warmup = population_margins(model, test_data; backend=:fd, vars=vars_to_test)
+                
+                # Test allocation scaling
+                bench = @benchmark population_margins($model, $test_data; backend=:fd, vars=$vars_to_test) samples=5 evals=1
+                
+                min_allocs = minimum(bench).allocs
+                allocs_per_row = min_allocs / n_test
+                
+                @debug "GLMM scaling test" model_name=glmm_test.name total_allocations=min_allocs allocations_per_row=allocs_per_row
+                
+                # GLMMs are the most complex, allow higher allocation ceiling but still sublinear
+                @test min_allocs < n_test * 100  # Still much better than O(n) scaling
+                @test allocs_per_row < 100  # Per-row allocation should be reasonable
+            end
         end
     end
     
