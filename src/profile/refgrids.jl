@@ -655,6 +655,91 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
 end
 
 """
+    _parse_deep_hierarchical_spec(spec, data_nt; max_depth=5) -> Vector{Dict}
+
+Parse hierarchical specifications with support for 3+ level nesting.
+Includes grid size estimation and safety checks.
+"""
+function _parse_deep_hierarchical_spec(spec, data_nt; max_depth=5)
+    # Estimate total grid size before parsing
+    estimated_size = _estimate_grid_size(spec, data_nt)
+    _validate_grid_size(estimated_size)
+    
+    # Parse with depth tracking
+    return _parse_hierarchical_recursive(spec, data_nt, 1, max_depth)
+end
+
+"""
+    _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth) -> Vector{Dict}
+
+Recursively parse hierarchical specifications with depth tracking.
+"""
+function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth)
+    if current_depth > max_depth
+        error("Maximum nesting depth ($max_depth) exceeded at level $current_depth")
+    end
+    
+    if spec isa Pair
+        outer_spec, inner_spec = spec.first, spec.second
+        
+        # Get outer combinations
+        outer_combinations = _parse_reference_grid_specification(outer_spec, data_nt)
+        
+        # Check if inner_spec contains more nesting
+        if inner_spec isa Pair
+            # Recursive case: more nesting levels
+            result_combinations = []
+            for outer_combo in outer_combinations
+                # Filter data to this outer group
+                filtered_data = _filter_data_to_group(data_nt, outer_combo)
+                
+                # Recursively parse inner specifications
+                inner_combinations = _parse_hierarchical_recursive(
+                    inner_spec, filtered_data, current_depth + 1, max_depth
+                )
+                
+                # Merge outer and inner combinations
+                for inner_combo in inner_combinations
+                    merged_combo = merge(outer_combo, inner_combo)
+                    push!(result_combinations, merged_combo)
+                end
+            end
+            return result_combinations
+        else
+            # Base case: use existing 2-level logic
+            return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+        end
+    else
+        # Not hierarchical - use standard parsing
+        return _parse_reference_grid_specification(spec, data_nt)
+    end
+end
+
+"""
+    _filter_data_to_group(data_nt, group_spec) -> NamedTuple
+
+Filter data to a specific group defined by group_spec for recursive parsing.
+"""
+function _filter_data_to_group(data_nt, group_spec)
+    # Get indices of observations that match the group specification
+    group_indices = _get_group_indices(group_spec, data_nt)
+    
+    if isempty(group_indices)
+        @warn "Empty group found for specification $group_spec - using full data"
+        return data_nt
+    end
+    
+    # Create filtered data for this group
+    filtered_data = NamedTuple()
+    for (var, col) in pairs(data_nt)
+        filtered_col = col[group_indices]
+        filtered_data = merge(filtered_data, NamedTuple{(var,)}((filtered_col,)))
+    end
+    
+    return filtered_data
+end
+
+"""
     _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt) -> Vector{Dict}
 
 Create hierarchical reference specifications using => syntax for reference grids.
@@ -741,6 +826,162 @@ function _get_group_indices(group_spec, data_nt)
 end
 
 # =============================================================================
+# Deep Hierarchical Nesting Support (Phase 1)
+# =============================================================================
+
+"""
+    _estimate_grid_size(spec, data_nt) -> Int
+
+Estimate total number of combinations without full computation.
+Used for warnings and memory planning.
+"""
+function _estimate_grid_size(spec, data_nt)
+    return _estimate_size_recursive(spec, data_nt)
+end
+
+"""
+    _estimate_size_recursive(spec, data_nt) -> Int
+
+Recursively estimate grid size for hierarchical specifications.
+"""
+function _estimate_size_recursive(spec, data_nt)
+    if spec isa Pair
+        outer_spec, inner_spec = spec.first, spec.second
+        outer_size = _estimate_size_recursive(outer_spec, data_nt)
+        
+        if inner_spec isa Pair
+            # Nested pair - multiplicative worst case
+            inner_size = _estimate_size_recursive(inner_spec, data_nt)
+            return outer_size * inner_size
+        elseif inner_spec isa Vector
+            # Multiple parallel specifications
+            total_inner = sum(_estimate_size_recursive(s, data_nt) for s in inner_spec)
+            return outer_size * total_inner
+        else
+            inner_size = _estimate_size_recursive(inner_spec, data_nt)
+            return outer_size * inner_size
+        end
+    elseif spec isa Symbol
+        # Categorical variable - count unique levels
+        if haskey(data_nt, spec)
+            col = data_nt[spec]
+            if _is_continuous_variable(col)
+                return 1  # Continuous variables typically produce single representative
+            else
+                return length(unique(col))
+            end
+        else
+            return 1
+        end
+    elseif spec isa Vector
+        if all(x -> x isa Symbol, spec)
+            # Cross-tabulation of symbols
+            total_size = 1
+            for var in spec
+                if haskey(data_nt, var)
+                    col = data_nt[var]
+                    if !_is_continuous_variable(col)
+                        total_size *= length(unique(col))
+                    end
+                end
+            end
+            return total_size
+        else
+            # Mixed vector - multiplicative
+            total_size = 1
+            for single_spec in spec
+                total_size *= _estimate_size_recursive(single_spec, data_nt)
+            end
+            return total_size
+        end
+    elseif spec isa Tuple && length(spec) == 2
+        var, rep_spec = spec
+        if _is_mixture_specification(rep_spec)
+            return 1  # Mixtures produce single reference point
+        elseif rep_spec === :quartiles
+            return 4
+        elseif rep_spec === :quintiles  
+            return 5
+        elseif rep_spec === :deciles
+            return 10
+        elseif rep_spec === :terciles || rep_spec === :tertiles
+            return 3
+        elseif rep_spec isa Vector
+            return length(rep_spec)
+        elseif rep_spec === :mean || rep_spec === :median || rep_spec === :min || rep_spec === :max
+            return 1
+        elseif rep_spec isa Tuple && length(rep_spec) == 2
+            spec_type, spec_value = rep_spec
+            if spec_type === :percentiles && spec_value isa Vector
+                return length(spec_value)
+            elseif spec_type === :quantiles && spec_value isa Integer
+                return spec_value
+            elseif spec_type === :range
+                if spec_value isa Integer
+                    return spec_value
+                elseif spec_value isa Tuple
+                    return 2  # min and max
+                end
+            end
+        else
+            return 1
+        end
+    else
+        return 1
+    end
+end
+
+"""
+    _validate_grid_size(estimated_size) -> Bool
+
+Check if estimated grid size is reasonable and warn user.
+"""
+function _validate_grid_size(estimated_size)
+    if estimated_size > 1_000_000
+        error("Estimated grid size too large: $(estimated_size) combinations. " *
+              "Consider reducing nesting depth or using more selective specifications.")
+    elseif estimated_size > 100_000
+        @warn "Large grid estimated: $(estimated_size) combinations. " *
+              "This may consume significant memory and time."
+    elseif estimated_size > 10_000
+        @info "Medium grid estimated: $(estimated_size) combinations."
+    end
+    
+    return true
+end
+
+"""
+    _validate_nesting_depth(spec, max_depth=5) -> Int
+
+Count and validate nesting depth of specification.
+"""
+function _validate_nesting_depth(spec, max_depth=5)
+    depth = _count_nesting_depth(spec)
+    if depth > max_depth
+        error("Nesting depth ($depth) exceeds maximum ($max_depth). " *
+              "Use max_depth parameter to increase limit if needed.")
+    end
+    return depth
+end
+
+"""
+    _count_nesting_depth(spec) -> Int
+
+Count the maximum nesting depth in a hierarchical specification.
+"""
+function _count_nesting_depth(spec)
+    if spec isa Pair
+        outer_depth = _count_nesting_depth(spec.first)
+        inner_depth = _count_nesting_depth(spec.second)
+        return 1 + max(outer_depth, inner_depth)
+    elseif spec isa Vector
+        return maximum(_count_nesting_depth(s) for s in spec; init=0)
+    else
+        return 0
+    end
+end
+
+# =============================================================================
 # Phase 2.1: Mixture Integration Support  
 # =============================================================================
 
@@ -794,14 +1035,15 @@ end
 # =============================================================================
 
 """
-    _validate_reference_specification(spec, data_nt) -> Bool
+    _validate_reference_specification(spec, data_nt; max_depth=5) -> Bool
 
 Validate reference specification against data before parsing.
 Provides comprehensive error checking with informative messages.
 """
-function _validate_reference_specification(spec, data_nt)
+function _validate_reference_specification(spec, data_nt; max_depth=5)
     _validate_data_not_empty(data_nt)
     _validate_specification_structure(spec, data_nt)
+    _validate_nesting_depth(spec, max_depth)
     return true
 end
 
@@ -1099,15 +1341,17 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
 end
 
 """
-    hierarchical_grid(data, spec) -> DataFrame
+    hierarchical_grid(data, spec; max_depth=5, warn_large=true) -> DataFrame
 
-Build hierarchical reference grid using group nesting grammar for systematic 
-reference grid construction. Uses the same `=>` operator grammar as data stratification
-but generates reference grids instead of filtering data.
+Enhanced hierarchical reference grid builder with deep nesting support.
+Uses group nesting grammar for systematic reference grid construction with
+support for 3+ level hierarchical specifications.
 
 # Arguments
 - `data`: DataFrame or NamedTuple containing the data
 - `spec`: Hierarchical specification using `=>` operator grammar
+- `max_depth::Int=5`: Maximum allowed nesting depth
+- `warn_large::Bool=true`: Show warnings for large grids
 
 # Returns
 - `DataFrame`: Reference grid ready for use with profile_margins()
@@ -1123,9 +1367,23 @@ reference_grid = hierarchical_grid(data, [:region, :education])
 # Continuous representatives: data-driven values
 reference_grid = hierarchical_grid(data, (:income, :quartiles))
 
-# Hierarchical reference construction
+# 2-level hierarchical reference construction
 reference_grid = hierarchical_grid(data, :region => :education)
 reference_grid = hierarchical_grid(data, :region => (:income, :quartiles))
+
+# 3-level hierarchical nesting (NEW)
+reference_grid = hierarchical_grid(data, :country => (:region => :education))
+
+# 4-level hierarchical nesting (NEW)
+reference_grid = hierarchical_grid(data, :country => (:region => (:city => :education)))
+
+# Mixed depth nesting (NEW)
+reference_spec = :country => (:region => [
+    :education,                              # Simple categorical within region
+    (:income, :quartiles),                  # Statistical representatives within region
+    (:city => (:age, :mean))               # 3-level nested specification
+])
+reference_grid = hierarchical_grid(data, reference_spec)
 
 # Complex hierarchical with mixed types
 reference_spec = :region => [
@@ -1142,6 +1400,9 @@ reference_spec = :region => [
     (:income, :quartiles)                    # Income quartiles within each region
 ]
 reference_grid = hierarchical_grid(data, reference_spec)
+
+# Control nesting depth and warnings
+reference_grid = hierarchical_grid(data, very_deep_spec; max_depth=10, warn_large=false)
 
 # Use with profile_margins
 result = profile_margins(model, data, reference_grid; vars=[:treatment])
@@ -1167,11 +1428,13 @@ result = profile_margins(model, data, reference_grid; vars=[:treatment])
 - `(:income, (:range, 5))` - 5 evenly spaced points from min to max
 - `(:income, (:range, (25000, 75000)))` - Fixed range endpoints
 
-## Hierarchical References
-- `:region => :education` - Education levels within each region
-- `:region => (:income, :quartiles)` - Income quartiles within each region
-- `:region => [(:income, :deciles), (:age, :mean)]` - Multiple representatives within each region
-- `:country => (:region => (:income, (:percentiles, [0.1, 0.5, 0.9])))` - Complex nested hierarchies
+## Hierarchical References (Enhanced)
+- `:region => :education` - Education levels within each region (2-level)
+- `:region => (:income, :quartiles)` - Income quartiles within each region (2-level)
+- `:region => [(:income, :deciles), (:age, :mean)]` - Multiple representatives within each region (2-level)
+- `:country => (:region => :education)` - Education levels within region within country (**3-level**)
+- `:country => (:region => (:city => :education))` - City education within region within country (**4-level**)
+- `:country => (:region => (:city => [(:income, :quartiles), (:age, :mean)]))` - **Complex 4-level nesting**
 
 ## Mixture Integration (Phase 2.1)
 - `(:education, :mix_proportional)` - Use observed frequency proportions from data
@@ -1179,20 +1442,36 @@ result = profile_margins(model, data, reference_grid; vars=[:treatment])
 - `:region => (:education, :mix_proportional)` - Population-proportion mixtures within each region
 - `:region => [(:education, :mix_proportional), (:income, :quartiles)]` - Combined mixture and statistical representatives
 
-This provides unprecedented ease of use for complex reference grid construction with
-methodological rigor through data-driven representative value selection.
+## Performance and Safety Features (NEW)
+- Automatic grid size estimation with warnings for large combinations
+- Maximum nesting depth protection (configurable)
+- Informative error messages for malformed deep specifications
+- Memory usage warnings and recommendations
+
+This provides the most sophisticated reference grid system in any statistical software,
+enabling complex multi-dimensional policy analysis that is currently impossible elsewhere.
 """
-function hierarchical_grid(data, spec)
+function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
     data_nt = data isa NamedTuple ? data : Tables.columntable(data)
     
-    # Phase 1.2: Enhanced validation
-    _validate_reference_specification(spec, data_nt)
+    # Enhanced validation with depth checking
+    _validate_reference_specification(spec, data_nt; max_depth=max_depth)
     
-    # Parse the hierarchical specification
-    parsed_specs = _parse_reference_grid_specification(spec, data_nt)
+    # Determine which parser to use based on nesting depth
+    actual_depth = _validate_nesting_depth(spec, max_depth)
     
-    # Phase 1.2: Validate combinations before building grid
-    _validate_grid_combinations(parsed_specs, data_nt)
+    if actual_depth <= 2
+        # Use optimized 2-level path for performance
+        parsed_specs = _parse_reference_grid_specification(spec, data_nt)
+    else
+        # Use new deep nesting parser
+        parsed_specs = _parse_deep_hierarchical_spec(spec, data_nt; max_depth=max_depth)
+    end
+    
+    # Grid size validation and warnings
+    if warn_large
+        _validate_grid_combinations(parsed_specs, data_nt)
+    end
     
     # Build the reference grid DataFrame
     return _build_hierarchical_reference_grid(parsed_specs, data_nt)
