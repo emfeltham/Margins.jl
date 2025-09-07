@@ -403,8 +403,8 @@ Process and validate the vars parameter with model awareness to exclude dependen
 """
 function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
     if vars === nothing
-        # Auto-detect ALL effect variables (both continuous and categorical)
-        effect_vars = _get_all_effect_variables(model, data_nt, weight_col)
+        # Auto-detect continuous variables (matches documentation: "Defaults to all continuous variables")
+        effect_vars = _get_continuous_variables(model, data_nt, weight_col)
         if isempty(effect_vars)
             throw(MarginsError("No explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
         end

@@ -43,8 +43,8 @@ module Margins
 # Dependencies
 using Tables, DataFrames, StatsModels, GLM
 using FormulaCompiler
-using FormulaCompiler: _get_baseline_level, CategoricalMixture, MixtureWithLevels, create_balanced_mixture, validate_mixture_against_data, mixture_to_scenario_value
-import FormulaCompiler: mix
+using FormulaCompiler: CategoricalMixture, MixtureWithLevels, create_balanced_mixture, validate_mixture_against_data, mixture_to_scenario_value
+import FormulaCompiler: mix, _get_baseline_level
 using LinearAlgebra: dot
 using Statistics: mean
 using CategoricalArrays

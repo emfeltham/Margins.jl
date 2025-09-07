@@ -58,8 +58,8 @@ function compute_profile_categorical_contrast(
     scale::Symbol; 
     backend::Symbol=:ad
 ) where L
-    # Get baseline level from model's contrast coding
-    baseline_level = _get_baseline_level(engine.model, var)
+    # Get baseline level (extended function handles Bool variables automatically)
+    baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
     current_level = profile[var]
     
     # If current level is already baseline, contrast is zero
@@ -120,7 +120,7 @@ function compute_multiple_profile_contrasts(
     gradients = Matrix{Float64}(undef, n_profiles, n_params)
     terms = Vector{String}(undef, n_profiles)  # Keep this allocation as it's String, not Float64
     
-    baseline_level = _get_baseline_level(engine.model, var)
+    baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
     
     # Compute contrasts for each profile
     for (i, profile) in enumerate(profiles)
@@ -226,7 +226,7 @@ function validate_contrast_specification(engine::MarginsEngine{L}, var::Symbol) 
     
     # Check model has contrast information
     try
-        _get_baseline_level(engine.model, var)
+        _get_baseline_level(engine.model, var, engine.data_nt)
     catch e
         rethrow(e)  # _get_baseline_level already provides good error message
     end

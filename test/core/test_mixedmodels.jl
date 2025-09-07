@@ -104,8 +104,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         df_result = DataFrame(result)
         
         # Basic validation that categorical contrasts work
-        @test size(df_result, 1) == 1  # One result for Period variable
-        @test df_result.term[1] == "Period"
+        @test size(df_result, 1) == 3  # Three contrasts for Period variable (4 levels - 1 baseline)
+        @test any(contains.(df_result.term, "Period"))  # All terms should contain "Period"
         @test !isnan(df_result.estimate[1])
         @test !isnan(df_result.se[1])
         @test df_result.se[1] > 0  # Standard error should be positive

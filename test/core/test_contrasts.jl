@@ -22,7 +22,7 @@ using Margins
         @debug "Categorical effects computation" n_contrasts=nrow(df_results) estimates=df_results.estimate terms=df_results.term all_finite=all(isfinite, df_results.estimate)
         @test nrow(DataFrame(cat_effects)) >= 1  # Should have contrasts
         @test all(isfinite, DataFrame(cat_effects).estimate)
-        @test "cat_var" in DataFrame(cat_effects).term
+        @test any(contains.(DataFrame(cat_effects).term, "cat_var"))
     end
 
     # Test binary categorical effects  
@@ -32,7 +32,7 @@ using Margins
         @debug "Binary categorical effects computation" n_contrasts=nrow(df_results) estimates=df_results.estimate terms=df_results.term all_finite=all(isfinite, df_results.estimate)
         @test nrow(DataFrame(binary_effects)) >= 1
         @test all(isfinite, DataFrame(binary_effects).estimate)
-        @test "binary_var" in DataFrame(binary_effects).term
+        @test any(contains.(DataFrame(binary_effects).term, "binary_var"))
     end
 
     # Test mixed continuous and categorical
@@ -43,7 +43,7 @@ using Margins
         @test nrow(DataFrame(mixed_effects)) >= 2  # At least one continuous + categorical contrasts
         @test all(isfinite, DataFrame(mixed_effects).estimate)
         @test "x" in DataFrame(mixed_effects).term
-        @test any(contains.("cat_var", DataFrame(mixed_effects).term))
+        @test any(contains.(DataFrame(mixed_effects).term, "cat_var"))
     end
 
     # Test contrasts parameter

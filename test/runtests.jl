@@ -46,3 +46,10 @@ end
     include("statistical_validation/statistical_validation.jl")
     include("statistical_validation/robust_se_validation.jl")
 end
+
+@testset "Validation Tests" begin
+    include("validation/test_contrast_invariance.jl")
+    include("validation/test_manual_counterfactual_validation.jl") 
+    include("validation/test_zero_allocation_comprehensive.jl")
+    include("validation/test_true_zero_allocation.jl")
+end

@@ -3,6 +3,24 @@
 using Tables  # Required for the architectural rework
 
 """
+    _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
+
+Extended version of FormulaCompiler._get_baseline_level with Boolean variable support.
+Boolean variables always use false as baseline (not represented in model terms).
+Other variables delegate to FormulaCompiler's implementation.
+"""
+function _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
+    col = getproperty(data_nt, var)
+    if eltype(col) <: Bool
+        # Boolean variables: baseline is always false
+        return false
+    else
+        # Categorical variables: delegate to FormulaCompiler's implementation
+        return _get_baseline_level(model, var)
+    end
+end
+
+"""
     _validate_variables(data_nt, vars)
 
 Validate that requested variables exist and are analyzable.
@@ -123,6 +141,131 @@ function _accumulate_weighted_ame_gradient!(
     end
     
     return gβ_sum
+end
+
+"""
+    _compute_weighted_ame_value(de, β, rows, var, weights, scale, backend)
+
+Compute weighted average marginal effect value for a single continuous variable.
+Extracted from the main computation loop to avoid code duplication and enable 
+immediate processing within the weighted loop.
+
+# Arguments
+- `de::FormulaCompiler.DerivativeEvaluator`: Derivative evaluator
+- `β::Vector{Float64}`: Model coefficients  
+- `rows::AbstractVector{Int}`: Row indices to process
+- `var::Symbol`: Variable name
+- `weights::Vector{Float64}`: Observation weights
+- `scale::Symbol`: `:response` or `:link` scale
+- `backend::Symbol`: `:fd` or `:ad` backend
+
+# Returns
+- `Float64`: Weighted average marginal effect value
+"""
+function _compute_weighted_ame_value(
+    de::FormulaCompiler.DerivativeEvaluator,
+    β::Vector{Float64}, 
+    rows::AbstractVector{Int},
+    var::Symbol,
+    weights::Vector{Float64},
+    scale::Symbol,
+    backend::Symbol,
+    link=GLM.IdentityLink()
+)
+    var_idx = findfirst(==(var), de.vars)
+    var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+    
+    # Create properly sized buffer for marginal effects (matching de.vars length)
+    g_buf = Vector{Float64}(undef, length(de.vars))
+    
+    weighted_acc = 0.0
+    total_weight = 0.0
+    
+    if scale === :response
+        for row in rows
+            w = weights[row]
+            if w > 0
+                FormulaCompiler.marginal_effects_mu!(g_buf, de, β, row; link=link, backend=backend)
+                weighted_acc += w * g_buf[var_idx]
+                total_weight += w
+            end
+        end
+    else
+        for row in rows
+            w = weights[row]
+            if w > 0
+                FormulaCompiler.marginal_effects_eta!(g_buf, de, β, row; backend=backend)
+                weighted_acc += w * g_buf[var_idx]
+                total_weight += w
+            end
+        end
+    end
+    
+    return total_weight > 0 ? weighted_acc / total_weight : 0.0
+end
+
+"""
+    _accumulate_me_value(g_buf, de, β, link, rows, scale, backend, var_idx, weights)
+
+Compute marginal effect value from gradient accumulation results.
+This function bridges the gap between gradient accumulation and value computation,
+supporting both weighted and unweighted cases.
+
+# Arguments
+- `g_buf::Vector{Float64}`: Working buffer for gradients
+- `de::FormulaCompiler.DerivativeEvaluator`: Derivative evaluator
+- `β::Vector{Float64}`: Model coefficients
+- `link::GLM.Link`: Link function for transformations
+- `rows::AbstractVector{Int}`: Row indices to process
+- `scale::Symbol`: `:response` or `:link` scale
+- `backend::Symbol`: `:fd` or `:ad` backend
+- `var_idx::Int`: Variable index in derivative evaluator
+- `weights::Union{Nothing, Vector{Float64}}`: Observation weights (nothing for unweighted)
+
+# Returns
+- `Float64`: Marginal effect value
+"""
+function _accumulate_me_value(
+    g_buf::Vector{Float64},
+    de::FormulaCompiler.DerivativeEvaluator,
+    β::Vector{Float64},
+    link,
+    rows::AbstractVector{Int},
+    scale::Symbol,
+    backend::Symbol,
+    var_idx::Int,
+    weights::Union{Nothing, Vector{Float64}}
+)
+    if isnothing(weights)
+        # Unweighted case: simple average across rows
+        me_acc = 0.0
+        for row in rows
+            if scale === :response
+                FormulaCompiler.marginal_effects_mu!(de.fd_yplus, de, β, row; link=link, backend=backend)
+            else
+                FormulaCompiler.marginal_effects_eta!(de.fd_yplus, de, β, row; backend=backend)
+            end
+            me_acc += de.fd_yplus[var_idx]
+        end
+        return me_acc / length(rows)
+    else
+        # Weighted case: weighted average
+        me_acc = 0.0
+        total_weight = 0.0
+        for row in rows
+            w = weights[row]
+            if w > 0
+                if scale === :response
+                    FormulaCompiler.marginal_effects_mu!(de.fd_yplus, de, β, row; link=link, backend=backend)
+                else
+                    FormulaCompiler.marginal_effects_eta!(de.fd_yplus, de, β, row; backend=backend)
+                end
+                me_acc += w * de.fd_yplus[var_idx]
+                total_weight += w
+            end
+        end
+        return total_weight > 0 ? me_acc / total_weight : 0.0
+    end
 end
 
 """
@@ -788,7 +931,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
         var_col = getproperty(engine.data_nt, var)
         if _detect_variable_type(engine.data_nt, var) == :categorical
             # Count non-baseline levels for this categorical variable
-            baseline_level = _get_baseline_level(engine.model, var)
+            baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
             unique_levels = unique(var_col)
             non_baseline_count = sum(level != baseline_level for level in unique_levels)
             total_rows += max(non_baseline_count, 1)  # At least 1 row even if all baseline
@@ -878,94 +1021,60 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 cont_idx += 1
             end
         else
-            # Fall back to old per-variable approach for weighted case
+            # Weighted case: process each variable immediately to avoid allocations
             for var in continuous_requested
-                # Handle weighted case - for now, fall back to existing weighted implementation
-                # TODO: Extend unified dispatcher to support weights
+                # Step 1: Accumulate weighted gradient for this variable
                 _accumulate_weighted_ame_gradient!(
                     engine.gβ_accumulator, local_de, local_β, rows, var, weights;
                     link=(scale === :response ? local_link : GLM.IdentityLink()), 
                     backend=backend
                 )
-                gβ_avg = engine.gβ_accumulator
                 
-                # Compute weighted AME value using existing helper
-                var_idx = findfirst(==(var), local_de.vars)
-                var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+                # Step 2: Compute weighted AME value immediately using helper
+                ame_val = _compute_weighted_ame_value(
+                    local_de, local_β, rows, var, weights, scale, backend, 
+                    (scale === :response ? local_link : GLM.IdentityLink())
+                )
                 
-                weighted_acc = 0.0
-                total_weight = 0.0
+                # Step 3: Apply elasticity transformations immediately
+                final_val = ame_val
+                gradient_transform_factor = 1.0  # Default: no transformation
                 
-                if scale === :response
-                    for row in rows
-                        w = weights[row]
-                        if w > 0
-                            marginal_effects_mu!(local_de.fd_yplus, local_de, local_β, row; link=local_link, backend=backend)
-                            weighted_acc += w * local_de.fd_yplus[var_idx]
-                            total_weight += w
-                        end
-                    end
-                else
-                    for row in rows
-                        w = weights[row]
-                        if w > 0
-                            marginal_effects_eta!(local_de.fd_yplus, local_de, local_β, row; backend=backend)
-                            weighted_acc += w * local_de.fd_yplus[var_idx]
-                            total_weight += w
-                        end
-                    end
-                end
-                
-                ame_val = total_weight > 0 ? weighted_acc / total_weight : 0.0
-            end
-            
-            # Apply elasticity transformations if requested
-            final_val = ame_val
-            gradient_transform_factor = 1.0  # Default: no transformation
-            
-            if measure !== :effect && engine.de !== nothing
-                # Compute average x and y for elasticity measures (vectorized)
-                xcol = getproperty(data_nt, var)
-                
-                # Step 1: Compute weighted average x
-                if isnothing(weights)
-                    x̄ = sum(float(xcol[row]) for row in rows) / length(rows)
-                else
+                if measure !== :effect && engine.de !== nothing
+                    # Compute average x and y for elasticity measures
+                    xcol = getproperty(data_nt, var)
+                    
+                    # Compute weighted average x
                     total_weight = sum(weights[row] for row in rows)
                     x̄ = sum(weights[row] * float(xcol[row]) for row in rows) / total_weight
+                    
+                    # Compute η/μ averages using helper
+                    ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale, weights)
+                    
+                    # Apply transformation based on measure type
+                    if measure === :elasticity
+                        gradient_transform_factor = x̄ / ȳ
+                        final_val = gradient_transform_factor * ame_val
+                    elseif measure === :semielasticity_dyex
+                        gradient_transform_factor = x̄
+                        final_val = gradient_transform_factor * ame_val
+                    elseif measure === :semielasticity_eydx
+                        gradient_transform_factor = 1 / ȳ
+                        final_val = gradient_transform_factor * ame_val
+                    end
                 end
                 
-                # Step 2: Compute η/μ averages using helper with concrete arguments
-                ȳ = _average_response_over_rows(local_compiled, local_row_buf, local_β, local_link, data_nt, rows, scale, weights)
+                # Step 4: Transform gradient and compute SE immediately (while in gβ_accumulator)
+                engine.gβ_accumulator .*= gradient_transform_factor  # Transform in-place
+                se = compute_se_only(engine.gβ_accumulator, engine.Σ)  # Use immediately
                 
-                # Apply transformation based on measure type
-                if measure === :elasticity
-                    gradient_transform_factor = x̄ / ȳ
-                    final_val = gradient_transform_factor * ame_val
-                elseif measure === :semielasticity_dyex
-                    gradient_transform_factor = x̄
-                    final_val = gradient_transform_factor * ame_val
-                elseif measure === :semielasticity_eydx
-                    gradient_transform_factor = 1 / ȳ
-                    final_val = gradient_transform_factor * ame_val
-                end
+                # Step 5: Store results immediately
+                results.term[cont_idx] = string(var)
+                results.estimate[cont_idx] = final_val
+                results.se[cont_idx] = se
+                G[cont_idx, :] = engine.gβ_accumulator  # Copy to output matrix
+                cont_idx += 1
             end
-            
-            # Transform the gradient and compute SE with transformed gradient
-            for j in 1:length(gβ_avg)
-                gβ_avg[j] = gradient_transform_factor * gβ_avg[j]
-            end
-            se = compute_se_only(gβ_avg, engine.Σ)
-            
-            # Direct assignment instead of push! to avoid reallocation
-            results.term[cont_idx] = string(var)
-            results.estimate[cont_idx] = final_val
-            results.se[cont_idx] = se
-            # Copy the transformed gradient to the output matrix
-            for j in 1:length(gβ_avg)
-                G[cont_idx, j] = gβ_avg[j]
-            end
-            cont_idx += 1
         end
     end
     
@@ -987,7 +1096,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             # Categorical variables: multiple baseline contrasts
             contrast_results = _compute_categorical_contrasts(engine, var, rows, scale, backend, :baseline)
             
-            baseline_level = _get_baseline_level(engine.model, var)
+            baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
             for (level1, level2, ame_val, gβ_avg) in contrast_results
                 se = compute_se_only(gβ_avg, engine.Σ)
                 
@@ -1474,7 +1583,7 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
             [(false, true)]
         else
             # For CategoricalArray variables: baseline contrasts for ALL non-baseline levels
-            baseline_level = _get_baseline_level(engine.model, var)
+            baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
             # Get all unique levels in the data
             all_levels = Set()
             for row in rows
@@ -1780,7 +1889,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 
                 # Build descriptive term name showing the specific contrast
                 current_level = profile_dict[var]
-                baseline_level = _get_baseline_level(engine.model, var)
+                baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
                 profile_parts = [string(k, "=", v) for (k, v) in pairs(profile_dict) if k != var]
                 profile_desc = join(profile_parts, ", ")
                 term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
@@ -1797,7 +1906,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     end
                 end
                 profile_nt = NamedTuple(profile_dict)
-                push!(results.term, var)
+                push!(results.term, term_name)
                 push!(results.estimate, final_effect)
                 push!(results.se, se)
                 push!(results.profile_desc, profile_nt)
