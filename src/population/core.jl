@@ -153,8 +153,8 @@ function population_margins(
         vars = nothing  # Not needed for predictions
     end
     
-    # Build zero-allocation engine with caching (including vcov function)
-    engine = get_or_build_engine(model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov)
+    # Build zero-allocation engine with PopulationUsage optimization (including vcov function)
+    engine = get_or_build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov)
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if !isnothing(scenarios) || !isnothing(groups)

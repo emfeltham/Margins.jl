@@ -160,8 +160,8 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         vars = nothing  # Not needed for predictions
     end
     
-    # Build zero-allocation engine with caching (including vcov function)
-    engine = get_or_build_engine(model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
+    # Build zero-allocation engine with ProfileUsage optimization (including vcov function)
+    engine = get_or_build_engine(ProfileUsage, model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach

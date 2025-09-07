@@ -1,6 +1,9 @@
 # Shared validation utilities for margins computation
 # Contains only genuinely common validation logic between population_margins() and profile_margins()
 
+# Cache for validated models to avoid repeated expensive vcov() calls
+const VALIDATED_MODELS_CACHE = Set{UInt64}()
+
 """
     validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
 
@@ -29,9 +32,19 @@ end
     validate_model_methods(model)
 
 Validate that model supports required methods for margins computation.
+Uses caching to avoid repeated expensive vcov() calls for large models.
 Eliminates the duplicated try/catch blocks between both margin functions.
 """
 function validate_model_methods(model)
+    # Create a lightweight cache key for the model
+    # Use hash of model type and coefficient vector (not the full model object)
+    model_key = hash((typeof(model), coef(model)))
+    
+    # Skip expensive validation if we've already validated this model
+    if model_key in VALIDATED_MODELS_CACHE
+        return nothing
+    end
+    
     try
         coef(model)
     catch e
@@ -43,6 +56,10 @@ function validate_model_methods(model)
     catch e
         throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
     end
+    
+    # Cache successful validation
+    push!(VALIDATED_MODELS_CACHE, model_key)
+    return nothing
 end
 
 """

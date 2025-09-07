@@ -388,13 +388,15 @@ function _compute_continuous_ame(engine::MarginsEngine{L}, var::Symbol, rows, sc
     ame_sum = 0.0
     
     # Accumulate marginal effects across rows (zero additional allocations)
+    # Use properly-sized view for FormulaCompiler (must match length(engine.de.vars))
+    g_buf_view = @view engine.g_buf[1:length(engine.de.vars)]
     for row in rows
         if scale === :response
-            FormulaCompiler.marginal_effects_mu!(engine.g_buf, engine.de, engine.β, row; link=engine.link, backend=backend)
+            FormulaCompiler.marginal_effects_mu!(g_buf_view, engine.de, engine.β, row; link=engine.link, backend=backend)
         else  # scale === :link
-            FormulaCompiler.marginal_effects_eta!(engine.g_buf, engine.de, engine.β, row; backend=backend)
+            FormulaCompiler.marginal_effects_eta!(g_buf_view, engine.de, engine.β, row; backend=backend)
         end
-        ame_sum += engine.g_buf[var_idx]  # Scalar accumulation, no allocations
+        ame_sum += g_buf_view[var_idx]  # Scalar accumulation, no allocations
     end
     
     # Simple average
@@ -468,17 +470,19 @@ macro batch_ame_computation(engine, vars, rows, scale, backend)
         end
         
         # Main computation loop - inlined to match 4-allocation pattern
+        # Use properly-sized view for FormulaCompiler (must match length($engine.de.vars))
+        local g_buf_view = @view $engine.g_buf[1:length($engine.de.vars)]
         for row in $rows
             # FormulaCompiler calls - same as manual pattern
             if $scale === :response
-                FormulaCompiler.marginal_effects_mu!($engine.g_buf, $engine.de, $engine.β, row; link=$engine.link, backend=$backend)
+                FormulaCompiler.marginal_effects_mu!(g_buf_view, $engine.de, $engine.β, row; link=$engine.link, backend=$backend)
             else
-                FormulaCompiler.marginal_effects_eta!($engine.g_buf, $engine.de, $engine.β, row; backend=$backend)
+                FormulaCompiler.marginal_effects_eta!(g_buf_view, $engine.de, $engine.β, row; backend=$backend)
             end
             
             # Accumulation - same as manual pattern
             for (result_idx, var_idx) in enumerate(var_indices)
-                ame_values[result_idx] += $engine.g_buf[var_idx]
+                ame_values[result_idx] += g_buf_view[var_idx]
             end
             
             # Gradient computation - same as manual pattern
@@ -1184,16 +1188,18 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
         for var in requested_vars
             if var ∈ continuous_vars
                 # Continuous variable: compute derivative using FormulaCompiler
+                # Use properly-sized view for FormulaCompiler (must match length(refgrid_de.vars))
+                g_buf_view = @view engine.g_buf[1:length(refgrid_de.vars)]
                 if scale === :response
-                    FormulaCompiler.marginal_effects_mu!(engine.g_buf, refgrid_de, engine.β, 1;
+                    FormulaCompiler.marginal_effects_mu!(g_buf_view, refgrid_de, engine.β, 1;
                                                         link=engine.link, backend=backend)
                 else
-                    FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, engine.β, 1;
+                    FormulaCompiler.marginal_effects_eta!(g_buf_view, refgrid_de, engine.β, 1;
                                                          backend=backend)
                 end
                 # Find the index of this variable in ALL continuous variables (to match refgrid_de.vars)
                 continuous_var_idx = findfirst(==(var), continuous_vars)
-                effect_val = engine.g_buf[continuous_var_idx]
+                effect_val = g_buf_view[continuous_var_idx]
                 
                 # Compute parameter gradient for SE using refgrid derivative evaluator
                 if scale === :response
@@ -1816,18 +1822,20 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
         for var in requested_vars
             if var ∈ continuous_vars
                 # Continuous variable: compute derivative using FormulaCompiler
+                # Use properly-sized view for FormulaCompiler (must match length(refgrid_de.vars))
+                g_buf_view = @view engine.g_buf[1:length(refgrid_de.vars)]
                 if scale === :response
-                    FormulaCompiler.marginal_effects_mu!(engine.g_buf, refgrid_de, local_β, profile_idx;
+                    FormulaCompiler.marginal_effects_mu!(g_buf_view, refgrid_de, local_β, profile_idx;
                                                         link=local_link, backend=backend)
                 else # scale === :link
-                    FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, local_β, profile_idx; 
+                    FormulaCompiler.marginal_effects_eta!(g_buf_view, refgrid_de, local_β, profile_idx; 
                                                          backend=backend)
                 end
                 
                 # Find the gradient component for this variable in ALL continuous variables
                 var_idx = findfirst(==(var), continuous_vars)
                 if var_idx !== nothing
-                    marginal_effect = engine.g_buf[var_idx]
+                    marginal_effect = g_buf_view[var_idx]
                     
                     # Apply measure transformation
                     if measure === :effect

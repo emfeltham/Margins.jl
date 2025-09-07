@@ -496,11 +496,17 @@ function _parse_reference_grid_specification(spec, data_nt)
         end
     end
     
-    # Continuous representative specification: (:income, :quartiles) or (:age, :mean)
+    # Tuple specifications: Check mixture first, then continuous
     if spec isa Tuple && length(spec) == 2
-        var, rep_spec = spec
+        var, spec_val = spec
         if var isa Symbol
-            return _parse_continuous_representative_spec(var, rep_spec, data_nt)
+            # Check if it's a mixture specification first
+            if _is_mixture_specification(spec_val)
+                return _parse_mixture_reference_spec(var, spec_val, data_nt)
+            else
+                # Otherwise treat as continuous representative specification
+                return _parse_continuous_representative_spec(var, spec_val, data_nt)
+            end
         end
     end
     
@@ -511,21 +517,25 @@ function _parse_reference_grid_specification(spec, data_nt)
         return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
     end
     
-    error("Invalid reference grid specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, representative_type), or outer => inner")
+    error("Invalid reference grid specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, representative_type), outer => inner, or (Symbol, mixture_spec)")
 end
 
 """
     _parse_categorical_reference_spec(vars, data_nt) -> Vector{Dict}
 
 Parse categorical reference specification for cross-tabulation.
-Returns all combinations of categorical levels.
+Returns all combinations of categorical levels or mixture specifications.
+
+Supports:
+- Regular categorical variables: all unique levels
+- Mixture specifications: mix_proportional, direct CategoricalMixture objects
 """
 function _parse_categorical_reference_spec(vars, data_nt)
     if isempty(vars)
         return [Dict()]
     end
     
-    # Generate all combinations of categorical levels
+    # Generate all combinations of categorical levels or mixtures
     specs = []
     
     for var in vars
@@ -538,7 +548,7 @@ function _parse_categorical_reference_spec(vars, data_nt)
             error("Variable $var is continuous but used in categorical specification. Use (:$var, :mean) or (:$var, :quartiles) instead.")
         end
         
-        # Get all unique levels
+        # Get all unique levels (no mixture support here - use hierarchical specs for mixtures)
         levels = unique(col)
         var_specs = [Dict(var => level) for level in levels]
         
@@ -584,15 +594,61 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
     elseif rep_spec === :quintiles
         quintile_values = [quantile(col, q) for q in [0.2, 0.4, 0.6, 0.8, 1.0]]
         representatives = [Dict(var => val) for val in quintile_values]
+    elseif rep_spec === :deciles
+        decile_values = [quantile(col, q) for q in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]]
+        representatives = [Dict(var => val) for val in decile_values]
+    elseif rep_spec === :terciles || rep_spec === :tertiles
+        tercile_values = [quantile(col, q) for q in [1/3, 2/3, 1.0]]
+        representatives = [Dict(var => val) for val in tercile_values]
     elseif rep_spec === :mean
         representatives = [Dict(var => mean(col))]
     elseif rep_spec === :median
         representatives = [Dict(var => median(col))]
+    elseif rep_spec === :min
+        representatives = [Dict(var => minimum(col))]
+    elseif rep_spec === :max
+        representatives = [Dict(var => maximum(col))]
+    elseif rep_spec isa Vector{<:Real} && length(rep_spec) > 0 && all(0 ≤ q ≤ 1 for q in rep_spec)
+        # Custom percentiles (values between 0 and 1)
+        percentile_values = [quantile(col, q) for q in rep_spec]
+        representatives = [Dict(var => val) for val in percentile_values]
     elseif rep_spec isa Vector{<:Real}
         # Fixed values specified
         representatives = [Dict(var => val) for val in rep_spec]
+    elseif rep_spec isa Tuple && length(rep_spec) == 2 && rep_spec[1] === :percentiles
+        # Custom percentiles specification: (:percentiles, [0.1, 0.5, 0.9])
+        percentiles = rep_spec[2]
+        if percentiles isa Vector{<:Real} && all(0 ≤ q ≤ 1 for q in percentiles)
+            percentile_values = [quantile(col, q) for q in percentiles]
+            representatives = [Dict(var => val) for val in percentile_values]
+        else
+            error("Percentiles must be a vector of values between 0 and 1: $percentiles")
+        end
+    elseif rep_spec isa Tuple && length(rep_spec) == 2 && rep_spec[1] === :quantiles
+        # N-quantiles specification: (:quantiles, 7) for septiles
+        n_quantiles = rep_spec[2]
+        if n_quantiles isa Integer && n_quantiles > 1
+            quantile_values = [quantile(col, i/n_quantiles) for i in 1:n_quantiles]
+            representatives = [Dict(var => val) for val in quantile_values]
+        else
+            error("Number of quantiles must be an integer > 1: $n_quantiles")
+        end
+    elseif rep_spec isa Tuple && length(rep_spec) == 2 && rep_spec[1] === :range
+        # Range specification: (:range, (min_val, max_val)) or (:range, n_points)
+        range_spec = rep_spec[2]
+        if range_spec isa Tuple && length(range_spec) == 2
+            min_val, max_val = range_spec
+            representatives = [Dict(var => min_val), Dict(var => max_val)]
+        elseif range_spec isa Integer && range_spec > 1
+            # Create n evenly spaced points from min to max
+            min_val, max_val = extrema(col)
+            range_values = range(min_val, max_val, length=range_spec)
+            representatives = [Dict(var => val) for val in range_values]
+        else
+            error("Range specification must be (min, max) tuple or integer number of points: $range_spec")
+        end
     else
-        error("Unsupported representative specification: $rep_spec. Supported: :quartiles, :quintiles, :mean, :median, or Vector of values")
+        error("Unsupported representative specification: $rep_spec. Supported: :quartiles, :quintiles, :deciles, :terciles, :mean, :median, :min, :max, Vector of values, (:percentiles, [0.1, 0.5, 0.9]), (:quantiles, n), (:range, (min, max)), or (:range, n_points)")
     end
     
     return representatives
@@ -684,13 +740,279 @@ function _get_group_indices(group_spec, data_nt)
     return indices
 end
 
+# =============================================================================
+# Phase 2.1: Mixture Integration Support  
+# =============================================================================
+
 """
-    _build_hierarchical_reference_grid(grid_combinations) -> DataFrame
+    _is_mixture_specification(spec) -> Bool
+
+Check if a specification is a mixture specification.
+Supports mix_proportional symbol and CategoricalMixture objects.
+"""
+function _is_mixture_specification(spec)
+    return spec === :mix_proportional || spec isa CategoricalMixture
+end
+
+"""
+    _parse_mixture_reference_spec(var, mixture_spec, data_nt) -> Vector{Dict}
+
+Parse mixture reference specification for a categorical variable.
+Creates a single reference point with the mixture specification.
+
+Supports:
+- :mix_proportional - Use observed frequency proportions from data
+- CategoricalMixture objects - Direct mixture specification
+"""
+function _parse_mixture_reference_spec(var, mixture_spec, data_nt)
+    if !haskey(data_nt, var)
+        error("Variable $var not found in data")
+    end
+    
+    col = data_nt[var]
+    
+    # Validate this is a categorical variable
+    if _is_continuous_variable(col)
+        error("Variable $var is continuous but used with mixture specification. Mixtures are only supported for categorical variables.")
+    end
+    
+    if mixture_spec === :mix_proportional
+        # Use existing frequency mixture computation
+        mixture = _create_frequency_mixture_exact(col)
+        return [Dict(var => mixture)]
+    elseif mixture_spec isa CategoricalMixture
+        # Validate mixture against data
+        validate_mixture_against_data(mixture_spec, col, var)
+        return [Dict(var => mixture_spec)]
+    else
+        error("Unsupported mixture specification: $mixture_spec. Supported: :mix_proportional or CategoricalMixture object")
+    end
+end
+
+# =============================================================================
+# Enhanced Validation and Error Handling (Phase 1.2)
+# =============================================================================
+
+"""
+    _validate_reference_specification(spec, data_nt) -> Bool
+
+Validate reference specification against data before parsing.
+Provides comprehensive error checking with informative messages.
+"""
+function _validate_reference_specification(spec, data_nt)
+    _validate_data_not_empty(data_nt)
+    _validate_specification_structure(spec, data_nt)
+    return true
+end
+
+"""
+    _validate_data_not_empty(data_nt) -> Bool
+
+Ensure data is not empty for meaningful representative value computation.
+"""
+function _validate_data_not_empty(data_nt)
+    if isempty(data_nt) || (length(data_nt) > 0 && length(first(data_nt)) == 0)
+        @warn "Empty dataset provided to hierarchical_grid(). Representative values may be undefined (NaN/missing)."
+    end
+    return true
+end
+
+"""
+    _validate_specification_structure(spec, data_nt) -> Bool
+
+Validate the structure and content of the specification.
+"""
+function _validate_specification_structure(spec, data_nt)
+    if spec isa Symbol
+        _validate_variable_exists(spec, data_nt)
+    elseif spec isa AbstractVector
+        for item in spec
+            _validate_specification_structure(item, data_nt)
+        end
+    elseif spec isa Tuple && length(spec) == 2
+        var, rep_spec = spec
+        if var isa Symbol
+            _validate_variable_exists(var, data_nt)
+            _validate_representative_specification(var, rep_spec, data_nt)
+        else
+            error("First element of tuple specification must be a Symbol (variable name), got: $(typeof(var))")
+        end
+    elseif spec isa Pair
+        _validate_specification_structure(spec.first, data_nt)
+        _validate_specification_structure(spec.second, data_nt)
+    else
+        error("Invalid specification type: $(typeof(spec)). Must be Symbol, Vector, Tuple, or Pair.")
+    end
+    return true
+end
+
+"""
+    _validate_variable_exists(var, data_nt) -> Bool
+
+Check that variable exists in data.
+"""
+function _validate_variable_exists(var, data_nt)
+    if !haskey(data_nt, var)
+        available_vars = collect(keys(data_nt))
+        error("Variable :$var not found in data. Available variables: $available_vars")
+    end
+    return true
+end
+
+"""
+    _validate_representative_specification(var, rep_spec, data_nt) -> Bool
+
+Validate representative value specification against variable type and data.
+"""
+function _validate_representative_specification(var, rep_spec, data_nt)
+    col = data_nt[var]
+    
+    # Check if variable is continuous for statistical specifications
+    continuous_specs = [:quartiles, :quintiles, :deciles, :terciles, :tertiles, 
+                       :mean, :median, :min, :max]
+    
+    if rep_spec in continuous_specs && !_is_continuous_variable(col)
+        error("Representative specification :$rep_spec requires continuous variable, but :$var is $(eltype(col)). Use categorical cross-tabulation syntax instead.")
+    end
+    
+    # Validate percentiles specifications
+    if rep_spec isa Vector{<:Real} && length(rep_spec) > 0 && all(0 ≤ q ≤ 1 for q in rep_spec)
+        # This is percentiles - validate they make sense
+        if any(q < 0 || q > 1 for q in rep_spec)
+            error("Percentile values must be between 0 and 1, got: $rep_spec")
+        end
+    end
+    
+    # Validate tuple specifications  
+    if rep_spec isa Tuple && length(rep_spec) == 2
+        spec_type, spec_value = rep_spec
+        
+        if spec_type === :percentiles
+            if !(spec_value isa Vector{<:Real}) || any(q < 0 || q > 1 for q in spec_value)
+                error("Percentiles specification requires vector of values in [0,1], got: $spec_value")
+            end
+        elseif spec_type === :quantiles
+            if !(spec_value isa Integer) || spec_value <= 1
+                error("Quantiles specification requires integer > 1, got: $spec_value")
+            end
+        elseif spec_type === :range
+            if spec_value isa Integer
+                if spec_value <= 1
+                    error("Range specification with integer requires value > 1, got: $spec_value")
+                end
+                # Valid integer specification
+            elseif spec_value isa Tuple && length(spec_value) == 2
+                min_val, max_val = spec_value
+                if !(min_val isa Real && max_val isa Real)
+                    error("Range specification with tuple requires (min, max) numeric values, got: $spec_value")
+                end
+                if min_val > max_val
+                    @warn "Range specification has min > max: ($min_val, $max_val). This will create a descending sequence."
+                end
+            else
+                error("Range specification must be integer (number of points) or (min, max) tuple, got: $spec_value")
+            end
+        else
+            error("Unknown tuple specification type: $spec_type. Supported: :percentiles, :quantiles, :range")
+        end
+    end
+    
+    return true
+end
+
+"""
+    _validate_grid_combinations(combinations, data_nt) -> Bool
+
+Validate that grid combinations are reasonable and warn about empty groups.
+Only validates categorical combinations - continuous representatives are expected not to match exactly.
+"""
+function _validate_grid_combinations(combinations, data_nt)
+    if isempty(combinations)
+        @warn "Empty combination list generated. Check specification validity."
+        return true
+    end
+    
+    # Only validate categorical combinations - continuous values aren't expected to match exactly
+    categorical_combinations = filter(combinations) do combo
+        # Check if this combination has only categorical variables (no continuous representative values)
+        has_only_categorical = true
+        for (var, val) in combo
+            if haskey(data_nt, var) && (_is_continuous_variable(data_nt[var]) || val isa Real)
+                has_only_categorical = false
+                break
+            end
+        end
+        has_only_categorical
+    end
+    
+    if !isempty(categorical_combinations)
+        empty_combinations = 0
+        
+        for combo in categorical_combinations
+            # Only check categorical parts of the combination
+            categorical_parts = Dict(var => val for (var, val) in combo if haskey(data_nt, var) && !_is_continuous_variable(data_nt[var]))
+            if !isempty(categorical_parts)
+                indices = _get_group_indices(categorical_parts, data_nt)
+                if isempty(indices)
+                    empty_combinations += 1
+                    if empty_combinations <= 3  # Only show first few to avoid spam
+                        @warn "Categorical combination $categorical_parts matches no observations in data"
+                    end
+                end
+            end
+        end
+        
+        if empty_combinations > 0
+            total_combinations = length(categorical_combinations)
+            percentage_empty = round(100 * empty_combinations / total_combinations, digits=1)
+            @warn "$(empty_combinations) out of $(total_combinations) categorical combinations ($(percentage_empty)%) match no data. Consider reviewing specification."
+        end
+    end
+    
+    # Warn about very large grids
+    if length(combinations) > 1000
+        @warn "Large reference grid generated ($(length(combinations)) combinations). This may impact performance or memory usage."
+    elseif length(combinations) > 100
+        @info "Medium reference grid generated ($(length(combinations)) combinations)."
+    end
+    
+    return true
+end
+
+"""
+    _get_typical_value_for_reference_grid(var, data_nt)
+
+Get typical value for a variable when it's not specified in a reference point.
+Uses same logic as means_grid() for consistency.
+"""
+function _get_typical_value_for_reference_grid(var, data_nt)
+    if !haskey(data_nt, var)
+        error("Variable $var not found in data when computing typical value")
+    end
+    
+    col = data_nt[var]
+    
+    if _is_continuous_variable(col)
+        return mean(col)  # Use mean for continuous variables
+    else
+        # For categorical, use most frequent level (mode)
+        level_counts = Dict()
+        for val in col
+            level_counts[val] = get(level_counts, val, 0) + 1
+        end
+        # Return the most frequent level
+        return first(sort(collect(level_counts), by=x->x[2], rev=true))[1]
+    end
+end
+
+"""
+    _build_hierarchical_reference_grid(grid_combinations, data_nt) -> DataFrame
 
 Build reference grid DataFrame from parsed specifications.
 Converts vector of Dict specifications to a proper DataFrame structure.
+Uses typical values instead of missing for unspecified variables.
 """
-function _build_hierarchical_reference_grid(grid_combinations)
+function _build_hierarchical_reference_grid(grid_combinations, data_nt)
     if isempty(grid_combinations)
         return DataFrame()
     end
@@ -698,36 +1020,78 @@ function _build_hierarchical_reference_grid(grid_combinations)
     # Convert to DataFrame format
     cols = Dict{Symbol, Vector}()
     
-    # Get all possible columns from all combinations
+    # Get all possible columns from all combinations AND all data variables
     all_keys = Set{Symbol}()
     for combo in grid_combinations
         union!(all_keys, keys(combo))
     end
+    # Ensure all data variables are included (for filling with typical values)
+    union!(all_keys, keys(data_nt))
     
     # Initialize columns
     for key in all_keys
         cols[key] = Any[]
     end
     
-    # Fill in values
+    # Fill in values - Phase 1.2: Use typical values instead of missing
     for combo in grid_combinations
         for key in all_keys
             if haskey(combo, key)
                 push!(cols[key], combo[key])
             else
-                # This should not happen with proper parsing, but handle gracefully
-                push!(cols[key], missing)
+                # For missing keys, fill with typical values from data
+                typical_value = _get_typical_value_for_reference_grid(key, data_nt)
+                push!(cols[key], typical_value)
             end
         end
     end
     
-    # Convert to proper types where possible
+    # Convert to proper types where possible - enhanced for Phase 1.2
+    # Handle missing values properly by using Union types
     for (key, values) in cols
-        if all(val -> !ismissing(val) && val isa Real && !(val isa Bool), values)
-            cols[key] = Float64[val for val in values]
-        elseif all(val -> !ismissing(val) && val isa Bool, values)
-            cols[key] = Bool[val for val in values]
-        # Leave other types as-is (Any[] for mixed types)
+        non_missing_values = filter(!ismissing, values)
+        has_missing = any(ismissing, values)
+        
+        if isempty(non_missing_values)
+            # All missing - keep as Any with Missing
+            cols[key] = Vector{Union{Missing, Any}}(values)
+        elseif all(val -> val isa Real && !(val isa Bool), non_missing_values)
+            # Numeric values (possibly with missing)
+            if has_missing
+                cols[key] = Vector{Union{Missing, Float64}}([ismissing(val) ? missing : convert(Float64, val) for val in values])
+            else
+                cols[key] = Float64[convert(Float64, val) for val in values]
+            end
+        elseif all(val -> val isa Bool, non_missing_values)
+            # Boolean values (possibly with missing)
+            if has_missing
+                cols[key] = Vector{Union{Missing, Bool}}([ismissing(val) ? missing : convert(Bool, val) for val in values])
+            else
+                cols[key] = Bool[convert(Bool, val) for val in values]
+            end
+        elseif all(val -> val isa AbstractString, non_missing_values)
+            # String values (possibly with missing)
+            if has_missing
+                cols[key] = Vector{Union{Missing, String}}([ismissing(val) ? missing : string(val) for val in values])
+            else
+                cols[key] = String[string(val) for val in values]
+            end
+        elseif all(val -> val isa CategoricalValue, non_missing_values)
+            # CategoricalValues (possibly with missing)
+            first_val = first(non_missing_values)
+            T = typeof(first_val)
+            if has_missing
+                cols[key] = Vector{Union{Missing, T}}(values)
+            else
+                cols[key] = T[val for val in values]
+            end
+        else
+            # Mixed types - keep as Any
+            if has_missing
+                cols[key] = Vector{Union{Missing, Any}}(values)
+            else
+                cols[key] = Vector{Any}(values)
+            end
         end
     end
     
@@ -771,6 +1135,14 @@ reference_spec = :region => [
 ]
 reference_grid = hierarchical_grid(data, reference_spec)
 
+# Phase 2.1: Mixture integration examples
+reference_spec = :region => [
+    (:education, :mix_proportional),         # Population-proportion education mixtures within each region
+    (:employment, mix("full_time" => 0.6, "part_time" => 0.4)),  # Custom employment mixture within each region
+    (:income, :quartiles)                    # Income quartiles within each region
+]
+reference_grid = hierarchical_grid(data, reference_spec)
+
 # Use with profile_margins
 result = profile_margins(model, data, reference_grid; vars=[:treatment])
 ```
@@ -781,15 +1153,31 @@ result = profile_margins(model, data, reference_grid; vars=[:treatment])
 - `:education` - All observed levels of categorical variable
 - `[:region, :education]` - Cross-tabulation of categorical variables
 - `(:income, :quartiles)` - Income quartiles (Q1, Q2, Q3, Q4)
-- `(:income, :quintiles)` - Income quintiles (P1, P2, P3, P4, P5) 
+- `(:income, :quintiles)` - Income quintiles (P1, P2, P3, P4, P5)
+- `(:income, :deciles)` - Income deciles (D1, D2, ..., D10)
+- `(:income, :terciles)` - Income terciles/tertiles (T1, T2, T3)
 - `(:age, :mean)` - Overall mean age
 - `(:age, :median)` - Overall median age
+- `(:age, :min)` - Minimum age
+- `(:age, :max)` - Maximum age
 - `(:age, [30, 50, 70])` - Fixed representative ages
+- `(:income, [0.1, 0.5, 0.9])` - Custom percentiles (10th, 50th, 90th)
+- `(:income, (:percentiles, [0.25, 0.75]))` - Explicit percentiles specification
+- `(:income, (:quantiles, 7))` - Custom n-quantiles (septiles)
+- `(:income, (:range, 5))` - 5 evenly spaced points from min to max
+- `(:income, (:range, (25000, 75000)))` - Fixed range endpoints
 
 ## Hierarchical References
 - `:region => :education` - Education levels within each region
 - `:region => (:income, :quartiles)` - Income quartiles within each region
-- `:region => [(:income, :quartiles), (:age, :mean)]` - Multiple representatives within each region
+- `:region => [(:income, :deciles), (:age, :mean)]` - Multiple representatives within each region
+- `:country => (:region => (:income, (:percentiles, [0.1, 0.5, 0.9])))` - Complex nested hierarchies
+
+## Mixture Integration (Phase 2.1)
+- `(:education, :mix_proportional)` - Use observed frequency proportions from data
+- `(:treatment, mix("control" => 0.4, "treatment" => 0.6))` - Custom mixture specification
+- `:region => (:education, :mix_proportional)` - Population-proportion mixtures within each region
+- `:region => [(:education, :mix_proportional), (:income, :quartiles)]` - Combined mixture and statistical representatives
 
 This provides unprecedented ease of use for complex reference grid construction with
 methodological rigor through data-driven representative value selection.
@@ -797,11 +1185,17 @@ methodological rigor through data-driven representative value selection.
 function hierarchical_grid(data, spec)
     data_nt = data isa NamedTuple ? data : Tables.columntable(data)
     
+    # Phase 1.2: Enhanced validation
+    _validate_reference_specification(spec, data_nt)
+    
     # Parse the hierarchical specification
     parsed_specs = _parse_reference_grid_specification(spec, data_nt)
     
+    # Phase 1.2: Validate combinations before building grid
+    _validate_grid_combinations(parsed_specs, data_nt)
+    
     # Build the reference grid DataFrame
-    return _build_hierarchical_reference_grid(parsed_specs)
+    return _build_hierarchical_reference_grid(parsed_specs, data_nt)
 end
 
 # =============================================================================

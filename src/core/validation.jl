@@ -208,6 +208,14 @@ validate_vcov_parameter(CovarianceMatrices.HC1, model)
 ```
 """
 function validate_vcov_parameter(vcov, model)
+    # Create cache key for this specific vcov + model combination
+    vcov_key = hash((vcov, typeof(model), coef(model)))
+    
+    # Skip expensive validation if we've already validated this combination
+    if vcov_key in Margins.VALIDATED_MODELS_CACHE
+        return nothing
+    end
+    
     # Test that vcov works with the model
     try
         if isa(vcov, Function)
@@ -226,6 +234,10 @@ function validate_vcov_parameter(vcov, model)
     catch e
         throw(ArgumentError("vcov failed when applied to provided model: $e"))
     end
+    
+    # Cache successful validation
+    push!(Margins.VALIDATED_MODELS_CACHE, vcov_key)
+    return nothing
 end
 
 # End of validation.jl
