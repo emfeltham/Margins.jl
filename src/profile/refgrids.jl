@@ -425,8 +425,387 @@ function _create_frequency_mixture_sampled(col)
     return CategoricalMixture(levels, weights)
 end
 
+# =============================================================================  
+# Hierarchical Reference Grid Grammar Support
 # =============================================================================
-# Reference Grid Builder Functions (NEW - AsBalanced Support)
+
+"""
+    _parse_reference_grid_specification(spec, data_nt) -> Vector{Dict}
+
+Adapt group parsing logic for reference grid construction context.
+This function processes hierarchical specifications using the `=>` operator grammar
+to generate systematic reference grids instead of data filtering.
+
+# Arguments
+- `spec`: Hierarchical specification (Symbol, Vector, Tuple, or Pair with `=>`)
+- `data_nt`: NamedTuple containing the data for computing representative values
+
+# Returns
+- `Vector{Dict}`: Each Dict represents a reference grid row specification
+
+# Examples
+```julia
+# Simple categorical: all observed levels
+spec = :education
+result = _parse_reference_grid_specification(spec, data_nt)
+
+# Cross-tabulation: all combinations  
+spec = [:region, :education]
+result = _parse_reference_grid_specification(spec, data_nt)
+
+# Continuous representatives: data-driven values
+spec = (:income, :quartiles)
+result = _parse_reference_grid_specification(spec, data_nt)
+
+# Hierarchical specifications
+spec = :region => :education
+result = _parse_reference_grid_specification(spec, data_nt)
+```
+"""
+function _parse_reference_grid_specification(spec, data_nt)
+    # Simple categorical specification: :education
+    if spec isa Symbol
+        return _parse_categorical_reference_spec([spec], data_nt)
+    end
+    
+    # Vector specification: may be all symbols or mixed specs  
+    if spec isa AbstractVector
+        if all(x -> x isa Symbol, spec)
+            # All symbols - simple categorical cross-tabulation
+            return _parse_categorical_reference_spec(spec, data_nt)
+        else
+            # Mixed vector - handle each spec and create cross-product
+            all_specs = []
+            for single_spec in spec
+                spec_results = _parse_reference_grid_specification(single_spec, data_nt)
+                if isempty(all_specs)
+                    all_specs = spec_results
+                else
+                    # Cross-product with existing specifications
+                    new_specs = []
+                    for existing_spec in all_specs
+                        for new_spec in spec_results
+                            combined_spec = merge(existing_spec, new_spec)
+                            push!(new_specs, combined_spec)
+                        end
+                    end
+                    all_specs = new_specs
+                end
+            end
+            return all_specs
+        end
+    end
+    
+    # Continuous representative specification: (:income, :quartiles) or (:age, :mean)
+    if spec isa Tuple && length(spec) == 2
+        var, rep_spec = spec
+        if var isa Symbol
+            return _parse_continuous_representative_spec(var, rep_spec, data_nt)
+        end
+    end
+    
+    # Hierarchical specification: :region => :education  
+    if spec isa Pair
+        outer_spec = spec.first
+        inner_spec = spec.second
+        return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+    end
+    
+    error("Invalid reference grid specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, representative_type), or outer => inner")
+end
+
+"""
+    _parse_categorical_reference_spec(vars, data_nt) -> Vector{Dict}
+
+Parse categorical reference specification for cross-tabulation.
+Returns all combinations of categorical levels.
+"""
+function _parse_categorical_reference_spec(vars, data_nt)
+    if isempty(vars)
+        return [Dict()]
+    end
+    
+    # Generate all combinations of categorical levels
+    specs = []
+    
+    for var in vars
+        if !haskey(data_nt, var)
+            error("Variable $var not found in data")
+        end
+        
+        col = data_nt[var]
+        if _is_continuous_variable(col)
+            error("Variable $var is continuous but used in categorical specification. Use (:$var, :mean) or (:$var, :quartiles) instead.")
+        end
+        
+        # Get all unique levels
+        levels = unique(col)
+        var_specs = [Dict(var => level) for level in levels]
+        
+        if isempty(specs)
+            specs = var_specs
+        else
+            # Cross-product with existing specs
+            new_specs = []
+            for existing_spec in specs
+                for var_spec in var_specs
+                    combined_spec = merge(existing_spec, var_spec)
+                    push!(new_specs, combined_spec)
+                end
+            end
+            specs = new_specs
+        end
+    end
+    
+    return isempty(specs) ? [Dict()] : specs
+end
+
+"""
+    _parse_continuous_representative_spec(var, rep_spec, data_nt) -> Vector{Dict}
+
+Parse continuous variable representative specification.
+Computes representative values (quartiles, mean, median, etc.) from data.
+"""
+function _parse_continuous_representative_spec(var, rep_spec, data_nt)
+    if !haskey(data_nt, var)
+        error("Variable $var not found in data")
+    end
+    
+    col = data_nt[var]
+    if !_is_continuous_variable(col)
+        error("Variable $var is not continuous but used with representative specification $rep_spec")
+    end
+    
+    representatives = []
+    
+    if rep_spec === :quartiles
+        quartile_values = [quantile(col, q) for q in [0.25, 0.50, 0.75, 1.0]]
+        representatives = [Dict(var => val) for val in quartile_values]
+    elseif rep_spec === :quintiles
+        quintile_values = [quantile(col, q) for q in [0.2, 0.4, 0.6, 0.8, 1.0]]
+        representatives = [Dict(var => val) for val in quintile_values]
+    elseif rep_spec === :mean
+        representatives = [Dict(var => mean(col))]
+    elseif rep_spec === :median
+        representatives = [Dict(var => median(col))]
+    elseif rep_spec isa Vector{<:Real}
+        # Fixed values specified
+        representatives = [Dict(var => val) for val in rep_spec]
+    else
+        error("Unsupported representative specification: $rep_spec. Supported: :quartiles, :quintiles, :mean, :median, or Vector of values")
+    end
+    
+    return representatives
+end
+
+"""
+    _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt) -> Vector{Dict}
+
+Create hierarchical reference specifications using => syntax for reference grids.
+Unlike group filtering, this computes representative values within each outer group.
+"""
+function _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+    # Parse outer specification
+    outer_specs = _parse_reference_grid_specification(outer_spec, data_nt)
+    
+    # Handle inner specification - can be single spec or Vector of specs
+    if inner_spec isa AbstractVector
+        # Multiple inner specifications - create parallel representatives within each outer
+        hierarchical_specs = []
+        for outer_spec_dict in outer_specs
+            for inner_single_spec in inner_spec
+                inner_specs = _compute_representative_values_within_group(inner_single_spec, outer_spec_dict, data_nt)
+                for inner_spec_dict in inner_specs
+                    # Merge outer and inner specifications
+                    combined_spec = merge(outer_spec_dict, inner_spec_dict)
+                    push!(hierarchical_specs, combined_spec)
+                end
+            end
+        end
+        return hierarchical_specs
+    else
+        # Single inner specification
+        hierarchical_specs = []
+        for outer_spec_dict in outer_specs
+            inner_specs = _compute_representative_values_within_group(inner_spec, outer_spec_dict, data_nt)
+            for inner_spec_dict in inner_specs
+                # Merge outer and inner specifications
+                combined_spec = merge(outer_spec_dict, inner_spec_dict)
+                push!(hierarchical_specs, combined_spec)
+            end
+        end
+        return hierarchical_specs
+    end
+end
+
+"""
+    _compute_representative_values_within_group(spec, group_spec, data_nt) -> Vector{Dict}
+
+Compute representative values within a specific group defined by group_spec.
+This enables hierarchical reference grid construction where inner representatives
+are computed within each outer group.
+"""
+function _compute_representative_values_within_group(spec, group_spec, data_nt)
+    # Filter data to the specified group
+    group_indices = _get_group_indices(group_spec, data_nt)
+    
+    if isempty(group_indices)
+        @warn "Empty group found for specification $group_spec - skipping"
+        return []
+    end
+    
+    # Create filtered data for this group
+    filtered_data = NamedTuple()
+    for (var, col) in pairs(data_nt)
+        filtered_col = col[group_indices]
+        filtered_data = merge(filtered_data, NamedTuple{(var,)}((filtered_col,)))
+    end
+    
+    # Parse the inner specification using the filtered group data
+    return _parse_reference_grid_specification(spec, filtered_data)
+end
+
+"""
+    _get_group_indices(group_spec, data_nt) -> Vector{Int}
+
+Get indices of observations that match the group specification.
+"""
+function _get_group_indices(group_spec, data_nt)
+    n_obs = length(first(data_nt))
+    indices = collect(1:n_obs)
+    
+    for (var, val) in group_spec
+        if haskey(data_nt, var)
+            var_indices = findall(==(val), data_nt[var])
+            indices = intersect(indices, var_indices)
+        end
+    end
+    
+    return indices
+end
+
+"""
+    _build_hierarchical_reference_grid(grid_combinations) -> DataFrame
+
+Build reference grid DataFrame from parsed specifications.
+Converts vector of Dict specifications to a proper DataFrame structure.
+"""
+function _build_hierarchical_reference_grid(grid_combinations)
+    if isempty(grid_combinations)
+        return DataFrame()
+    end
+    
+    # Convert to DataFrame format
+    cols = Dict{Symbol, Vector}()
+    
+    # Get all possible columns from all combinations
+    all_keys = Set{Symbol}()
+    for combo in grid_combinations
+        union!(all_keys, keys(combo))
+    end
+    
+    # Initialize columns
+    for key in all_keys
+        cols[key] = Any[]
+    end
+    
+    # Fill in values
+    for combo in grid_combinations
+        for key in all_keys
+            if haskey(combo, key)
+                push!(cols[key], combo[key])
+            else
+                # This should not happen with proper parsing, but handle gracefully
+                push!(cols[key], missing)
+            end
+        end
+    end
+    
+    # Convert to proper types where possible
+    for (key, values) in cols
+        if all(val -> !ismissing(val) && val isa Real && !(val isa Bool), values)
+            cols[key] = Float64[val for val in values]
+        elseif all(val -> !ismissing(val) && val isa Bool, values)
+            cols[key] = Bool[val for val in values]
+        # Leave other types as-is (Any[] for mixed types)
+        end
+    end
+    
+    return DataFrame(cols)
+end
+
+"""
+    hierarchical_grid(data, spec) -> DataFrame
+
+Build hierarchical reference grid using group nesting grammar for systematic 
+reference grid construction. Uses the same `=>` operator grammar as data stratification
+but generates reference grids instead of filtering data.
+
+# Arguments
+- `data`: DataFrame or NamedTuple containing the data
+- `spec`: Hierarchical specification using `=>` operator grammar
+
+# Returns
+- `DataFrame`: Reference grid ready for use with profile_margins()
+
+# Examples
+```julia
+# Simple categorical: all observed levels
+reference_grid = hierarchical_grid(data, :education)
+
+# Cross-tabulation: all combinations
+reference_grid = hierarchical_grid(data, [:region, :education])
+
+# Continuous representatives: data-driven values
+reference_grid = hierarchical_grid(data, (:income, :quartiles))
+
+# Hierarchical reference construction
+reference_grid = hierarchical_grid(data, :region => :education)
+reference_grid = hierarchical_grid(data, :region => (:income, :quartiles))
+
+# Complex hierarchical with mixed types
+reference_spec = :region => [
+    :education,                    # All education levels within each region
+    (:income, :quartiles),        # Income quartiles within each region  
+    (:age, :mean)                 # Mean age within each region
+]
+reference_grid = hierarchical_grid(data, reference_spec)
+
+# Use with profile_margins
+result = profile_margins(model, data, reference_grid; vars=[:treatment])
+```
+
+# Grammar Support
+
+## Basic References
+- `:education` - All observed levels of categorical variable
+- `[:region, :education]` - Cross-tabulation of categorical variables
+- `(:income, :quartiles)` - Income quartiles (Q1, Q2, Q3, Q4)
+- `(:income, :quintiles)` - Income quintiles (P1, P2, P3, P4, P5) 
+- `(:age, :mean)` - Overall mean age
+- `(:age, :median)` - Overall median age
+- `(:age, [30, 50, 70])` - Fixed representative ages
+
+## Hierarchical References
+- `:region => :education` - Education levels within each region
+- `:region => (:income, :quartiles)` - Income quartiles within each region
+- `:region => [(:income, :quartiles), (:age, :mean)]` - Multiple representatives within each region
+
+This provides unprecedented ease of use for complex reference grid construction with
+methodological rigor through data-driven representative value selection.
+"""
+function hierarchical_grid(data, spec)
+    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    
+    # Parse the hierarchical specification
+    parsed_specs = _parse_reference_grid_specification(spec, data_nt)
+    
+    # Build the reference grid DataFrame
+    return _build_hierarchical_reference_grid(parsed_specs)
+end
+
+# =============================================================================
+# Reference Grid Builder Functions (NEW - AsBalanced Support)  
 # =============================================================================
 
 """

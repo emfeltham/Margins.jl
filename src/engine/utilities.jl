@@ -922,7 +922,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     continuous_vars = FormulaCompiler.continuous_variables(engine.compiled, data_nt)
     
     # Determine which variables we're processing (continuous vs categorical)
-    continuous_requested = engine.de === nothing ? Symbol[] : engine.de.vars
+    continuous_requested = [v for v in engine.vars if v ∈ continuous_vars]
     categorical_requested = [v for v in engine.vars if v ∉ continuous_vars]
     
     # Count total number of result rows needed (categorical variables may have multiple contrasts)
@@ -1173,10 +1173,11 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
         refgrid_compiled = FormulaCompiler.compile_formula(engine.model, refgrid_data)
         
         # Build derivative evaluator only if we have continuous variables
+        # Must use ALL continuous variables to match engine.g_buf size
         refgrid_de = nothing
         if !isempty(continuous_requested) && engine.de !== nothing
             refgrid_de = FormulaCompiler.build_derivative_evaluator(refgrid_compiled, refgrid_data; 
-                                                                   vars=continuous_requested)
+                                                                   vars=continuous_vars)  # ALL continuous vars
         end
         
         # Process all requested variables (both continuous and categorical)
@@ -1190,8 +1191,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
                     FormulaCompiler.marginal_effects_eta!(engine.g_buf, refgrid_de, engine.β, 1;
                                                          backend=backend)
                 end
-                # Find the index of this variable in the continuous variables
-                continuous_var_idx = findfirst(==(var), continuous_requested)
+                # Find the index of this variable in ALL continuous variables (to match refgrid_de.vars)
+                continuous_var_idx = findfirst(==(var), continuous_vars)
                 effect_val = engine.g_buf[continuous_var_idx]
                 
                 # Compute parameter gradient for SE using refgrid derivative evaluator
@@ -1797,10 +1798,11 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     refgrid_compiled = FormulaCompiler.compile_formula(engine.model, refgrid_data)
     
     # Build derivative evaluator once if we have continuous variables
+    # Must use ALL continuous variables to match engine.g_buf size
     refgrid_de = nothing
     if !isempty(continuous_requested) && engine.de !== nothing
         refgrid_de = FormulaCompiler.build_derivative_evaluator(refgrid_compiled, refgrid_data; 
-                                                               vars=continuous_requested)
+                                                               vars=continuous_vars)  # ALL continuous vars
     end
     
     row_idx = 1
@@ -1822,8 +1824,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                                                          backend=backend)
                 end
                 
-                # Find the gradient component for this variable
-                var_idx = findfirst(==(var), continuous_requested)
+                # Find the gradient component for this variable in ALL continuous variables
+                var_idx = findfirst(==(var), continuous_vars)
                 if var_idx !== nothing
                     marginal_effect = engine.g_buf[var_idx]
                     

@@ -95,18 +95,21 @@ function build_engine(model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov)
     # Compile formula with FormulaCompiler
     compiled = FormulaCompiler.compile_formula(model, data_nt)
     continuous_vars = FormulaCompiler.continuous_variables(compiled, data_nt)
-    vars_for_de = filter(v -> v in continuous_vars, vars)
     
-    # Build derivative evaluator only if needed (for continuous variables)
-    de = isempty(vars_for_de) ? nothing : 
-         FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars=vars_for_de)
+    # Build derivative evaluator for ALL continuous variables (FormulaCompiler requirement)
+    # We'll use indexing to extract only the requested variables later
+    de = isempty(continuous_vars) ? nothing : 
+         FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars=continuous_vars)
     
     # Pre-allocate buffers for zero runtime allocation
-    n_vars = length(vars_for_de)
+    # Buffer must match ALL continuous variables, not just requested ones
+    n_continuous = length(continuous_vars)
     n_coef = length(compiled)
     n_obs = length(first(data_nt))
     n_cols = length(compiled)  # Number of columns in design matrix
-    g_buf = Vector{Float64}(undef, max(n_vars, 1))  # At least size 1 to avoid bounds errors
+    # g_buf MUST be sized exactly for FormulaCompiler derivative evaluator requirements
+    # FormulaCompiler.marginal_effects_*! requires buffer of length(evaluator.vars)
+    g_buf = Vector{Float64}(undef, max(n_continuous, 1))  # At least size 1 to avoid bounds errors
     gβ_accumulator = Vector{Float64}(undef, n_coef)
     η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
     row_buf = Vector{Float64}(undef, n_cols)       # Buffer for design matrix rows

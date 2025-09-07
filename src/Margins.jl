@@ -62,7 +62,7 @@ export population_margins, profile_margins, MarginsResult
 export CategoricalMixture, mix
 
 # Reference grid builders (NEW - AsBalanced support)
-export means_grid, balanced_grid, cartesian_grid, quantile_grid
+export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid
 
 # Include all submodules in dependency order
 include("types.jl")
