@@ -12,7 +12,7 @@ using StatsModels
 # For robust standard errors (optional dependency)
 # using CovarianceMatrices
 
-Random.seed!(123)
+Random.seed!(06515)
 
 println("=== Advanced Econometric Analysis ===")
 
