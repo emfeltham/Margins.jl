@@ -33,7 +33,7 @@ using FormulaCompiler
             df = DataFrame(x1 = randn(n), x2 = randn(n), y = randn(n))
             model = lm(@formula(y ~ x1 + x2), df)
             data_nt = Tables.columntable(df)
-            engine = Margins.get_or_build_engine(model, data_nt, [:x1, :x2], GLM.vcov)
+            engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x1, :x2], GLM.vcov)
             
             # Test the SPECIFIC function we fixed
             result = @benchmark Margins._compute_all_continuous_ame_batch($engine, [:x1, :x2], 1:$n, :response, :fd) samples=10 evals=1
@@ -70,7 +70,7 @@ using FormulaCompiler
         df = DataFrame(x1 = randn(n), y = randn(n))
         model = lm(@formula(y ~ x1), df)
         data_nt = Tables.columntable(df)
-        engine = Margins.get_or_build_engine(model, data_nt, [:x1], GLM.vcov)
+        engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x1], GLM.vcov)
         
         # Verify that the engine has proper types (not Union{Nothing, ...})
         @test engine.de !== nothing
@@ -126,7 +126,7 @@ using FormulaCompiler
         df = DataFrame(x1 = randn(n), y = randn(n))
         model = lm(@formula(y ~ x1), df)
         data_nt = Tables.columntable(df)
-        engine = Margins.get_or_build_engine(model, data_nt, [:x1], GLM.vcov)
+        engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x1], GLM.vcov)
         
         @testset "Core marginal effects functions (FD backend)" begin
             # Validate zero allocation for core computation functions
@@ -155,7 +155,7 @@ using FormulaCompiler
         df = DataFrame(x1 = randn(n), y = randn(n))
         model = lm(@formula(y ~ x1), df)
         data_nt = Tables.columntable(df)
-        engine = Margins.get_or_build_engine(model, data_nt, [:x1], GLM.vcov)
+        engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x1], GLM.vcov)
         
         result = @benchmark Margins._compute_all_continuous_ame_batch($engine, [:x1], 1:$n, :response, :fd) samples=10 evals=1
         current_allocs = minimum(result).allocs
@@ -238,7 +238,7 @@ using FormulaCompiler
                 df = DataFrame(x1 = randn(n), y = randn(n))
                 model = lm(@formula(y ~ x1), df)
                 data_nt = Tables.columntable(df)
-                engine = Margins.get_or_build_engine(model, data_nt, [:x1], GLM.vcov)
+                engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x1], GLM.vcov)
                 
                 result = @benchmark Margins._compute_all_continuous_ame_batch($engine, [:x1], 1:$n, :response, :fd) samples=5 evals=1
                 allocs = minimum(result).allocs

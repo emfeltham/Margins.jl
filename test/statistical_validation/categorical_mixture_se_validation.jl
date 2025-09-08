@@ -172,7 +172,9 @@ function bootstrap_profile_mixture_computation(model_func, formula, data, refere
     n_successful = length(bootstrap_results)
     
     if n_successful < 10
-        error("Bootstrap failed: only $n_successful successful samples out of $n_bootstrap")
+        @debug "Bootstrap failed: only $n_successful successful samples out of $n_bootstrap"
+        @test false
+        return NaN, NaN, 0  # Return appropriate values to continue
     end
     
     # Convert to matrix for easier computation
@@ -181,7 +183,9 @@ function bootstrap_profile_mixture_computation(model_func, formula, data, refere
         bootstrap_means = vec(mean(result_matrix, dims=2))
         bootstrap_ses = vec(std(result_matrix, dims=2))
     else
-        error("No successful bootstrap samples")
+        @debug "No successful bootstrap samples"
+        @test false
+        return NaN, NaN, 0  # Return appropriate values to continue
     end
     
     return bootstrap_means, bootstrap_ses, n_successful
@@ -197,7 +201,9 @@ function test_mixture_se_consistency(data, var_symbol)
     levels = unique(data[!, var_symbol])
     
     if length(levels) < 2
-        error("Variable $var_symbol must have at least 2 levels")
+        @debug "Variable $var_symbol must have at least 2 levels"
+        @test false
+        return []  # Return empty array to continue
     end
     
     # Create different mixture specifications

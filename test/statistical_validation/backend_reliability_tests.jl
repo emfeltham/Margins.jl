@@ -30,10 +30,10 @@ include("backend_reliability_guide.jl")
             
             # Validate that AD is more reliable than FD for log functions
             if !reliability_results[:fd].success && reliability_results[:ad].success
-                @info " Confirmed: AD succeeds where FD fails for log() near domain boundary"
+                @debug "Confirmed: AD succeeds where FD fails for log() near domain boundary"
                 @test true  # Expected behavior
             elseif reliability_results[:fd].success && reliability_results[:ad].success
-                @info "ⓘ Both backends succeeded for this log() case - testing with data closer to boundary"
+                @debug "Both backends succeeded for this log() case - testing with data closer to boundary"
                 @test true  # Both working is fine
             else
                 @warn "Unexpected: FD succeeded but AD failed for log() function"
@@ -43,7 +43,7 @@ include("backend_reliability_guide.jl")
             if reliability_results[:fd].success && reliability_results[:ad].success
                 @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-10
                 @test reliability_results[:fd].ses ≈ reliability_results[:ad].ses rtol=1e-8
-                @info " When both succeed, FD and AD produce consistent results"
+                @debug "When both succeed, FD and AD produce consistent results"
             end
         end
         
@@ -60,10 +60,10 @@ include("backend_reliability_guide.jl")
             
             # Validate that AD is more reliable than FD for sqrt functions
             if !reliability_results[:fd].success && reliability_results[:ad].success
-                @info " Confirmed: AD succeeds where FD fails for sqrt() near domain boundary"
+                @debug "Confirmed: AD succeeds where FD fails for sqrt() near domain boundary"
                 @test true  # Expected behavior
             elseif reliability_results[:fd].success && reliability_results[:ad].success
-                @info "ⓘ Both backends succeeded for this sqrt() case"
+                @debug "Both backends succeeded for this sqrt() case"
                 # Test consistency when both work
                 @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-10
                 @test reliability_results[:fd].ses ≈ reliability_results[:ad].ses rtol=1e-8
@@ -86,7 +86,7 @@ include("backend_reliability_guide.jl")
             fd_time = @elapsed population_margins(model, df; type=:effects, vars=[:x], backend=:fd)
             ad_time = @elapsed population_margins(model, df; type=:effects, vars=[:x], backend=:ad)
             
-            @info "Small problem (n=100): FD=$(round(fd_time*1000, digits=1))ms, AD=$(round(ad_time*1000, digits=1))ms"
+            @debug "Small problem (n=100): FD=$(round(fd_time*1000, digits=1))ms, AD=$(round(ad_time*1000, digits=1))ms"
             
             # Don't enforce specific performance requirements since they vary by system
             # Just validate that both complete successfully
@@ -104,7 +104,7 @@ include("backend_reliability_guide.jl")
             fd_time = @elapsed population_margins(model, df; type=:effects, vars=[:x], backend=:fd)
             ad_time = @elapsed population_margins(model, df; type=:effects, vars=[:x], backend=:ad)
             
-            @info "Medium problem (n=1000): FD=$(round(fd_time*1000, digits=1))ms, AD=$(round(ad_time*1000, digits=1))ms"
+            @debug "Medium problem (n=1000): FD=$(round(fd_time*1000, digits=1))ms, AD=$(round(ad_time*1000, digits=1))ms"
             @test true
         end
     end
@@ -125,7 +125,7 @@ include("backend_reliability_guide.jl")
             @test fd_df.estimate ≈ ad_df.estimate rtol=1e-12
             @test fd_df.se ≈ ad_df.se rtol=1e-10
             
-            @info " Linear model: FD and AD produce identical results"
+            @debug "Linear model: FD and AD produce identical results"
         end
         
         @testset "GLM Consistency" begin
@@ -141,7 +141,7 @@ include("backend_reliability_guide.jl")
             @test fd_df.estimate ≈ ad_df.estimate rtol=1e-10
             @test fd_df.se ≈ ad_df.se rtol=1e-8
             
-            @info " GLM: FD and AD produce consistent results"
+            @debug "GLM: FD and AD produce consistent results"
         end
     end
     
@@ -165,7 +165,7 @@ include("backend_reliability_guide.jl")
                 end
                 
                 @test validate_all_finite_positive(DataFrame(result)).all_valid
-                @info " $name: AD backend recommendation validated"
+                @debug "$name: AD backend recommendation validated"
             end
         end
     end

@@ -8,7 +8,7 @@ using Random
     
     # Helper function to create test datasets
     function create_test_data(n::Int)
-        Random.seed!(123)
+        Random.seed!(06515)
         DataFrame(
             y = randn(n),
             x1 = randn(n),

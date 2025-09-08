@@ -17,26 +17,26 @@ using Margins
 @testset "Release Statistical Validation - Complete Suite" begin
     Random.seed!(06515)
     
-    @info "Starting comprehensive release validation..."
-    @info "This includes all statistical correctness tests for production release"
+    @debug "Starting comprehensive release validation..."
+    @debug "This includes all statistical correctness tests for production release"
     
     # === COMPLETE STATISTICAL VALIDATION ===
     @testset "Complete Statistical Correctness" begin
-        @info "Running complete statistical validation..."
+        @debug "Running complete statistical validation..."
         include("statistical_validation.jl")
-        @info "Complete statistical validation included"
+        @debug "Complete statistical validation included"
     end
     
     # === COMPLETE BACKEND CONSISTENCY ===
     @testset "Complete Backend Consistency" begin
-        @info "Running complete backend consistency validation..."
+        @debug "Running complete backend consistency validation..."
         include("backend_consistency.jl") 
-        @info "Complete backend consistency validated"
+        @debug "Complete backend consistency validated"
     end
     
     # === RELEASE-SPECIFIC PERFORMANCE VALIDATION ===
     @testset "Release Performance Validation" begin
-        @info "Validating performance characteristics for release..."
+        @debug "Validating performance characteristics for release..."
         
         df = make_econometric_data(n=1000, seed=999)
         model = lm(@formula(log(wage) ~ int_education + int_experience + gender), df)
@@ -48,7 +48,7 @@ using Margins
             duration = time() - start_time
             
             @test validate_all_finite_positive(DataFrame(result)).all_valid
-            @info "Population margins (n=1000): $(round(duration, digits=3))s"
+            @debug "Population margins (n=1000): $(round(duration, digits=3))s"
             
             # Should be reasonable for production use
             @test duration < 5.0  # Less than 5 seconds for 1000 observations
@@ -61,7 +61,7 @@ using Margins
             duration = time() - start_time
             
             @test validate_all_finite_positive(DataFrame(result)).all_valid
-            @info "Profile margins (n=1000): $(round(duration, digits=3))s"
+            @debug "Profile margins (n=1000): $(round(duration, digits=3))s"
             
             # Should be very fast for profile margins (O(1) complexity)
             @test duration < 1.0  # Less than 1 second regardless of dataset size
@@ -78,14 +78,14 @@ using Margins
             duration = time() - start_time
             
             @test validate_all_finite_positive(DataFrame(result)).all_valid
-            @info "Profile margins (n=2000): $(round(duration, digits=3))s"
+            @debug "Profile margins (n=2000): $(round(duration, digits=3))s"
             @test duration < 1.0  # Should remain constant time
         end
     end
     
     # === RELEASE-SPECIFIC ROBUSTNESS VALIDATION ===
     @testset "Release Robustness Validation" begin
-        @info "Testing robustness for production release..."
+        @debug "Testing robustness for production release..."
         
         @testset "Edge Case Robustness" begin
             # Very small datasets
@@ -94,7 +94,7 @@ using Margins
             
             result = population_margins(model_small, df_small; type=:effects, vars=[:x])
             @test validate_all_finite_positive(DataFrame(result)).all_valid
-            @info "Small dataset (n=20) robustness verified"
+            @debug "Small dataset (n=20) robustness verified"
             
             # High-dimensional interaction
             df_interact = make_econometric_data(n=500, seed=222)
@@ -102,7 +102,7 @@ using Margins
             
             framework_result = test_2x2_framework_quadrants(model_interact, df_interact; test_name="High-dim interaction")
             @test framework_result.all_successful
-            @info "High-dimensional interaction robustness verified"
+            @debug "High-dimensional interaction robustness verified"
         end
         
         @testset "Statistical Correctness Cross-Check" begin
@@ -115,7 +115,7 @@ using Margins
             manual_coeff = coef(model)[2]  # int_education coefficient
             
             @test DataFrame(pop_effects).estimate[1] ≈ manual_coeff atol=1e-12
-            @info "Population vs manual coefficient cross-check verified"
+            @debug "Population vs manual coefficient cross-check verified"
             
             # Profile vs manual prediction cross-check
             test_education = 16  # 16 years
@@ -129,13 +129,13 @@ using Margins
             manual_pred = β₀ + β₁ * test_education + β₂ * test_wage
             
             @test DataFrame(prof_pred).estimate[1] ≈ manual_pred atol=1e-12
-            @info "Profile vs manual prediction cross-check verified"
+            @debug "Profile vs manual prediction cross-check verified"
         end
     end
     
     # === RELEASE SUMMARY DIAGNOSTICS ===
     @testset "Release Summary Diagnostics" begin
-        @info "Generating release validation summary..."
+        @debug "Generating release validation summary..."
         
         # Test coverage summary
         validation_categories = [

@@ -98,7 +98,9 @@ function bootstrap_margins_computation(model_func, formula, data, margins_func;
     end
     
     if isempty(bootstrap_results)
-        error("All bootstrap samples failed for model: $formula")
+        @debug "All bootstrap samples failed for model: $formula"
+        @test false
+        return NaN, NaN  # Return appropriate values to continue
     end
     
     # Convert to matrix for easier computation

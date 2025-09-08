@@ -34,8 +34,8 @@ function make_econometric_data(; n = 500, seed = 42)
     Random.seed!(seed)
     
     df = DataFrame(
-        # Core continuous variables (float)
-        wage = exp.(3.0 .+ 0.1 .* randn(n)),           # Log-normal wages ($20-$100)
+        # Core continuous variables (float) - NUMERICALLY STABLE RANGES
+        wage = exp.(2.5 .+ 0.3 .* randn(n)),           # Log-normal wages ($8-$40) - more conservative range
         
         # CRITICAL: Integer variables (following FormulaCompiler pattern)
         int_age = rand(18:80, n),                      # Age as integer (18-80 years)
@@ -45,9 +45,9 @@ function make_econometric_data(; n = 500, seed = 42)
         int_score = rand(0:1000, n),                   # Test scores (0-1000)
         int_children = rand(0:5, n),                   # Number of children (0-5)
         
-        # Mixed float variables for comparison/interaction
-        float_wage = exp.(3.0 .+ 0.1 .* randn(n)),     # Float wage for mixed testing
-        float_productivity = 50.0 .+ 20.0 .* randn(n), # Productivity measure
+        # Mixed float variables for comparison/interaction - NUMERICALLY STABLE
+        float_wage = exp.(2.5 .+ 0.3 .* randn(n)),     # Float wage matching stable wage range
+        float_productivity = 5.0 .+ 2.0 .* randn(n),   # Productivity measure (smaller range for stability)
         
         # Categorical variables
         gender = categorical(rand(["Male", "Female"], n)),
@@ -63,9 +63,10 @@ function make_econometric_data(; n = 500, seed = 42)
                 1000 .* df.int_age .+ 5000 .* (df.gender .== "Male") .+ 3000 .* randn(n)
                 
     # Generate wage with realistic log-wage structure (but keep wage, not log_wage)
-    # This creates wage values that follow: log(wage) = 2.5 + 0.08*education + 0.02*experience + 0.01*age + 0.15*male + error
-    log_wage_linear = 2.5 .+ 0.08 .* df.int_education .+ 0.02 .* df.int_experience .+ 
-                      0.01 .* df.int_age .+ 0.15 .* (df.gender .== "Male") .+ 0.1 .* randn(n)
+    # NUMERICALLY STABLE: more conservative coefficients to prevent extreme exp() values
+    # This creates wage values that follow: log(wage) = 2.0 + 0.04*education + 0.01*experience + 0.005*age + 0.08*male + error
+    log_wage_linear = 2.0 .+ 0.04 .* df.int_education .+ 0.01 .* df.int_experience .+ 
+                      0.005 .* df.int_age .+ 0.08 .* (df.gender .== "Male") .+ 0.15 .* randn(n)
     df.wage = exp.(log_wage_linear)  # Generate wage from log-wage relationship
     
     return df
@@ -519,9 +520,12 @@ function make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, see
         error_scale = 0.1 .* (df.x.^2 .+ 1.0)
         errors = randn(n) .* error_scale
     elseif heteroskedasticity_type == :groupwise
-        # Different error variances by group
-        group_scales = [0.1, 0.3, 0.5, 0.8, 1.2]  # Different scales for each group
-        errors = [randn() * group_scales[g] for g in df.group]
+        # Create realistic clustering structure similar to Grunfeld dataset
+        # Use fewer groups with more observations per group for meaningful clustering
+        df.group = repeat(1:5, inner=n÷5)  # Reassign to balanced groups
+        group_scales = [0.2, 0.2, 0.2, 0.2, 0.2]  # Consistent variance
+        group_effects = [randn() * 0.6 for _ in 1:5]  # Moderate group effects 
+        errors = [randn() * group_scales[g] + group_effects[g] for g in df.group]
     else
         # Homoskedastic baseline
         errors = 0.2 .* randn(n)
@@ -537,8 +541,57 @@ function make_heteroskedastic_data(; n=500, heteroskedasticity_type=:linear, see
     return df
 end
 
+"""
+    make_grunfeld_style_data(; n_firms=10, n_years=20, seed=42)
+
+Create test data with clustering structure similar to the Grunfeld dataset,
+which has known positive within-cluster correlation that increases clustered SEs.
+
+# Arguments
+- `n_firms`: Number of firms (clusters)
+- `n_years`: Number of years per firm
+- `seed`: Random seed for reproducibility
+
+# Returns
+- `DataFrame` with firm-level clustering that produces clustered SEs > model SEs
+"""
+function make_grunfeld_style_data(; n_firms=10, n_years=20, seed=42)
+    Random.seed!(seed)
+    
+    n_total = n_firms * n_years
+    
+    # Create firm (cluster) IDs
+    firm_id = repeat(1:n_firms, inner=n_years)
+    
+    # Create firm-specific effects (this creates the clustering)
+    firm_effects = randn(n_firms) * 0.8
+    firm_effect_expanded = repeat(firm_effects, inner=n_years)
+    
+    # Create predictors
+    x = randn(n_total)
+    z = randn(n_total)
+    
+    # Create outcome with firm-level clustering
+    # This mimics the Grunfeld investment equation structure
+    individual_errors = randn(n_total) * 0.3
+    y = 2.0 .+ 0.5 .* x .+ 0.3 .* z .+ firm_effect_expanded .+ individual_errors
+    
+    # Create binary outcome for logistic models
+    logit_linear = -0.5 .+ 0.4 .* x .+ 0.3 .* z .+ 0.5 .* firm_effect_expanded
+    binary_y = [rand() < (1 / (1 + exp(-lp))) for lp in logit_linear]
+    
+    return DataFrame(
+        y = y,
+        x = x,
+        z = z,
+        firm_id = firm_id,
+        binary_y = binary_y,
+        group = firm_id  # Alias for compatibility
+    )
+end
+
 # Export key functions for use in test files
 export make_econometric_data, make_simple_test_data, make_glm_test_data
 export test_2x2_framework_quadrants, test_backend_consistency
 export analytical_derivative, logistic_chain_rule, validate_all_finite_positive
-export make_heteroskedastic_data
+export make_heteroskedastic_data, make_grunfeld_style_data

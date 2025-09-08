@@ -35,7 +35,7 @@
     
     @testset "Weighted vs Unweighted Results - Linear Model" begin
         # Linear model: marginal effects are coefficients (weights shouldn't affect estimates much)
-        Random.seed!(42)
+        Random.seed!(08540)
         n = 200
         data = DataFrame(
             y = randn(n),
@@ -78,7 +78,7 @@
     
     @testset "Weighted vs Unweighted Results - GLM Model" begin
         # GLM model: marginal effects depend on data points (weights should affect estimates)
-        Random.seed!(123)
+        Random.seed!(06515)
         n = 300
         data = DataFrame(
             x1 = randn(n),

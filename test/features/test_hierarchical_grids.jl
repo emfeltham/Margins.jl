@@ -5,7 +5,7 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
 
 @testset "Hierarchical Reference Grid Grammar" begin
     # Create test data with mixed types
-    Random.seed!(123)
+    Random.seed!(06515)
     n = 100
     data = DataFrame(
         region = categorical(rand(["North", "South"], n)),
@@ -450,7 +450,7 @@ end
 @testset "Integration with profile_margins() Workflow" begin
     @testset "Basic DataFrame Construction Tests" begin
         # Test that hierarchical grid produces proper DataFrames with correct types
-        Random.seed!(123)
+        Random.seed!(06515)
         data = DataFrame(
             region = categorical(["North", "South", "East", "West"]),
             income = [25000, 50000, 75000, 40000],

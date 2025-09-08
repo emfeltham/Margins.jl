@@ -100,7 +100,9 @@ function analytical_nested_derivative(expr_type::Symbol, x_val::Float64, other_v
         return -2.0 * π * sin(2.0 * π * x_val)
         
     else
-        error("Unknown expression type: $expr_type")
+        @debug "Unknown expression type: $expr_type"
+        @test false
+        return NaN
     end
 end
 

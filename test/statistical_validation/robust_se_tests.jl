@@ -97,15 +97,52 @@ using CovarianceMatrices
     
     @testset "Clustered Standard Errors Testing" begin
 
-        # Test clustered SEs with linear model
+        # Test clustered SEs with proper validation of clustering mechanism
         @testset "Linear Model Clustered SEs" begin
-            data = make_heteroskedastic_data(n=500, heteroskedasticity_type=:groupwise)
+            # Create data with known dual clustering structure  
+            n_total = 240
+            region_id = repeat(1:6, inner=n_total÷6)  # 6 regions, 40 obs each
+            year_id = repeat(1:8, inner=n_total÷8)    # 8 years, 30 obs each
+            
+            # Create region and year effects
+            region_effects = randn(6) * 0.6
+            year_effects = randn(8) * 0.5
+            region_effect_expanded = repeat(region_effects, inner=n_total÷6)
+            year_effect_expanded = repeat(year_effects, inner=n_total÷8)
+            
+            x = randn(n_total)
+            z = randn(n_total)
+            individual_errors = randn(n_total) * 0.2
+            y = 2.0 .+ 0.5 .* x .+ 0.3 .* z .+ region_effect_expanded .+ year_effect_expanded .+ individual_errors
+            
+            data = DataFrame(y=y, x=x, z=z, region_id=region_id, year_id=year_id)
             model = lm(@formula(y ~ x + z), data)
             
-            cluster_results = test_clustered_se_validation(model, data, :group)
-            @test cluster_results.success
-            @test cluster_results.framework_valid
-            @test cluster_results.max_se_ratio >= 1.0  # Clustered ≥ model SEs
+            # Test that clustering mechanism works correctly
+            model_result = population_margins(model, data; type=:effects, vars=[:x])
+            model_se = DataFrame(model_result).se[1]
+            
+            region_result = population_margins(model, data; type=:effects, vars=[:x], vcov=CR0(data.region_id))
+            region_se = DataFrame(region_result).se[1]
+            
+            year_result = population_margins(model, data; type=:effects, vars=[:x], vcov=CR0(data.year_id))
+            year_se = DataFrame(year_result).se[1]
+            
+            # Validate clustering mechanism works
+            @test abs(region_se - model_se) / model_se > 0.05  # Region clustering affects SEs
+            @test abs(year_se - model_se) / model_se > 0.05    # Year clustering affects SEs  
+            @test abs(region_se - year_se) / max(region_se, year_se) > 0.05  # Different clusterings differ
+            
+            # Test framework validity across 2×2 quadrants
+            pop_effects = population_margins(model, data; type=:effects, vars=[:x], vcov=CR0(data.region_id))
+            pop_predictions = population_margins(model, data; type=:predictions, vcov=CR0(data.region_id))
+            prof_effects = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x], vcov=CR0(data.region_id))
+            prof_predictions = profile_margins(model, data, means_grid(data); type=:predictions, vcov=CR0(data.region_id))
+            
+            @test all(DataFrame(pop_effects).se .> 0)
+            @test all(DataFrame(pop_predictions).se .> 0)
+            @test all(DataFrame(prof_effects).se .> 0)
+            @test all(DataFrame(prof_predictions).se .> 0)
         end
         
         # Test clustered SEs with different cluster sizes

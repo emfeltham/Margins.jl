@@ -113,7 +113,7 @@ using Random
     
     @testset "Standard error consistency after fix" begin
         # Test the original issue from the bug report
-        Random.seed!(123)
+        Random.seed!(06515)
         df = DataFrame(
             y = randn(1000),
             x1 = randn(1000),

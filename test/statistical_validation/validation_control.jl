@@ -20,12 +20,12 @@ Expected duration: < 30 seconds
 Coverage: Critical mathematical correctness, integer variables, backend consistency
 """
 function run_ci_validation()
-    @info " Running CI Statistical Validation (Fast Critical Subset)"
-    @info "Expected duration: < 30 seconds"
+    @debug "Running CI Statistical Validation (Fast Critical Subset)"
+    @debug "Expected duration: < 30 seconds"
     
     include("ci_validation.jl")
     
-    @info " CI validation complete - ready for pipeline"
+    @debug "CI validation complete - ready for pipeline"
     return true
 end
 
@@ -46,21 +46,21 @@ Arguments:
 Expected duration: 30 seconds to 5 minutes depending on focus
 """
 function run_development_validation(; focus=:all)
-    @info " Running Development Statistical Validation"
-    @info "Focus area: $focus"
+    @debug "Running Development Statistical Validation"
+    @debug "Focus area: $focus"
     
     if focus == :all
-        @info "Running complete validation for development..."
+        @debug "Running complete validation for development..."
         include("statistical_validation.jl")
         include("backend_consistency.jl")
     elseif focus == :core
-        @info "Running core mathematical correctness validation..."
+        @debug "Running core mathematical correctness validation..."
         include("ci_validation.jl")  # CI subset covers core correctness
     elseif focus == :backend
-        @info "Running backend consistency validation..."
+        @debug "Running backend consistency validation..."
         include("backend_consistency.jl")
     elseif focus == :integers
-        @info "Running integer variable support validation..."
+        @debug "Running integer variable support validation..."
         # Run subset focusing on integer variables
         @testset "Integer Variable Development Validation" begin
             Random.seed!(06515)
@@ -83,10 +83,10 @@ function run_development_validation(; focus=:all)
                 end
             end
             
-            @info " Integer variable development validation complete"
+            @debug "Integer variable development validation complete"
         end
     elseif focus == :systematic
-        @info "Running systematic model coverage validation..."
+        @debug "Running systematic model coverage validation..."
         # Run subset of systematic model tests
         @testset "Systematic Model Development Validation" begin
             Random.seed!(06515)
@@ -109,13 +109,14 @@ function run_development_validation(; focus=:all)
                 end
             end
             
-            @info " Systematic model development validation complete"
+            @debug "Systematic model development validation complete"
         end
     else
-        error("Unknown focus area: $focus. Use :all, :core, :backend, :integers, or :systematic")
+        @debug "Unknown focus area: $focus. Use :all, :core, :backend, :integers, or :systematic"
+        @test false
     end
     
-    @info " Development validation complete"
+    @debug "Development validation complete"
     return true
 end
 
@@ -129,13 +130,13 @@ Expected duration: ~5 minutes
 Coverage: Complete statistical correctness validation with performance monitoring
 """
 function run_release_validation()
-    @info " Running Release Statistical Validation (Complete Suite)"
-    @info "Expected duration: ~5 minutes"
-    @info "This is the complete validation required for production release"
+    @debug "Running Release Statistical Validation (Complete Suite)"
+    @debug "Expected duration: ~5 minutes"
+    @debug "This is the complete validation required for production release"
     
     include("release_validation.jl")
     
-    @info " Release validation complete - ready for production"
+    @debug "Release validation complete - ready for production"
     return true
 end
 

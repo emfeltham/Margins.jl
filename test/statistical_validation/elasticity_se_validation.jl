@@ -161,7 +161,9 @@ function bootstrap_profile_computation(model_func, formula, data, reference_grid
     n_successful = length(bootstrap_results)
     
     if n_successful < 10
-        error("Bootstrap failed: only $n_successful successful samples out of $n_bootstrap")
+        @debug "Bootstrap failed: only $n_successful successful samples out of $n_bootstrap"
+        @test false
+        return NaN, NaN, 0  # Return appropriate values to continue
     end
     
     # Convert to matrix for easier computation
@@ -170,7 +172,9 @@ function bootstrap_profile_computation(model_func, formula, data, reference_grid
         bootstrap_means = vec(mean(result_matrix, dims=2))
         bootstrap_ses = vec(std(result_matrix, dims=2))
     else
-        error("No successful bootstrap samples")
+        @debug "No successful bootstrap samples"
+        @test false
+        return NaN, NaN, 0  # Return appropriate values to continue
     end
     
     return bootstrap_means, bootstrap_ses, n_successful

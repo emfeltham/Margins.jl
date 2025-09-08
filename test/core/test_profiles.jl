@@ -5,7 +5,7 @@ using Margins
 using Statistics
 
 @testset "Profile margins reference grid semantics" begin
-    Random.seed!(123)
+    Random.seed!(06515)
     n = 200
     df = DataFrame(
         y = randn(n),

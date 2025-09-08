@@ -29,7 +29,7 @@ using LinearAlgebra: dot
     @testset "Binary Variable Counterfactual Validation" begin
         # Test binary (boolean) variable AME against manual counterfactual computation
         
-        Random.seed!(42)
+        Random.seed!(08540)
         n = 200
         df = DataFrame(
             x = randn(n),
@@ -133,7 +133,7 @@ using LinearAlgebra: dot
     @testset "Categorical Variable Counterfactual Validation" begin
         # Test categorical variable AME against manual counterfactual computation
         
-        Random.seed!(123)
+        Random.seed!(06515)
         n = 300
         df = DataFrame(
             x = randn(n),

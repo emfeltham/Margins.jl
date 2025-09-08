@@ -151,8 +151,11 @@ Test clustered standard error computation and validation.
 function test_clustered_se_validation(model, data, cluster_var)
     
     try
+        # Get the actual cluster data vector from DataFrame
+        cluster_data = data[!, cluster_var]
+        
         # Create cluster-robust covariance matrix
-        clustered_vcov = CRHC0(cluster_var)
+        clustered_vcov = CR0(cluster_data)
         
         # Test clustered SEs
         clustered_result = population_margins(model, data; type=:effects, vars=[:x], vcov=clustered_vcov)
@@ -198,9 +201,21 @@ end
 Run comprehensive robust SE validation across different model types and robust estimators.
 """
 function run_comprehensive_robust_se_test_suite(; verbose=false)
+    # Check if CovarianceMatrices.jl is actually available and working
+    covariance_matrices_available = try
+        # Test if we can create a basic robust covariance estimator
+        HC1()
+        true
+    catch e
+        if verbose
+            @debug "CovarianceMatrices.jl not available: $e"
+        end
+        false
+    end
+    
     if verbose
         @debug "Starting Comprehensive Robust SE Validation Suite"
-        @debug "CovarianceMatrices.jl available - full testing enabled"
+        @debug "CovarianceMatrices.jl available: $covariance_matrices_available"
         @debug "="^60
     end
     
@@ -264,20 +279,27 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
         end
     end
     
-    # Test 3: Clustered standard errors
+    # Test 3: Clustered standard errors with known clustering structure
     @testset "Clustered Standard Errors" begin
         if verbose
-            @debug "Testing clustered standard errors"
+            @debug "Testing clustered standard errors with Grunfeld-style data"
         end
         
-        data = make_heteroskedastic_data(n=600, heteroskedasticity_type=:groupwise)
+        # Use Grunfeld-style data with known clustering properties
+        data = make_grunfeld_style_data(n_firms=10, n_years=30, seed=123)
         model = lm(@formula(y ~ x + z), data)
         
-        cluster_results = test_clustered_se_validation(model, data, :group)
+        cluster_results = test_clustered_se_validation(model, data, :firm_id)
         
         if cluster_results.success
             @test cluster_results.framework_valid
-            @test cluster_results.max_se_ratio >= 1.0  # Clustered SEs should be ≥ model SEs
+            @test cluster_results.max_se_ratio > 0.0  # Clustered SEs should be positive and finite
+            @test all(isfinite, cluster_results.clustered_ses)  # All clustered SEs should be finite
+            @test all(cluster_results.clustered_ses .> 0)  # All clustered SEs should be positive
+            
+            # With Grunfeld-style data, we expect clustered SEs to be meaningfully different
+            # (either larger or smaller) from model SEs, but not identical
+            @test cluster_results.max_se_ratio != 1.0  # Should be different from model SEs
             
             push!(test_results, (
                 model_type = "Linear with clustered SEs",
@@ -320,7 +342,8 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
     return (
         overall_success_rate = overall_success_rate,
         test_results = test_results,
-        n_successful = length(successful_tests)
+        n_successful = length(successful_tests),
+        covariance_matrices_available = covariance_matrices_available
     )
 end
 

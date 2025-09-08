@@ -11,10 +11,14 @@ using MixedModels
 using RDatasets
 using Distributions
 
+# Clear engine cache to ensure fresh engines (prevents stale cache issues)
+Margins.clear_engine_cache!()
+
 # Load testing utilities centrally to prevent method definition warnings
 include("statistical_validation/testing_utilities.jl")
 include("statistical_validation/bootstrap_se_validation.jl") 
 include("statistical_validation/analytical_se_validation.jl")
+include("statistical_validation/robust_se_validation.jl")
 
 @testset "Core Functionality" begin
     include("core/test_glm_basic.jl")
@@ -34,6 +38,7 @@ end
     include("features/test_bool_profiles.jl")
     include("features/test_table_profiles.jl")
     include("features/test_prediction_scales.jl")
+    include("features/test_hierarchical_grids.jl")
 end
 
 @testset "Performance" begin
@@ -44,7 +49,6 @@ end
 @testset "Statistical Correctness" begin
     include("statistical_validation/backend_consistency.jl")
     include("statistical_validation/statistical_validation.jl")
-    include("statistical_validation/robust_se_validation.jl")
 end
 
 @testset "Validation Tests" begin

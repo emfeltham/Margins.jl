@@ -241,7 +241,7 @@ using Margins
             # KNOWN SYSTEMATIC BUG: See ISSUES.md REMAINING ISSUE 2
             # ALL profile effects with log functions fail with DomainError(-6.055e-6)
             # This test will fail until FormulaCompiler log derivative issue is resolved
-            Random.seed!(123)
+            Random.seed!(06515)
             n = 500
             df = DataFrame(
                 x = abs.(rand(n)) .+ 10,  # Ensure positive values for log safety

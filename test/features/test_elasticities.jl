@@ -4,7 +4,7 @@ using DataFrames, GLM, Statistics, CategoricalArrays
 using Margins
 
 @testset "Elasticity Features" begin
-    Random.seed!(123)
+    Random.seed!(06515)
     n = 100
     df = DataFrame(
         y = randn(n),
