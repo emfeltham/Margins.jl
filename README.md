@@ -71,9 +71,13 @@ population_margins(model, data; measure=:semielasticity_eydx)  # d(ln y)/dx
 profile_margins(model, data, means_grid(data); type=:effects)
 profile_margins(model, data, cartesian_grid(data; x1=[0, 1, 2], x2=[1.5]); type=:effects)
 
-# Categorical scenarios using CategoricalMixture
+# Categorical scenarios using CategoricalMixture (explicit grid)
 reference_grid = DataFrame(group=[mix("A" => 0.3, "B" => 0.7)])
 profile_margins(model, data, reference_grid; type=:effects)
+
+# Stata-style scenario kwarg (at()) for population analysis (AME at representative values)
+population_margins(model, data; type=:effects, scenario=(x1=0.0, treatment=true))
+population_margins(model, data; type=:predictions, scenario=(group=mix("A"=>0.3, "B"=>0.7)))
 ```
 
 ### Stratified Analysis
@@ -135,8 +139,14 @@ Pkg.add("Margins")
 
 ### Statistical Foundation
 - Delta-method standard errors computed using full covariance matrices
-- Bootstrap validation across GLM model families
+- Comprehensive validation through manual counterfactual computation tests
 - Zero-tolerance policy for statistical approximations
+- Contrast-coding invariance guaranteed across dummy/effects/helmert schemes
+
+### Performance Characteristics
+- **O(1) allocation scaling**: Constant memory usage regardless of dataset size
+- **Zero-allocation kernels**: All computational cores achieve 0 bytes after warmup
+- **Profile margins**: Constant-time complexity independent of data size
 
 ### System Integration
 - Native support for GLM.jl and MixedModels.jl fitted models
@@ -155,4 +165,3 @@ Pkg.add("Margins")
 | `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)` |
 | `margins` | `population_margins(model, data; type=:predictions)` |
 | `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` |
-
