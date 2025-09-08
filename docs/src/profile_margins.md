@@ -64,6 +64,28 @@ result = profile_margins(model, data,
     type=:effects)
 ```
 
+### 5. Hierarchical Grammar - `hierarchical_grid()`
+
+Systematic reference grid construction using the group nesting grammar (`=>` operator) for complex multi-dimensional covariate scenario analysis:
+
+```julia
+# Complex hierarchical specification with multiple representative types
+reference_spec = :region => [
+    (:income, :quartiles),  # Income quartiles within each region
+    (:age, :mean),          # Mean age within each region
+    :education              # All education levels within each region
+]
+result = profile_margins(model, data, 
+    hierarchical_grid(data, reference_spec); 
+    type=:effects)
+
+# Deep hierarchical nesting for comprehensive policy analysis
+policy_spec = :country => (:region => (:education => [(:income, :quintiles), (:age, :mean)]))
+result = profile_margins(model, data,
+    hierarchical_grid(data, policy_spec; max_depth=4); 
+    type=:predictions)
+```
+
 ## Direct DataFrame Specification (Complete Analytical Control)
 
 Maximum analytical flexibility is achieved through direct DataFrame specification of reference grid points:

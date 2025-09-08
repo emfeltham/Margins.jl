@@ -123,15 +123,19 @@ All main functions support these core parameters:
 profile_margins(model, data, means_grid(data))
 
 # Cartesian product: 6 scenarios (3×2)
-profile_margins(model, data; at=Dict(:x => [0,1,2], :group => ["A","B"]))
+profile_margins(model, data, cartesian_grid(data; x=[0,1,2], group=["A","B"]))
 
-# Explicit profiles  
-profiles = [Dict(:x => 0, :group => "A"), Dict(:x => 1, :group => "B")]
-profile_margins(model, data; at=profiles)
+# Hierarchical grid construction using group grammar
+reference_spec = :region => [(:income, :quartiles), (:age, :mean)]
+profile_margins(model, data, hierarchical_grid(data, reference_spec))
+
+# Deep hierarchical nesting for complex policy analysis
+policy_spec = :country => (:region => (:education => [(:income, :quintiles), (:age, :mean)]))
+profile_margins(model, data, hierarchical_grid(data, policy_spec; max_depth=4))
 
 # DataFrame grid (full control)
 grid = DataFrame(x=[0,1,2], group=["A","A","B"])
-profile_margins(model, grid)
+profile_margins(model, data, grid)
 ```
 
 ### Population-Specific Parameters

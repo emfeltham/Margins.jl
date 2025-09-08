@@ -89,6 +89,70 @@ grid = quantile_grid(data;
 result = profile_margins(model, data, grid; type=:effects)
 ```
 
+### 5. Hierarchical Grammar - `hierarchical_grid(data, spec)`
+
+Creates systematic reference grids using the group nesting grammar (`=>` operator) for complex multi-dimensional covariate scenario construction:
+
+```julia
+# Simple hierarchical: region-specific education representatives
+spec = :region => :education
+grid = hierarchical_grid(data, spec)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Complex hierarchy with multiple representative types
+spec = :region => [
+    (:income, :quartiles),  # Income quartiles within each region
+    (:age, :mean),          # Mean age within each region  
+    :education              # All education levels within each region
+]
+grid = hierarchical_grid(data, spec)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Deep nesting (3+ levels) with automatic safety validation
+spec = :country => (
+    :region => (
+        :education => [(:income, :quartiles), (:age, :mean)]
+    )
+)
+grid = hierarchical_grid(data, spec; max_depth=4, warn_large=true)
+result = profile_margins(model, data, grid; type=:effects)
+```
+
+**Advanced Representative Types:**
+```julia
+# Statistical representatives within hierarchical groups
+spec = :region => [
+    (:income, :mean),           # Mean income per region
+    (:income, :median),         # Median income per region
+    (:income, :quartiles),      # Q1, Q2, Q3, Q4 per region
+    (:income, :quintiles),      # Quintiles per region
+    (:income, :deciles),        # Deciles per region
+    (:income, [0.1, 0.5, 0.9]), # Custom percentiles per region
+    (:age, [25, 45, 65]),       # Fixed representative ages
+    (:score, (:range, 5))       # 5 evenly spaced points from min to max
+]
+grid = hierarchical_grid(data, spec)
+```
+
+**Mixture Integration:**
+```julia
+# Population-proportion mixtures for realistic scenarios
+spec = :region => [
+    (:education, :mix_proportional),  # Use actual data proportions
+    (:income, :quartiles),
+    (:age, :mean)
+]
+grid = hierarchical_grid(data, spec)
+
+# Custom mixtures for policy analysis
+using Margins: mix
+spec = :region => [
+    (:education, mix("HS" => 0.3, "College" => 0.7)),  # Policy scenario
+    (:income, :median)
+]
+grid = hierarchical_grid(data, spec)
+```
+
 ## Direct DataFrame Specification
 
 For maximum control, create reference grids directly:
@@ -135,6 +199,39 @@ grid = cartesian_grid(data; income=[30000, 50000, 70000])
 # → education: mix("HS" => 0.4, "College" => 0.45, "Graduate" => 0.15)
 # → region: mix("Urban" => 0.75, "Rural" => 0.25)  
 # → treated: 0.6 (probability of true)
+```
+
+### Hierarchical Policy Analysis
+
+Systematic multi-dimensional policy evaluation using hierarchical grids:
+
+```julia
+# Complex policy analysis across administrative levels
+policy_spec = :state => (
+    :county => [
+        (:education, :mix_proportional),     # Actual education composition per county
+        (:income, :quintiles),               # Income distribution per county
+        (:age, [25, 45, 65]),               # Key demographic groups
+        (:employment_status, :all)           # All employment categories
+    ]
+)
+grid = hierarchical_grid(data, policy_spec)
+result = profile_margins(policy_model, data, grid; vars=[:policy_treatment])
+
+# Comparative scenario analysis
+baseline_spec = :region => [(:education, :mix_proportional), (:income, :mean)]
+intervention_spec = :region => [(:education, mix("HS" => 0.2, "College" => 0.8)), (:income, :mean)]
+
+baseline_grid = hierarchical_grid(data, baseline_spec)
+intervention_grid = hierarchical_grid(data, intervention_spec)
+
+baseline_results = profile_margins(model, data, baseline_grid; type=:predictions)
+intervention_results = profile_margins(model, data, intervention_grid; type=:predictions)
+
+# Calculate policy impact
+baseline_df = DataFrame(baseline_results)
+intervention_df = DataFrame(intervention_results)
+policy_impact = intervention_df.estimate .- baseline_df.estimate
 ```
 
 ### Scenario Comparison
@@ -193,6 +290,26 @@ large_grid = cartesian_grid(data; x=[0,1,2], y=[0,1,2], z=[0,1,2])
 
 # Dataset size doesn't matter
 @time profile_margins(model, small_data, large_grid)  # Still ~400μs
+```
+
+### Hierarchical Grid Performance
+
+Hierarchical grids provide automatic size estimation and safety validation:
+
+```julia
+# Automatic grid size warnings for large combinations
+large_spec = :country => (:region => (:education => (:income, :deciles)))
+# Warning: Estimated grid size ~50,000 combinations may impact performance
+grid = hierarchical_grid(data, large_spec; warn_large=true)
+
+# Depth protection prevents excessive nesting
+deep_spec = :a => (:b => (:c => (:d => (:e => (:f => :g)))))
+# Error: Nesting depth 7 exceeds maximum allowed depth 5
+grid = hierarchical_grid(data, deep_spec; max_depth=5)
+
+# Efficient construction through systematic generation
+complex_spec = :region => [(:income, :quartiles), (:age, :mean), :education]
+@time hierarchical_grid(data, complex_spec)  # ~50μs regardless of data size
 ```
 
 ### Memory Management
@@ -309,9 +426,11 @@ quantile_grid(data; vars...)
 2. **Use `cartesian_grid()`** for systematic exploration
 3. **Use `balanced_grid()`** for orthogonal factorial designs
 4. **Use `quantile_grid()`** for distributional analysis
-5. **Use explicit DataFrame** for complex custom scenarios
-6. **Validate grids** with small examples before scaling up
-7. **Consider grid size** vs computational requirements
-8. **Leverage frequency weighting** for realistic defaults
+5. **Use `hierarchical_grid()`** for complex multi-dimensional policy analysis
+6. **Use explicit DataFrame** for maximum custom control
+7. **Validate grids** with small examples before scaling up
+8. **Consider grid size** vs computational requirements
+9. **Leverage frequency weighting** for realistic defaults
+10. **Use mixture specifications** for policy counterfactual analysis
 
 See also: [`profile_margins`](@ref) for the main function interface.
