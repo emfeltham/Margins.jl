@@ -53,95 +53,6 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
     end
 end
 
-"""
-    _accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, weights; link=IdentityLink(), backend=:ad)
-
-Accumulate parameter gradients across rows for weighted average marginal effects.
-This is the proper weighted version that accounts for weights in both point estimates and gradients.
-
-For statistical rigor, this function computes:
-- Weighted point estimate: Σ(w_i * g_i) / Σ(w_i) 
-- Weighted gradient: Σ(w_i * ∇g_i) / Σ(w_i)
-
-Where g_i is the marginal effect at observation i, and ∇g_i is its parameter gradient.
-
-# Arguments
-- `gβ_sum::Vector{Float64}`: Preallocated accumulator (modified in-place)
-- `de::DerivativeEvaluator`: Built evaluator from FormulaCompiler
-- `β::Vector{Float64}`: Model coefficients
-- `rows::AbstractVector{Int}`: Row indices to average over
-- `var::Symbol`: Variable for marginal effect
-- `weights::Vector{Float64}`: Observation weights
-- `link`: GLM link function for μ effects
-- `backend::Symbol`: `:fd` (finite differences) or `:ad` (automatic differentiation)
-
-# Returns
-- The same `gβ_sum` buffer, containing weighted average gradient
-"""
-function _accumulate_weighted_ame_gradient!(
-    gβ_sum::Vector{Float64},
-    de::Union{Nothing, FormulaCompiler.DerivativeEvaluator},
-    β::Vector{Float64}, 
-    rows::AbstractVector{Int},
-    var::Symbol,
-    weights::Vector{Float64};
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
-)
-    # Handle case where de is nothing (no continuous variables)
-    if de === nothing
-        fill!(gβ_sum, 0.0)
-        return gβ_sum
-    end
-    
-    @assert length(gβ_sum) == length(de)
-    
-    # Use evaluator's fd_yminus buffer as temporary storage
-    gβ_temp = de.fd_yminus
-    fill!(gβ_sum, 0.0)
-    
-    # Compute total weight for proper weighted averaging
-    total_weight = sum(weights[row] for row in rows if weights[row] > 0)
-    
-    # Accumulate weighted gradients across rows
-    for row in rows
-        w = weights[row]
-        if w > 0  # Skip zero-weight observations
-            if link isa GLM.IdentityLink
-                # η case: gβ = J_k (single Jacobian column)
-                if backend === :fd
-                    # Zero-allocation single-column FD (optimal for AME)
-                    FormulaCompiler.fd_jacobian_column!(gβ_temp, de, row, var)
-                elseif backend === :ad
-                    # Compute full Jacobian then extract column
-                    FormulaCompiler.derivative_modelrow!(de.jacobian_buffer, de, row)
-                    var_idx = findfirst(==(var), de.vars)
-                    var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
-                    gβ_temp .= view(de.jacobian_buffer, :, var_idx)
-                else
-                    throw(ArgumentError("Invalid backend: $backend. Use :fd or :ad"))
-                end
-            else
-                # μ case: use existing FD-based chain rule function
-                FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
-            end
-            
-            # Apply weight and accumulate
-            for j in eachindex(gβ_sum)
-                gβ_sum[j] += w * gβ_temp[j]
-            end
-        end
-    end
-    
-    # Weighted average
-    if total_weight > 0
-        gβ_sum ./= total_weight
-    else
-        fill!(gβ_sum, 0.0)  # All weights are zero
-    end
-    
-    return gβ_sum
-end
 
 """
     _compute_weighted_ame_value(de, β, rows, var, weights, scale, backend)
@@ -268,90 +179,6 @@ function _accumulate_me_value(
     end
 end
 
-"""
-    _accumulate_unweighted_ame_gradient!(gβ_sum, de, β, rows, var; link=IdentityLink(), backend=:ad)
-
-**OPTIMIZED**: Zero-allocation unweighted gradient accumulation for continuous variables.
-
-This function eliminates the O(n) allocation scaling bottleneck by avoiding weights vector creation
-for the common unweighted case. Provides identical mathematical results to the weighted version
-when all weights equal 1.0, but with constant memory usage regardless of dataset size.
-
-# Arguments
-- `gβ_sum::Vector{Float64}`: Preallocated accumulator (modified in-place)
-- `de::DerivativeEvaluator`: Built evaluator from FormulaCompiler
-- `β::Vector{Float64}`: Model coefficients
-- `rows::AbstractVector{Int}`: Row indices to average over
-- `var::Symbol`: Variable for marginal effect
-- `link`: GLM link function for μ effects
-- `backend::Symbol`: `:fd` (finite differences) or `:ad` (automatic differentiation)
-
-# Returns
-- The same `gβ_sum` buffer, containing average gradient
-
-# Performance
-- **Memory**: O(1) constant allocation vs O(n) for weighted version
-- **Speed**: Eliminates vector allocation overhead
-- **Scaling**: Independent of dataset size
-"""
-function _accumulate_unweighted_ame_gradient!(
-    gβ_sum::Vector{Float64},
-    de::Union{Nothing, FormulaCompiler.DerivativeEvaluator},
-    β::Vector{Float64}, 
-    rows::AbstractVector{Int},
-    var::Symbol;
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
-)
-    # Handle case where de is nothing (no continuous variables)
-    if de === nothing
-        fill!(gβ_sum, 0.0)
-        return gβ_sum
-    end
-    
-    @assert length(gβ_sum) == length(β)
-    
-    # Use evaluator's fd_yminus buffer as temporary storage
-    gβ_temp = de.fd_yminus
-    fill!(gβ_sum, 0.0)
-    
-    # Accumulate unweighted gradients across rows (no weights vector allocation!)
-    for row in rows
-        if link isa GLM.IdentityLink
-            # η case: gβ = J_k (single Jacobian column)
-            if backend === :fd
-                # Zero-allocation single-column FD (optimal for AME)
-                FormulaCompiler.fd_jacobian_column!(gβ_temp, de, row, var)
-            elseif backend === :ad
-                # Compute full Jacobian then extract column
-                FormulaCompiler.derivative_modelrow!(de.jacobian_buffer, de, row)
-                var_idx = findfirst(==(var), de.vars)
-                var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
-                gβ_temp .= view(de.jacobian_buffer, :, var_idx)
-            else
-                throw(ArgumentError("Invalid backend: $backend. Use :fd or :ad"))
-            end
-        else
-            # μ case: use existing FD-based chain rule function
-            FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
-        end
-        
-        # Accumulate without weights (uniform weight = 1.0 for all observations)
-        for j in eachindex(gβ_sum)
-            gβ_sum[j] += gβ_temp[j]
-        end
-    end
-    
-    # Unweighted average (simple division by count)
-    n_rows = length(rows)
-    if n_rows > 0
-        gβ_sum ./= n_rows
-    else
-        fill!(gβ_sum, 0.0)  # No observations
-    end
-    
-    return gβ_sum
-end
 
 # ================================================================
 # PHASE 2: UNIFIED DATASCENARIO OPTIMIZATION FOR ALL VARIABLE TYPES
@@ -899,7 +726,7 @@ function _is_continuous_variable(col)
 end
 
 """
-    _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad) -> (DataFrame, Matrix)
+    _ame_continuous_and_categorical(engine, data_nt, scale, backend, measure; contrasts=:baseline, weights=nothing) -> (DataFrame, Matrix)
 
 Zero-allocation population effects (AME) using FormulaCompiler's built-in APIs.
 Implements REORG.md lines 290-348 with explicit backend selection and batch operations.
@@ -909,16 +736,19 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 - `data_nt::NamedTuple`: Data in columntable format
 - `scale::Symbol`: `:link` for link scale, `:response` for response scale
 - `backend::Symbol`: `:ad` or `:fd` backend selection
+- `measure::Symbol`: `:effect`, `:elasticity`, etc. for measure type
+- `contrasts::Symbol`: `:baseline` for baseline contrasts (keyword arg)
+- `weights`: Observation weights (keyword arg)
 
 # Returns
 - `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
 
 # Examples
 ```julia
-df, G = _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad)
+df, G = _ame_continuous_and_categorical(engine, data_nt, :response, :ad, :effect)
 ```
 """
-function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, weights=nothing) where L
+function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple, scale::Symbol, backend::Symbol, measure::Symbol; contrasts=:baseline, weights=nothing) where L
     rows = 1:length(first(data_nt))
     n_obs = length(first(data_nt))
     
@@ -1029,9 +859,9 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             for var in continuous_requested
                 # Step 1: Accumulate weighted gradient for this variable
                 _accumulate_weighted_ame_gradient!(
-                    engine.gβ_accumulator, local_de, local_β, rows, var, weights;
-                    link=(scale === :response ? local_link : GLM.IdentityLink()), 
-                    backend=backend
+                    engine.gβ_accumulator, engine, rows, var, weights,
+                    (scale === :response ? local_link : GLM.IdentityLink()), 
+                    backend
                 )
                 
                 # Step 2: Compute weighted AME value immediately using helper
@@ -1118,7 +948,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
 end
 
 """
-    _mem_continuous_and_categorical(engine, profiles; scale=:response, backend=:ad) -> (DataFrame, Matrix)
+    _mem_continuous_and_categorical(engine, profiles, scale, backend, measure) -> (DataFrame, Matrix)
 
 Profile Effects (MEM) Using Reference Grids with FormulaCompiler's built-in APIs.
 Implements REORG.md lines 353-486 following FormulaCompiler guide.
@@ -1128,6 +958,7 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 - `profiles::Vector{Dict}`: Vector of profile dictionaries
 - `scale::Symbol`: `:link` for link scale, `:response` for response scale
 - `backend::Symbol`: `:ad` or `:fd` backend selection
+- `measure::Symbol`: `:effect`, `:elasticity`, etc. for measure type
 
 # Returns
 - `(DataFrame, Matrix{Float64})`: Results table and gradient matrix G
@@ -1135,10 +966,10 @@ Implements REORG.md lines 353-486 following FormulaCompiler guide.
 # Examples
 ```julia
 profiles = [Dict(:x1 => 0.0, :region => "North")]
-df, G = _mem_continuous_and_categorical(engine, profiles; scale=:response, backend=:ad)
+df, G = _mem_continuous_and_categorical(engine, profiles, :response, :ad, :effect)
 ```
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector; scale=:response, backend=:ad, measure=:effect) where L
+function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vector, scale::Symbol, backend::Symbol, measure::Symbol) where L
     # Handle the case where we have only categorical variables (engine.de === nothing)
     # or mixed continuous/categorical variables
     
@@ -1499,9 +1330,9 @@ function _accumulate_weighted_ame_gradient!(
     engine::MarginsEngine{L, U, HasDerivatives},
     rows::AbstractVector{Int},
     var::Symbol,
-    weights::Vector{Float64};
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
+    weights::Vector{Float64},
+    link,
+    backend::Symbol
 ) where {L, U}
     # HasDerivatives: Use the derivative evaluator (concrete type, no Union checks)
     de = engine.de
@@ -1559,21 +1390,19 @@ end
 """
     _accumulate_weighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,NoDerivatives}, rows, var, weights; kwargs...)
 
-**NoDerivatives dispatch**: Return zero gradient for engines without derivative support.
-Eliminates runtime Union type checking and provides type-safe categorical-only operation.
+**NoDerivatives dispatch**: Error when derivatives are required but not available.
 """
 function _accumulate_weighted_ame_gradient!(
     gβ_sum::Vector{Float64},
     engine::MarginsEngine{L, U, NoDerivatives},
     rows::AbstractVector{Int},
     var::Symbol,
-    weights::Vector{Float64};
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
+    weights::Vector{Float64},
+    link,
+    backend::Symbol
 ) where {L, U}
-    # NoDerivatives: No derivative evaluator, return zero gradient
-    fill!(gβ_sum, 0.0)
-    return gβ_sum
+    error("Cannot compute weighted marginal effects standard errors: engine lacks derivative support. " *
+          "Standard errors require proper gradient computation, which is not available for this model type.")
 end
 
 """
@@ -1585,9 +1414,9 @@ function _accumulate_unweighted_ame_gradient!(
     gβ_sum::Vector{Float64},
     engine::MarginsEngine{L, U, HasDerivatives},
     rows::AbstractVector{Int},
-    var::Symbol;
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
+    var::Symbol,
+    link,
+    backend::Symbol
 ) where {L, U}
     # HasDerivatives: Use the derivative evaluator (concrete type, no Union checks)
     de = engine.de
@@ -1640,19 +1469,18 @@ end
 """
     _accumulate_unweighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,NoDerivatives}, rows, var; kwargs...)
 
-**NoDerivatives dispatch**: Return zero gradient for engines without derivative support.
+**NoDerivatives dispatch**: Error when derivatives are required but not available.
 """
 function _accumulate_unweighted_ame_gradient!(
     gβ_sum::Vector{Float64},
     engine::MarginsEngine{L, U, NoDerivatives},
     rows::AbstractVector{Int},
-    var::Symbol;
-    link=GLM.IdentityLink(),
-    backend::Symbol=:ad
+    var::Symbol,
+    link,
+    backend::Symbol
 ) where {L, U}
-    # NoDerivatives: No derivative evaluator, return zero gradient
-    fill!(gβ_sum, 0.0)
-    return gβ_sum
+    error("Cannot compute marginal effects standard errors: engine lacks derivative support. " *
+          "Standard errors require proper gradient computation, which is not available for this model type.")
 end
 
 """
@@ -1930,7 +1758,7 @@ Helper function for _mem_continuous_and_categorical.
 """
 function _compute_row_specific_baseline_contrast(engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, scale::Symbol, backend::Symbol) where L
     # Use the new profile contrasts implementation
-    effect, _ = compute_profile_categorical_contrast(engine, profile, var, scale; backend)
+    effect, _ = compute_profile_categorical_contrast(engine, profile, var, scale, backend)
     return effect
 end
 
@@ -1942,7 +1770,7 @@ Helper function for _mem_continuous_and_categorical.
 """
 function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::MarginsEngine{L}, refgrid_de, profile::Dict, var::Symbol, scale::Symbol) where L
     # Use the new profile contrasts implementation  
-    _, gradient = compute_profile_categorical_contrast(engine, profile, var, scale; backend=:ad)
+    _, gradient = compute_profile_categorical_contrast(engine, profile, var, scale, :ad)
     copyto!(gβ_buffer, gradient)
 end
 
@@ -1969,7 +1797,7 @@ function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, 
 end
 
 """
-    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; scale=:response, backend=:ad, measure=:effect) where L -> (DataFrame, Matrix{Float64})
+    _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid, scale, backend, measure) where L -> (DataFrame, Matrix{Float64})
 
 **Architectural Rework**: Efficient single-compilation approach for profile marginal effects.
 
@@ -1994,7 +1822,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 - Consistent mixture routing across all profiles
 - Memory efficient with single compiled object
 """
-function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid; scale=:response, backend=:ad, measure=:effect) where L
+function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid, scale::Symbol, backend::Symbol, measure::Symbol) where L
     n_profiles = nrow(reference_grid)
     
     # Auto-detect variable types ONCE (not per profile)

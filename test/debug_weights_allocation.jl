@@ -32,19 +32,19 @@ function test_weights_allocation(n_rows)
     preallocated_weights = ones(Float64, n_rows)
     
     # Warmup
-    Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, 1:min(10, n_rows), :x, preallocated_weights; 
-                                               link=engine.link, backend=:fd)
+    Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, 1:min(10, n_rows), :x, preallocated_weights,
+                                               engine.link, :fd)
     
     # Test with pre-allocated weights
-    alloc_prealloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, rows, :x, preallocated_weights; 
-                                                                          link=engine.link, backend=:fd)
+    alloc_prealloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, rows, :x, preallocated_weights,
+                                                                          engine.link, :fd)
     println("    With pre-allocated weights: $alloc_prealloc bytes")
     
     # Test with freshly allocated weights (like _compute_continuous_ame does)
     function test_with_fresh_weights(gβ_sum, de, β, rows, var, link, backend)
         fresh_weights = ones(Float64, length(rows))  # This is what _compute_continuous_ame does!
-        Margins._accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, fresh_weights; 
-                                                  link=link, backend=backend)
+        Margins._accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, fresh_weights,
+                                                  link, backend)
     end
     
     # Warmup

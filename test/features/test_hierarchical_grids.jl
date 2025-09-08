@@ -179,7 +179,8 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
             @test occursin("requires continuous variable", string(e))
         end
         
-        # Empty data case
+        # Empty data case - tests edge case handling and warning behavior
+        # This intentionally triggers a warning to verify proper error reporting
         empty_data = DataFrame(x = Float64[], y = Float64[])
         grid = hierarchical_grid(empty_data, (:x, :mean))
         @test nrow(grid) == 1  # Still creates a single row with NaN for mean of empty data

@@ -30,7 +30,7 @@ alloc_fc = @allocated FormulaCompiler.fd_jacobian_column!(gβ_temp, engine.de, 1
 gβ_buffer = Vector{Float64}(undef, length(engine.β))
 alloc_new = @allocated Margins._accumulate_unweighted_ame_gradient!(
     gβ_buffer, engine.de, engine.β, 1:100, :x;
-    link=engine.link, backend=:fd
+    engine.link, :fd
 )
 @info "New function allocation: $alloc_new bytes"
 

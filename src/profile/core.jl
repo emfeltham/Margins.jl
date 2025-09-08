@@ -166,7 +166,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     if type === :effects
         # Use reference grid directly for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
-        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid; scale, backend, measure)  # → MEM/MER
+        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid, scale, backend, measure)  # → MEM/MER
         
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -192,7 +192,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions(engine, reference_grid; scale)  # → APM/APR
+        df, G = _profile_predictions(engine, reference_grid, scale)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
@@ -305,14 +305,14 @@ end
 
 
 """
-    _profile_predictions(engine, reference_grid; scale) -> (DataFrame, Matrix{Float64})
+    _profile_predictions(engine, reference_grid, scale) -> (DataFrame, Matrix{Float64})
 
 Compute adjusted predictions at profiles (APM/APR) with delta-method standard errors.
 
 This function evaluates predictions at each row of the reference grid, providing
 adjusted predictions at the mean (APM) or at representative values (APR).
 """
-function _profile_predictions(engine::MarginsEngine{L}, reference_grid; scale=:response) where L
+function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) where L
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     

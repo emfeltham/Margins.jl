@@ -1,7 +1,7 @@
 # population/contexts.jl - Handle at/over parameters for population contexts (Stata-compatible)
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights; type, scale, backend)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend)
 
 Handle population margins with scenarios/groups contexts (unified API).
 
@@ -11,7 +11,7 @@ subgroup analysis (groups) in population margins computation.
 # Arguments
 - `weights`: Observation weights vector (Vector{Float64} or nothing)
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights; type, scale, backend)
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     
@@ -597,9 +597,9 @@ function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, 
     else
         # Use weighted computation from existing infrastructure
         _accumulate_weighted_ame_gradient!(
-            engine.gβ_accumulator, engine.de, engine.β, rows, var, weights;
-            link=(scale === :response ? engine.link : GLM.IdentityLink()), 
-            backend=backend
+            engine.gβ_accumulator, engine, rows, var, weights,
+            (scale === :response ? engine.link : GLM.IdentityLink()), 
+            backend
         )
         # Compute weighted AME value 
         ame_val = _accumulate_me_value(engine.g_buf, engine.de, engine.β, engine.link, rows, scale, backend, var_idx, weights)

@@ -21,10 +21,10 @@ function debug_population_margins_step_by_step(n_rows)
     rows = 1:n_rows
     
     # Warmup
-    df_warmup, G_warmup = Margins._ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad)
+    df_warmup, G_warmup = Margins._ame_continuous_and_categorical(engine, data_nt, :response, :ad, :effect)
     
     # Measure
-    step2_alloc = @allocated df, G = Margins._ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad)
+    step2_alloc = @allocated df, G = Margins._ame_continuous_and_categorical(engine, data_nt, :response, :ad, :effect)
     println("    _ame_continuous_and_categorical: $step2_alloc bytes")
     
     println("  Step 3: Individual variable processing")

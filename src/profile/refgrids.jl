@@ -655,12 +655,12 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
 end
 
 """
-    _parse_deep_hierarchical_spec(spec, data_nt; max_depth=5) -> Vector{Dict}
+    _parse_deep_hierarchical_spec(spec, data_nt, max_depth) -> Vector{Dict}
 
 Parse hierarchical specifications with support for 3+ level nesting.
 Includes grid size estimation and safety checks.
 """
-function _parse_deep_hierarchical_spec(spec, data_nt; max_depth=5)
+function _parse_deep_hierarchical_spec(spec, data_nt, max_depth)
     # Estimate total grid size before parsing
     estimated_size = _estimate_grid_size(spec, data_nt)
     _validate_grid_size(estimated_size)
@@ -1035,12 +1035,12 @@ end
 # =============================================================================
 
 """
-    _validate_reference_specification(spec, data_nt; max_depth=5) -> Bool
+    _validate_reference_specification(spec, data_nt, max_depth) -> Bool
 
 Validate reference specification against data before parsing.
 Provides comprehensive error checking with informative messages.
 """
-function _validate_reference_specification(spec, data_nt; max_depth=5)
+function _validate_reference_specification(spec, data_nt, max_depth)
     _validate_data_not_empty(data_nt)
     _validate_specification_structure(spec, data_nt)
     _validate_nesting_depth(spec, max_depth)
@@ -1455,7 +1455,7 @@ function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
     data_nt = data isa NamedTuple ? data : Tables.columntable(data)
     
     # Enhanced validation with depth checking
-    _validate_reference_specification(spec, data_nt; max_depth=max_depth)
+    _validate_reference_specification(spec, data_nt, max_depth)
     
     # Determine which parser to use based on nesting depth
     actual_depth = _validate_nesting_depth(spec, max_depth)
@@ -1465,7 +1465,7 @@ function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
         parsed_specs = _parse_reference_grid_specification(spec, data_nt)
     else
         # Use new deep nesting parser
-        parsed_specs = _parse_deep_hierarchical_spec(spec, data_nt; max_depth=max_depth)
+        parsed_specs = _parse_deep_hierarchical_spec(spec, data_nt, max_depth)
     end
     
     # Grid size validation and warnings

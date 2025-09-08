@@ -30,7 +30,7 @@ Where:
 """
 
 """
-    compute_profile_categorical_contrast(engine, profile, var, scale; backend=:ad) -> (effect, gradient)
+    compute_profile_categorical_contrast(engine, profile, var, scale, :ad) -> (effect, gradient)
 
 Compute row-specific categorical contrast at a specific profile.
 
@@ -55,8 +55,8 @@ function compute_profile_categorical_contrast(
     engine::MarginsEngine{L}, 
     profile::Dict, 
     var::Symbol, 
-    scale::Symbol; 
-    backend::Symbol=:ad
+    scale::Symbol,
+    backend::Symbol
 ) where L
     # Get baseline level (extended function handles Bool variables automatically)
     baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
@@ -84,7 +84,7 @@ function compute_profile_categorical_contrast(
 end
 
 """
-    compute_multiple_profile_contrasts(engine, profiles, var, scale; backend=:ad) -> (DataFrame, Matrix)
+    compute_multiple_profile_contrasts(engine, profiles, var, scale, backend) -> (DataFrame, Matrix)
 
 Compute row-specific categorical contrasts for multiple profiles efficiently.
 
@@ -104,8 +104,8 @@ function compute_multiple_profile_contrasts(
     engine::MarginsEngine{L},
     profiles::Vector{Dict}, 
     var::Symbol,
-    scale::Symbol;
-    backend::Symbol=:ad
+    scale::Symbol,
+    backend::Symbol
 ) where L
     n_profiles = length(profiles)
     n_params = length(engine.β)
@@ -124,7 +124,7 @@ function compute_multiple_profile_contrasts(
     
     # Compute contrasts for each profile
     for (i, profile) in enumerate(profiles)
-        effect, gradient = compute_profile_categorical_contrast(engine, profile, var, scale; backend)
+        effect, gradient = compute_profile_categorical_contrast(engine, profile, var, scale, backend)
         
         effects[i] = effect
         gradients[i, :] = gradient

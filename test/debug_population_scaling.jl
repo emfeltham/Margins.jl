@@ -53,19 +53,19 @@ function test_scaling_components(n_rows)
     weights = ones(Float64, n_rows)
     
     # Warmup
-    Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, 1:min(10, n_rows), :x, weights; 
-                                               link=engine.link, backend=:fd)
+    Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, 1:min(10, n_rows), :x, weights,
+                                               engine.link, :fd)
     
     # Test small subset
     small_subset = 1:min(100, n_rows)
-    small_alloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, small_subset, :x, weights; 
-                                                                        link=engine.link, backend=:fd)
+    small_alloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, small_subset, :x, weights,
+                                                                        engine.link, :fd)
     println("    Small subset ($(length(small_subset)) rows): $small_alloc bytes")
     
     # Test full dataset if manageable
     if n_rows <= 1000
-        full_alloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, rows, :x, weights; 
-                                                                          link=engine.link, backend=:fd)
+        full_alloc = @allocated Margins._accumulate_weighted_ame_gradient!(gβ_sum, engine.de, engine.β, rows, :x, weights,
+                                                                          engine.link, :fd)
         println("    Full dataset ($n_rows rows): $full_alloc bytes")
         println("    Allocation ratio: $(full_alloc / small_alloc)x")
     else

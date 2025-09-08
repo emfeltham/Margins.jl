@@ -27,12 +27,12 @@ function test_fix_correctness(n_rows)
     
     # Old approach (allocates weights vector)
     weights = ones(Float64, length(rows))
-    Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, rows, :x, weights; 
-                                              link=engine.link, backend=:fd)
+    Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, rows, :x, weights,
+                                              engine.link, :fd)
     
     # New approach (no weights allocation)
     Margins._accumulate_unweighted_ame_gradient!(gβ_new, engine.de, engine.β, rows, :x; 
-                                                link=engine.link, backend=:fd)
+                                                engine.link, :fd)
     
     # Compare results
     max_diff = maximum(abs.(gβ_old .- gβ_new))
@@ -49,21 +49,21 @@ function test_fix_correctness(n_rows)
     println("  Comparing allocation behavior:")
     
     # Warmup both approaches
-    Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, 1:min(10, n_rows), :x, weights; 
-                                              link=engine.link, backend=:fd)
+    Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, 1:min(10, n_rows), :x, weights,
+                                              engine.link, :fd)
     Margins._accumulate_unweighted_ame_gradient!(gβ_new, engine.de, engine.β, 1:min(10, n_rows), :x; 
-                                                link=engine.link, backend=:fd)
+                                                engine.link, :fd)
     
     # Test old approach allocation (with weights vector creation)
     old_alloc = @allocated begin
         temp_weights = ones(Float64, length(rows))
-        Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, rows, :x, temp_weights; 
-                                                  link=engine.link, backend=:fd)
+        Margins._accumulate_weighted_ame_gradient!(gβ_old, engine.de, engine.β, rows, :x, temp_weights,
+                                                  engine.link, :fd)
     end
     
     # Test new approach allocation (no weights vector)
     new_alloc = @allocated Margins._accumulate_unweighted_ame_gradient!(gβ_new, engine.de, engine.β, rows, :x; 
-                                                                       link=engine.link, backend=:fd)
+                                                                       engine.link, :fd)
     
     println("    Old approach (with weights): $old_alloc bytes")
     println("    New approach (no weights): $new_alloc bytes")
