@@ -5,7 +5,7 @@ using Margins, GLM, DataFrames, StatsModels, CategoricalArrays
 using Random
 
 # Create small test dataset - SIMPLIFIED TO ONLY CONTINUOUS VARIABLES
-Random.seed!(123)
+Random.seed!(06515)
 data = DataFrame(
     y = randn(10),
     x1 = randn(10),
