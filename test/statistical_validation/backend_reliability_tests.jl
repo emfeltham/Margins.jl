@@ -36,7 +36,7 @@ include("backend_reliability_guide.jl")
                 @debug "Both backends succeeded for this log() case - testing with data closer to boundary"
                 @test true  # Both working is fine
             else
-                @warn "Unexpected: FD succeeded but AD failed for log() function"
+                @info "Anomalous behavior observed: finite differences succeeded where automatic differentiation failed for logarithmic function"
             end
             
             # Test that when both succeed, results are consistent
@@ -89,7 +89,7 @@ include("backend_reliability_guide.jl")
             @debug "Small problem (n=100): FD=$(round(fd_time*1000, digits=1))ms, AD=$(round(ad_time*1000, digits=1))ms"
             
             # Don't enforce specific performance requirements since they vary by system
-            # Just validate that both complete successfully
+            # Verification that both computational backends complete successfully
             @test true
         end
         
@@ -170,10 +170,10 @@ include("backend_reliability_guide.jl")
         end
     end
     
-    @info " BACKEND RELIABILITY VALIDATION: COMPLETE"
-    @info "Key findings validated:"
-    @info "   AD more reliable for domain-sensitive functions (log, sqrt)"
-    @info "   Both backends numerically consistent for well-conditioned problems"  
-    @info "   Performance characteristics documented (varies by system)"
-    @info "   AD default recommendation validated across common use cases"
+    @info "Backend Reliability Validation: Complete"
+    @info "Primary validation findings:"
+    @info "  Automatic differentiation demonstrates superior reliability for domain-sensitive functions (logarithmic, square root transformations)"
+    @info "  Both computational backends maintain numerical consistency for well-conditioned statistical problems"
+    @info "  Performance characteristics exhibit system-dependent variation as expected"
+    @info "  Automatic differentiation default recommendation validated across standard econometric applications"
 end

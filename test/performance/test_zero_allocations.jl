@@ -221,7 +221,7 @@ include("../test_utilities.jl")
     end
     
     @testset "Allocation scaling tests across dataset sizes" begin
-        # CRITICAL: Verify that allocations don't scale with number of rows
+        # CRITICAL: Verify that allocations do not scale with number of rows
         # This tests the core performance guarantee that computational cost per row is constant
         
         dataset_sizes = [500, 2000, 8000]
@@ -246,7 +246,7 @@ include("../test_utilities.jl")
                 
                 @debug "Population scaling test" n_rows=n total_allocations=min_allocs allocations_per_row=allocs_per_row
                 
-                # Test that total allocations don't scale linearly with dataset size
+                # Test that total allocations do not scale linearly with dataset size
                 # Allow some growth but ensure it's sublinear (much less than O(n))
                 @test min_allocs < n * 10  # Much better than O(n) scaling
             end
@@ -280,7 +280,7 @@ include("../test_utilities.jl")
                 @test min_allocs < 500000  # Fixed upper bound regardless of dataset size
             end
             
-            # Verify that profile margins allocations don't increase significantly with dataset size
+            # Verify that profile margins allocations do not increase significantly with dataset size
             allocs_500 = allocation_results[1][2]
             allocs_8000 = allocation_results[3][2]
             # Allow some variation but ensure it's not proportional to dataset size

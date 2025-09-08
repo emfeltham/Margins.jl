@@ -1,7 +1,7 @@
-# Debug script to see which code path is being taken
+# Computational pathway analysis for marginal effects estimation
 using Margins, GLM, DataFrames, Tables
 
-println("=== Checking Which Code Path Is Taken ===\n")
+@info "Computational Pathway Analysis for Marginal Effects Estimation"
 
 # Create test data like the allocation test
 n_rows = 1000
@@ -11,30 +11,29 @@ df = DataFrame(
 )
 model = lm(@formula(y ~ x), df)
 
-println("Calling population_margins with n_rows = $n_rows")
+@info "Executing population_margins with sample size n = $n_rows"
 
-# Trace the execution by modifying the functions temporarily
-# Let's add some debug prints to see which path is taken
+# Systematic analysis of computational pathway selection during execution
 result = population_margins(model, df; type=:effects, vars=[:x])
 
-println("Result obtained successfully")
-println("Estimate: $(result.estimates[1])")
-println("Standard Error: $(result.standard_errors[1])")
+@info "Population margins computation completed successfully"
+@info "Marginal effect estimate: $(result.estimates[1])"
+@info "Delta-method standard error: $(result.standard_errors[1])"
 
-# Try to manually trace which function gets called
+# Manual verification of computational pathway selection
 data_nt = Tables.columntable(df)
 engine = Margins.get_or_build_engine(model, data_nt, [:x], GLM.vcov)
 
-println("\nTesting _compute_variable_ame_unified directly:")
+@info "Direct validation of variable-specific AME computation"
 var_type = Margins._detect_variable_type(engine.data_nt, :x)
-println("Variable type detected: $var_type")
+@info "Variable classification: $var_type"
 
 rows = 1:n_rows
 scale = :response
 backend = :ad
 
 if var_type === :continuous
-    println("Should call _compute_continuous_ame")
+    @info "Routing to continuous variable AME computation"
     ame_val, gradient = Margins._compute_continuous_ame(engine, :x, rows, scale, backend)
-    println("Direct call result - AME: $ame_val, Gradient norm: $(sum(abs.(gradient)))")
+    @info "Direct computation result - AME estimate: $ame_val, Gradient vector norm: $(sum(abs.(gradient)))"
 end

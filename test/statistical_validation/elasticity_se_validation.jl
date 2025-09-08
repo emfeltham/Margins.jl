@@ -186,7 +186,7 @@ end
 Run comprehensive elasticity SE validation across multiple measures and model types.
 """
 function run_comprehensive_elasticity_se_tests()
-    println("\n=== Comprehensive Elasticity SE Validation ===")
+    @info "Comprehensive Elasticity SE Validation Framework"
     
     # Generate test data
     data = make_econometric_data(n=300, seed=42)
@@ -204,10 +204,10 @@ function run_comprehensive_elasticity_se_tests()
     validation_results = []
     
     for (model_name, model_func, formula, test_data) in models_to_test
-        println("\n--- Testing $model_name ---")
+        @info "Model validation: $model_name"
         
         for measure in measures
-            println("  Validating measure: $measure")
+            @info "Elasticity measure validation: $measure"
             
             try
                 # Test population elasticity
@@ -215,7 +215,7 @@ function run_comprehensive_elasticity_se_tests()
                     model_func, formula, test_data, measure; n_bootstrap=100
                 )
                 
-                println("    Population $(measure): Agreement rate = $(round(pop_result.validation.agreement_rate, digits=3))")
+                @info "Population $measure validation: Agreement rate = $(round(pop_result.validation.agreement_rate, digits=3))"
                 
                 # Test profile elasticity at means
                 means_ref_grid = means_grid(test_data)
@@ -223,7 +223,7 @@ function run_comprehensive_elasticity_se_tests()
                     model_func, formula, test_data, means_ref_grid, measure; n_bootstrap=100
                 )
                 
-                println("    Profile $(measure): Agreement rate = $(round(profile_result.validation.agreement_rate, digits=3))")
+                @info "Profile $measure validation: Agreement rate = $(round(profile_result.validation.agreement_rate, digits=3))"
                 
                 push!(validation_results, (
                     model = model_name,
@@ -235,7 +235,7 @@ function run_comprehensive_elasticity_se_tests()
                 ))
                 
             catch e
-                println("    ERROR: $e")
+                @info "Validation error encountered: $e"
                 push!(validation_results, (
                     model = model_name,
                     measure = measure,
@@ -332,9 +332,9 @@ if get(ENV, "MARGINS_COMPREHENSIVE_TESTS", "false") == "true"
         
         @test good_agreements / total_tests > 0.8
         
-        println("\nElasticity SE Validation Summary:")
-        println("$(good_agreements)/$(total_tests) tests passed agreement criteria (>80% agreement rate)")
+        @info "Elasticity SE Validation Summary:"
+        @info "$(good_agreements) of $(total_tests) tests satisfied agreement criteria (>80% agreement rate)"
     end
 end
 
-println("Elasticity SE validation tests loaded successfully")
+@info "Elasticity SE validation framework loaded successfully"

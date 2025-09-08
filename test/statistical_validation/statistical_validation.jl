@@ -296,7 +296,7 @@ using Margins
             # 1. Population Effects: Hand-calculated analytical derivative
             pop_effects = population_margins(model, df; type=:effects, vars=[:x], scale=:link)
             pop_effects_df = DataFrame(pop_effects)
-            # Note: The model is y ~ x + x^2 
+            # Analytical verification: quadratic model specification y ~ x + x² 
             # So ∂y/∂x = β₁ + 2*β₂*x (true derivative of quadratic function)
             # This tests the computational correctness of automatic differentiation for x²
             # For quadratic y ~ x + x^2, AME = average of (β₁ + 2*β₂*x) over all x values

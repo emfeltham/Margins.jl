@@ -172,7 +172,7 @@ using Margins
         @test validate_all_finite_positive(DataFrame(warmup_result)).all_valid
         
         # Test that FD backend achieves near-zero allocations for population margins
-        # Note: We can't easily test allocations here without BenchmarkTools,
+        # Allocation testing requires BenchmarkTools dependency,
         # but we can verify the computational correctness holds across sample sizes
         
         @testset "Scaling Consistency" begin

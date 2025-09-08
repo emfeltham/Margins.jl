@@ -17,7 +17,7 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
     )
     
     @testset "Basic Reference Specifications" begin
-        # Simple categorical specification
+        # Basic categorical variable specification
         grid = hierarchical_grid(data, :education)
         @test nrow(grid) == 2  # HS and College
         @test "education" in names(grid)
@@ -106,7 +106,7 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
     end
     
     @testset "Hierarchical Reference Construction" begin
-        # Simple hierarchical: region => education
+        # Basic hierarchical specification: region conditioning education
         grid = hierarchical_grid(data, :region => :education)
         @test nrow(grid) == 4  # 2 regions × 2 education levels (same as cross-tabulation)
         @test "region" in names(grid) && "education" in names(grid)
@@ -334,7 +334,7 @@ end
         @test "city" in names(grid)
         @test "age" in names(grid)
         
-        # Check that some rows have education (from simple categorical spec)
+        # Verification of education variable presence in basic categorical specification
         education_rows = grid[.!ismissing.(grid.education), :]
         @test nrow(education_rows) > 0
         
@@ -434,7 +434,7 @@ end
         estimated_size = Margins._estimate_grid_size(large_spec, Tables.columntable(small_data))
         
         # The actual warning threshold testing requires specific data composition
-        # Just test that the function runs without error
+        # Verification of function execution without errors
         grid = hierarchical_grid(small_data, large_spec)
         @test grid isa DataFrame
         
@@ -457,7 +457,7 @@ end
             age = [30, 45, 60, 35]
         )
         
-        # Test simple continuous specification
+        # Evaluation of basic continuous variable specification
         reference_grid = hierarchical_grid(data, (:income, :mean))
         @test reference_grid isa DataFrame
         @test nrow(reference_grid) == 1
@@ -510,7 +510,7 @@ end
 end
 
 @testset "Grammar Parsing Infrastructure" begin
-    # Create simple test data
+    # Generate basic test dataset
     data = DataFrame(
         cat1 = ["A", "B"], 
         cat2 = ["X", "Y"],

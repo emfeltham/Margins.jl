@@ -1,50 +1,50 @@
-# Check what's actually running
+# Implementation status verification for marginal effects computation
 using Margins, GLM, DataFrames, Tables
 using FormulaCompiler
 
-println("=== IMPLEMENTATION STATUS CHECK ===\n")
+@info "Implementation Status Assessment"
 
-# Test data
+# Synthetic data for computational pathway testing
 df = DataFrame(y = randn(100), x = randn(100))
 model = lm(@formula(y ~ x), df)
 data_nt = Tables.columntable(df)
 engine = Margins.get_or_build_engine(model, data_nt, [:x], GLM.vcov)
 
-println("1. Check if new function exists:")
+@info "Function existence verification:"
 try
     methods_count = length(methods(Margins._accumulate_unweighted_ame_gradient!))
-    println("   ✅ _accumulate_unweighted_ame_gradient! exists ($methods_count methods)")
+    @info "Function _accumulate_unweighted_ame_gradient! confirmed ($methods_count methods)"
 catch e
-    println("   ❌ Function missing: $e")
+    @info "Function unavailable: $e"
 end
 
-println("\n2. Test individual FormulaCompiler calls (should be ~0 bytes):")
+@info "FormulaCompiler allocation analysis (target: ~0 bytes):"
 
-# Test FormulaCompiler calls directly
+# Direct evaluation of FormulaCompiler computational efficiency
 gβ_temp = engine.de.fd_yminus
-println("   Testing FormulaCompiler.fd_jacobian_column!:")
+@info "Evaluating FormulaCompiler.fd_jacobian_column! allocation:"
 alloc_fc = @allocated FormulaCompiler.fd_jacobian_column!(gβ_temp, engine.de, 1, :x)
-println("   FormulaCompiler call: $alloc_fc bytes")
+@info "FormulaCompiler allocation: $alloc_fc bytes"
 
-println("\n3. Test our new function (should be ~0 bytes):")
+@info "New function allocation analysis (target: ~0 bytes):"
 gβ_buffer = Vector{Float64}(undef, length(engine.β))
 alloc_new = @allocated Margins._accumulate_unweighted_ame_gradient!(
     gβ_buffer, engine.de, engine.β, 1:100, :x;
     link=engine.link, backend=:fd
 )
-println("   Our new function: $alloc_new bytes")
+@info "New function allocation: $alloc_new bytes"
 
-println("\n4. Test original _compute_continuous_ame (should be fixed):")
+@info "Original function allocation analysis (expected improvement):"
 alloc_orig = @allocated Margins._compute_continuous_ame(engine, :x, 1:100, :response, :fd)
-println("   _compute_continuous_ame: $alloc_orig bytes")
+@info "_compute_continuous_ame allocation: $alloc_orig bytes"
 
-println("\n=== DIAGNOSIS ===")
+@info "Diagnostic Assessment:"
 if alloc_fc > 1000
-    println("🔍 FormulaCompiler calls are allocating - this suggests dataset/evaluator size issue")
+    @info "FormulaCompiler allocation detected - potential dataset or evaluator scaling issue"
 elseif alloc_new > 1000
-    println("🔍 Our new function has bugs - implementation needs fixing") 
+    @info "New function implementation requires debugging and correction" 
 elseif alloc_orig > 1000
-    println("🔍 Main function still broken - wrong code path being used")
+    @info "Main function routing error - incorrect computational pathway selection"
 else
-    println("✅ Everything looks good - maybe just need full system test")
+    @info "All functions operating within expected parameters - system integration testing recommended"
 end

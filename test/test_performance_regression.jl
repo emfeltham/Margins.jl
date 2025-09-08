@@ -78,8 +78,8 @@ using Test, BenchmarkTools, Margins, GLM, DataFrames, CategoricalArrays
         mixed_allocs = result.memory
         @debug "Mixed variables allocations: $(mixed_allocs) bytes"
         
-        # Mixed shouldn't be dramatically worse than sum of components
-        # Allow some overhead but shouldn't be more than 2x the sum
+        # Mixed variable allocation should not exceed sum of components significantly
+        # Allow some overhead but should not exceed 2x the sum
         component_sum = cont_allocs + bool_allocs + cat_allocs
         @test mixed_allocs < 2 * component_sum
     end

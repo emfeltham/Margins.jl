@@ -39,9 +39,9 @@ function test_fix_correctness(n_rows)
     println("    Maximum difference between old/new: $max_diff")
     
     if max_diff < 1e-12
-        println("    ✅ Results are mathematically identical")
+        @info "Mathematical equivalence verified: results are identical"
     else
-        println("    ❌ Results differ - potential bug!")
+        @info "Mathematical equivalence violated: results differ - investigation required"
         return false
     end
     
@@ -116,9 +116,9 @@ function test_full_population_margins_scaling()
         println("    Allocation increase: $(alloc_ratio)x")
         
         if alloc_ratio < 100
-            println("    ✅ Allocation scaling is under control (target: <100x)")
+            @info "Allocation scaling satisfies performance criteria (target: <100x)"
         else
-            println("    ❌ Allocation scaling still problematic (>100x)")
+            @info "Allocation scaling exceeds performance criteria (>100x)"
         end
     end
     
@@ -130,7 +130,7 @@ println("=== CORRECTNESS TESTS ===")
 for n in [100, 1000]
     success = test_fix_correctness(n)
     if !success
-        println("❌ Correctness test failed!")
+        @info "Correctness validation failed"
         exit(1)
     end
     println()

@@ -33,7 +33,7 @@ using FormulaCompiler
         allocs_single = @allocated FormulaCompiler.marginal_effects_mu!(g_buf, de, β, 1; link=GLM.IdentityLink(), backend=:ad)
         
         @test allocs_single == 0  # Should be zero allocation according to FormulaCompiler tests
-        println("Single marginal_effects_mu! call: $allocs_single bytes")
+        @info "Single marginal_effects_mu! allocation: $allocs_single bytes"
     end
     
     @testset "Loop Allocation Test" begin
@@ -52,12 +52,12 @@ using FormulaCompiler
         allocs_loop = @allocated test_marginal_effects_loop(g_buf, de, β, rows)
         allocs_per_call = allocs_loop / length(rows)
         
-        println("Loop marginal_effects_mu! calls:")
-        println("  Total: $allocs_loop bytes")
-        println("  Per call: $allocs_per_call bytes")
+        @info "Loop marginal_effects_mu! allocation analysis:"
+        @info "Total allocation: $allocs_loop bytes"
+        @info "Per-call allocation: $allocs_per_call bytes"
         
-        # This should be zero or very small if FormulaCompiler is efficient
-        @test allocs_per_call < 1000  # Allow some overhead but shouldn't be massive
+        # Allocation should be minimal under efficient FormulaCompiler implementation
+        @test allocs_per_call < 1000  # Allowable overhead with reasonable upper bound
     end
     
     @testset "Backend Comparison" begin
@@ -67,11 +67,11 @@ using FormulaCompiler
         # Test FD backend  
         allocs_fd = @allocated FormulaCompiler.marginal_effects_mu!(g_buf, de, β, 1; link=GLM.IdentityLink(), backend=:fd)
         
-        println("Backend allocation comparison:")
-        println("  AD backend: $allocs_ad bytes")
-        println("  FD backend: $allocs_fd bytes")
+        @info "Computational backend allocation comparison:"
+        @info "Automatic differentiation backend: $allocs_ad bytes"
+        @info "Finite differences backend: $allocs_fd bytes"
         
-        # FD should definitely be zero allocation
+        # FD backend expected to achieve zero allocation
         @test allocs_fd == 0
     end
     
@@ -93,15 +93,15 @@ using FormulaCompiler
         # Test large dataset allocation (original de)
         allocs_large = @allocated FormulaCompiler.marginal_effects_mu!(g_buf, de, β, 1; link=GLM.IdentityLink(), backend=:ad)
         
-        println("Dataset size impact:")
-        println("  Small dataset (n=10): $allocs_small bytes") 
-        println("  Large dataset (n=1000): $allocs_large bytes")
+        @info "Dataset size scaling analysis:"
+        @info "Small dataset allocation (n=10): $allocs_small bytes"
+        @info "Large dataset allocation (n=1000): $allocs_large bytes"
         
         # If derivative evaluator size causes allocations, we'll see it here
         if allocs_large > allocs_small
-            println("  ⚠️  Large dataset causes more allocations!")
+            @info "Large dataset exhibits increased allocation overhead"
         else
-            println("  ✅  Dataset size doesn't affect allocations")
+            @info "Dataset size demonstrates allocation invariance"
         end
     end
 end

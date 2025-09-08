@@ -217,7 +217,7 @@
         df_ad = DataFrame(result_ad)
         df_fd = DataFrame(result_fd)
         
-        # AD and FD should give very similar results for weighted computation
+        # AD and FD backends should produce numerically consistent results for weighted computation
         @test all(abs.(df_ad.estimate .- df_fd.estimate) .< 1e-4)
         @test all(abs.(df_ad.se .- df_fd.se) .< 1e-3)  # Standard errors might differ slightly
         

@@ -14,7 +14,7 @@ using Margins
 using GLM
 using CovarianceMatrices
 
-# Note: robust_se_validation.jl functions are included at the top level in runtests.jl
+# Robust standard error validation functions imported via runtests.jl
 
 @testset "Robust Standard Errors Integration" begin
     Random.seed!(06515)  

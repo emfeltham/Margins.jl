@@ -256,7 +256,7 @@ using Margins: mix
     # === CATEGORICAL MIXTURE SE TESTING ===
     @testset "Categorical Mixture SE Testing - Weighted Scenario SEs" begin
         
-        @testset "Simple Categorical Mixture SE Validation" begin
+        @testset "Basic Categorical Mixture SE Validation" begin
             # Create data with categorical variable
             n = 1000
             Random.seed!(456)

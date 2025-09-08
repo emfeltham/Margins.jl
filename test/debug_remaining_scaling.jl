@@ -72,10 +72,10 @@ if length(results) >= 2
     println("Main function scaling: $(main_ratio)x")
     
     if main_ratio > 10
-        println("⚠️  Main function still has significant scaling")
+        @info "Main function exhibits significant scaling behavior"
     elseif engine_ratio > 10  
-        println("⚠️  Engine creation has significant scaling")
+        @info "Engine creation exhibits significant scaling behavior"
     else
-        println("✅  Both components have reasonable scaling")
+        @info "Both components demonstrate acceptable scaling characteristics"
     end
 end

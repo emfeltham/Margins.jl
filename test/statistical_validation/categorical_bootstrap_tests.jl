@@ -116,7 +116,7 @@ function bootstrap_validate_categorical_effects(model_func, formula, data; categ
     original_model = model_func(formula, data)
     
     # Get population margins for categorical variables
-    # Note: Margins.jl handles categorical variables automatically
+    # Categorical variable processing is performed automatically by the Margins.jl framework
     try
         original_result = population_margins(original_model, data; type=:effects, backend=:fd)
         original_df = DataFrame(original_result)

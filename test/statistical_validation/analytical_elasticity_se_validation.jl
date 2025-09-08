@@ -83,7 +83,7 @@ function analytical_linear_elasticity_se(model, data, var_symbol, at_values)
         end
     end
     
-    # For linear model, prediction is just the linear predictor
+    # For linear model specification, prediction equals the linear predictor
     y_pred = linear_pred
     x_value = at_values[var_symbol]
     

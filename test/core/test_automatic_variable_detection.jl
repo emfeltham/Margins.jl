@@ -137,7 +137,7 @@ using Random
         x2_row = df_result[df_result.term .== "x2", :]
         
         # Standard errors should be approximately equal (not 1000x different!)
-        @test isapprox(x1_row.se[1], x1_coef_se, rtol=1e-10)  # Very tight tolerance for linear model
+        @test isapprox(x1_row.se[1], x1_coef_se, rtol=1e-10)  # High precision tolerance for linear model specification
         @test isapprox(x2_row.se[1], x2_coef_se, rtol=1e-10)
         
         # Verify estimates match coefficients too

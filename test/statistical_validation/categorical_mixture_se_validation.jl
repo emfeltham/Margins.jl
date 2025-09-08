@@ -260,7 +260,7 @@ function run_comprehensive_mixture_se_tests()
     validation_results = []
     
     for (model_name, model_func, formula) in models_to_test
-        println("\n--- Testing $model_name ---")
+        @info "Model validation: $model_name"
         
         for (var_symbol, mixture) in mixtures_to_test
             
@@ -270,14 +270,14 @@ function run_comprehensive_mixture_se_tests()
                     model_func, formula, data, var_symbol, mixture; n_bootstrap=50  # Smaller for speed
                 )
                 
-                println("    Population mixture SE: Agreement rate = $(round(pop_result.validation.agreement_rate, digits=3))")
+                @info "Population mixture SE validation: Agreement rate = $(round(pop_result.validation.agreement_rate, digits=3))"
                 
                 # Test profile mixture effects  
                 profile_result = bootstrap_validate_categorical_mixture_profile(
                     model_func, formula, data, var_symbol, mixture; n_bootstrap=50
                 )
                 
-                println("    Profile mixture SE: Agreement rate = $(round(profile_result.validation.agreement_rate, digits=3))")
+                @info "Profile mixture SE validation: Agreement rate = $(round(profile_result.validation.agreement_rate, digits=3))"
                 
                 push!(validation_results, (
                     model = model_name,
@@ -289,7 +289,7 @@ function run_comprehensive_mixture_se_tests()
                 ))
                 
             catch e
-                println("    ERROR: $e")
+                @info "Validation error encountered: $e"
                 push!(validation_results, (
                     model = model_name,
                     variable = var_symbol,
@@ -326,7 +326,7 @@ end
         @test all(isfinite.(result.computed_ses))  # SEs should be finite
         @test all(isfinite.(result.bootstrap_ses))  # Bootstrap SEs should be finite
         
-        println("Population mixture SE validation: Agreement = $(round(result.validation.agreement_rate, digits=3)), Max error = $(round(result.validation.max_relative_error, digits=3))")
+        @info "Population mixture SE validation: Agreement = $(round(result.validation.agreement_rate, digits=3)), Maximum relative error = $(round(result.validation.max_relative_error, digits=3))"
     end
     
     @testset "Profile Mixture SE Bootstrap Validation" begin
@@ -344,7 +344,7 @@ end
         @test all(isfinite.(result.computed_ses))
         @test all(isfinite.(result.bootstrap_ses))
         
-        println("Profile mixture SE validation: Agreement = $(round(result.validation.agreement_rate, digits=3)), Max error = $(round(result.validation.max_relative_error, digits=3))")
+        @info "Profile mixture SE validation: Agreement = $(round(result.validation.agreement_rate, digits=3)), Maximum relative error = $(round(result.validation.max_relative_error, digits=3))"
     end
     
     @testset "Mixture SE Consistency Tests" begin
@@ -363,9 +363,9 @@ end
     
     @testset "Boolean Mixture SE Validation" begin
         # Skip boolean test for now - need to fix contrast issues
-        # Just test that basic mixture framework is working
+        # Verification of fundamental mixture framework functionality
         @test true  # Placeholder test
-        println("Boolean mixture SE validation: Skipped (contrast implementation needed)")
+        @info "Boolean mixture standard error validation deferred pending contrast method implementation"
     end
 end
 
@@ -380,9 +380,9 @@ if get(ENV, "MARGINS_COMPREHENSIVE_TESTS", "false") == "true"
         
         @test good_agreements / total_tests > 0.6  # 60% success rate for comprehensive testing
         
-        println("\nCategorical Mixture SE Validation Summary:")
-        println("$(good_agreements)/$(total_tests) tests passed agreement criteria (>70% agreement rate)")
+        @info "Categorical Mixture SE Validation Summary:"
+        @info "$(good_agreements) of $(total_tests) tests satisfied agreement criteria (>70% agreement rate)"
     end
 end
 
-println("Categorical mixture SE validation tests loaded successfully")
+@info "Categorical mixture SE validation framework loaded successfully"
