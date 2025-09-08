@@ -159,7 +159,7 @@ This is the main validation entry point for most margins functions.
 validate_common_parameters(:effects, :response, :auto)
 
 # Full validation with all parameters  
-validate_common_parameters(:effects, :link, :fd, :elasticity, [:x1, :x2])
+validate_common_parameters(:effects, :link, :ad, :elasticity, [:x1, :x2])
 ```
 """
 function validate_common_parameters(type, scale, backend, measure=:effect, vars=nothing)

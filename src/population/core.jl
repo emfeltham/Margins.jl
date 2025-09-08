@@ -94,8 +94,8 @@ result = population_margins(model, data; vars=[:x1], scenarios=Dict(:x2 => [0, 1
 result = population_margins(model, data; groups=:education)  # By education level
 result = population_margins(model, data; groups=(:income, 4))  # By income quartiles  
 
-# High-performance production use with finite differences
-result = population_margins(model, data; backend=:fd, scale=:link)
+# High-accuracy computation with automatic differentiation  
+result = population_margins(model, data; backend=:ad, scale=:link)
 
 # Survey data with sampling weights
 result = population_margins(model, data; weights=:sampling_weight)

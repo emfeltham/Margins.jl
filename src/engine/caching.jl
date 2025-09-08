@@ -14,26 +14,29 @@ Cache key includes usage type to ensure proper buffer sizing for different usage
 const ENGINE_CACHE = Dict{UInt64, MarginsEngine}()
 
 """
-    get_or_build_engine(usage, model, data_nt, vars, vcov) -> MarginsEngine
+    get_or_build_engine(usage, deriv, model, data_nt, vars, vcov) -> MarginsEngine
 
-Get cached engine or build new one with usage-specific optimization.
+Get cached engine or build new one with usage-specific optimization and derivative support.
 
 This unified function replaces scattered cache logic throughout the codebase,
-providing consistent caching behavior for both population and profile margins.
+providing consistent caching behavior for both population and profile margins
+with compile-time derivative support specialization.
 
 # Arguments
 - `usage::Type{<:MarginsUsage}`: Usage pattern (PopulationUsage or ProfileUsage)
+- `deriv::Type{<:DerivativeSupport}`: Derivative support (HasDerivatives or NoDerivatives)
 - `model`: Fitted statistical model (GLM.jl, etc.)
 - `data_nt::NamedTuple`: Data in columntable format 
 - `vars::Vector{Symbol}`: Variables for derivative analysis
 - `vcov`: Covariance estimator (function or CovarianceMatrices estimator)
 
 # Returns
-- `MarginsEngine{L, U}`: Cached or newly built usage-optimized engine
+- `MarginsEngine{L, U, D}`: Cached or newly built usage-optimized engine with derivative support
 
 # Cache Key Strategy
 Creates comprehensive cache key including:
 - Usage type for buffer sizing strategy
+- Derivative support for compile-time specialization
 - Model object and structure  
 - Data structure (column names)
 - Variables for derivatives
@@ -42,20 +45,21 @@ Creates comprehensive cache key including:
 
 # Examples
 ```julia
-# Get cached population margins engine
-engine = get_or_build_engine(PopulationUsage, model, data_nt, [:x1, :x2], GLM.vcov)
+# Get cached population margins engine with derivatives
+engine = get_or_build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], GLM.vcov)
 
-# Get cached profile margins engine (different cache entry due to usage type)
-engine2 = get_or_build_engine(ProfileUsage, model, data_nt, [:x1, :x2], GLM.vcov)
+# Get cached profile margins engine without derivatives (different cache entry)
+engine2 = get_or_build_engine(ProfileUsage, NoDerivatives, model, data_nt, [:category], GLM.vcov)
 
 # Same call will return cached instance
-engine3 = get_or_build_engine(PopulationUsage, model, data_nt, [:x1, :x2], GLM.vcov)  # Cache hit!
+engine3 = get_or_build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], GLM.vcov)  # Cache hit!
 ```
 """
-function get_or_build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov) where {U<:MarginsUsage}
-    # Create comprehensive cache key including usage type and all relevant factors
+function get_or_build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov) where {U<:MarginsUsage, D<:DerivativeSupport}
+    # Create comprehensive cache key including usage type, derivative support, and all relevant factors
     cache_key = hash((
-        usage,                   # Usage type for buffer sizing strategy (NEW!)
+        usage,                   # Usage type for buffer sizing strategy
+        deriv,                   # Derivative support for compile-time specialization (NEW!)
         model,                   # Model object (coefficients, structure, etc.)
         keys(data_nt),          # Data structure (column names)
         vars,                   # Variables for derivatives
@@ -65,8 +69,26 @@ function get_or_build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::V
     ))
     
     return get!(ENGINE_CACHE, cache_key) do
-        build_engine(usage, model, data_nt, vars, vcov)
+        build_engine(usage, deriv, model, data_nt, vars, vcov)
     end
+end
+
+# Backward compatibility function without DerivativeSupport (auto-detects)
+"""
+    get_or_build_engine(usage, model, data_nt, vars, vcov) -> MarginsEngine
+
+**Backward compatibility**: Auto-detect derivative support based on continuous variables in data.
+New code should use the explicit DerivativeSupport version for better type safety.
+"""
+function get_or_build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov) where {U<:MarginsUsage}
+    # Auto-detect derivative support based on data
+    compiled = FormulaCompiler.compile_formula(model, data_nt)
+    continuous_vars = FormulaCompiler.continuous_variables(compiled, data_nt)
+    
+    # Auto-select DerivativeSupport based on presence of continuous variables
+    deriv = isempty(continuous_vars) ? NoDerivatives : HasDerivatives
+    
+    return get_or_build_engine(usage, deriv, model, data_nt, vars, vcov)
 end
 
 """

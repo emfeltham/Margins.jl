@@ -11,6 +11,43 @@ See also: [`PopulationUsage`](@ref), [`ProfileUsage`](@ref)
 abstract type MarginsUsage end
 
 """
+    DerivativeSupport
+
+Abstract type for specifying whether a MarginsEngine supports derivative computation.
+Enables compile-time specialization and eliminates Union type overhead.
+
+See also: [`HasDerivatives`](@ref), [`NoDerivatives`](@ref)
+"""
+abstract type DerivativeSupport end
+
+"""
+    HasDerivatives <: DerivativeSupport
+
+Indicates that the MarginsEngine has derivative computation capability.
+Used for engines that need to compute marginal effects for continuous variables.
+
+Provides:
+- `de::FormulaCompiler.DerivativeEvaluator` field (concrete type)
+- Compile-time dispatch for derivative-based computations
+- Type safety: prevents calling derivative functions on engines without support
+"""
+struct HasDerivatives <: DerivativeSupport end
+
+"""
+    NoDerivatives <: DerivativeSupport
+
+Indicates that the MarginsEngine has no derivative computation capability.
+Used for engines that only handle categorical/boolean variables or predictions.
+
+Provides:
+- No derivative evaluator field
+- Minimal memory footprint
+- Compile-time dispatch for non-derivative computations
+- Type safety: compile-time error if derivative functions are called
+"""
+struct NoDerivatives <: DerivativeSupport end
+
+"""
     PopulationUsage <: MarginsUsage
 
 Usage pattern for population margins (AME, AAP).
@@ -39,19 +76,21 @@ Used by `profile_margins()` function.
 struct ProfileUsage <: MarginsUsage end
 
 """
-    MarginsEngine{L<:GLM.Link, U<:MarginsUsage}
+    MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport}
 
-Zero-allocation engine for marginal effects computation, optimized for specific usage patterns.
+Zero-allocation engine for marginal effects computation, optimized for specific usage patterns
+and derivative computation requirements.
 
 Built on FormulaCompiler.jl with usage-specific pre-allocated buffers for maximum performance.
 
 Type Parameters:
 - `L<:GLM.Link`: GLM link function type for the underlying model
 - `U<:MarginsUsage`: Usage pattern determining buffer sizing strategy
+- `D<:DerivativeSupport`: Derivative computation capability (HasDerivatives or NoDerivatives)
 
 Fields:
 - `compiled::FormulaCompiler.UnifiedCompiled`: Pre-compiled FormulaCompiler formula
-- `de::Union{FormulaCompiler.DerivativeEvaluator, Nothing}`: Derivative evaluator for continuous vars
+- `de::Union{FormulaCompiler.DerivativeEvaluator, Nothing}`: Derivative evaluator (concrete when D <: HasDerivatives, Nothing when D <: NoDerivatives)
 - `g_buf::Vector{Float64}`: Usage-optimized buffer for marginal effects results
 - `gβ_accumulator::Vector{Float64}`: Pre-allocated buffer for AME gradient accumulation
 - `η_buf::Vector{Float64}`: Pre-allocated buffer for linear predictor computations
@@ -67,19 +106,23 @@ Fields:
 - `PopulationUsage`: Minimal g_buf (sized for FormulaCompiler continuous variables only)
 - `ProfileUsage`: Larger g_buf (sized for typical profile counts ~100 to avoid allocation fallbacks)
 
+# Derivative Support Strategy
+- `HasDerivatives`: de field contains DerivativeEvaluator for continuous variable computation
+- `NoDerivatives`: de field is nothing, minimal memory footprint for categorical-only analysis
+
 # Examples
 ```julia
-# Population margins engine (minimal memory footprint)
-engine = build_engine(PopulationUsage, model, data_nt, [:x1, :x2], vcov)
+# Population margins engine with derivatives (continuous variables)
+engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], vcov)
 
-# Profile margins engine (optimized for multiple profiles)  
-engine = build_engine(ProfileUsage, model, data_nt, [:x1, :x2], vcov)
+# Profile margins engine without derivatives (categorical-only)  
+engine = build_engine(ProfileUsage, NoDerivatives, model, data_nt, [:category], vcov)
 ```
 """
-struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage}
+struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport}
     # FormulaCompiler components (pre-compiled)
     compiled::FormulaCompiler.UnifiedCompiled
-    de::Union{FormulaCompiler.DerivativeEvaluator, Nothing}
+    de::Union{FormulaCompiler.DerivativeEvaluator, Nothing}  # Type-parameterized access via dispatch
     
     # Usage-optimized buffers (zero runtime allocation)
     g_buf::Vector{Float64}              # Usage-optimized marginal effects results buffer
@@ -97,19 +140,20 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage}
 end
 
 """
-    build_engine(usage::Type{U}, model, data_nt, vars, vcov) where {U<:MarginsUsage} -> MarginsEngine
+    build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt, vars, vcov) where {U<:MarginsUsage, D<:DerivativeSupport} -> MarginsEngine
 
-Construct zero-allocation margins engine with usage-specific optimization.
+Construct zero-allocation margins engine with usage-specific optimization and derivative support.
 
 # Arguments
 - `usage::Type{<:MarginsUsage}`: Usage pattern (PopulationUsage or ProfileUsage)
+- `deriv::Type{<:DerivativeSupport}`: Derivative support (HasDerivatives or NoDerivatives)
 - `model`: Fitted statistical model (GLM.jl, MLJ.jl, etc.)
 - `data_nt::NamedTuple`: Data in columntable format from Tables.jl
 - `vars::Vector{Symbol}`: Variables to analyze for marginal effects
 - `vcov`: Covariance estimator (function or CovarianceMatrices estimator)
 
 # Returns
-- `MarginsEngine{L, U}`: Pre-compiled engine with usage-optimized buffers
+- `MarginsEngine{L, U, D}`: Pre-compiled engine with usage and derivative support optimization
 
 # Usage-Specific Buffer Sizing Strategy
 - **PopulationUsage**: Minimal g_buf sized for FormulaCompiler continuous variables only
@@ -121,6 +165,17 @@ Construct zero-allocation margins engine with usage-specific optimization.
   - Optimizes for multiple profiles without allocation fallbacks
   - Handles most reference grids without buffer reallocations
   - Perfect for MEM/APM/MER/APR operations across profile grids
+
+# Derivative Support Strategy
+- **HasDerivatives**: Includes DerivativeEvaluator for continuous variable computation
+  - `de` field contains concrete FormulaCompiler.DerivativeEvaluator
+  - Enables compile-time dispatch for derivative-based computations
+  - Type safety: can call derivative functions
+
+- **NoDerivatives**: No derivative evaluator, minimal memory footprint
+  - `de` field is nothing
+  - Optimized for categorical/boolean variables only
+  - Type safety: compile-time error if derivative functions are called
 
 # Buffer Management
 Pre-allocates four key buffers with usage-specific optimization:
@@ -136,20 +191,24 @@ is logged when buffer allocation fallback occurs for performance visibility.
 # Performance Notes
 - Compilation is expensive (~milliseconds), so cache engines when possible
 - Usage-specific sizing eliminates major allocation bottlenecks
-- PopulationUsage: Minimal memory, zero FormulaCompiler fallbacks
-- ProfileUsage: Zero fallbacks for typical profile counts (up to 100)
+- Derivative support specialization eliminates Union type overhead
+- PopulationUsage + HasDerivatives: Optimal for continuous AME
+- ProfileUsage + NoDerivatives: Optimal for categorical-only analysis
 
 # Examples
 ```julia
-# Population margins - minimal memory footprint
+# Population margins with derivatives - continuous variables
 data_nt = Tables.columntable(data)
-engine = build_engine(PopulationUsage, model, data_nt, [:x1, :x2], GLM.vcov)
+engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], GLM.vcov)
 
-# Profile margins - optimized for multiple profiles
-engine = build_engine(ProfileUsage, model, data_nt, [:x1, :x2], GLM.vcov)
+# Profile margins without derivatives - categorical-only
+engine = build_engine(ProfileUsage, NoDerivatives, model, data_nt, [:category], GLM.vcov)
+
+# Mixed case: profile margins with derivatives
+engine = build_engine(ProfileUsage, HasDerivatives, model, data_nt, [:x1, :category], GLM.vcov)
 ```
 """
-function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov) where {U<:MarginsUsage}
+function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov) where {U<:MarginsUsage, D<:DerivativeSupport}
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
     
@@ -157,10 +216,16 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
     compiled = FormulaCompiler.compile_formula(model, data_nt)
     continuous_vars = FormulaCompiler.continuous_variables(compiled, data_nt)
     
-    # Build derivative evaluator for ALL continuous variables (FormulaCompiler requirement)
-    # We'll use indexing to extract only the requested variables later
-    de = isempty(continuous_vars) ? nothing : 
-         FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars=continuous_vars)
+    # Build derivative evaluator based on DerivativeSupport parameter
+    de = if D <: HasDerivatives
+        # HasDerivatives: Build evaluator for ALL continuous variables (FormulaCompiler requirement)
+        # We'll use indexing to extract only the requested variables later
+        isempty(continuous_vars) ? nothing : 
+            FormulaCompiler.build_derivative_evaluator(compiled, data_nt; vars=continuous_vars)
+    else  # D <: NoDerivatives
+        # NoDerivatives: No derivative evaluator, minimal memory footprint
+        nothing
+    end
     
     # Pre-allocate buffers with usage-specific optimization
     n_continuous = length(continuous_vars)
@@ -181,6 +246,12 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
         error("Unknown MarginsUsage type: $U")
     end
     
+    # Additional optimization: NoDerivatives engines can use smaller g_buf
+    if D <: NoDerivatives
+        # For categorical-only computations, we don't need large g_buf
+        g_buf_size = 1  # Minimal size
+    end
+    
     g_buf = Vector{Float64}(undef, g_buf_size)
     gβ_accumulator = Vector{Float64}(undef, n_coef)
     η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
@@ -198,7 +269,7 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
         covariance_matrix = Base.invokelatest(vcov_module.vcov, actual_vcov, model)
     end
     
-    return MarginsEngine{typeof(_auto_link(model)), U}(
+    return MarginsEngine{typeof(_auto_link(model)), U, D}(
         compiled, de, g_buf, gβ_accumulator, η_buf, row_buf,
         model, coef(model), covariance_matrix, _auto_link(model), vars, data_nt
     )

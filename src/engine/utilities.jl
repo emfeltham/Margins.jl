@@ -54,7 +54,7 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
 end
 
 """
-    _accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, weights; link=IdentityLink(), backend=:fd)
+    _accumulate_weighted_ame_gradient!(gβ_sum, de, β, rows, var, weights; link=IdentityLink(), backend=:ad)
 
 Accumulate parameter gradients across rows for weighted average marginal effects.
 This is the proper weighted version that accounts for weights in both point estimates and gradients.
@@ -86,7 +86,7 @@ function _accumulate_weighted_ame_gradient!(
     var::Symbol,
     weights::Vector{Float64};
     link=GLM.IdentityLink(),
-    backend::Symbol=:fd
+    backend::Symbol=:ad
 )
     # Handle case where de is nothing (no continuous variables)
     if de === nothing
@@ -269,7 +269,7 @@ function _accumulate_me_value(
 end
 
 """
-    _accumulate_unweighted_ame_gradient!(gβ_sum, de, β, rows, var; link=IdentityLink(), backend=:fd)
+    _accumulate_unweighted_ame_gradient!(gβ_sum, de, β, rows, var; link=IdentityLink(), backend=:ad)
 
 **OPTIMIZED**: Zero-allocation unweighted gradient accumulation for continuous variables.
 
@@ -301,7 +301,7 @@ function _accumulate_unweighted_ame_gradient!(
     rows::AbstractVector{Int},
     var::Symbol;
     link=GLM.IdentityLink(),
-    backend::Symbol=:fd
+    backend::Symbol=:ad
 )
     # Handle case where de is nothing (no continuous variables)
     if de === nothing
@@ -915,7 +915,7 @@ Implements REORG.md lines 290-348 with explicit backend selection and batch oper
 
 # Examples
 ```julia
-df, G = _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:fd)
+df, G = _ame_continuous_and_categorical(engine, data_nt; scale=:response, backend=:ad)
 ```
 """
 function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::NamedTuple; scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, weights=nothing) where L
@@ -1483,6 +1483,227 @@ end
 # Import dependencies for utility functions
 using Dates: now
 using StatsBase: mode
+
+# ================================================================
+# COMPILE-TIME DISPATCH VERSIONS - DerivativeSupport Parameterization
+# ================================================================
+
+"""
+    _accumulate_weighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,HasDerivatives}, rows, var, weights; kwargs...)
+
+**HasDerivatives dispatch**: Accumulate parameter gradients for engines with derivative support.
+Eliminates runtime Union type checking by using compile-time dispatch on DerivativeSupport parameter.
+"""
+function _accumulate_weighted_ame_gradient!(
+    gβ_sum::Vector{Float64},
+    engine::MarginsEngine{L, U, HasDerivatives},
+    rows::AbstractVector{Int},
+    var::Symbol,
+    weights::Vector{Float64};
+    link=GLM.IdentityLink(),
+    backend::Symbol=:ad
+) where {L, U}
+    # HasDerivatives: Use the derivative evaluator (concrete type, no Union checks)
+    de = engine.de
+    β = engine.β
+    
+    @assert length(gβ_sum) == length(de)
+    
+    # Use evaluator's fd_yminus buffer as temporary storage
+    gβ_temp = de.fd_yminus
+    fill!(gβ_sum, 0.0)
+    
+    # Compute total weight for proper weighted averaging
+    total_weight = sum(weights[row] for row in rows if weights[row] > 0)
+    
+    # Accumulate weighted gradients across rows
+    for row in rows
+        w = weights[row]
+        if w > 0  # Skip zero-weight observations
+            if link isa GLM.IdentityLink
+                # η case: gβ = J_k (single Jacobian column)
+                if backend === :fd
+                    # Zero-allocation single-column FD (optimal for AME)
+                    FormulaCompiler.fd_jacobian_column!(gβ_temp, de, row, var)
+                elseif backend === :ad
+                    # Compute full Jacobian then extract column
+                    FormulaCompiler.derivative_modelrow!(de.jacobian_buffer, de, row)
+                    var_idx = findfirst(==(var), de.vars)
+                    var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+                    gβ_temp .= view(de.jacobian_buffer, :, var_idx)
+                else
+                    throw(ArgumentError("Invalid backend: $backend. Use :fd or :ad"))
+                end
+            else
+                # μ case: use existing FD-based chain rule function
+                FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
+            end
+            
+            # Apply weight and accumulate
+            for j in eachindex(gβ_sum)
+                gβ_sum[j] += w * gβ_temp[j]
+            end
+        end
+    end
+    
+    # Weighted average
+    if total_weight > 0
+        gβ_sum ./= total_weight
+    else
+        fill!(gβ_sum, 0.0)  # All weights are zero
+    end
+    
+    return gβ_sum
+end
+
+"""
+    _accumulate_weighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,NoDerivatives}, rows, var, weights; kwargs...)
+
+**NoDerivatives dispatch**: Return zero gradient for engines without derivative support.
+Eliminates runtime Union type checking and provides type-safe categorical-only operation.
+"""
+function _accumulate_weighted_ame_gradient!(
+    gβ_sum::Vector{Float64},
+    engine::MarginsEngine{L, U, NoDerivatives},
+    rows::AbstractVector{Int},
+    var::Symbol,
+    weights::Vector{Float64};
+    link=GLM.IdentityLink(),
+    backend::Symbol=:ad
+) where {L, U}
+    # NoDerivatives: No derivative evaluator, return zero gradient
+    fill!(gβ_sum, 0.0)
+    return gβ_sum
+end
+
+"""
+    _accumulate_unweighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,HasDerivatives}, rows, var; kwargs...)
+
+**HasDerivatives dispatch**: Zero-allocation unweighted gradient accumulation for engines with derivative support.
+"""
+function _accumulate_unweighted_ame_gradient!(
+    gβ_sum::Vector{Float64},
+    engine::MarginsEngine{L, U, HasDerivatives},
+    rows::AbstractVector{Int},
+    var::Symbol;
+    link=GLM.IdentityLink(),
+    backend::Symbol=:ad
+) where {L, U}
+    # HasDerivatives: Use the derivative evaluator (concrete type, no Union checks)
+    de = engine.de
+    β = engine.β
+    
+    @assert length(gβ_sum) == length(β)
+    
+    # Use evaluator's fd_yminus buffer as temporary storage
+    gβ_temp = de.fd_yminus
+    fill!(gβ_sum, 0.0)
+    
+    # Accumulate unweighted gradients across rows (no weights vector allocation!)
+    for row in rows
+        if link isa GLM.IdentityLink
+            # η case: gβ = J_k (single Jacobian column)
+            if backend === :fd
+                # Zero-allocation single-column FD (optimal for AME)
+                FormulaCompiler.fd_jacobian_column!(gβ_temp, de, row, var)
+            elseif backend === :ad
+                # Compute full Jacobian then extract column
+                FormulaCompiler.derivative_modelrow!(de.jacobian_buffer, de, row)
+                var_idx = findfirst(==(var), de.vars)
+                var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+                gβ_temp .= view(de.jacobian_buffer, :, var_idx)
+            else
+                throw(ArgumentError("Invalid backend: $backend. Use :fd or :ad"))
+            end
+        else
+            # μ case: use existing FD-based chain rule function
+            FormulaCompiler.me_mu_grad_beta!(gβ_temp, de, β, row, var; link=link)
+        end
+        
+        # Accumulate without weights (uniform weight = 1.0 for all observations)
+        for j in eachindex(gβ_sum)
+            gβ_sum[j] += gβ_temp[j]
+        end
+    end
+    
+    # Unweighted average (simple division by count)
+    n_rows = length(rows)
+    if n_rows > 0
+        gβ_sum ./= n_rows
+    else
+        fill!(gβ_sum, 0.0)  # No observations
+    end
+    
+    return gβ_sum
+end
+
+"""
+    _accumulate_unweighted_ame_gradient!(gβ_sum, engine::MarginsEngine{L,U,NoDerivatives}, rows, var; kwargs...)
+
+**NoDerivatives dispatch**: Return zero gradient for engines without derivative support.
+"""
+function _accumulate_unweighted_ame_gradient!(
+    gβ_sum::Vector{Float64},
+    engine::MarginsEngine{L, U, NoDerivatives},
+    rows::AbstractVector{Int},
+    var::Symbol;
+    link=GLM.IdentityLink(),
+    backend::Symbol=:ad
+) where {L, U}
+    # NoDerivatives: No derivative evaluator, return zero gradient
+    fill!(gβ_sum, 0.0)
+    return gβ_sum
+end
+
+"""
+    _compute_continuous_ame(engine::MarginsEngine{L,U,HasDerivatives}, var, rows, scale, backend) -> (Float64, Vector{Float64})
+
+**HasDerivatives dispatch**: Zero-allocation continuous marginal effects computation for engines with derivative support.
+"""
+function _compute_continuous_ame(engine::MarginsEngine{L, U, HasDerivatives}, var::Symbol, rows, scale::Symbol, backend::Symbol) where {L, U}
+    # HasDerivatives: Use FormulaCompiler approach with concrete type
+    de = engine.de
+    var_idx = findfirst(==(var), de.vars)
+    var_idx === nothing && throw(ArgumentError("Variable $var not found in de.vars"))
+    
+    # ZERO-ALLOCATION: Use scalar accumulation instead of vector allocation
+    ame_sum = 0.0
+    
+    # Accumulate marginal effects across rows (zero additional allocations)
+    # Use properly-sized view for FormulaCompiler (must match length(de.vars))
+    g_buf_view = @view engine.g_buf[1:length(de.vars)]
+    for row in rows
+        if scale === :response
+            FormulaCompiler.marginal_effects_mu!(g_buf_view, de, engine.β, row; link=engine.link, backend=backend)
+        else  # scale === :link
+            FormulaCompiler.marginal_effects_eta!(g_buf_view, de, engine.β, row; backend=backend)
+        end
+        ame_sum += g_buf_view[var_idx]  # Scalar accumulation, no allocations
+    end
+    
+    # Simple average
+    ame_val = ame_sum / length(rows)
+    
+    # OPTIMAL: Use FormulaCompiler's native batch AME gradient accumulation
+    FormulaCompiler.accumulate_ame_gradient!(
+        engine.gβ_accumulator, de, engine.β, rows, var;
+        link=(scale === :response ? engine.link : GLM.IdentityLink()), 
+        backend=backend
+    )
+    
+    return (ame_val, engine.gβ_accumulator)
+end
+
+"""
+    _compute_continuous_ame(engine::MarginsEngine{L,U,NoDerivatives}, var, rows, scale, backend) -> (Float64, Vector{Float64})
+
+**NoDerivatives dispatch**: Error for engines without derivative support - compile-time type safety.
+"""
+function _compute_continuous_ame(engine::MarginsEngine{L, U, NoDerivatives}, var::Symbol, rows, scale::Symbol, backend::Symbol) where {L, U}
+    # NoDerivatives: Cannot compute continuous marginal effects
+    throw(ArgumentError("Cannot compute continuous marginal effects for variable $var: engine has NoDerivatives support. " *
+                       "Use HasDerivatives engine for continuous variables or categorical computation for discrete variables."))
+end
 
 # ================================================================
 # OPTIMAL DATASCENARIO SOLUTION  
