@@ -17,8 +17,10 @@ or adjusted predictions at specific profiles (APM/APR).
 - `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
 - `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
 - `reference_grid`: DataFrame specifying covariate combinations for analysis
-  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `cartesian_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Or use pure grid construction: `cartesian_grid(vars...)` (automatically completed with typical values)
   - Or provide custom DataFrame with desired covariate combinations
+  - **Note**: Missing model variables are automatically completed with typical values internally
 
 # Keyword Arguments
 - `type::Symbol=:effects`: Analysis type
@@ -26,7 +28,7 @@ or adjusted predictions at specific profiles (APM/APR).
   - `:predictions` - Adjusted Predictions at profiles (APM/APR): fitted values at specific points
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
-  - Defaults to all continuous variables (numeric types except Bool)
+  - Defaults to all explanatory variables (both continuous and categorical)
 - `scale::Symbol=:response`: Target scale for computation
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
@@ -80,7 +82,7 @@ result = profile_margins(model, data, cartesian_grid(data; x1=[-1, 0, 1]);
 # Predictions at the mean (APM)
 result = profile_margins(model, data, means_grid(data); type=:predictions)
 
-# Balanced factorial designs (AsBalanced)
+# Balanced factorial designs
 result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
 
 # Multiple explicit profiles for complex analysis
@@ -95,28 +97,42 @@ result = profile_margins(model, data, reference_grid; type=:effects)
 reference_grid = DataFrame(x1=[0, 1, 2], x2=[10, 20, 30])
 result = profile_margins(model, data, reference_grid; type=:predictions)
 
-# Cartesian product for systematic exploration
-result = profile_margins(model, data, 
-                        cartesian_grid(data; age=[25, 35, 45], education=[12, 16]); 
-                        type=:effects, vars=[:income], backend=:ad)
+# Pure Cartesian product for systematic exploration
+grid = cartesian_grid(age=[25, 35, 45], education=[12, 16])
+result = profile_margins(model, data, grid; type=:effects, vars=[:income], backend=:ad)
+
+# Data-driven range construction
+grid = cartesian_grid(
+    x1 = collect(range(extrema(data.x1)...; length = 5)),
+    x2 = collect(range(extrema(data.x2)...; length = 5))
+)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Manual completion still available if needed
+partial_grid = cartesian_grid(x1=[0, 1, 2])
+complete_grid = complete_reference_grid(partial_grid, model, data)
+result = profile_margins(model, data, complete_grid; type=:predictions)
 ```
 
-# Frequency-Weighted Categorical Defaults
-Unspecified categorical variables use actual data composition:
+# Automatic Reference Grid Completion
+Missing model variables are automatically completed with typical values:
 ```julia
-# Your data: region = 75% Urban, 25% Rural
-#           treated = 60% true, 40% false
+# Your data: region = 75% Urban, 25% Rural, treated = 60% true, 40% false
+# Model: y ~ x1 + x2 + region + treated
 
-# Effects "at means" now uses realistic population profile
-result = profile_margins(model, data, means_grid(data); type=:effects)
-# → income: sample mean
+# Specify only variables you care about
+grid = cartesian_grid(x1=[0, 1, 2], x2=[10, 20])
+result = profile_margins(model, data, grid; type=:effects)
+
+# Internally completed with typical values:
+# → x1, x2: your specified values
 # → region: frequency-weighted (75% urban, 25% rural) 
 # → treated: 0.6 (actual treatment rate)
-# → Not arbitrary first levels!
+# But output shows only x1, x2 in at_* columns!
 
-# Override when needed for scenario analysis
-reference_grid = DataFrame(treated=[1.0])  # 100% treatment scenario
-result = profile_margins(model, data, reference_grid; type=:effects)
+# Effects "at means" for comparison
+result = profile_margins(model, data, means_grid(data); type=:effects)
+# → Shows all variables: at_x1, at_x2, at_region, at_treated
 ```
 
 See also: [`population_margins`](@ref) for population-averaged effects and predictions.
@@ -147,6 +163,34 @@ function _extract_profile_values(reference_grid, result_length::Int)
 end
 
 """
+    _extract_and_filter_profile_values(reference_grid, result_length::Int, original_vars::Set{Symbol}) -> NamedTuple
+
+Extract profile values from reference grid and filter to only show variables that were
+originally specified by the user (hiding automatically added typical values).
+Each profile can generate multiple results (one per variable), so we need to repeat
+each profile row for each variable it generates.
+"""
+function _extract_and_filter_profile_values(reference_grid, result_length::Int, original_vars::Set{Symbol})
+    n_profiles = nrow(reference_grid)
+    vars_per_profile = result_length ÷ n_profiles
+    
+    # Convert to named tuple with expanded values, filtering to original variables only
+    profile_dict = Dict{Symbol, Vector}()
+    
+    for col_name in names(reference_grid)
+        # Only include variables that were in the original reference grid
+        if Symbol(col_name) in original_vars
+            col_data = reference_grid[!, col_name]
+            # Repeat each profile value vars_per_profile times
+            expanded_data = repeat(col_data, inner=vars_per_profile)
+            profile_dict[Symbol(col_name)] = expanded_data
+        end
+    end
+    
+    return NamedTuple(profile_dict)
+end
+
+"""
     _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> MarginsResult
 
 Internal implementation for both profile_margins methods.
@@ -160,13 +204,23 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         vars = nothing  # Not needed for predictions
     end
     
+    # Store original reference grid variable names for output filtering
+    original_grid_vars = Set(Symbol.(names(reference_grid)))
+    
+    # Remove response variable from display (users don't need to see response in profile)
+    response_var = Symbol(model.mf.f.lhs.sym)
+    delete!(original_grid_vars, response_var)
+    
+    # Automatically complete reference grid with typical values for missing model variables
+    completed_reference_grid = complete_reference_grid(reference_grid, model, data_nt)
+    
     # Build zero-allocation engine with ProfileUsage optimization (including vcov function)
     engine = get_or_build_engine(ProfileUsage, model, data_nt, vars === nothing ? Symbol[] : vars, vcov)
     
     if type === :effects
-        # Use reference grid directly for efficient single-compilation approach
+        # Use complete reference grid for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
-        df, G = _mem_continuous_and_categorical_refgrid(engine, reference_grid, scale, backend, measure)  # → MEM/MER
+        df, G = _mem_continuous_and_categorical_refgrid(engine, completed_reference_grid, scale, backend, measure)  # → MEM/MER
         
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -176,7 +230,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(reference_grid)
+        metadata[:n_profiles] = nrow(completed_reference_grid)
         
         # Store confidence interval parameters in metadata
         metadata[:alpha] = ci_alpha
@@ -184,21 +238,23 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Extract raw components from DataFrame  
         estimates = df.estimate
         standard_errors = df.se
-        terms = string.(df.term)  # Convert Symbol to String
+        variables = string.(df.variable)  # The "x" in dy/dx
+        terms = string.(df.contrast)  # Convert Symbol to String
         
         # Extract profile values from reference grid - expand to match result length
-        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        # Filter to show only original reference grid variables (hide automatic typical values)
+        profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
         
-        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+        return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions(engine, reference_grid, scale)  # → APM/APR
+        df, G = _profile_predictions(engine, completed_reference_grid, scale)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
         # Add analysis_type for format auto-detection  
         metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(reference_grid)
+        metadata[:n_profiles] = nrow(completed_reference_grid)
         
         # Store confidence interval parameters in metadata
         metadata[:alpha] = ci_alpha
@@ -206,12 +262,14 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        terms = string.(df.term)  # Convert Symbol to String
+        variables = string.(df.variable)  # The "x" in dy/dx
+        terms = string.(df.contrast)  # Convert Symbol to String
         
         # Extract profile values from reference grid - expand to match result length
-        profile_values = _extract_profile_values(reference_grid, length(estimates))
+        # Filter to show only original reference grid variables (hide automatic typical values)
+        profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
         
-        return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+        return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
     end
 end
 
@@ -227,8 +285,10 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 - `model`: Fitted statistical model supporting `coef()` and `vcov()` methods
 - `data`: Data table (DataFrame, NamedTuple, or any Tables.jl-compatible format)
 - `reference_grid`: DataFrame specifying covariate combinations for analysis
-  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `cartesian_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Use reference grid builders: `means_grid(data)`, `balanced_grid(data; vars...)`, `quantile_grid(data; vars...)`
+  - Or use pure grid construction: `cartesian_grid(vars...)` (automatically completed with typical values)
   - Or provide custom DataFrame with desired covariate combinations
+  - **Note**: Missing model variables are automatically completed with typical values internally
 
 # Keyword Arguments
 - `type::Symbol=:effects`: Analysis type
@@ -348,7 +408,8 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     
     # Create results DataFrame with profile information
     results = DataFrame()
-    results.term = ["APM/APR" for _ in 1:n_profiles]
+    results.variable = ["" for _ in 1:n_profiles]  # Empty for predictions (no specific x)
+    results.contrast = ["APM/APR" for _ in 1:n_profiles]
     results.estimate = predictions
     results.se = se_vals
     results.t_stat = predictions ./ se_vals
@@ -388,25 +449,32 @@ Internal computation uses symbols, but user display uses descriptive strings.
 `df`` is only arg, since we assume it is filtered to model variables
 """
 function _convert_profile_terms_to_strings(df::DataFrame)
-    # Create descriptive term strings
+    # Clean up contrast descriptions for better display
     descriptive_terms = String[]
     
     for i in 1:nrow(df)
-        var = df.term[i]
-        profile = df.profile_desc[i]
+        var = df.variable[i]
+        contrast = df.contrast[i]
         
-        # Build profile description
-        profile_parts = ["$(k)=$(v)" for (k, v) in pairs(profile)]
-        profile_desc = join(profile_parts, ", ")
+        # Clean up boolean contrasts: convert "value vs false" patterns to "true vs false"
+        if contains(contrast, " vs false") && contrast != "true vs false"
+            # This is a boolean variable with a numeric mean - standardize to "true vs false"
+            cleaned_contrast = "true vs false"
+        elseif contrast == "derivative"
+            # Keep derivative as-is for continuous variables
+            cleaned_contrast = contrast
+        else
+            # Keep other contrasts as-is (for future categorical support)
+            cleaned_contrast = contrast
+        end
         
-        # For now, use simple format - we can enhance categorical detection later if needed
-        term_name = "$(var) at $(profile_desc)"
-        push!(descriptive_terms, term_name)
+        push!(descriptive_terms, cleaned_contrast)
     end
     
-    # Create new DataFrame with string terms and remove profile_desc column
+    # Create new DataFrame with clean contrast terms
     result_df = DataFrame(
-        term = descriptive_terms,
+        variable = df.variable,  # Include the "x" in dy/dx 
+        contrast = descriptive_terms,
         estimate = df.estimate,
         se = df.se
     )

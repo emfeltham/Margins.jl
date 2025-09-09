@@ -1,5 +1,51 @@
 # types.jl - Result types, error types, and display methods
 
+# Global display settings (defined here so it's available to formatting functions)
+const DISPLAY_DIGITS = Ref(5)  # For statistical results
+const PROFILE_DIGITS = Ref(3)  # For reference grid values
+
+"""
+    set_display_digits(n::Int)
+
+Set the number of significant digits for statistical results (dy/dx, std error, CI) in show methods.
+Default is 5 digits.
+"""
+function set_display_digits(n::Int)
+    if n < 1 || n > 15
+        throw(ArgumentError("Display digits must be between 1 and 15"))
+    end
+    DISPLAY_DIGITS[] = n
+    return nothing
+end
+
+"""
+    get_display_digits() -> Int
+
+Get the current number of significant digits for statistical results.
+"""
+get_display_digits() = DISPLAY_DIGITS[]
+
+"""
+    set_profile_digits(n::Int)
+
+Set the number of significant digits for profile/reference grid values in show methods.
+Default is 3 digits.
+"""
+function set_profile_digits(n::Int)
+    if n < 1 || n > 15
+        throw(ArgumentError("Profile digits must be between 1 and 15"))
+    end
+    PROFILE_DIGITS[] = n
+    return nothing
+end
+
+"""
+    get_profile_digits() -> Int
+
+Get the current number of significant digits for profile/reference grid values.
+"""
+get_profile_digits() = PROFILE_DIGITS[]
+
 """
     MarginsResult
 
@@ -34,6 +80,7 @@ struct MarginsResult
     # Core statistical results
     estimates::Vector{Float64}
     standard_errors::Vector{Float64}  
+    variables::Vector{String}  # The "x" in dy/dx - which variable each row represents
     terms::Vector{String}  # Clean variable names (converted to strings for display)
     
     # Structural information
@@ -90,11 +137,14 @@ function Base.show(io::IO, mr::MarginsResult)
     analysis_type = get(mr.metadata, :analysis_type, :unknown)
     
     # Header
+    n_obs = get(mr.metadata, :n_obs, missing)
+    n_text = ismissing(n_obs) ? "" : " (N=$n_obs)"
+    
     if analysis_type == :profile
         n_profiles = get(mr.metadata, :n_profiles, 1)
-        println(io, "MarginsResult: $n_results results at $n_profiles profiles")
+        println(io, "MarginsResult: $n_results results at $n_profiles profiles$n_text")
     else
-        println(io, "MarginsResult: $n_results population results")  
+        println(io, "MarginsResult: $n_results population results$n_text")  
     end
     
     # Stata-style table with horizontal lines
@@ -107,32 +157,115 @@ function Base.show(io::IO, ::MIME"text/plain", mr::MarginsResult)
     # println(io, "\nUse DataFrame(result; format=...) for different table formats")
 end
 
+# Helper function to generate clean display labels for show method
+function _generate_clean_display_labels(mr::MarginsResult)
+    # Combine variable name with contrast for clear identification
+    display_labels = Vector{String}(undef, length(mr.estimates))
+    
+    for i in 1:length(mr.estimates)
+        var_name = mr.variables[i]
+        contrast = mr.terms[i]
+        
+        # For clean display, show "variable: contrast" format
+        display_labels[i] = "$var_name: $contrast"
+    end
+    
+    return display_labels
+end
+
 function _show_stata_table(io::IO, mr::MarginsResult)
     # Calculate confidence intervals
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
-    # Column widths for alignment - defensive against undefined references
-    var_width = try
-        max(8, maximum(length.(mr.terms)) + 1)
-    catch e
-        # Fallback if terms have undefined references - use a safe default
-        @warn "Display issue with undefined terms, using default width" exception=e
-        20  # Safe default width
+    # Check if this is profile margins (has profile_values)
+    has_profile = mr.profile_values !== nothing
+    
+    # Check if this is predictions (don't need Variable and Contrast columns)
+    type = get(mr.metadata, :type, :effects)
+    is_predictions = type === :predictions
+    
+    # Column widths for alignment (skip Variable/Contrast for predictions)
+    var_width = if is_predictions
+        0  # Skip Variable column for predictions
+    else
+        try
+            max(8, maximum(length.(mr.variables)) + 1)
+        catch e
+            @warn "Display issue with variable names, using default width" exception=e
+            12  # Safe default width
+        end
     end
+    
+    contrast_width = if is_predictions
+        0  # Skip Contrast column for predictions
+    else
+        try
+            max(10, maximum(length.(mr.terms)) + 1)
+        catch e
+            @warn "Display issue with contrast terms, using default width" exception=e
+            15  # Safe default width
+        end
+    end
+    
+    # Profile columns (for profile margins only)
+    profile_widths = Int[]  # Specify Int type to avoid sum() type issues
+    profile_names = String[]  # Specify String type
+    if has_profile
+        for (name, values) in pairs(mr.profile_values)
+            push!(profile_names, string(name))
+            # Calculate width needed for this profile column (reduced padding for tighter spacing)
+            max_val_width = try
+                maximum(length.(string.(values)))
+            catch e
+                6  # fallback width
+            end
+            header_width = length(string(name))
+            col_width = 7  # fixed compact width for all profile columns
+            push!(profile_widths, col_width)
+        end
+    end
+    
     num_width = 12
     
-    # Header line
-    println(io, "─"^(var_width + 4*num_width + 3))
+    # Calculate total width (account for skipped columns in predictions)
+    var_contrast_width = if is_predictions 
+        0  # Skip both Variable and Contrast columns
+    else
+        var_width + contrast_width + 1  # +1 for space between columns
+    end
+    total_width = var_contrast_width + sum(profile_widths) + 4*num_width + length(profile_widths) + 4
+    println(io, "─"^total_width)
     
-    # Column headers - dynamic based on measure
+    # Column headers - dynamic based on type and measure
     measure = get(mr.metadata, :measure, :effect)
-    header_text = measure === :effect ? "dy/dx" :
-                  measure === :elasticity ? "eyex" :
-                  measure === :semielasticity_dyex ? "dyex" :
-                  measure === :semielasticity_eydx ? "eydx" : "dy/dx"
     
-    print(io, rpad("", var_width))
+    # For predictions, always use "Prediction" regardless of measure
+    if is_predictions
+        header_text = "Prediction"
+    else
+        # For effects, use measure-specific headers
+        header_text = measure === :effect ? "dy/dx" :
+                      measure === :elasticity ? "eyex" :
+                      measure === :semielasticity_dyex ? "dyex" :
+                      measure === :semielasticity_eydx ? "eydx" : "dy/dx"
+    end
+    
+    # Print headers (skip Variable/Contrast for predictions)
+    if !is_predictions
+        print(io, rpad("Variable", var_width))
+        print(io, " ")
+        print(io, rpad("Contrast", contrast_width))
+    end
+    
+    # Profile column headers
+    if has_profile
+        for (i, (name, width)) in enumerate(zip(profile_names, profile_widths))
+            print(io, " ")
+            print(io, rpad(name, width))
+        end
+    end
+    
     print(io, lpad(header_text, num_width))
     print(io, lpad("Std. Err.", num_width))
     print(io, lpad("[$(Int(100*(1-alpha)))% Conf.", num_width))
@@ -140,31 +273,156 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     println(io)
     
     # Separator line  
-    println(io, "─"^(var_width + 4*num_width + 3))
+    println(io, "─"^total_width)
     
     # Data rows
     for i in 1:length(mr.estimates)
-        term_str = try
-            mr.terms[i]
-        catch e
-            "undefined_term_$i"  # Fallback if term is undefined
+        # Print Variable and Contrast columns only for effects (not predictions)
+        if !is_predictions
+            var_name = try
+                mr.variables[i]
+            catch e
+                "undefined_var_$i"
+            end
+            
+            contrast = try
+                mr.terms[i]
+            catch e
+                "undefined_contrast_$i"
+            end
+            
+            print(io, rpad(var_name, var_width))
+            print(io, " ")
+            print(io, rpad(contrast, contrast_width))
         end
-        print(io, rpad(term_str, var_width))
-        print(io, lpad(sprintf("%.6f", mr.estimates[i]), num_width))
-        print(io, lpad(sprintf("%.6f", mr.standard_errors[i]), num_width))
-        print(io, lpad(sprintf("%.6f", lower[i]), num_width))
-        print(io, lpad(sprintf("%.6f", upper[i]), num_width))
+        
+        # Profile values
+        if has_profile
+            for (j, (name, width)) in enumerate(zip(profile_names, profile_widths))
+                print(io, " ")
+                profile_val = try
+                    val = mr.profile_values[Symbol(name)][i]
+                    format_number(Float64(val); profile_column=true)
+                catch e
+                    "N/A"
+                end
+                print(io, rpad(profile_val, width))
+            end
+        end
+        
+        print(io, lpad(format_number(mr.estimates[i]), num_width))
+        print(io, lpad(format_number(mr.standard_errors[i]), num_width))
+        print(io, lpad(format_number(lower[i]), num_width))
+        print(io, lpad(format_number(upper[i]), num_width))
         println(io)
     end
     
     # Bottom line
-    println(io, "─"^(var_width + 4*num_width + 3))
+    println(io, "─"^total_width)
 end
 
-# Simple sprintf-like formatting
+# Advanced numeric formatting for display
+"""
+    format_number(x::Float64; digits::Int=get_display_digits(), force_scientific::Bool=false, profile_column::Bool=false) -> String
+
+Format a number for display with configurable precision and notation.
+
+# Arguments
+- `x`: Number to format
+- `digits`: Number of significant digits (default from global setting)
+- `force_scientific`: Force scientific notation
+- `profile_column`: Use shorter format suitable for profile/reference values
+
+# Formatting Rules
+- Statistical results: Full precision with auto scientific notation for very small/large values
+- Profile columns: Shorter format, avoid scientific notation when possible
+- Auto scientific: |x| < 1e-4 or |x| >= 10^digits
+"""
+function format_number(x::Float64; digits::Int=get_display_digits(), 
+                      force_scientific::Bool=false, profile_column::Bool=false)
+    if isnan(x) || !isfinite(x)
+        return string(x)
+    end
+    
+    if x == 0.0
+        return "0"
+    end
+    
+    abs_x = abs(x)
+    
+    # Profile columns use consistent formatting across all values
+    if profile_column
+        if abs_x >= 1000 || abs_x < 0.00001
+            return @sprintf("%.2g", x)  # Scientific for extreme values only
+        else
+            # Use consistent decimal places for all profile values in typical ranges
+            # Most profile values are small (0.001-0.1 range), so use 4 decimal places consistently
+            formatted = @sprintf("%.4f", x)
+            
+            # Remove trailing zeros for cleaner appearance
+            if contains(formatted, '.')
+                formatted = rstrip(formatted, '0')
+                formatted = rstrip(formatted, '.')
+            end
+            
+            return formatted
+        end
+    end
+    
+    # Auto scientific notation thresholds
+    scientific_threshold_low = 10.0^(-4)
+    scientific_threshold_high = 10.0^(digits)
+    
+    use_scientific = force_scientific || abs_x < scientific_threshold_low || abs_x >= scientific_threshold_high
+    
+    if use_scientific
+        # Use a fixed format string based on digits
+        if digits == 3
+            return @sprintf("%.2e", x)
+        elseif digits == 4
+            return @sprintf("%.3e", x) 
+        elseif digits == 5
+            return @sprintf("%.4e", x)
+        elseif digits == 6
+            return @sprintf("%.5e", x)
+        elseif digits == 8
+            return @sprintf("%.7e", x)
+        else
+            # Fallback for other digit counts
+            return @sprintf("%.4e", x)
+        end
+    else
+        # Use fixed-point notation with appropriate precision
+        if digits <= 3
+            formatted = @sprintf("%.3f", x)
+        elseif digits == 4
+            formatted = @sprintf("%.4f", x)
+        elseif digits == 5
+            formatted = @sprintf("%.5f", x)
+        elseif digits == 6
+            formatted = @sprintf("%.6f", x)
+        elseif digits >= 8
+            formatted = @sprintf("%.8f", x)
+        else
+            formatted = @sprintf("%.5f", x)  # Default fallback
+        end
+        
+        # Remove trailing zeros and unnecessary decimal point
+        if contains(formatted, '.')
+            formatted = rstrip(formatted, '0')
+            formatted = rstrip(formatted, '.')
+        end
+        
+        return formatted
+    end
+end
+
+# Simple sprintf-like formatting (kept for compatibility)
 function sprintf(fmt::String, x::Float64)
     if fmt == "%.6f"
         return @sprintf("%.6f", x)
+    elseif fmt == "%.3g"
+        return @sprintf("%.3g", x)
     else
         return string(x)
     end
@@ -185,7 +443,8 @@ function _standard_table(mr::MarginsResult)
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
     df = DataFrame(
-        term = mr.terms,  # Clean variable names, not "x1_effect"
+        variable = mr.variables,  # The "x" in dy/dx
+        contrast = mr.terms,  # Clean variable names, not "x1_effect"
         estimate = mr.estimates,
         se = mr.standard_errors, 
         t_stat = t_stats,
@@ -216,7 +475,8 @@ end
 
 function _compact_table(mr::MarginsResult)
     df = DataFrame(
-        term = mr.terms,
+        variable = mr.variables,  # The "x" in dy/dx
+        contrast = mr.terms,
         estimate = mr.estimates,
         se = mr.standard_errors
     )
@@ -229,7 +489,8 @@ function _confidence_table(mr::MarginsResult)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
     df = DataFrame(
-        term = mr.terms,
+        variable = mr.variables,  # The "x" in dy/dx
+        contrast = mr.terms,
         estimate = mr.estimates,
         lower = lower,
         upper = upper
@@ -253,7 +514,8 @@ function _profile_table(mr::MarginsResult)
     end
     
     # Add results columns
-    df[!, :term] = mr.terms  # Clean variable names
+    df[!, :variable] = mr.variables  # The "x" in dy/dx
+    df[!, :contrast] = mr.terms  # Clean variable names
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
     df[!, :lower] = lower

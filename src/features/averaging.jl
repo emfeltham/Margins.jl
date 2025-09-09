@@ -14,11 +14,11 @@ function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix
     
     if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
         # Simple case: average all rows for each term
-        terms = unique(df.term)
+        terms = unique(df.contrast)
         avg_parts = DataFrame[]
         
         for term in terms
-            term_row_idxs = findall(==(term), df.term)
+            term_row_idxs = findall(==(term), df.contrast)
             if length(term_row_idxs) <= 1
                 # Single row, just keep as-is
                 push!(avg_parts, df[term_row_idxs, :])
@@ -32,6 +32,7 @@ function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix
             
             # Create averaged result
             avg_row = DataFrame(
+                variable = [term],  # The "x" in dy/dx (assuming term is the variable)
                 term = [term],
                 estimate = [mean(df[term_row_idxs, :estimate])],
                 se = [se_proper]
@@ -49,7 +50,7 @@ function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix
         end
         
         return isempty(avg_parts) ? DataFrame() : reduce(vcat, avg_parts), 
-               isempty(avg_parts) ? Matrix{Float64}(undef, 0, size(G, 2)) : vcat([vec(mean(G[findall(==(term), df.term), :], dims=1))' for term in terms]...)
+               isempty(avg_parts) ? Matrix{Float64}(undef, 0, size(G, 2)) : vcat([vec(mean(G[findall(==(term), df.contrast), :], dims=1))' for term in terms]...)
     else
         # Complex case: group by non-profile columns and average within groups
         grouped = groupby(df, group_cols)
@@ -60,9 +61,9 @@ function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix
             # Get row indices of this group in the original df
             group_row_idxs = [findfirst(==(row), eachrow(df)) for row in eachrow(group)]
             
-            terms = unique(group.term)
+            terms = unique(group.contrast)
             for term in terms
-                term_local_idxs = findall(==(term), group.term)  # Local indices within group
+                term_local_idxs = findall(==(term), group.contrast)  # Local indices within group
                 term_global_idxs = group_row_idxs[term_local_idxs]  # Global indices in df and G
                 
                 if length(term_local_idxs) <= 1
@@ -78,6 +79,7 @@ function _average_rows_with_proper_se(df, G::Matrix{Float64}, Σ::AbstractMatrix
                 
                 # Create averaged result
                 avg_group = DataFrame(
+                    variable = [term],  # The "x" in dy/dx (assuming term is the variable)
                     term = [term],
                     estimate = [mean(group[term_local_idxs, :estimate])],
                     se = [se_proper]
@@ -121,11 +123,11 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
     
     if isempty(group_cols) || all(col -> length(unique(df[!, col])) == 1, group_cols)
         # Simple case: average all rows for each term
-        terms = unique(df.term)
+        terms = unique(df.contrast)
         avg_parts = DataFrame[]
         
         for term in terms
-            term_rows = findall(==(term), df.term)
+            term_rows = findall(==(term), df.contrast)
             if length(term_rows) <= 1
                 # Single row, just keep as-is
                 push!(avg_parts, df[term_rows, :])
@@ -170,6 +172,7 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
             
             # Create averaged result
             avg_row = DataFrame(
+                variable = [term],  # The "x" in dy/dx (assuming term is the variable)
                 term = [term],
                 dydx = [mean(df[term_rows, :dydx])],
                 se = [se_proper]
@@ -193,9 +196,9 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
         avg_parts = DataFrame[]
         
         for group in grouped
-            terms = unique(group.term)
+            terms = unique(group.contrast)
             for term in terms
-                term_rows = findall(==(term), group.term)
+                term_rows = findall(==(term), group.contrast)
                 if length(term_rows) <= 1
                     push!(avg_parts, group[term_rows, :])
                     continue
@@ -248,6 +251,7 @@ function _average_profiles_with_proper_se(df, gradients::Dict, Σ::AbstractMatri
                 
                 # Create averaged result
                 avg_group = DataFrame(
+                    variable = [term],  # The "x" in dy/dx (assuming term is the variable)
                     term = [term],
                     dydx = [mean(group[term_rows, :dydx])],
                     se = [se_proper]

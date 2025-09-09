@@ -42,7 +42,8 @@ function _population_predictions(
     
     # Create results DataFrame
     df = DataFrame(
-        term = ["AAP"],
+        variable = [""],  # Empty for predictions (no specific x)
+        contrast = ["AAP"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],

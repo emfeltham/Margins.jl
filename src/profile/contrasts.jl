@@ -132,7 +132,7 @@ function compute_multiple_profile_contrasts(
         # Build descriptive term name
         current_level = profile[var]
         profile_desc = join(["$(k)=$(v)" for (k,v) in pairs(profile) if k != var], ", ")
-        terms[i] = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
+        terms[i] = "$(current_level) vs $(baseline_level)"
     end
     
     # Safely use g_buf for SE computation if large enough
@@ -149,7 +149,7 @@ function compute_multiple_profile_contrasts(
     # Build results DataFrame
     results = DataFrame(
         profile_id = 1:n_profiles,
-        term = terms,
+        contrast = terms,
         estimate = effects,
         se = ses
     )

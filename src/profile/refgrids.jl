@@ -25,6 +25,9 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
     # Get model variables using FormulaCompiler
     compiled = FormulaCompiler.compile_formula(model, data_nt)
     
+    # Get response variable name from model formula (to exclude it)
+    response_var = Symbol(model.mf.f.lhs.sym)
+    
     # Extract all variables used in model operations
     model_vars = Set{Symbol}()
     for op in compiled.ops
@@ -37,7 +40,10 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
         end
     end
     
-    # Filter data to only include model variables
+    # Remove response variable from model variables (keep only predictors)
+    delete!(model_vars, response_var)
+    
+    # Filter data to only include predictor variables (exclude response)
     filtered_data = Dict{Symbol, Any}()
     for var in model_vars
         if haskey(data_nt, var)
@@ -1622,13 +1628,14 @@ function balanced_grid(data; vars...)
 end
 
 """
-    cartesian_grid(data; vars...) -> DataFrame
+    cartesian_grid(; vars...) -> DataFrame
 
 Build Cartesian product reference grid from variable specifications.
-This provides a cleaner builder approach for reference grid specification.
+This is a pure grid constructor that creates combinations from provided values
+without needing reference data. When used with `profile_margins()`, missing 
+model variables are automatically completed with typical values.
 
 # Arguments
-- `data`: DataFrame or NamedTuple containing the data
 - `vars...`: Keyword arguments mapping variables to values
   - Single values: `age=45`
   - Multiple values: `age=[25, 45, 65]`
@@ -1640,19 +1647,141 @@ This provides a cleaner builder approach for reference grid specification.
 # Examples
 ```julia
 # Simple cartesian product
-ref_grid = cartesian_grid(data; age=[25, 45, 65], treatment=[true, false])
+ref_grid = cartesian_grid(age=[25, 45, 65], treatment=[true, false])
+
+# Using range construction
+ref_grid = cartesian_grid(
+    x1 = collect(range(extrema(data.x1)...; length = 5)),
+    x2 = collect(range(extrema(data.x2)...; length = 5))
+)
 
 # Mixed specifications
-ref_grid = cartesian_grid(data; age="25(10)65", education=["college", "graduate"])
+ref_grid = cartesian_grid(age="25(10)65", education=["college", "graduate"])
 
-# Use with profile_margins
+# Use with profile_margins (automatically completed with typical values for missing variables)
 result = profile_margins(model, data, ref_grid)
 ```
 """
-function cartesian_grid(data; vars...)
+function cartesian_grid(; vars...)
+    at_spec = Dict{Symbol, Any}(vars)
+    
+    if isempty(at_spec)
+        return DataFrame()
+    end
+    
+    # Extract specified variables and their values
+    var_names = collect(keys(at_spec))
+    var_values = Vector{Vector{Any}}(undef, length(var_names))
+    
+    for (i, var) in enumerate(var_names)
+        vals = at_spec[var]
+        # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
+        if vals isa String && occursin(r"^-?\d+\(\d+\)-?\d+$", vals)
+            vals = _parse_numlist(vals)
+        end
+        var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
+    end
+    
+    # Pre-calculate total number of combinations for efficient allocation
+    n_combinations = prod(length(vals) for vals in var_values)
+    
+    # Pre-allocate result vector for better performance
+    grid_rows = Vector{Dict{Symbol,Any}}(undef, n_combinations)
+    
+    # Generate Cartesian product
+    combo_idx = 1
+    for combo in Iterators.product(var_values...)
+        row = Dict{Symbol,Any}()
+        for (i, var) in enumerate(var_names)
+            row[var] = combo[i]
+        end
+        grid_rows[combo_idx] = row
+        combo_idx += 1
+    end
+    
+    # Convert to DataFrame
+    if isempty(grid_rows)
+        return DataFrame()
+    end
+    
+    cols = Dict{Symbol, Vector}()
+    for key in keys(first(grid_rows))
+        values = [row[key] for row in grid_rows]
+        # Create vector with proper type based on first value type
+        first_val = first(values)
+        if all(v -> typeof(v) == typeof(first_val), values)
+            cols[key] = typeof(first_val)[values...]
+        else
+            cols[key] = Vector{Any}(values)
+        end
+    end
+    
+    return DataFrame(cols)
+end
+
+"""
+    complete_reference_grid(reference_grid, model, data; typical=mean) -> DataFrame
+
+Complete a partial reference grid by adding typical values for missing model variables.
+This function takes a reference grid that may be missing some model variables and
+adds appropriate typical values for those missing variables.
+
+# Arguments
+- `reference_grid`: DataFrame with partial reference grid (e.g., from cartesian_grid)
+- `model`: Fitted statistical model
+- `data`: Original data (DataFrame or NamedTuple) to compute typical values
+- `typical`: Function to compute typical values for continuous variables (default: mean)
+
+# Returns
+- `DataFrame`: Complete reference grid with all model variables
+
+# Examples
+```julia
+# Create partial grid with only x1 and x2
+partial_grid = cartesian_grid(x1=[0, 1, 2], x2=[10, 20])
+
+# Complete it with typical values for other model variables
+complete_grid = complete_reference_grid(partial_grid, model, data)
+
+# Use with profile_margins
+result = profile_margins(model, data, complete_grid)
+```
+"""
+function complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean)
+    # Convert data to NamedTuple for consistency
     data_nt = data isa NamedTuple ? data : Tables.columntable(data)
-    at_dict = Dict{Symbol, Any}(vars)
-    return _build_cartesian_refgrid(at_dict, data_nt, mean)
+    
+    # Filter data to model variables only
+    filtered_data = _filter_data_to_model_variables(data_nt, model)
+    
+    # Get typical values for all model variables
+    typical_values = _get_typical_values_dict(filtered_data, typical)
+    
+    # Create complete reference grid
+    n_rows = nrow(reference_grid)
+    complete_cols = Dict{Symbol, Vector}()
+    
+    # First, add all columns from the original reference grid
+    for col_name in names(reference_grid)
+        complete_cols[Symbol(col_name)] = reference_grid[!, col_name]
+    end
+    
+    # Then, add typical values for missing model variables
+    for (var, typical_val) in typical_values
+        if !haskey(complete_cols, var)
+            # This variable is missing from reference grid, add typical values
+            if typical_val isa Real && !(typical_val isa Bool)
+                complete_cols[var] = fill(Float64(typical_val), n_rows)
+            elseif typical_val isa Bool
+                complete_cols[var] = fill(typical_val, n_rows)
+            else
+                # CategoricalMixture or other types
+                complete_cols[var] = fill(typical_val, n_rows)
+            end
+        end
+    end
+    
+    return DataFrame(complete_cols)
 end
 
 """

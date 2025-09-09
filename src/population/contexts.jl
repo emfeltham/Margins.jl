@@ -97,7 +97,8 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     # Extract raw components from DataFrame
     estimates = results.estimate
     standard_errors = results.se
-    terms = string.(results.term)  # Convert Symbol to String
+    variables = string.(results.variable)  # The "x" in dy/dx
+    terms = string.(results.contrast)  # Convert Symbol to String
     
     # CRITICAL: Preserve actual subgroup sizes from computation
     if "n" in names(results)
@@ -109,7 +110,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     # Extract profile values from at_ columns (if any)
     profile_values = _extract_context_profile_values(results)
     
-    return MarginsResult(estimates, standard_errors, terms, profile_values, nothing, G, metadata)
+    return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
 end
 
 """
@@ -546,7 +547,8 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     
     # Create results DataFrame
     df = DataFrame(
-        term = [string(var)],
+        variable = [string(var)],  # The "x" in dy/dx
+        contrast = ["derivative"],
         estimate = [ame_val],
         se = [se],
         t_stat = [ame_val / se],
@@ -678,7 +680,8 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     
     # Create results DataFrame
     df = DataFrame(
-        term = ["AAP"],
+        variable = [""],  # Empty for predictions (no specific x)
+        contrast = ["AAP"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],

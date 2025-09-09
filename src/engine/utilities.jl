@@ -778,7 +778,8 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     if total_rows == 0
         # No variables to process - return empty DataFrame
         empty_df = DataFrame(
-            term = String[],
+            variable = String[],
+            contrast = String[],
             estimate = Float64[],
             se = Float64[],
             n = Int[]
@@ -788,7 +789,8 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
     
     # PRE-ALLOCATE results DataFrame for the actual number of rows needed
     results = DataFrame(
-        term = Vector{String}(undef, total_rows),
+        variable = Vector{String}(undef, total_rows),  # The "x" in dy/dx
+        contrast = Vector{String}(undef, total_rows),
         estimate = Vector{Float64}(undef, total_rows), 
         se = Vector{Float64}(undef, total_rows),
         n = fill(n_obs, total_rows)  # Add sample size for all rows
@@ -847,7 +849,8 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 se = compute_se_only(gβ_avg, engine.Σ)
                 
                 # Direct assignment instead of push! to avoid reallocation
-                results.term[cont_idx] = string(var)
+                results.variable[cont_idx] = string(var)  # The "x" in dy/dx
+                results.contrast[cont_idx] = "derivative"
                 results.estimate[cont_idx] = final_val
                 results.se[cont_idx] = se
                 # Copy the transformed gradient to the output matrix
@@ -903,7 +906,8 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
                 se = compute_se_only(engine.gβ_accumulator, engine.Σ)  # Use immediately
                 
                 # Step 5: Store results immediately
-                results.term[cont_idx] = string(var)
+                results.variable[cont_idx] = string(var)  # The "x" in dy/dx
+                results.contrast[cont_idx] = "derivative"
                 results.estimate[cont_idx] = final_val
                 results.se[cont_idx] = se
                 G[cont_idx, :] = engine.gβ_accumulator  # Copy to output matrix
@@ -921,7 +925,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             ame_val, gβ_avg = _compute_variable_ame_unified(engine, var, rows, scale, backend)
             se = compute_se_only(gβ_avg, engine.Σ)
             
-            results.term[cont_idx] = string(var)
+            results.contrast[cont_idx] = "true vs false"
             results.estimate[cont_idx] = ame_val
             results.se[cont_idx] = se
             G[cont_idx, :] = gβ_avg
@@ -934,8 +938,9 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             for (level1, level2, ame_val, gβ_avg) in contrast_results
                 se = compute_se_only(gβ_avg, engine.Σ)
                 
-                # Create descriptive term name: "var: level vs baseline"
-                results.term[cont_idx] = "$(var): $(level2) vs $(level1)"
+                # Create descriptive term name: "level vs baseline" (no variable name)
+                results.variable[cont_idx] = string(var)  # The "x" in dy/dx
+                results.contrast[cont_idx] = "$(level2) vs $(level1)"
                 results.estimate[cont_idx] = ame_val
                 results.se[cont_idx] = se
                 G[cont_idx, :] = gβ_avg
@@ -988,7 +993,8 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
     
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth (PERFORMANCE FIX)
     results = DataFrame(
-        term = String[],
+        variable = String[],  # The "x" in dy/dx
+        contrast = String[],
         estimate = Float64[],
         se = Float64[],
         profile_desc = NamedTuple[]  # Store profile info for later string conversion
@@ -1082,7 +1088,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
             se = compute_se_only(engine.gβ_accumulator, engine.Σ)
             
             # Store results using string terms for MarginsResult compatibility
-            push!(results, (term=string(var), estimate=final_val, se=se, profile_desc=profile))
+            push!(results, (variable=string(var), contrast="derivative", estimate=final_val, se=se, profile_desc=profile))
             # Store the transformed gradient
             G[row_idx, :] = engine.gβ_accumulator
             row_idx += 1
@@ -1838,7 +1844,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth
     results = DataFrame(
-        term = String[],
+        variable = String[],  # The "x" in dy/dx
+        contrast = String[],
         estimate = Float64[],
         se = Float64[],
         profile_desc = NamedTuple[]  # Store profile info for later string conversion
@@ -1922,7 +1929,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                         end
                     end
                     profile_nt = NamedTuple(profile_dict)
-                    push!(results.term, string(var))
+                    push!(results.variable, string(var))  # The "x" in dy/dx
+                    push!(results.contrast, "derivative")
                     push!(results.estimate, estimate)
                     push!(results.se, se)
                     push!(results.profile_desc, profile_nt)
@@ -1951,7 +1959,7 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
                 profile_parts = [string(k, "=", v) for (k, v) in pairs(profile_dict) if k != var]
                 profile_desc = join(profile_parts, ", ")
-                term_name = "$(var)=$(current_level) vs $(baseline_level) at $(profile_desc)"
+                term_name = "$(current_level) vs $(baseline_level)"
                 
                 # Store results with profile info (convert mixtures to display values)
                 profile_dict = Dict{Symbol,Any}()
@@ -1965,7 +1973,8 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                     end
                 end
                 profile_nt = NamedTuple(profile_dict)
-                push!(results.term, term_name)
+                push!(results.variable, string(var))  # The "x" in dy/dx
+                push!(results.contrast, term_name)
                 push!(results.estimate, final_effect)
                 push!(results.se, se)
                 push!(results.profile_desc, profile_nt)

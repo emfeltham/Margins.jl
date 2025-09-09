@@ -22,7 +22,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:predictions` - Average Adjusted Predictions (AAP): population-averaged fitted values
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
-  - Defaults to all continuous variables (numeric types except Bool)
+  - Defaults to all explanatory variables (both continuous and categorical)
 - `scale::Symbol=:response`: Target scale for computation
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
@@ -39,7 +39,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `groups=nothing`: Grouping specification for stratified analysis
   - Simple: `:education` or `[:region, :gender]` for categorical grouping
   - Continuous: `(:income, 4)` for quartiles, `(:age, [25, 50, 75])` for thresholds
-  - Nested: `(main=:region, within=:gender)` for hierarchical grouping
+  - Nested: `:outer => :inner` for hierarchical grouping
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels  
@@ -67,7 +67,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 
 # Examples
 ```julia
-# Average marginal effects for all continuous variables
+# Average marginal effects for all explanatory variables
 result = population_margins(model, data)
 DataFrame(result)  # Convert to DataFrame
 
@@ -92,7 +92,8 @@ result = population_margins(model, data; vars=[:x1], scenarios=Dict(:x2 => [0, 1
 
 # Grouping examples
 result = population_margins(model, data; groups=:education)  # By education level
-result = population_margins(model, data; groups=(:income, 4))  # By income quartiles  
+result = population_margins(model, data; groups=(:income, 4))  # By income quartiles
+result = population_margins(model, data; groups=:region => :gender)  # Nested grouping
 
 # High-accuracy computation with automatic differentiation  
 result = population_margins(model, data; backend=:ad, scale=:link)
@@ -177,9 +178,10 @@ function population_margins(
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        terms = df.term
+        variables = df.variable  # The "x" in dy/dx
+        terms = df.contrast
         
-        return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
+        return MarginsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
@@ -196,9 +198,10 @@ function population_margins(
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        terms = df.term
+        variables = df.variable  # The "x" in dy/dx
+        terms = df.contrast
         
-        return MarginsResult(estimates, standard_errors, terms, nothing, nothing, G, metadata)
+        return MarginsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
     end
 end
 
@@ -403,8 +406,8 @@ Process and validate the vars parameter with model awareness to exclude dependen
 """
 function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
     if vars === nothing
-        # Auto-detect continuous variables (matches documentation: "Defaults to all continuous variables")
-        effect_vars = _get_continuous_variables(model, data_nt, weight_col)
+        # Auto-detect ALL variables (both continuous and categorical) for comprehensive effects analysis
+        effect_vars = _get_all_effect_variables(model, data_nt, weight_col)
         if isempty(effect_vars)
             throw(MarginsError("No explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
         end

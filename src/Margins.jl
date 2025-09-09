@@ -48,8 +48,8 @@ import FormulaCompiler: mix, _get_baseline_level
 using LinearAlgebra: dot
 using Statistics: mean
 using CategoricalArrays
-using Distributions: Normal, cdf, quantile
 using Printf: @sprintf
+using Distributions: Normal, cdf, quantile
 
 # Version info
 const VERSION = v"2.0.0"
@@ -57,12 +57,15 @@ const VERSION = v"2.0.0"
 # Core API - Clean 2×2 framework  
 export population_margins, profile_margins, MarginsResult
 
+# Display configuration
+export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits
+
 # Categorical mixture utilities
 # Re-export FormulaCompiler's native mixture functionality
 export CategoricalMixture, mix
 
 # Reference grid builders (NEW - AsBalanced support)
-export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid
+export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid, complete_reference_grid
 
 # Include all submodules in dependency order
 include("types.jl")
