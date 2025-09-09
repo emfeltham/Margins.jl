@@ -182,6 +182,42 @@ profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)
 - **Profile interpretation**: More concrete than population averages, ideal for policy communication
 - **Computational efficiency**: Single compilation per analysis, reused across all profiles
 
+## Output Structure and Result Multiplicity
+
+### Result Row Generation Pattern
+The number of output rows depends on variable types and categorical levels:
+
+- **Continuous variables**: 1 reference grid row → 1 output row (derivative)
+- **Categorical variables**: 1 reference grid row → Multiple output rows (baseline contrasts)
+
+### Example Output Multiplicity
+```julia
+# Reference grid with 2 profiles
+grid = DataFrame(
+    age = [30, 40],                    # Continuous variable
+    education = ["A", "B", "C"]        # Categorical with 3 levels
+)
+
+# Results: 2 profiles × (1 continuous + 2 categorical contrasts) = 6 total rows:
+result = profile_margins(model, data, grid; type=:effects, vars=[:age, :education])
+
+# Output structure:
+# Row 1: age at (age=30, education="A,B,C")
+# Row 2: education: B vs A at (age=30, education="A,B,C")  
+# Row 3: education: C vs A at (age=30, education="A,B,C")
+# Row 4: age at (age=40, education="A,B,C")
+# Row 5: education: B vs A at (age=40, education="A,B,C")
+# Row 6: education: C vs A at (age=40, education="A,B,C")
+```
+
+### Categorical Baseline Contrasts
+For a categorical variable with K levels, each reference grid row generates:
+- **K-1 contrast rows** comparing each non-baseline level to the baseline
+- Term names follow pattern: `"variable: level vs baseline"`
+- Example: 4-level categorical produces 3 contrasts (B vs A, C vs A, D vs A)
+
+This multiplicative pattern means that reference grids with multiple categorical variables can generate substantial numbers of result rows, enabling comprehensive categorical effect analysis at each profile.
+
 ## Examples
 
 ### Basic Workflow
