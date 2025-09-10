@@ -925,6 +925,7 @@ function _ame_continuous_and_categorical(engine::MarginsEngine{L}, data_nt::Name
             ame_val, gβ_avg = _compute_variable_ame_unified(engine, var, rows, scale, backend)
             se = compute_se_only(gβ_avg, engine.Σ)
             
+            results.variable[cont_idx] = string(var)  # The "x" in dy/dx for Boolean variable
             results.contrast[cont_idx] = "true vs false"
             results.estimate[cont_idx] = ame_val
             results.se[cont_idx] = se
@@ -1633,6 +1634,18 @@ through a single, extensible interface.
 - **Mathematical equivalence**: Same discrete change computation, optimal evaluation path
 """
 function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, rows, scale::Symbol, backend::Symbol, contrasts::Symbol) where L
+    # Delegate to scenario-aware version with no additional overrides or weights
+    return _compute_categorical_contrasts(engine, var, rows, scale, backend, contrasts, nothing, nothing)
+end
+
+"""
+    _compute_categorical_contrasts(engine, var, rows, scale, backend, contrasts, scenario_overrides)
+
+Scenario-aware version of categorical contrasts: merges user scenario overrides into
+each per-level DataScenario, ensuring predictions/gradients are evaluated at the
+requested counterfactual covariates.
+"""
+function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, rows, scale::Symbol, backend::Symbol, contrasts::Symbol, scenario_overrides, weights::Union{Vector{Float64}, Nothing}) where L
     var_col = getproperty(engine.data_nt, var)
     levels = unique(var_col[rows])
     compiled = engine.compiled  # ← O(0) additional compilations for any contrast type!
@@ -1678,12 +1691,24 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
     for (level1, level2) in contrast_pairs
         if !haskey(scenarios, level1)
             # Create DataScenario using FormulaCompiler API
-            overrides = Dict(var => level1)
+            overrides = Dict{Symbol,Any}()
+            if scenario_overrides !== nothing
+                for (k, v) in pairs(scenario_overrides)
+                    overrides[k] = v
+                end
+            end
+            overrides[var] = level1
             scenarios[level1] = FormulaCompiler.create_scenario("level_$(level1)", engine.data_nt, overrides)
         end
         if !haskey(scenarios, level2)
             # Create DataScenario using FormulaCompiler API  
-            overrides = Dict(var => level2)
+            overrides = Dict{Symbol,Any}()
+            if scenario_overrides !== nothing
+                for (k, v) in pairs(scenario_overrides)
+                    overrides[k] = v
+                end
+            end
+            overrides[var] = level2
             scenarios[level2] = FormulaCompiler.create_scenario("level_$(level2)", engine.data_nt, overrides)
         end
     end
@@ -1711,27 +1736,51 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
         # Unpack engine parameters for cleaner function calls
         (β, link, row_buf) = (engine.β, engine.link, engine.row_buf)
 
-        for row in rows
-            # Scenario-based predictions (no recompilation)
-            pred1 = _predict_with_scenario(compiled, scenario1, row, scale, β, link, row_buf)
-            pred2 = _predict_with_scenario(compiled, scenario2, row, scale, β, link, row_buf)
-            # In-place gradients for both scenarios (no per-row allocations)
-            _gradient_with_scenario!(g1, compiled, scenario1, row, scale, β, link, row_buf)
-            _gradient_with_scenario!(g2, compiled, scenario2, row, scale, β, link, row_buf)
+        if isnothing(weights)
+            for row in rows
+                # Scenario-based predictions (no recompilation)
+                pred1 = _predict_with_scenario(compiled, scenario1, row, scale, β, link, row_buf)
+                pred2 = _predict_with_scenario(compiled, scenario2, row, scale, β, link, row_buf)
+                # In-place gradients for both scenarios (no per-row allocations)
+                _gradient_with_scenario!(g1, compiled, scenario1, row, scale, β, link, row_buf)
+                _gradient_with_scenario!(g2, compiled, scenario2, row, scale, β, link, row_buf)
 
-            ame_sum += (pred2 - pred1)
-            @inbounds @fastmath for i in eachindex(grad_sum)
-                grad_sum[i] += (g2[i] - g1[i])
+                ame_sum += (pred2 - pred1)
+                @inbounds @fastmath for i in eachindex(grad_sum)
+                    grad_sum[i] += (g2[i] - g1[i])
+                end
             end
-        end
+            # Average over all observations
+            n = length(rows)
+            ame_val = ame_sum / n
+            gβ_avg = (grad_sum ./ n)
+            push!(results, (level1, level2, ame_val, gβ_avg))
+        else
+            total_weight = 0.0
+            for row in rows
+                w = weights[row]
+                if w > 0
+                    pred1 = _predict_with_scenario(compiled, scenario1, row, scale, β, link, row_buf)
+                    pred2 = _predict_with_scenario(compiled, scenario2, row, scale, β, link, row_buf)
+                    _gradient_with_scenario!(g1, compiled, scenario1, row, scale, β, link, row_buf)
+                    _gradient_with_scenario!(g2, compiled, scenario2, row, scale, β, link, row_buf)
 
-        # Average over all observations
-        n = length(rows)
-        ame_val = ame_sum / n
-        gβ_avg = (grad_sum ./ n)
-        push!(results, (level1, level2, ame_val, gβ_avg))
+                    ame_sum += w * (pred2 - pred1)
+                    @inbounds @fastmath for i in eachindex(grad_sum)
+                        grad_sum[i] += w * (g2[i] - g1[i])
+                    end
+                    total_weight += w
+                end
+            end
+            if total_weight <= 0
+                throw(MarginsError("All weights are zero for this categorical contrast; cannot compute weighted effect."))
+            end
+            ame_val = ame_sum / total_weight
+            gβ_avg = (grad_sum ./ total_weight)
+            push!(results, (level1, level2, ame_val, gβ_avg))
+        end
     end
-    
+
     return results
 end
 

@@ -208,33 +208,75 @@ function _show_stata_table(io::IO, mr::MarginsResult)
         end
     end
     
-    # Profile columns (for profile margins only)
+    # Context column (for population margins with scenarios/groups)
+    context_width = 0
+    context_text = ""
+    has_contexts = get(mr.metadata, :has_contexts, false) && get(mr.metadata, :analysis_type, :unknown) == :population
+    if has_contexts && !is_predictions  # Only for effects, not predictions
+        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
+        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+        
+        if !isempty(scenarios_vars) && !isempty(groups_vars)
+            # Both scenarios and groups
+            context_text = "Scenario→Group: $(join(scenarios_vars, ','))→$(join(groups_vars, ','))"
+        elseif !isempty(scenarios_vars)
+            # Scenarios only
+            context_text = "Scenario: $(join(scenarios_vars, ','))"
+        elseif !isempty(groups_vars)
+            # Groups only  
+            context_text = "Group: $(join(groups_vars, ','))"
+        end
+        context_width = max(12, length(context_text) + 1)
+    end
+    
+    # Profile columns (for profile margins or population margins with contexts)
     profile_widths = Int[]  # Specify Int type to avoid sum() type issues
-    profile_names = String[]  # Specify String type
+    profile_names = String[]  # Display names
+    profile_raw_names = Symbol[]  # Raw names for data access
     if has_profile
+        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
+        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+        
         for (name, values) in pairs(mr.profile_values)
-            push!(profile_names, string(name))
-            # Calculate width needed for this profile column (reduced padding for tighter spacing)
+            # Store raw name for data access
+            push!(profile_raw_names, name)
+            
+            # Determine proper column name based on scenarios vs groups
+            display_name = if has_contexts
+                # For population margins with contexts, use proper naming
+                if Symbol(name) in scenarios_vars
+                    "at_$(name)"  # Scenarios use at_ prefix
+                else
+                    string(name)  # Groups use no prefix  
+                end
+            else
+                # For regular profile margins, use as-is
+                string(name)
+            end
+            
+            push!(profile_names, display_name)
+            # Calculate width needed for this profile column
             max_val_width = try
                 maximum(length.(string.(values)))
             catch e
                 6  # fallback width
             end
-            header_width = length(string(name))
-            col_width = 7  # fixed compact width for all profile columns
+            header_width = length(display_name)
+            col_width = max(7, header_width + 1)  # Ensure header fits
             push!(profile_widths, col_width)
         end
     end
     
     num_width = 12
     
-    # Calculate total width (account for skipped columns in predictions)
+    # Calculate total width (account for skipped columns in predictions and Context column)
     var_contrast_width = if is_predictions 
         0  # Skip both Variable and Contrast columns
     else
         var_width + contrast_width + 1  # +1 for space between columns
     end
-    total_width = var_contrast_width + sum(profile_widths) + 4*num_width + length(profile_widths) + 4
+    context_width_with_space = has_contexts && !is_predictions ? context_width + 1 : 0
+    total_width = var_contrast_width + context_width_with_space + sum(profile_widths) + 4*num_width + length(profile_widths) + 4
     println(io, "─"^total_width)
     
     # Column headers - dynamic based on type and measure
@@ -256,6 +298,12 @@ function _show_stata_table(io::IO, mr::MarginsResult)
         print(io, rpad("Variable", var_width))
         print(io, " ")
         print(io, rpad("Contrast", contrast_width))
+        
+        # Context column header
+        if has_contexts
+            print(io, " ")
+            print(io, rpad("Context", context_width))
+        end
     end
     
     # Profile column headers
@@ -294,15 +342,27 @@ function _show_stata_table(io::IO, mr::MarginsResult)
             print(io, rpad(var_name, var_width))
             print(io, " ")
             print(io, rpad(contrast, contrast_width))
+            
+            # Context column data
+            if has_contexts
+                print(io, " ")
+                print(io, rpad(context_text, context_width))
+            end
         end
         
         # Profile values
         if has_profile
-            for (j, (name, width)) in enumerate(zip(profile_names, profile_widths))
+            for (j, (display_name, raw_name, width)) in enumerate(zip(profile_names, profile_raw_names, profile_widths))
                 print(io, " ")
                 profile_val = try
-                    val = mr.profile_values[Symbol(name)][i]
-                    format_number(Float64(val); profile_column=true)
+                    val = mr.profile_values[raw_name][i]
+                    # Handle both numeric and string values
+                    if val isa Number
+                        format_number(Float64(val); profile_column=true)
+                    else
+                        # For categorical/string values, use as-is
+                        string(val)
+                    end
                 catch e
                     "N/A"
                 end
@@ -444,12 +504,13 @@ function _standard_table(mr::MarginsResult)
     
     df = DataFrame(
         variable = mr.variables,  # The "x" in dy/dx
-        contrast = mr.terms,  # Clean variable names, not "x1_effect"
+        contrast = mr.terms,      # Human-readable contrast/label
         estimate = mr.estimates,
         se = mr.standard_errors, 
         t_stat = t_stats,
         p_value = p_values
     )
+    # Use new variable/contrast structure - no backward compatibility
     
     # Add confidence intervals if alpha is specified in metadata
     if haskey(mr.metadata, :alpha)

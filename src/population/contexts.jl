@@ -48,7 +48,9 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                 end
                 
                 # Compute effect in this context
-                var_result, var_gradients = _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend, context_weights)
+                var_result, var_gradients = _compute_population_effect_in_context(
+                    engine, context_data, context_indices, var, scale, backend, context_weights, scenario_spec
+                )
                 
                 # Add context identifiers
                 for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
@@ -90,6 +92,12 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     # Build metadata
     metadata = _build_metadata(; type, vars, scale, backend, n_obs=length(first(data_nt)), 
                               model_type=typeof(engine.model), has_contexts=true)
+    
+    # Store scenarios and groups variable information for Context column
+    scenarios_vars = scenarios === nothing ? Symbol[] : (scenarios isa Dict ? collect(keys(scenarios)) : Symbol[])
+    groups_vars = groups === nothing ? Symbol[] : (groups isa Symbol ? [groups] : Symbol[])
+    metadata[:scenarios_vars] = scenarios_vars
+    metadata[:groups_vars] = groups_vars
     
     # Add analysis_type for format auto-detection
     metadata[:analysis_type] = :population  # This is still population-level, just with contexts
@@ -485,6 +493,9 @@ function _create_context_data(data_nt, at_spec, over_spec)
                     range_indices = findall(x -> spec.lower <= x <= spec.upper, col)
                 end
                 indices_to_keep = intersect(indices_to_keep, range_indices)
+            elseif spec isa NamedTuple && haskey(spec, :indices)
+                # Index-based subgroup (support for around-value subgroups)
+                indices_to_keep = intersect(indices_to_keep, collect(spec.indices))
             else
                 # Categorical - filter by value
                 var_indices = findall(==(spec), context_data[var])
@@ -509,14 +520,24 @@ function _create_context_data(data_nt, at_spec, over_spec)
 end
 
 """
-    _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend, weights) -> (DataFrame, Matrix{Float64})
+    _compute_population_effect_in_context(engine, context_data, context_indices, var, scale, backend, weights, scenario_spec) -> (DataFrame, Matrix{Float64})
 
 Compute population marginal effect for a single variable in a specific context.
 
 # Arguments
 - `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
+- `scenario_spec`: Dict of scenario overrides for counterfactual evaluation (threaded for later use)
 """
-function _compute_population_effect_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, var::Symbol, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
+function _compute_population_effect_in_context(
+    engine::MarginsEngine{L},
+    context_data::NamedTuple,
+    context_indices::Vector{Int},
+    var::Symbol,
+    scale::Symbol,
+    backend::Symbol,
+    weights::Union{Vector{Float64}, Nothing},
+    scenario_spec,
+) where L
     # Create a temporary engine for this single variable to reuse existing AME infrastructure
     n_obs = length(first(context_data))
     n_params = length(engine.β)
@@ -530,16 +551,29 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     end
     
     # For single variable, we need to compute the AME for just this var
-    # First check if this variable is continuous or categorical
-    col = context_data[var]
-    is_categorical = eltype(col) <: Bool || eltype(col) <: CategoricalValue
-    
-    if is_categorical
-        # Use existing categorical AME computation
-        ame_val, gβ_avg = _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend, weights)
+    # Determine variable type using unified detector (continuous vs boolean/categorical)
+    var_type = _detect_variable_type(engine.data_nt, var)
+
+    if var_type === :categorical || var_type === :boolean
+        # Scenario-aware categorical AME using DataScenario-based contrasts (supports weights)
+        contrast_results = _compute_categorical_contrasts(engine, var, context_indices, scale, backend, :baseline, scenario_spec, weights)
+        if isempty(contrast_results)
+            ame_val, gβ_avg = (0.0, zeros(length(engine.β)))
+        else
+            _, _, ame_val, gβ_avg = contrast_results[1]
+        end
     else
-        # Use existing continuous AME computation for single variable
-        ame_val, gβ_avg = _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend, weights)
+        # Continuous variable
+        if scenario_spec !== nothing && !isempty(scenario_spec)
+            # Scenario-aware centered FD using DataScenario
+            ame_val, gβ_avg = _compute_continuous_ame_with_scenario(
+                engine, var, context_indices, scale, backend, scenario_spec, weights;
+                h=1e-6
+            )
+        else
+            # Existing continuous AME computation for single variable (no scenarios)
+            ame_val, gβ_avg = _compute_continuous_ame_context(engine, var, context_data, context_indices, scale, backend, weights)
+        end
     end
     
     # Compute delta-method SE
@@ -560,6 +594,140 @@ function _compute_population_effect_in_context(engine::MarginsEngine{L}, context
     G = reshape(gβ_avg, 1, length(gβ_avg))
     
     return df, G
+end
+
+"""
+    _compute_continuous_ame_with_scenario(engine, var, context_indices, scale, backend, scenario_spec, weights; h=1e-6)
+
+Compute continuous AME under a counterfactual scenario using centered finite differences
+with FormulaCompiler DataScenarios. Also computes the proper averaged parameter gradient
+for delta-method SEs.
+
+- Unweighted: average per-row (Δ_i, g_i)
+- Weighted: weighted average with weights indexed by original row indices
+"""
+function _compute_continuous_ame_with_scenario(
+    engine::MarginsEngine{L},
+    var::Symbol,
+    context_indices::Vector{Int},
+    scale::Symbol,
+    backend::Symbol,
+    scenario_spec,
+    weights::Union{Vector{Float64}, Nothing};
+    h::Float64=1e-6,
+) where L
+    compiled = engine.compiled
+    β = engine.β
+    link = engine.link
+    row_buf = engine.row_buf
+
+    # Gradient sum buffer
+    grad_sum = engine.gβ_accumulator
+    fill!(grad_sum, 0.0)
+
+    # Temporary gradient buffers sized to number of coefficients
+    if engine.de === nothing
+        g_minus = Vector{Float64}(undef, length(β))
+        g_plus  = Vector{Float64}(undef, length(β))
+    else
+        # Reuse derivative evaluator buffers when available
+        g_minus = engine.de.fd_yminus
+        g_plus  = engine.de.fd_yplus
+    end
+
+    effect_sum = 0.0
+
+    if isnothing(weights)
+        # Unweighted averaging
+        for row in context_indices
+            s_minus, s_plus = _build_row_scenarios_for_continuous(engine, var, row, scenario_spec; h=h)
+
+            p_minus = _predict_with_scenario(compiled, s_minus, row, scale, β, link, row_buf)
+            p_plus  = _predict_with_scenario(compiled, s_plus,  row, scale, β, link, row_buf)
+            _gradient_with_scenario!(g_minus, compiled, s_minus, row, scale, β, link, row_buf)
+            _gradient_with_scenario!(g_plus,  compiled, s_plus,  row, scale, β, link, row_buf)
+
+            Δ = (p_plus - p_minus) / (2h)
+            effect_sum += Δ
+
+            @inbounds @fastmath for j in eachindex(grad_sum)
+                grad_sum[j] += (g_plus[j] - g_minus[j]) / (2h)
+            end
+        end
+
+        n = length(context_indices)
+        ame_val = effect_sum / n
+        grad_avg = grad_sum ./ n
+        return ame_val, grad_avg
+    else
+        # Weighted averaging (weights indexed by original row indices)
+        total_weight = 0.0
+        for row in context_indices
+            w = weights[row]
+            if w > 0
+                s_minus, s_plus = _build_row_scenarios_for_continuous(engine, var, row, scenario_spec; h=h)
+
+                p_minus = _predict_with_scenario(compiled, s_minus, row, scale, β, link, row_buf)
+                p_plus  = _predict_with_scenario(compiled, s_plus,  row, scale, β, link, row_buf)
+                _gradient_with_scenario!(g_minus, compiled, s_minus, row, scale, β, link, row_buf)
+                _gradient_with_scenario!(g_plus,  compiled, s_plus,  row, scale, β, link, row_buf)
+
+                Δ = (p_plus - p_minus) / (2h)
+                effect_sum += w * Δ
+
+                @inbounds @fastmath for j in eachindex(grad_sum)
+                    grad_sum[j] += w * ((g_plus[j] - g_minus[j]) / (2h))
+                end
+                total_weight += w
+            end
+        end
+
+        if total_weight <= 0
+            error("All weights are zero in this context; cannot compute weighted marginal effect under scenario.")
+        end
+
+        ame_val = effect_sum / total_weight
+        grad_avg = grad_sum ./ total_weight
+        return ame_val, grad_avg
+    end
+end
+
+"""
+    _build_row_scenarios_for_continuous(engine, var, row, scenario_spec; h=1e-6) -> (scenario_minus, scenario_plus)
+
+Build two FormulaCompiler DataScenarios for a continuous variable at a specific row,
+merging user-provided scenario overrides with a centered finite-difference step for `var`.
+
+- `scenario_spec`: Dict or NamedTuple of user overrides (e.g., `Dict(:z => z0)`).
+- `h`: finite-difference step size (Float64).
+"""
+function _build_row_scenarios_for_continuous(engine::MarginsEngine{L}, var::Symbol, row::Int, scenario_spec; h::Float64=1e-6) where L
+    # Base value for this row from the original reference data
+    x = getproperty(engine.data_nt, var)[row]
+    x_val = float(x)
+
+    # Merge user scenario overrides with +/- h overrides for var
+    # Ensure we create fresh Dicts to avoid mutating user inputs
+    overrides_minus = Dict{Symbol, Any}()
+    overrides_plus  = Dict{Symbol, Any}()
+
+    # Copy user overrides first (if provided)
+    if scenario_spec !== nothing
+        for (k, v) in pairs(scenario_spec)
+            overrides_minus[k] = v
+            overrides_plus[k] = v
+        end
+    end
+
+    # Apply FD overrides for the target variable
+    overrides_minus[var] = x_val - h
+    overrides_plus[var]  = x_val + h
+
+    # Create DataScenarios using FormulaCompiler API (no data mutation)
+    s_minus = FormulaCompiler.create_scenario("$(var)_minus_row_$(row)", engine.data_nt, overrides_minus)
+    s_plus  = FormulaCompiler.create_scenario("$(var)_plus_row_$(row)",  engine.data_nt, overrides_plus)
+
+    return s_minus, s_plus
 end
 
 """
@@ -626,6 +794,11 @@ Maintains identical API for contexts while achieving ~900x performance improveme
 - `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
 function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
+    # Error-first: weighted categorical effects in contexts are not yet implemented correctly
+    if !isnothing(weights)
+        throw(MarginsError("Weighted categorical effects in contexts are not yet supported with statistical validity. " *
+                           "Avoid weights or use profile_margins, or compute unweighted effects until proper weighted contrasts are implemented."))
+    end
     # Use optimal unified contrast system with baseline contrasts for this context
     # This delegates to _compute_categorical_contrasts which uses DataScenario
     results = _compute_categorical_contrasts(engine, var, context_indices, scale, backend, :baseline)
@@ -664,30 +837,103 @@ Compute population average prediction in a specific context.
 - `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
 function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
-    # Use the same logic as _population_predictions but with context_data
+    # Adaptation of _population_predictions for context data with correct weight alignment
     n_obs = length(first(context_data))
     n_params = length(engine.β)
-    
-    # Use pre-allocated η_buf as working buffer; size to n_obs
+
     work = view(engine.η_buf, 1:n_obs)
-    G = zeros(1, n_params)  # Single row for population average
-    
-    # Delegate hot loop to the same helper but with context data and weights
-    mean_prediction = _compute_population_predictions!(G, work, engine, context_data, scale, weights)
-    
-    # Delta-method SE (G is 1×p, Σ is p×p)
+    G = zeros(1, n_params)
+
+    compiled = engine.compiled
+    row_buf = engine.row_buf
+    β = engine.β
+    link = engine.link
+
+    if isnothing(weights)
+        mean_acc = 0.0
+        if scale === :response
+            for i in 1:n_obs
+                FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
+                η = dot(row_buf, β)
+                μ = GLM.linkinv(link, η)
+                dμ_dη = GLM.mueta(link, η)
+                mean_acc += μ
+                @inbounds for j in 1:length(row_buf)
+                    G[1, j] += (dμ_dη * row_buf[j]) / n_obs
+                end
+                work[i] = μ
+            end
+        else
+            for i in 1:n_obs
+                FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
+                η = dot(row_buf, β)
+                mean_acc += η
+                @inbounds for j in 1:length(row_buf)
+                    G[1, j] += row_buf[j] / n_obs
+                end
+                work[i] = η
+            end
+        end
+        mean_prediction = mean_acc / n_obs
+    else
+        # Compute total_weight over original row indices
+        total_weight = 0.0
+        for i in 1:n_obs
+            w = weights[context_indices[i]]
+            if w > 0
+                total_weight += w
+            end
+        end
+        if total_weight <= 0
+            error("All weights are zero in this context; cannot compute weighted prediction.")
+        end
+
+        weighted_acc = 0.0
+        if scale === :response
+            for i in 1:n_obs
+                w = weights[context_indices[i]]
+                if w > 0
+                    FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
+                    η = dot(row_buf, β)
+                    μ = GLM.linkinv(link, η)
+                    dμ_dη = GLM.mueta(link, η)
+                    weighted_acc += w * μ
+                    @inbounds for j in 1:length(row_buf)
+                        G[1, j] += (w * dμ_dη * row_buf[j]) / total_weight
+                    end
+                    work[i] = μ
+                else
+                    work[i] = 0.0
+                end
+            end
+        else
+            for i in 1:n_obs
+                w = weights[context_indices[i]]
+                if w > 0
+                    FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
+                    η = dot(row_buf, β)
+                    weighted_acc += w * η
+                    @inbounds for j in 1:length(row_buf)
+                        G[1, j] += (w * row_buf[j]) / total_weight
+                    end
+                    work[i] = η
+                else
+                    work[i] = 0.0
+                end
+            end
+        end
+        mean_prediction = weighted_acc / total_weight
+    end
+
     se = sqrt((G * engine.Σ * G')[1, 1])
-    
-    # Create results DataFrame
     df = DataFrame(
-        variable = [""],  # Empty for predictions (no specific x)
-        contrast = ["AAP"],
+        variable = ["AAP"],
+        contrast = ["Average Adjusted Prediction"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],
         p_value = [2 * (1 - cdf(Normal(), abs(mean_prediction / se)))]
     )
-    
     return df, G
 end
 
