@@ -72,11 +72,11 @@ DataFrame(result)  # Convert to DataFrame with profile information
 result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1], measure=:elasticity)
 
 # Effects at specific scenarios (MER) using cartesian grid
-result = profile_margins(model, data, cartesian_grid(data; x1=[0, 1], income=[25000, 50000]); 
+result = profile_margins(model, data, cartesian_grid(x1=[0, 1], income=[25000, 50000]); 
                         type=:effects, vars=[:education])
 
 # Semi-elasticities at specific profiles
-result = profile_margins(model, data, cartesian_grid(data; x1=[-1, 0, 1]); 
+result = profile_margins(model, data, cartesian_grid(x1=[-1, 0, 1]); 
                         type=:effects, vars=[:x2], measure=:semielasticity_dyex)
 
 # Predictions at the mean (APM)
@@ -295,6 +295,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   - `:effects` - Marginal Effects at profiles: derivatives/contrasts at specific points
   - `:predictions` - Adjusted Predictions at profiles: fitted values at specific points
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+  - Defaults to all explanatory variables (both continuous and categorical)
 - `scale::Symbol=:response`: Target scale (:response or :link)
 - `backend::Symbol=:ad`: Computational backend (:ad or :fd)
 - `measure::Symbol=:effect`: Effect measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
@@ -307,11 +308,11 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 # Effects at sample means (most common case)
 result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1, :x2])
 
-# Balanced factorial designs (AsBalanced)
+# Balanced factorial designs
 result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
 
 # Effects at specific scenarios using cartesian grid
-result = profile_margins(model, data, cartesian_grid(data; x1=[0, 1], income=[25000, 50000]); 
+result = profile_margins(model, data, cartesian_grid(x1=[0, 1], income=[25000, 50000]); 
                         type=:effects, vars=[:education])
 
 # Predictions using quantile-based grid
@@ -357,6 +358,40 @@ function profile_margins(
     
     if ncol(reference_grid) == 0
         throw(ArgumentError("reference_grid must have at least one column"))
+    end
+    
+    # Validate that reference grid variables exist in the data or model
+    data_vars = Set(keys(data_nt))
+    # Get model variables by compiling the formula and extracting variable references
+    try
+        compiled = FormulaCompiler.compile_formula(model, data_nt)
+        model_vars = Set{Symbol}()
+        for op in compiled.ops
+            if op isa FormulaCompiler.LoadOp
+                Col = typeof(op).parameters[1]
+                push!(model_vars, Col)
+            elseif op isa FormulaCompiler.ContrastOp
+                Col = typeof(op).parameters[1]
+                push!(model_vars, Col)
+            end
+        end
+        
+        # Check reference grid variables against both data and model variables
+        for col_name in names(reference_grid)
+            col_symbol = Symbol(col_name)
+            if !(col_symbol in data_vars) && !(col_symbol in model_vars)
+                throw(ArgumentError("Reference grid variable '$col_name' not found in model data. Available variables: $(sort(collect(data_vars)))"))
+            end
+        end
+    catch e
+        # If we can't compile the formula (which might happen if the reference grid is invalid),
+        # just check against data variables for basic validation
+        for col_name in names(reference_grid)
+            col_symbol = Symbol(col_name)
+            if !(col_symbol in data_vars)
+                throw(ArgumentError("Reference grid variable '$col_name' not found in data. Available variables: $(sort(collect(data_vars)))"))
+            end
+        end
     end
     
     # Route to single implementation with reference grid directly

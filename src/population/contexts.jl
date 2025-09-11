@@ -67,8 +67,8 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                 push!(gradients_list, var_gradients)
             end
         else # :predictions
-            # Compute prediction in this context
-            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_data, context_indices, scale, context_weights)
+            # Compute prediction in this context using DataScenario (no data mutation)
+            pred_result, pred_gradients = _compute_population_prediction_in_context(engine, context_indices, scale, context_weights, scenario_spec)
             
             # Add context identifiers
             for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
@@ -465,15 +465,7 @@ function _create_context_data(data_nt, at_spec, over_spec)
     # Start with full data
     context_data = data_nt  # Don't deepcopy for performance
     
-    # Apply counterfactual overrides (at/scenarios)
-    for (var, val) in at_spec
-        if haskey(context_data, var)
-            # Override all values with specified value
-            n_rows = length(first(context_data))
-            override_col = fill(val, n_rows)
-            context_data = merge(context_data, NamedTuple{(var,)}((override_col,)))
-        end
-    end
+    # Do not mutate data for scenarios; use DataScenario overrides during evaluation
     
     # Apply subgroup filtering (groups)
     indices_to_keep = collect(1:length(first(context_data)))
@@ -836,12 +828,17 @@ Compute population average prediction in a specific context.
 # Arguments
 - `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
 """
-function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
-    # Adaptation of _population_predictions for context data with correct weight alignment
-    n_obs = length(first(context_data))
-    n_params = length(engine.β)
+function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_indices::Vector{Int}, scale::Symbol, weights::Union{Vector{Float64}, Nothing}, scenario_spec) where L
+    # Build a single DataScenario per context (no data mutation)
+    overrides = Dict{Symbol, Any}()
+    if scenario_spec !== nothing
+        for (k, v) in pairs(scenario_spec)
+            overrides[k] = v
+        end
+    end
+    scenario = FormulaCompiler.create_scenario("context_prediction", engine.data_nt, overrides)
 
-    work = view(engine.η_buf, 1:n_obs)
+    n_params = length(engine.β)
     G = zeros(1, n_params)
 
     compiled = engine.compiled
@@ -850,85 +847,46 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     link = engine.link
 
     if isnothing(weights)
+        n = length(context_indices)
         mean_acc = 0.0
-        if scale === :response
-            for i in 1:n_obs
-                FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
-                η = dot(row_buf, β)
-                μ = GLM.linkinv(link, η)
-                dμ_dη = GLM.mueta(link, η)
-                mean_acc += μ
-                @inbounds for j in 1:length(row_buf)
-                    G[1, j] += (dμ_dη * row_buf[j]) / n_obs
-                end
-                work[i] = μ
-            end
-        else
-            for i in 1:n_obs
-                FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
-                η = dot(row_buf, β)
-                mean_acc += η
-                @inbounds for j in 1:length(row_buf)
-                    G[1, j] += row_buf[j] / n_obs
-                end
-                work[i] = η
+        for idx in context_indices
+            pred = _predict_with_scenario(compiled, scenario, idx, scale, β, link, row_buf)
+            mean_acc += pred
+            tmp = similar(view(G, 1, :))
+            _gradient_with_scenario!(tmp, compiled, scenario, idx, scale, β, link, row_buf)
+            @inbounds @fastmath for j in axes(G, 2)
+                G[1, j] += tmp[j]
             end
         end
-        mean_prediction = mean_acc / n_obs
+        mean_prediction = mean_acc / n
+        G ./= n
     else
-        # Compute total_weight over original row indices
         total_weight = 0.0
-        for i in 1:n_obs
-            w = weights[context_indices[i]]
+        weighted_acc = 0.0
+        for idx in context_indices
+            w = weights[idx]
             if w > 0
+                pred = _predict_with_scenario(compiled, scenario, idx, scale, β, link, row_buf)
+                weighted_acc += w * pred
+                tmp = similar(view(G, 1, :))
+                _gradient_with_scenario!(tmp, compiled, scenario, idx, scale, β, link, row_buf)
+                @inbounds @fastmath for j in axes(G, 2)
+                    G[1, j] += w * tmp[j]
+                end
                 total_weight += w
             end
         end
         if total_weight <= 0
             error("All weights are zero in this context; cannot compute weighted prediction.")
         end
-
-        weighted_acc = 0.0
-        if scale === :response
-            for i in 1:n_obs
-                w = weights[context_indices[i]]
-                if w > 0
-                    FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
-                    η = dot(row_buf, β)
-                    μ = GLM.linkinv(link, η)
-                    dμ_dη = GLM.mueta(link, η)
-                    weighted_acc += w * μ
-                    @inbounds for j in 1:length(row_buf)
-                        G[1, j] += (w * dμ_dη * row_buf[j]) / total_weight
-                    end
-                    work[i] = μ
-                else
-                    work[i] = 0.0
-                end
-            end
-        else
-            for i in 1:n_obs
-                w = weights[context_indices[i]]
-                if w > 0
-                    FormulaCompiler.modelrow!(row_buf, compiled, context_data, i)
-                    η = dot(row_buf, β)
-                    weighted_acc += w * η
-                    @inbounds for j in 1:length(row_buf)
-                        G[1, j] += (w * row_buf[j]) / total_weight
-                    end
-                    work[i] = η
-                else
-                    work[i] = 0.0
-                end
-            end
-        end
         mean_prediction = weighted_acc / total_weight
+        G ./= total_weight
     end
 
     se = sqrt((G * engine.Σ * G')[1, 1])
     df = DataFrame(
-        variable = ["AAP"],
-        contrast = ["Average Adjusted Prediction"],
+        variable = [""],
+        contrast = ["AAP"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],

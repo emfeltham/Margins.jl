@@ -42,8 +42,8 @@ function _population_predictions(
     
     # Create results DataFrame
     df = DataFrame(
-        variable = [""],  # Empty for predictions (no specific x)
-        contrast = ["AAP"],
+        variable = ["AAP"],  # AAP for predictions (Average Adjusted Prediction)
+        contrast = ["Average Adjusted Prediction"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],
