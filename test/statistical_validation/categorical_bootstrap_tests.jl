@@ -125,7 +125,7 @@ function bootstrap_validate_categorical_effects(model_func, formula, data; categ
         categorical_terms = String[]
         categorical_ses = Float64[]
         
-        for (i, term) in enumerate(original_df.term)
+        for (i, term) in enumerate(original_df.variable)
             # Check if this term corresponds to a categorical variable
             for cat_var in categorical_vars
                 if startswith(string(term), string(cat_var)) || string(term) == string(cat_var)
@@ -149,7 +149,7 @@ function bootstrap_validate_categorical_effects(model_func, formula, data; categ
         # Match bootstrap results to categorical terms
         bootstrap_categorical_ses = Float64[]
         for term in categorical_terms
-            term_idx = findfirst(t -> t == term, original_df.term)
+            term_idx = findfirst(t -> t == term, original_df.variable)
             if term_idx !== nothing && term_idx <= length(boot_ses)
                 push!(bootstrap_categorical_ses, boot_ses[term_idx])
             end

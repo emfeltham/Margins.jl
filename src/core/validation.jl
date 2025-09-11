@@ -78,11 +78,11 @@ end
     validate_backend_parameter(backend::Symbol)
 
 Validate the `backend` parameter for derivative computation.
-Must be `:ad` (automatic differentiation), `:fd` (finite differences), or `:auto`.
+Must be `:ad` (automatic differentiation) or `:fd` (finite differences).
 """
 function validate_backend_parameter(backend::Symbol)
-    backend ∉ (:ad, :fd, :auto) && 
-        throw(ArgumentError("backend must be :ad, :fd, or :auto, got :$(backend)"))
+    backend ∉ (:ad, :fd) && 
+        throw(ArgumentError("backend must be :ad or :fd, got :$(backend)"))
 end
 
 """
@@ -149,14 +149,14 @@ This is the main validation entry point for most margins functions.
 # Arguments
 - `type::Symbol`: Effect type (`:effects` or `:predictions`)  
 - `scale::Symbol`: Target scale (`:link` or `:response`)
-- `backend::Symbol`: Computation backend (`:ad`, `:fd`, or `:auto`)
+- `backend::Symbol`: Computation backend (`:ad` or `:fd`)
 - `measure::Symbol`: Effect measure (default `:effect`)
 - `vars`: Variable selection (default `nothing`)
 
 # Examples
 ```julia
 # Basic validation
-validate_common_parameters(:effects, :response, :auto)
+validate_common_parameters(:effects, :response, :ad)
 
 # Full validation with all parameters  
 validate_common_parameters(:effects, :link, :ad, :elasticity, [:x1, :x2])

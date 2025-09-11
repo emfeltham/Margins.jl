@@ -28,7 +28,7 @@ using Margins
     
     @testset "Bool Fractional Values" begin
         # Test explicit fractional Bool specifications
-        result = profile_margins(m, df, cartesian_grid(df; treated=[0.0, 0.3, 0.7, 1.0], urban=[0.0, 1.0]); type=:effects, vars=[:x])
+        result = profile_margins(m, df, cartesian_grid(treated=[0.0, 0.3, 0.7, 1.0], urban=[0.0, 1.0]); type=:effects, vars=[:x])
         
         # Should create 4×2 = 8 scenarios
         @test nrow(DataFrame(result)) == 8
@@ -46,7 +46,7 @@ using Margins
     
     @testset ":all Specification with Bool Columns" begin
         # Test with mixed specifications
-        result = profile_margins(m, df, cartesian_grid(df; x=mean(df.x), z=mean(df.z), treated=[0, 1], urban=0.5); type=:effects, vars=[:x])
+        result = profile_margins(m, df, cartesian_grid(x=mean(df.x), z=mean(df.z), treated=[0, 1], urban=0.5); type=:effects, vars=[:x])
         
         # Should create 2×1 = 2 scenarios (treated=[0,1], urban=0.5)
         @test nrow(DataFrame(result)) == 2
@@ -66,7 +66,7 @@ using Margins
     
     @testset "Mixed Variable Types in Profiles" begin
         # Test complex scenario with all variable types
-        result = profile_margins(m, df, cartesian_grid(df; x=[-1, 0, 1], z=mean(df.z), treated=[0.0, 0.4, 1.0], urban=[false, true]); type=:predictions, scale=:response)
+        result = profile_margins(m, df, cartesian_grid(x=[-1, 0, 1], z=mean(df.z), treated=[0.0, 0.4, 1.0], urban=[false, true]); type=:predictions, scale=:response)
         
         # Should create 3×1×3×2 = 18 scenarios
         @test nrow(DataFrame(result)) == 18

@@ -180,7 +180,7 @@ function bootstrap_validate_population_effects(model_func, formula, data; vars=n
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(
@@ -255,7 +255,7 @@ function bootstrap_validate_profile_effects(model_func, formula, data; vars=noth
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(

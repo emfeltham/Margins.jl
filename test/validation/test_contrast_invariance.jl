@@ -64,7 +64,7 @@ const contrast_schemes = [
                 
                 @test nrow(ame_df) >= 1  # Should have at least one contrast
                 @test all(isfinite, ame_df.estimate)
-                @test !isempty(ame_df.term)
+                @test !isempty(ame_df.variable)
                 
                 # Debug output
                 @debug "Contrast scheme results" scheme=scheme_name baseline=baseline_levels[scheme_name] n_contrasts=nrow(ame_df) estimates=ame_df.estimate

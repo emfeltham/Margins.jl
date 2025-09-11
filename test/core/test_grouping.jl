@@ -65,7 +65,7 @@ using Margins
         @test nrow(DataFrame(res_pred)) == length(levels(df.group1))
         @test Symbol("at_group1") in propertynames(DataFrame(res_pred))
         @test all(isfinite, DataFrame(res_pred).estimate)
-        @test all(DataFrame(res_pred).term .== "AAP")
+        @test all(DataFrame(res_pred).variable .== "AAP")
     end
 
     # MISSING TEST COVERAGE: Categorical variables with grouping
@@ -75,7 +75,7 @@ using Margins
         df_results = DataFrame(res_cat_groups)
         @test nrow(df_results) >= 1  # Should have at least one group
         @test all(isfinite, df_results.estimate)
-        @test "treatment" in df_results.term
+        @test "treatment" in df_results.variable
         @test Symbol("at_group1") in propertynames(df_results)
     end
 
@@ -85,7 +85,7 @@ using Margins
         df_results = DataFrame(res_cat_multi)
         @test nrow(df_results) >= 1  # Should have at least one combination
         @test all(isfinite, df_results.estimate)
-        @test "binary_var" in df_results.term
+        @test "binary_var" in df_results.variable
         @test Symbol("at_group1") in propertynames(df_results)
         @test Symbol("at_group2") in propertynames(df_results)
     end
@@ -96,8 +96,8 @@ using Margins
         df_results = DataFrame(res_mixed)
         @test nrow(df_results) >= 2  # At least one continuous + one categorical effect per group
         @test all(isfinite, df_results.estimate)
-        @test "x" in df_results.term
-        @test "treatment" in df_results.term
+        @test "x" in df_results.variable
+        @test "treatment" in df_results.variable
         @test Symbol("at_group2") in propertynames(df_results)
     end
 
@@ -107,7 +107,7 @@ using Margins
         df_results = DataFrame(res_nested_cat)
         @test nrow(df_results) >= 1  # Should have nested combinations
         @test all(isfinite, df_results.estimate)
-        @test "treatment" in df_results.term
+        @test "treatment" in df_results.variable
         @test Symbol("at_group1") in propertynames(df_results)
         @test Symbol("at_group2") in propertynames(df_results)
     end

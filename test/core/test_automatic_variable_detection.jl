@@ -25,12 +25,12 @@ using Random
         result = population_margins(model, df; type=:effects)
         df_result = DataFrame(result)
         
-        # Should only include explanatory continuous variables (x1, x2)
-        @test nrow(df_result) == 2
-        @test "x1" ∈ df_result.term
-        @test "x2" ∈ df_result.term
-        @test "y" ∉ df_result.term  # Dependent variable should be excluded
-        @test "group" ∉ df_result.term  # Categorical should be excluded from continuous effects
+        # Should include both continuous variables (x1, x2) AND categorical baseline contrasts (group)
+        @test nrow(df_result) == 3  # x1, x2, and group baseline contrast
+        @test "x1" ∈ df_result.variable
+        @test "x2" ∈ df_result.variable  
+        @test "group" ∈ df_result.variable  # Categorical included with baseline contrast
+        @test "y" ∉ df_result.variable  # Dependent variable should be excluded
     end
     
     @testset "Profile margins with automatic detection" begin
@@ -49,9 +49,9 @@ using Random
         df_result = DataFrame(result)
         
         @test nrow(df_result) == 2
-        @test any(occursin.("x1", df_result.term))
-        @test any(occursin.("x2", df_result.term))
-        @test all(.!occursin.("y", df_result.term))
+        @test any(occursin.("x1", df_result.variable))
+        @test any(occursin.("x2", df_result.variable))
+        @test all(.!occursin.("y", df_result.variable))
     end
     
     @testset "Mixed variable types with automatic detection" begin
@@ -67,14 +67,14 @@ using Random
         result = population_margins(model, df; type=:effects)
         df_result = DataFrame(result)
         
-        # Should include: price (Float64), quantity (Int64) 
-        # Should exclude: revenue (dependent), available (Bool), category (String)
-        @test nrow(df_result) == 2
-        @test "price" ∈ df_result.term
-        @test "quantity" ∈ df_result.term  # Int64 should be treated as continuous
-        @test "revenue" ∉ df_result.term   # Dependent variable excluded
-        @test "available" ∉ df_result.term # Bool is categorical
-        @test "category" ∉ df_result.term  # String is categorical
+        # Should include: price (Float64), quantity (Int64), available (Bool baseline), category (baseline contrasts)
+        # Should exclude: revenue (dependent variable)
+        @test nrow(df_result) == 5  # price, quantity, available, category(Y vs X), category(Z vs X)
+        @test "price" ∈ df_result.variable      # Float64 continuous
+        @test "quantity" ∈ df_result.variable   # Int64 treated as continuous  
+        @test "available" ∈ df_result.variable  # Bool with baseline contrast
+        @test "category" ∈ df_result.variable   # Categorical with baseline contrasts
+        @test "revenue" ∉ df_result.variable    # Dependent variable excluded
     end
     
     @testset "All categorical explanatory variables" begin
@@ -87,8 +87,15 @@ using Random
         
         model = lm(@formula(y ~ cat1 + cat2 + cat3), df)
         
-        # Should throw meaningful error - no continuous explanatory variables
-        @test_throws Margins.MarginsError population_margins(model, df; type=:effects)
+        # Should work fine and return baseline contrasts for all categorical variables
+        result = population_margins(model, df; type=:effects)
+        df_result = DataFrame(result)
+        
+        # Should have baseline contrasts for all categorical variables
+        @test nrow(df_result) >= 3  # At least one contrast per categorical variable
+        @test "cat1" ∈ df_result.variable
+        @test "cat2" ∈ df_result.variable  
+        @test "cat3" ∈ df_result.variable
     end
     
     @testset "Explicit vars parameter bypasses automatic detection" begin
@@ -105,7 +112,7 @@ using Random
         df_result = DataFrame(result)
         
         @test nrow(df_result) == 1
-        @test df_result.term[1] == "x1"
+        @test df_result.variable[1] == "x1"
         
         # Should also work with explicit vars including non-existent vars (should error appropriately)
         @test_throws Margins.MarginsError population_margins(model, df; type=:effects, vars=[:nonexistent])
@@ -133,8 +140,8 @@ using Random
         result = population_margins(model, df; type=:effects)
         df_result = DataFrame(result)
         
-        x1_row = df_result[df_result.term .== "x1", :]
-        x2_row = df_result[df_result.term .== "x2", :]
+        x1_row = df_result[df_result.variable .== "x1", :]
+        x2_row = df_result[df_result.variable .== "x2", :]
         
         # Standard errors should be approximately equal (not 1000x different!)
         @test isapprox(x1_row.se[1], x1_coef_se, rtol=1e-10)  # High precision tolerance for linear model specification

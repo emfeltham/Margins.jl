@@ -14,6 +14,22 @@ using Distributions
 # Clear engine cache to ensure fresh engines (prevents stale cache issues)
 Margins.clear_engine_cache!()
 
+# If specific test files were requested (via Pkg.test test_args or ARGS), run only those
+if !isempty(ARGS)
+    # Ensure shared testing utilities are available when running subtests directly
+    include("statistical_validation/testing_utilities.jl")
+
+    # Normalize paths: strip whitespace/newlines and allow with or without leading "test/"
+    for arg in ARGS
+        cleaned = replace(strip(arg), '\n' => "")
+        rel = startswith(cleaned, "test/") ? replace(cleaned, "test/" => "") : cleaned
+        path = joinpath(@__DIR__, rel)
+        @info "Including test file" path
+        include(path)
+    end
+    # Skip full suite below
+else
+
 # Load testing utilities centrally to prevent method definition warnings
 include("statistical_validation/testing_utilities.jl")
 include("statistical_validation/bootstrap_se_validation.jl") 
@@ -57,3 +73,5 @@ end
     include("validation/test_zero_allocation_comprehensive.jl")
     include("validation/test_true_zero_allocation.jl")
 end
+
+end # else (full suite)

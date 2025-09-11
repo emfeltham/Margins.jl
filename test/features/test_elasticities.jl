@@ -38,7 +38,7 @@ using Margins
         # Test multiple variables
         result_multi = population_margins(m, df; type=:effects, vars=[:x1, :x2], measure=:elasticity)
         @test nrow(DataFrame(result_multi)) == 2
-        @test Set(DataFrame(result_multi).term) == Set(["x1", "x2"])
+        @test Set(DataFrame(result_multi).variable) == Set(["x1", "x2"])
     end
     
     @testset "Profile Margins - Measure Parameter" begin
@@ -57,7 +57,7 @@ using Margins
         @test nrow(DataFrame(result_means_semi_y)) == 1
         
         # Test at specific profiles
-        result_profiles = profile_margins(m, df, cartesian_grid(df; x1=[-1.0, 0.0, 1.0], x2=[0.0]); type=:effects, vars=[:x1], measure=:elasticity)
+        result_profiles = profile_margins(m, df, cartesian_grid(x1=[-1.0, 0.0, 1.0], x2=[0.0]); type=:effects, vars=[:x1], measure=:elasticity)
         @test nrow(DataFrame(result_profiles)) == 3  # 3 x1 values
         
         # Test table-based profiles

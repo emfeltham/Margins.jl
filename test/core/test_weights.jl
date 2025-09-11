@@ -118,7 +118,7 @@
         # Check that results have expected structure
         @test nrow(df_wt) == 2
         @test all(df_wt.se .> 0)
-        @test all(in.(df_wt.term, Ref(["x1", "x2"])))
+        @test all(in.(df_wt.variable, Ref(["x1", "x2"])))
     end
     
     @testset "Weighted Results - Extreme Weights" begin

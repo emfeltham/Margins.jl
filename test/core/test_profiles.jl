@@ -22,13 +22,13 @@ using Statistics
     @test nrow(DataFrame(profile2)) == 1
 
     # Using cartesian grid to specify x values, others use typical values
-    profile_spec = profile_margins(m, df, cartesian_grid(df; x=[-1.0, 0.0, 1.0]); type=:predictions)
+    profile_spec = profile_margins(m, df, cartesian_grid(x=[-1.0, 0.0, 1.0]); type=:predictions)
     @test nrow(DataFrame(profile_spec)) == 3
     df_result = DataFrame(profile_spec)
     @test any(contains.(string.(names(df_result)), "x"))
 
     # explicit values (equivalent to numlist "-2(2)2" which becomes [-2,0,2])
-    profile_num = profile_margins(m, df, cartesian_grid(df; x=[-2.0, 0.0, 2.0]); type=:predictions)
+    profile_num = profile_margins(m, df, cartesian_grid(x=[-2.0, 0.0, 2.0]); type=:predictions)
     @test nrow(DataFrame(profile_num)) == 3
 
     # explicit profiles using DataFrame with proper categorical values
@@ -36,7 +36,7 @@ using Statistics
     @test nrow(DataFrame(profile_multi)) == 2
 
     # multiple profiles using cartesian grid
-    profile_multiple = profile_margins(m, df, cartesian_grid(df; x=[-2.0, 0.0, 2.0]); type=:predictions)
+    profile_multiple = profile_margins(m, df, cartesian_grid(x=[-2.0, 0.0, 2.0]); type=:predictions)
     @test nrow(DataFrame(profile_multiple)) == 3
 end
 

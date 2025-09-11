@@ -613,19 +613,96 @@ function _compute_continuous_ame_with_scenario(
     link = engine.link
     row_buf = engine.row_buf
 
+    # If derivative support is available, use AD under the scenario to compute dy/dx
+    if engine.de !== nothing && backend === :ad
+        # Build one DataScenario for the context (overrides for non-target variables)
+        overrides = Dict{Symbol, Any}()
+        if scenario_spec !== nothing
+            for (k, v) in pairs(scenario_spec)
+                overrides[k] = v
+            end
+        end
+        scenario = FormulaCompiler.create_scenario("ctx_effect_ad", engine.data_nt, overrides)
+
+        # Build derivative evaluator on scenario data for ALL continuous vars
+        continuous_vars = FormulaCompiler.continuous_variables(compiled, engine.data_nt)
+        scenario_de = FormulaCompiler.build_derivative_evaluator(compiled, scenario.data; vars=continuous_vars)
+
+        # Index of the target var in scenario_de.vars
+        var_idx = findfirst(==(var), scenario_de.vars)
+        var_idx === nothing && throw(ArgumentError("Variable $var not found in scenario derivative evaluator"))
+
+        # Working buffers
+        g_buf_view = @view engine.g_buf[1:length(scenario_de.vars)]
+        grad_sum = engine.gβ_accumulator
+        fill!(grad_sum, 0.0)
+        effect_sum = 0.0
+
+        if isnothing(weights)
+            # Temporary gradient buffer from evaluator for per-row gradient
+            gβ_temp = scenario_de.fd_yminus
+            fill!(gβ_temp, 0.0)
+            for row in context_indices
+                if scale === :response
+                    FormulaCompiler.marginal_effects_mu!(g_buf_view, scenario_de, β, row; link=link, backend=:ad)
+                    FormulaCompiler.me_mu_grad_beta!(gβ_temp, scenario_de, β, row, var; link=link)
+                else
+                    FormulaCompiler.marginal_effects_eta!(g_buf_view, scenario_de, β, row; backend=:ad)
+                    FormulaCompiler.me_eta_grad_beta!(gβ_temp, scenario_de, β, row, var)
+                end
+                effect_sum += g_buf_view[var_idx]
+                @inbounds @fastmath for j in eachindex(grad_sum)
+                    grad_sum[j] += gβ_temp[j]
+                end
+            end
+            n = length(context_indices)
+            return effect_sum / n, (grad_sum ./ n)
+        else
+            total_weight = 0.0
+            # Temporary gradient buffer from evaluator
+            gβ_temp = scenario_de.fd_yminus
+            fill!(gβ_temp, 0.0)  # ensure clean start
+            fill!(grad_sum, 0.0)
+            for row in context_indices
+                w = weights[row]
+                if w > 0
+                    if scale === :response
+                        FormulaCompiler.marginal_effects_mu!(g_buf_view, scenario_de, β, row; link=link, backend=:ad)
+                        FormulaCompiler.me_mu_grad_beta!(gβ_temp, scenario_de, β, row, var; link=link)
+                    else
+                        FormulaCompiler.marginal_effects_eta!(g_buf_view, scenario_de, β, row; backend=:ad)
+                        FormulaCompiler.me_eta_grad_beta!(gβ_temp, scenario_de, β, row, var)
+                    end
+                    effect_sum += w * g_buf_view[var_idx]
+                    @inbounds @fastmath for j in eachindex(grad_sum)
+                        grad_sum[j] += w * gβ_temp[j]
+                    end
+                    total_weight += w
+                end
+            end
+            if total_weight <= 0
+                error("All weights are zero in this context; cannot compute weighted marginal effect under scenario.")
+            end
+            return effect_sum / total_weight, (grad_sum ./ total_weight)
+        end
+    end
+
+    # If backend explicitly requests AD but we couldn't take the AD path above,
+    # refuse to silently fall back to FD to preserve backend semantics and statistical policy.
+    if backend === :ad
+        throw(MarginsError("backend=:ad requested but derivative evaluator is unavailable for scenario-based continuous AME. " *
+                          "Refusing FD fallback to honor explicit backend selection. " *
+                          "Use backend=:fd explicitly or adjust model/data to enable AD derivatives."))
+    end
+
+    # Fallback: centered FD under scenario (only when backend === :fd)
     # Gradient sum buffer
     grad_sum = engine.gβ_accumulator
     fill!(grad_sum, 0.0)
 
     # Temporary gradient buffers sized to number of coefficients
-    if engine.de === nothing
-        g_minus = Vector{Float64}(undef, length(β))
-        g_plus  = Vector{Float64}(undef, length(β))
-    else
-        # Reuse derivative evaluator buffers when available
-        g_minus = engine.de.fd_yminus
-        g_plus  = engine.de.fd_yplus
-    end
+    g_minus = Vector{Float64}(undef, length(β))
+    g_plus  = Vector{Float64}(undef, length(β))
 
     effect_sum = 0.0
 
@@ -885,7 +962,7 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
 
     se = sqrt((G * engine.Σ * G')[1, 1])
     df = DataFrame(
-        variable = [""],
+        variable = ["AAP"],
         contrast = ["AAP"],
         estimate = [mean_prediction],
         se = [se],

@@ -182,10 +182,10 @@ using LinearAlgebra: dot
                     ame_result = population_margins(model, df; vars=[:region], scale=:response)
                     ame_df = DataFrame(ame_result)
                     
-                    # Find the correct row for this level
-                    level_row = findfirst(row -> occursin(test_level, row.term), eachrow(ame_df))
+                    # Find the correct row for this level: match variable and contrast label
+                    expected_contrast = string(test_level, " vs ", baseline)
+                    level_row = findfirst(row -> row.variable == "region" && row.contrast == expected_contrast, eachrow(ame_df))
                     @test level_row !== nothing  # Should find the level
-                    
                     computed_ame = ame_df.estimate[level_row]
                     
                     @test manual_ame ≈ computed_ame atol=1e-12
@@ -238,7 +238,9 @@ using LinearAlgebra: dot
             ame_result = population_margins(model, df_logistic; vars=[:region], scale=:response)
             ame_df = DataFrame(ame_result)
             
-            level_row = findfirst(row -> occursin(test_level, row.term), eachrow(ame_df))
+            expected_contrast = string(test_level, " vs ", baseline)
+            level_row = findfirst(row -> row.variable == "region" && row.contrast == expected_contrast, eachrow(ame_df))
+            @test level_row !== nothing
             computed_ame = ame_df.estimate[level_row]
             
             @test manual_ame_response ≈ computed_ame atol=1e-12
@@ -449,7 +451,9 @@ using LinearAlgebra: dot
             
             ame_categorical = population_margins(model, df; vars=[:region], scale=:response)
             cat_ame_df = DataFrame(ame_categorical)
-            level_row = findfirst(row -> occursin(test_level, row.term), eachrow(cat_ame_df))
+            expected_contrast = string(test_level, " vs ", baseline)
+            level_row = findfirst(row -> row.variable == "region" && row.contrast == expected_contrast, eachrow(cat_ame_df))
+            @test level_row !== nothing
             cat_ame = cat_ame_df.estimate[level_row]
             @test manual_cat_ame ≈ cat_ame atol=1e-12
             
@@ -519,7 +523,9 @@ using LinearAlgebra: dot
             # === VALIDATE population_margins MATCHES BOTH METHODS ===
             ame_result = population_margins(model, df; vars=[:treatment], scale=:response)
             ame_df = DataFrame(ame_result)
-            level_row = findfirst(row -> occursin(test_level, row.term), eachrow(ame_df))
+            expected_contrast = string(test_level, " vs ", baseline)
+            level_row = findfirst(row -> row.variable == "treatment" && row.contrast == expected_contrast, eachrow(ame_df))
+            @test level_row !== nothing
             computed_ame = ame_df.estimate[level_row]
             
             @test computed_ame ≈ contrast_then_average atol=1e-12  # Should match contrast-then-average

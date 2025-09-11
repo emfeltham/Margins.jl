@@ -349,7 +349,7 @@ end
             result = profile_margins(interaction_model, df, ref_grid_eff; type=:effects)
             @test result isa MarginsResult
             @test nrow(DataFrame(result)) >= 1  # At least one effect (age, income, or employed)
-            @test "term" in names(DataFrame(result))
+            @test "variable" in names(DataFrame(result))
             @test "estimate" in names(DataFrame(result))
             @test all(isfinite, DataFrame(result).estimate)
             @test all(isfinite, DataFrame(result).se)

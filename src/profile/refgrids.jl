@@ -25,9 +25,6 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
     # Get model variables using FormulaCompiler
     compiled = FormulaCompiler.compile_formula(model, data_nt)
     
-    # Get response variable name from model formula (to exclude it)
-    response_var = Symbol(model.mf.f.lhs.sym)
-    
     # Extract all variables used in model operations
     model_vars = Set{Symbol}()
     for op in compiled.ops
@@ -39,9 +36,6 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
             push!(model_vars, Col)
         end
     end
-    
-    # Remove response variable from model variables (keep only predictors)
-    delete!(model_vars, response_var)
     
     # Filter data to only include predictor variables (exclude response)
     filtered_data = Dict{Symbol, Any}()

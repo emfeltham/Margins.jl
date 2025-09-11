@@ -207,9 +207,15 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     # Store original reference grid variable names for output filtering
     original_grid_vars = Set(Symbol.(names(reference_grid)))
     
-    # Remove response variable from display (users don't need to see response in profile)
-    response_var = Symbol(model.mf.f.lhs.sym)
-    delete!(original_grid_vars, response_var)
+    # Attempt to remove response variable from display if it appears in the provided grid.
+    # Be defensive: formulas with transformed responses (e.g., log(y)) may not expose `.sym`.
+    try
+        response_var = Symbol(model.mf.f.lhs.sym)
+        delete!(original_grid_vars, response_var)
+    catch
+        # If we cannot determine a simple response symbol, do nothing.
+        # Reference grids almost never include the response variable anyway.
+    end
     
     # Automatically complete reference grid with typical values for missing model variables
     completed_reference_grid = complete_reference_grid(reference_grid, model, data_nt)

@@ -30,7 +30,7 @@ using Margins
         @test all(isfinite, DataFrame(result).estimate)
         @test all(DataFrame(result).se .> 0)
         # Check term descriptions contain x1 variable
-        @test all(occursin.("x1", DataFrame(result).term))
+        @test all(occursin.("x1", DataFrame(result).variable))
         
         # Check profile columns are present
         @test "x1" in names(DataFrame(result))
@@ -64,7 +64,7 @@ using Margins
     
     @testset "Equivalence with Grid-based Approach" begin
         # Cartesian grid specification
-        result_dict = profile_margins(m, df, cartesian_grid(df; x1=[0.0, 1.0], x2=[0.5, -0.5], treated=[true, false]); type=:effects, vars=[:x1])
+        result_dict = profile_margins(m, df, cartesian_grid(x1=[0.0, 1.0], x2=[0.5, -0.5], treated=[true, false]); type=:effects, vars=[:x1])
         
         # Equivalent table specification (Cartesian product)
         reference_grid = DataFrame(
@@ -115,7 +115,7 @@ using Margins
         
         @test nrow(DataFrame(result)) == 4  # 2 scenarios × 2 variables
         # Check both variables are present in term descriptions
-        terms = DataFrame(result).term
+        terms = DataFrame(result).variable
         @test any(occursin.("x1", terms))
         @test any(occursin.("x2", terms))
         @test all(isfinite, DataFrame(result).estimate)
@@ -171,7 +171,7 @@ using Margins
         result = profile_margins(m, df, reference_grid; type=:effects, vars=[:x1, :x2])  # Explicit continuous vars
         
         # Should only include x1 and x2 (continuous variables)
-        terms = DataFrame(result).term
+        terms = DataFrame(result).variable
         @test any(occursin.("x1", terms))
         @test any(occursin.("x2", terms))
         @test nrow(DataFrame(result)) == 4  # 2 scenarios × 2 continuous vars

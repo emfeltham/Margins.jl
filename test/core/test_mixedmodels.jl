@@ -45,7 +45,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        days_row = filter(r -> r.term == "Days", df_result)[1, :]
+        days_row = filter(r -> r.variable == "Days", df_result)[1, :]
         @test isapprox(days_row.estimate, ame_closed; atol=atol_)
         @test isapprox(days_row.se, se_closed; atol=atol_)
     end
@@ -66,7 +66,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[i]
         se_closed = sqrt(vc[i, i])
 
-        days_row = filter(r -> r.term == "Days", df_result)[1, :]
+        days_row = filter(r -> r.variable == "Days", df_result)[1, :]
         @test isapprox(days_row.estimate, ame_closed; atol=atol_)
         @test isapprox(days_row.se, se_closed; atol=atol_)
     end
@@ -88,7 +88,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         ame_closed = fe[idx] * mean_inv
         se_closed = sqrt(vc[idx, idx] * mean_inv^2)
 
-        days_row = filter(r -> r.term == "Days", df_result)[1, :]
+        days_row = filter(r -> r.variable == "Days", df_result)[1, :]
         # less precision here 1.5e6
         @test isapprox(days_row.estimate, ame_closed; atol=1.5e6)
         @test isapprox(days_row.se, se_closed; atol=1.5e6)
@@ -105,7 +105,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         
         # Basic validation that categorical contrasts work
         @test size(df_result, 1) == 3  # Three contrasts for Period variable (4 levels - 1 baseline)
-        @test any(contains.(df_result.term, "Period"))  # All terms should contain "Period"
+        @test any(contains.(df_result.variable, "Period"))  # All terms should contain "Period"
         @test !isnan(df_result.estimate[1])
         @test !isnan(df_result.se[1])
         @test df_result.se[1] > 0  # Standard error should be positive
@@ -140,7 +140,7 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         var_closed = g' * vc * g
         se_closed = sqrt(var_closed)
 
-        x_row = filter(r -> r.term == "x", df_result)[1, :]
+        x_row = filter(r -> r.variable == "x", df_result)[1, :]
         @test isapprox(x_row.estimate, ame_closed; atol=atol_)
         @test isapprox(x_row.se, se_closed; atol=atol_)
     end

@@ -47,7 +47,7 @@ function bootstrap_validate_population_elasticity(model_func, formula, data, mea
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(
@@ -99,7 +99,7 @@ function bootstrap_validate_profile_elasticity(model_func, formula, data, refere
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation using modified function for profile margins
     boot_means, boot_ses, n_successful = bootstrap_profile_computation(

@@ -32,7 +32,7 @@ using Margins
     # Population and Profile predictions
     pop_pred = population_margins(m, df; type=:predictions, scale=:response)
     @test nrow(DataFrame(pop_pred)) == 1
-    profile_pred = profile_margins(m, df, cartesian_grid(df; x=[-2.0,0.0,2.0]); type=:predictions, scale=:response)
+    profile_pred = profile_margins(m, df, cartesian_grid(x=[-2.0,0.0,2.0]); type=:predictions, scale=:response)
     @test nrow(DataFrame(profile_pred)) == 3
     # single profile at means
     profile_single = profile_margins(m, df, means_grid(df); type=:predictions, scale=:response)
@@ -42,7 +42,7 @@ using Margins
     # The current API doesn't support the 'over' and 'by' parameters as expected
     basic_effects = population_margins(m, df; type=:effects, vars=[:x], scale=:response)
     @test nrow(DataFrame(basic_effects)) == 1  # Single effect estimate
-    @test DataFrame(basic_effects).term[1] == "x"  # Term should be string "x"
+    @test DataFrame(basic_effects).variable[1] == "x"  # Term should be string "x"
 
     # Test different scales
     ame_link = population_margins(m, df; type=:effects, vars=[:x], scale=:link)
@@ -55,6 +55,6 @@ using Margins
     # Test multiple variables
     multi_effects = population_margins(m, df; type=:effects, vars=[:x, :z], scale=:response)
     @test nrow(DataFrame(multi_effects)) == 2  # Two variables
-    @test Set(DataFrame(multi_effects).term) == Set(["x", "z"])
+    @test Set(DataFrame(multi_effects).variable) == Set(["x", "z"])
 end
 

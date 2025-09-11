@@ -46,7 +46,7 @@ function bootstrap_validate_categorical_mixture_population(model_func, formula, 
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation
     boot_means, boot_ses, n_successful = bootstrap_margins_computation(
@@ -105,7 +105,7 @@ function bootstrap_validate_categorical_mixture_profile(model_func, formula, dat
     end
     
     # Create reference grid using cartesian_grid
-    reference_grid = cartesian_grid(data; ref_dict...)
+    reference_grid = cartesian_grid(ref_dict...)
     
     # Fit original model
     original_model = model_func(formula, data)
@@ -115,7 +115,7 @@ function bootstrap_validate_categorical_mixture_profile(model_func, formula, dat
     
     original_df = DataFrame(original_result)
     computed_ses = original_df.se
-    var_names = original_df.term
+    var_names = original_df.variable
     
     # Bootstrap computation using profile margins
     boot_means, boot_ses, n_successful = bootstrap_profile_mixture_computation(

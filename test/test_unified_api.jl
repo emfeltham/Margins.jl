@@ -68,7 +68,7 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
         # Should have results for all three variables
         @test length(result_all.estimates) == 3
         @test length(result_all.standard_errors) == 3
-        @test length(result_all.terms) == 3
+        @test length(result_all.variables) == 3
         
         # All results should be finite
         @test all(isfinite.(result_all.estimates))
@@ -76,9 +76,9 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
         @test all(result_all.standard_errors .> 0)  # SEs should be positive
         
         # Terms should match variable names
-        @test "x_continuous" in result_all.terms
-        @test "x_boolean" in result_all.terms  
-        @test "x_categorical" in result_all.terms
+        @test "x_continuous" in result_all.variables
+        @test "x_boolean" in result_all.variables  
+        @test "x_categorical" in result_all.variables
     end
     
     @testset "Consistency Across Different Data Sizes" begin
