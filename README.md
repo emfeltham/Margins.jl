@@ -11,19 +11,52 @@ using Margins, DataFrames, GLM
 
 # Fit your model
 n = 1_000_00
-data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n))
-model = lm(@formula(y ~ x1 + x2), data)
+data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n), x3 = x2 = randn(n))
+model = lm(@formula(y ~ x1 + x2 + x3), data)
 
 # Population average marginal effects (AME)
-@btime ame_result = population_margins(model, data; type=:effects)
+ame_result = population_margins(model, data; type=:effects)
 
-# Marginal effects at sample means (MEM) 
-mem_result = profile_margins(model, data, means_grid(data); type=:effects)
+# Population average marginal predictions (AAP)
+ame_result = population_margins(model, data; type=:predictions)
+
+# Population average marginal predictions (AAP)
+ame_result = population_margins(model, data; scenarios=nothing, type=:predictions)
+
+# Marginal effects at sample means (MEM)
+mem_result = profile_margins(
+    model, data, means_grid(data); type=:effects
+)
+
+# Marginal predictions at sample means (APM)
+apm_result = profile_margins(
+    model, data, means_grid(data); type=:predictions
+)
 
 # Convert to DataFrame for analysis
 DataFrame(ame_result)
 
 DataFrame(mem_result)
+
+DataFrame(apm_result)
+```
+
+```julia
+grid = cartesian_grid(
+    x1 = collect(range(extrema(data.x1)...; length = 3)),
+    x2 = collect(range(extrema(data.x2)...; length = 3))
+)
+
+mem_result_ = profile_margins(
+    model, data, grid; type=:effects
+);
+
+apm_result_ = profile_margins(
+    model, data, grid; type=:predictions
+);
+
+DataFrame(mem_result_)
+DataFrame(apm_result_)
 ```
 
 ## Conceptual Framework
@@ -54,6 +87,26 @@ profile_margins(model, data, means_grid(data); type=:predictions)     # Predicti
 
 ## Advanced Features
 
+### Population Scenarios (at) and Groups
+```julia
+# Effects at counterfactual values (continuous + boolean)
+population_margins(model, data; type=:effects, vars=[:x], scenarios=Dict(:z => 0.5))
+
+# Predictions under scenario grids (Cartesian expansion)
+population_margins(model, data; type=:predictions, scenarios=Dict(:x => [-1, 0, 1], :treated => [true, false]))
+
+# Weighted contexts (e.g., survey weights)
+population_margins(model, data; type=:effects, vars=[:g], scenarios=Dict(:x => 0.0), weights=:w)
+
+# Grouped analysis (Stata `over()` analogue)
+population_margins(model, data; type=:effects, vars=[:x], groups=(:z, 4))     # quartiles of z
+population_margins(model, data; type=:effects, vars=[:g], groups=:region => :gender)
+
+# Note: profile_margins uses explicit reference grids and does not accept scenarios
+ref = cartesian_grid(x=[-2.0, 0.0, 2.0])
+profile_margins(model, data, ref; type=:effects)
+```
+
 ### Effect Measures
 ```julia
 # Standard marginal effects
@@ -69,15 +122,15 @@ population_margins(model, data; measure=:semielasticity_eydx)  # d(ln y)/dx
 ```julia
 # Representative points
 profile_margins(model, data, means_grid(data); type=:effects)
-profile_margins(model, data, cartesian_grid(data; x1=[0, 1, 2], x2=[1.5]); type=:effects)
+profile_margins(model, data, cartesian_grid(x1=[0, 1, 2], x2=[1.5]); type=:effects)
 
-# Categorical scenarios using CategoricalMixture (explicit grid)
-reference_grid = DataFrame(group=[mix("A" => 0.3, "B" => 0.7)])
+# Categorical compositions via explicit reference grids (profile analysis only)
+reference_grid = DataFrame(group=["A", "B"])
 profile_margins(model, data, reference_grid; type=:effects)
 
-# Stata-style scenario kwarg (at()) for population analysis (AME at representative values)
-population_margins(model, data; type=:effects, scenario=(x1=0.0, treatment=true))
-population_margins(model, data; type=:predictions, scenario=(group=mix("A"=>0.3, "B"=>0.7)))
+# Population scenarios (Stata `at()` analogue)
+population_margins(model, data; type=:effects, scenarios=Dict(:x1 => 0.0, :treatment => true))
+population_margins(model, data; type=:predictions, scenarios=Dict(:x1 => [-2.0, 0.0, 2.0]))
 ```
 
 ### Stratified Analysis
@@ -121,7 +174,7 @@ ame = population_margins(model, df; type=:effects, scale=:response)
 DataFrame(ame)
 
 # Treatment effects by education
-reference_grid = cartesian_grid(df; treatment=[true, false], education=["HS", "College", "Graduate"])
+reference_grid = cartesian_grid(treatment=[true, false], education=["HS", "College", "Graduate"])
 treatment_by_edu = profile_margins(model, df, reference_grid; type=:predictions, scale=:response)
 DataFrame(treatment_by_edu)
 ```
@@ -162,6 +215,6 @@ Pkg.add("Margins")
 |---------------|----------------------|
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` |
 | `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type=:effects)` |
-| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)` |
+| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)` |
 | `margins` | `population_margins(model, data; type=:predictions)` |
 | `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` |
