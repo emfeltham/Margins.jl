@@ -25,10 +25,10 @@ For researchers familiar with Stata's `margins` command, Margins.jl provides equ
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins, at(x=0 x=1 x=2)` | `profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:predictions)` | Multiple evaluation points |
+| `margins, at(x=0 x=1 x=2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:predictions)` | Multiple evaluation points |
 | `margins, at(x=0 z=1) at(x=1 z=2)` | `profile_margins(model, data, DataFrame(x=[0,1], z=[1,2]); type=:predictions)` | Custom scenarios |
 | `margins, over(group)` | `population_margins(model, data; groups=:group)` | Subgroup analysis |
-| `margins, dydx(x) at(z=(0 1))` | `profile_margins(model, data, cartesian_grid(data; z=[0,1]); type=:effects, vars=[:x])` | Specific variables |
+| `margins, dydx(x) at(z=(0 1))` | `profile_margins(model, data, cartesian_grid(z=[0,1]); type=:effects, vars=[:x])` | Specific variables |
 
 ### Elasticity Commands
 
@@ -85,7 +85,7 @@ DataFrame(mem)
 
 # Effects at specific ages
 age_effects = profile_margins(model, data, 
-    cartesian_grid(data; age=[25, 35, 45, 55]); 
+    cartesian_grid(age=[25, 35, 45, 55]); 
     vars=[:education], 
     type=:effects
 )

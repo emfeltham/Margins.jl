@@ -226,7 +226,7 @@ exploration_model = models[100_000]
 
 # Fast exploration with profiles
 exploration_time = @elapsed begin
-    scenarios = cartesian_grid(exploration_data; x1=[-1, 0, 1], treatment=[0, 1])
+    scenarios = cartesian_grid(x1=[-1, 0, 1], treatment=[0, 1])
     exploration_result = profile_margins(exploration_model, exploration_data, scenarios; type=:effects)
 end
 

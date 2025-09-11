@@ -172,7 +172,7 @@ career_scenarios = Dict(
     :female => [0, 1]
 )
 
-career_predictions = profile_margins(wage_model, data, cartesian_grid(data; age=[25,35,45,55], experience=[2,12,22,32], education=["High School","Bachelor's","Graduate"], female=[0,1]);
+career_predictions = profile_margins(wage_model, data, cartesian_grid(age=[25,35,45,55], experience=[2,12,22,32], education=["High School","Bachelor's","Graduate"], female=[0,1]);
                                    type=:predictions, scale=:response)
 career_df = DataFrame(career_predictions)
 
@@ -183,7 +183,7 @@ wage_comparison.wage = exp.(wage_comparison.estimate)  # Convert from log wage
 println(wage_comparison[1:12, :])  # Show first 12 rows
 
 # Gender wage gap quantification
-gap_analysis = profile_margins(wage_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
+gap_analysis = profile_margins(wage_model, data, cartesian_grid(education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
     type=:predictions
 )
 
@@ -214,7 +214,7 @@ println("Population average elasticities:")
 println(DataFrame(elasticities))
 
 # Elasticities by education level
-edu_elasticities = profile_margins(wage_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"]);
+edu_elasticities = profile_margins(wage_model, data, cartesian_grid(education=["High School", "Bachelor's", "Graduate"]);
     type=:effects,
     measure=:elasticity,
     vars=[:age, :experience]
@@ -249,7 +249,7 @@ println("\nAverage marginal effects on promotion probability:")
 println(DataFrame(promotion_ame))
 
 # Promotion probability by demographic scenarios
-promotion_scenarios = profile_margins(promotion_model, data, cartesian_grid(data; education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
+promotion_scenarios = profile_margins(promotion_model, data, cartesian_grid(education=["High School", "Bachelor's", "Graduate"], experience=[5, 15, 25], female=[0, 1]);
     type=:predictions,
     scale=:response  # Probability scale
 )

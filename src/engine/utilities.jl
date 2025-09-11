@@ -551,55 +551,7 @@ function _detect_variable_type(data_nt::NamedTuple, var::Symbol)
     end
 end
 
-"""
-    _is_linear_model(model) -> Bool
-
-Determine if model is linear (LM/LMM) or nonlinear (GLM) to choose optimal computation strategy.
-
-Linear models can use FormulaCompiler's `modelrow_batch!` for perfect 0-byte performance
-since marginal effects = design matrix coefficients (constant across observations).
-
-Nonlinear models need row-wise evaluation with pre-allocated arrays.
-
-# Arguments
-- `model`: Statistical model (LinearModel, LinearMixedModel, GeneralizedLinearModel, etc.)
-
-# Returns  
-- `true`: Linear model, linear mixed model, or GLM with identity link
-- `false`: Nonlinear GLM requiring row-wise evaluation
-
-# Examples
-```julia
-lm_model = lm(@formula(y ~ x), data)
-lmm_model = fit(MixedModel, @formula(y ~ x + (1|subject)), data)
-glm_model = glm(@formula(y ~ x), data, Normal(), IdentityLink())
-logit_model = glm(@formula(y ~ x), data, Binomial(), LogitLink())
-
-_is_linear_model(lm_model)     # true - linear model
-_is_linear_model(lmm_model)    # true - linear mixed model
-_is_linear_model(glm_model)    # true - identity link 
-_is_linear_model(logit_model)  # false - nonlinear link
-```
-"""
-function _is_linear_model(model)
-    # LinearModel is always linear
-    if isa(model, LinearModel)
-        return true
-    end
-    
-    # LinearMixedModel is also linear (fixed effects part)
-    if typeof(model).name.name == :LinearMixedModel  # Check type name to avoid import
-        return true
-    end
-    
-    # GeneralizedLinearModel with identity link is effectively linear
-    if isa(model, GeneralizedLinearModel)
-        return isa(GLM.Link(model), GLM.IdentityLink)
-    end
-    
-    # Other model types - assume nonlinear for safety
-    return false
-end
+ 
 
 """  
     _compute_variable_ame_unified(engine, var, rows, scale, backend) -> (Float64, Vector{Float64})
@@ -1099,64 +1051,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, profiles::Vec
     return (results, G)
 end
 
-"""
-    _prediction_with_gradient_reusing_buffers(engine, profile, scale) -> (prediction, gradient)
-
-Helper function following exact categorical pattern to compute both prediction and gradient 
-at a profile using FormulaCompiler, reusing existing engine buffers.
-
-This function uses the same approach as categorical variables to achieve O(1) scaling.
-"""
-function _prediction_with_gradient_reusing_buffers(engine::MarginsEngine{L}, profile::Dict, scale::Symbol) where L
-    # Exact same pattern as categorical variables:
-    profile_data = _build_refgrid_data(profile, engine.data_nt)
-    profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
-    
-    # Reuse existing buffer (like categorical does)
-    profile_compiled(engine.gβ_accumulator, profile_data, 1)
-    η = dot(engine.β, engine.gβ_accumulator)
-    
-    if scale === :response
-        μ = GLM.linkinv(engine.link, η)
-        link_deriv = GLM.mueta(engine.link, η)
-        # Avoid broadcast allocation: manual scalar multiplication (like categorical)
-        gradient = similar(engine.gβ_accumulator)
-        for j in 1:length(engine.gβ_accumulator)
-            gradient[j] = link_deriv * engine.gβ_accumulator[j]
-        end
-        return (μ, gradient)
-    else
-        return (η, copy(engine.gβ_accumulator))
-    end
-end
-
-"""
-    _compute_boolean_contrast_like_categorical(engine, var, profile_dict, scale) -> (effect, gradient)
-
-Compute boolean contrast using the exact categorical pattern for O(1) scaling.
-This replaces the problematic per-row boolean processing with the proven categorical approach.
-"""
-function _compute_boolean_contrast_like_categorical(
-    engine::MarginsEngine{L}, 
-    var::Symbol, 
-    profile_dict::Dict, 
-    scale::Symbol
-) where L
-    # Create profiles for true and false scenarios (like categorical baseline vs level)
-    profile_true = copy(profile_dict)
-    profile_false = copy(profile_dict)
-    profile_true[var] = true
-    profile_false[var] = false
-    
-    # Use existing gβ_accumulator buffer (like categorical variables do)
-    pred_true, grad_true = _prediction_with_gradient_reusing_buffers(engine, profile_true, scale)
-    pred_false, grad_false = _prediction_with_gradient_reusing_buffers(engine, profile_false, scale)
-    
-    # Contrast effect and gradient (simple subtraction like categorical)
-    effect = pred_true - pred_false
-    gradient = grad_true .- grad_false
-    return (effect, gradient)
-end
+ 
 
 # Helper: Build minimal reference grid data for row-specific contrasts
 function _build_refgrid_data(profile::Dict, original_data::NamedTuple)
@@ -1829,27 +1724,7 @@ function _row_specific_contrast_grad_beta!(gβ_buffer::Vector{Float64}, engine::
     copyto!(gβ_buffer, gradient)
 end
 
-"""
-    _predict_with_formulacompiler(engine, profile, scale) -> Float64
-
-Make predictions using FormulaCompiler for categorical contrast computation.
-Helper function that properly uses FormulaCompiler instead of manual computation.
-"""
-function _predict_with_formulacompiler(engine::MarginsEngine{L}, profile::Dict, scale::Symbol) where L
-    # Create minimal reference data for this profile  
-    profile_data = _build_refgrid_data(profile, engine.data_nt)
-    profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
-    
-    # Use zero-allocation FormulaCompiler's modelrow! to get design matrix row, then apply coefficients
-    FormulaCompiler.modelrow!(engine.row_buf, profile_compiled, profile_data, 1)
-    η = dot(engine.row_buf, engine.β)
-    
-    if scale === :link
-        return η
-    else # :response  
-        return GLM.linkinv(engine.link, η)
-    end
-end
+ 
 
 """
     _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid, scale, backend, measure) where L -> (DataFrame, Matrix{Float64})

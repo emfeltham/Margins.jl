@@ -100,7 +100,7 @@ println("\n=== Profile Specification Examples ===")
 # Using cartesian grid for systematic exploration
 # Creates all combinations of specified values
 
-scenario_effects = profile_margins(model, data, cartesian_grid(data; age=[30, 45, 60], treatment=[0, 1], education=["High School", "College", "Graduate"]); type=:effects)
+scenario_effects = profile_margins(model, data, cartesian_grid(age=[30, 45, 60], treatment=[0, 1], education=["High School", "College", "Graduate"]); type=:effects)
 scenario_df = DataFrame(scenario_effects)
 
 println("Treatment effects across age and education scenarios:")

@@ -889,15 +889,13 @@ function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, 
 end
 
 """
-    
-
-"""
-    _compute_population_prediction_in_context(engine, context_data, context_indices, scale, weights) -> (DataFrame, Matrix{Float64})
+    _compute_population_prediction_in_context(engine, context_indices, scale, weights, scenario_spec) -> (DataFrame, Matrix{Float64})
 
 Compute population average prediction in a specific context.
 
-# Arguments
-- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
+Arguments
+- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to `context_indices`
+- `scenario_spec`: Dict of scenario overrides for counterfactual evaluation (applied via DataScenario)
 """
 function _compute_population_prediction_in_context(engine::MarginsEngine{L}, context_indices::Vector{Int}, scale::Symbol, weights::Union{Vector{Float64}, Nothing}, scenario_spec) where L
     # Build a single DataScenario per context (no data mutation)

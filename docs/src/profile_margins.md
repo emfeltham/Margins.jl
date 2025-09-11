@@ -33,12 +33,12 @@ Systematic construction of reference grids through Cartesian product enumeration
 ```julia
 # Complete factorial design: 3×2 = 6 scenarios
 result = profile_margins(model, data, 
-    cartesian_grid(data; x=[-1, 0, 1], education=["High School", "College"]); 
+    cartesian_grid(x=[-1, 0, 1], education=["High School", "College"]); 
     type=:effects)
 
 # Single-variable sensitivity analysis with typical values for remaining covariates
 result = profile_margins(model, data,
-    cartesian_grid(data; age=20:10:70); 
+    cartesian_grid(age=20:10:70); 
     type=:predictions)
 ```
 
@@ -143,7 +143,7 @@ result = profile_margins(model, data, means_grid(data);
 
 # Semi-elasticities across income distribution quantiles
 result = profile_margins(model, data,
-    cartesian_grid(data; income=[25000, 50000, 75000]); 
+    cartesian_grid(income=[25000, 50000, 75000]); 
     type=:effects, measure=:semielasticity_dyex)
 ```
 
@@ -157,7 +157,7 @@ Profile-specific marginal effects analysis exhibits constant-time computational 
 @time profile_margins(model, large_data, means_grid(large_data))   # ~100μs
 
 # Complex factorial designs maintain constant-time scaling properties
-scenarios = cartesian_grid(data; x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
+scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
 @time profile_margins(model, huge_data, scenarios)  # Maintains ~100μs complexity
 ```
 
@@ -172,7 +172,7 @@ profile_margins(model, data; at=Dict(:x => [0,1,2]), type=:effects)
 
 # NEW (current):
 profile_margins(model, data, means_grid(data); type=:effects)  
-profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)
+profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)
 ```
 
 ## Statistical Notes
@@ -233,7 +233,7 @@ mem_results = profile_margins(model, data, means_grid(data); type=:effects)
 DataFrame(mem_results)
 
 # Predictions at specific scenarios
-scenarios = cartesian_grid(data; x1=[0, 1, 2], group=["A", "B"])
+scenarios = cartesian_grid(x1=[0, 1, 2], group=["A", "B"])
 predictions = profile_margins(model, data, scenarios; type=:predictions)
 DataFrame(predictions)
 ```

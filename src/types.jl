@@ -477,16 +477,7 @@ function format_number(x::Float64; digits::Int=get_display_digits(),
     end
 end
 
-# Simple sprintf-like formatting (kept for compatibility)
-function sprintf(fmt::String, x::Float64)
-    if fmt == "%.6f"
-        return @sprintf("%.6f", x)
-    elseif fmt == "%.3g"
-        return @sprintf("%.3g", x)
-    else
-        return string(x)
-    end
-end
+ 
 
 # Utility function for confidence interval calculation
 function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64)

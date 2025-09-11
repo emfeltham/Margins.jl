@@ -33,21 +33,21 @@ result = profile_margins(model, data, grid; type=:effects)
 - **Categorical variables**: Frequency-weighted mixture based on actual data distribution
 - **Bool variables**: Probability of true (proportion of true values)
 
-### 2. Cartesian Product - `cartesian_grid(data; vars...)`
+### 2. Cartesian Product - `cartesian_grid(vars...)`
 
 Creates all combinations of specified values across variables:
 
 ```julia
 # 3×2 = 6 scenarios: all combinations of x and education values
-grid = cartesian_grid(data; x=[-1, 0, 1], education=["High School", "College"])
+grid = cartesian_grid(x=[-1, 0, 1], education=["High School", "College"])
 result = profile_margins(model, data, grid; type=:effects)
 
 # Single variable varying, others at typical values
-grid = cartesian_grid(data; age=20:10:70)
+grid = cartesian_grid(age=20:10:70)
 result = profile_margins(model, data, grid; type=:predictions)
 
 # Complex scenarios with multiple variables
-grid = cartesian_grid(data; 
+grid = cartesian_grid(
     income=[25000, 50000, 75000],
     education=["HS", "College"],
     region=["North", "South"]
@@ -194,7 +194,7 @@ When variables are unspecified in builder functions, they use actual data compos
 # - treated: 60% true, 40% false
 
 # Builder uses realistic defaults
-grid = cartesian_grid(data; income=[30000, 50000, 70000])
+grid = cartesian_grid(income=[30000, 50000, 70000])
 # → income varies as specified
 # → education: mix("HS" => 0.4, "College" => 0.45, "Graduate" => 0.15)
 # → region: mix("Urban" => 0.75, "Rural" => 0.25)  
@@ -263,7 +263,7 @@ Analyze effects along ranges of key variables:
 
 ```julia
 # Effects across age ranges
-age_grid = cartesian_grid(data; age=25:5:65)
+age_grid = cartesian_grid(age=25:5:65)
 age_effects = profile_margins(model, data, age_grid; type=:effects, vars=[:education])
 
 # Plot age-varying effects
@@ -281,11 +281,11 @@ Reference grid size affects performance linearly, but is independent of dataset 
 
 ```julia
 # Small grid: 3 scenarios
-small_grid = cartesian_grid(data; x=[0, 1, 2])
+small_grid = cartesian_grid(x=[0, 1, 2])
 @time profile_margins(model, huge_data, small_grid)  # ~150μs
 
 # Large grid: 27 scenarios  
-large_grid = cartesian_grid(data; x=[0,1,2], y=[0,1,2], z=[0,1,2])
+large_grid = cartesian_grid(x=[0,1,2], y=[0,1,2], z=[0,1,2])
 @time profile_margins(model, huge_data, large_grid)  # ~400μs
 
 # Dataset size doesn't matter
@@ -346,7 +346,7 @@ profile_margins(model, data, invalid_grid)
 # → ArgumentError: Invalid levels for categorical variable 'group'
 
 # Warning: Large grid size
-huge_grid = cartesian_grid(data; x=1:100, y=1:100)  # 10,000 scenarios
+huge_grid = cartesian_grid(x=1:100, y=1:100)  # 10,000 scenarios
 profile_margins(model, data, huge_grid)
 # → Warning: Large reference grid (10000 scenarios) may impact performance
 ```
@@ -361,7 +361,7 @@ Standard errors are computed consistently across all reference grid types:
 # Same statistical rigor regardless of grid construction method
 grid1 = means_grid(data)
 grid2 = DataFrame(age=mean(data.age), education=mode(data.education))
-grid3 = cartesian_grid(data; age=[mean(data.age)])
+grid3 = cartesian_grid(age=[mean(data.age)])
 
 # All use identical delta-method computation
 result1 = profile_margins(model, data, grid1; type=:effects)
@@ -400,7 +400,7 @@ profile_margins(model, data; at=[Dict(:x => 0), Dict(:x => 1)])
 
 # NEW (current):
 profile_margins(model, data, means_grid(data))
-profile_margins(model, data, cartesian_grid(data; x=[0,1,2]))
+profile_margins(model, data, cartesian_grid(x=[0,1,2]))
 
 explicit_grid = DataFrame(x=[0, 1])
 profile_margins(model, data, explicit_grid)
@@ -415,7 +415,7 @@ refgrid_cartesian(specs, data)
 
 # NEW (exported public API):
 means_grid(data)
-cartesian_grid(data; vars...)
+cartesian_grid(vars...)
 balanced_grid(data; vars...)
 quantile_grid(data; vars...)
 ```

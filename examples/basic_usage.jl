@@ -55,7 +55,7 @@ println()
 
 # Example 5: Profile predictions at specific scenarios
 println("5. Profile predictions at specific education levels:")
-prof_pred = profile_margins(wage_model, df, cartesian_grid(df; education=[12.0, 16.0, 20.0]); type=:predictions)
+prof_pred = profile_margins(wage_model, df, cartesian_grid(education=[12.0, 16.0, 20.0]); type=:predictions)
 println(DataFrame(prof_pred))
 println()
 

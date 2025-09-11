@@ -99,9 +99,8 @@ All main functions support these core parameters:
 - `:eta` - Linear predictor scale (link scale)
 
 #### Computational Backend (`backend`)
-- `:auto` - Context-dependent selection (default)
+- `:ad` - Automatic differentiation (default; higher accuracy, zero allocation after warmup)
 - `:fd` - Finite differences (zero allocation, production-ready)
-- `:ad` - Automatic differentiation (higher accuracy, small allocation)
 
 #### Effect Measures (`measure`)
 - `:effect` - Standard marginal effects (default)
@@ -123,7 +122,7 @@ All main functions support these core parameters:
 profile_margins(model, data, means_grid(data))
 
 # Cartesian product: 6 scenarios (3×2)
-profile_margins(model, data, cartesian_grid(data; x=[0,1,2], group=["A","B"]))
+profile_margins(model, data, cartesian_grid(x=[0,1,2], group=["A","B"]))
 
 # Hierarchical grid construction using group grammar
 reference_spec = :region => [(:income, :quartiles), (:age, :mean)]

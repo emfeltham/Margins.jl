@@ -358,6 +358,14 @@ groups=:var1 => [:var2, (:var4, 4)]
 # to maintain statistical validity
 ```
 
+#### Skip Rule: vars also in groups or scenarios
+- For population analysis, computing the effect of a variable while simultaneously holding it fixed (via `scenarios`) or using it to define subgroups (via `groups`) is contradictory.
+- To preserve statistical correctness and interpretability, `population_margins` skips variables that appear in `vars` if they also appear in `groups` or `scenarios`.
+- Practical guidance:
+  - If you need Stata-style `dydx(x) over(x)`, consider whether you intend profile analysis instead. Use `profile_margins(..., at=...)` to evaluate derivatives at specific values of `x`.
+  - If you want effects within strata of `x`, group by a coarser or external variable, or compute effects for other variables while stratifying by `x`.
+  - If you want counterfactual predictions as `x` changes, use `type=:predictions` with `scenarios=Dict(:x => [...])` and omit `x` from `vars`.
+
 #### Interpretation Complexity
 ```julia
 # For presentation, consider simpler patterns:

@@ -77,6 +77,76 @@ population_results = population_margins(model, data;
     type=:effects)
 ```
 
+### Skip Rule: `dydx(x)` with `over(x)` (and scenarios)
+
+Unlike Stata, `population_margins` intentionally skips computing the effect of a variable when that same variable appears in `groups` (Stata `over()`) or in `scenarios` (Stata `at()`). This avoids the contradiction of “compute the effect of x while holding x fixed” or “using x both as an effect variable and a grouping key.”
+
+Recommended translations:
+
+```julia
+# 1) Stata: margins, dydx(x) over(x)
+# → Profile-style alternative: evaluate derivatives at specific x values
+mem_like = profile_margins(model, data;
+    type=:effects,
+    vars=[:x],
+    at=Dict(:x => [-2.0, 0.0, 2.0]))
+
+# 2) Population stratification by x without contradiction:
+#    Create a derived bin variable and group by it, not by :x directly
+df.x_bin = cut(df.x, 4)  # quartiles via user code; or use groups=(:x, 4)
+by_xbins = population_margins(model, df;
+    type=:effects,
+    vars=[:x],
+    groups=:x_bin)  # allowed since groups variable ≠ :x
+
+# 3) Effects of other variables within x strata (population approach)
+effects_in_xbins = population_margins(model, data;
+    type=:effects,
+    vars=[:z, :w],
+    groups=(:x, 4))
+
+# 4) Counterfactual predictions as x changes (not effects of x)
+preds_under_x = population_margins(model, data;
+    type=:predictions,
+    scenarios=Dict(:x => [-2.0, 0.0, 2.0]))
+```
+
+See also: “Skip Rule” note in the Population Grouping docs for rationale and guidance.
+
+#### Short example: grouping by `x_bin` to compute `dydx(x)` across strata
+
+```julia
+using Random
+using DataFrames, CategoricalArrays
+using Statistics  # for quantile
+using GLM
+using Margins
+
+Random.seed!(42)
+n = 500
+df = DataFrame(
+    y = rand(Bool, n),
+    x = randn(n),
+    z = randn(n)
+)
+
+# Fit a simple model
+m = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
+
+# Create quartile bins for x as a separate column "x_bin"
+edges = quantile(df.x, 0:0.25:1.0)
+labels = ["Q1", "Q2", "Q3", "Q4"]
+df.x_bin = cut(df.x, edges; labels=labels, extend=true)
+
+# Now compute population AME of x within x_bin strata (no contradiction)
+res = population_margins(m, df;
+    type=:effects,
+    vars=[:x],
+    groups=:x_bin)
+
+DataFrame(res)  # Shows dydx(x) by Q1..Q4
+```
+
 ## Combined Grouping and Scenarios
 
 ### Complex Analysis Patterns
@@ -153,6 +223,8 @@ margins, at(treatment=1 policy=1)
 # Julia approach (automatic Cartesian product):
 population_margins(model, data; scenarios=Dict(:treatment => [0, 1], :policy => [0, 1]))
 ```
+
+Note: `scenarios` in Julia are population‑level counterfactuals (everyone receives each setting in turn). For Stata’s point‑evaluation semantics of `at()`, use `profile_margins(..., at=...)`.
 
 ## Complete Workflow Examples
 

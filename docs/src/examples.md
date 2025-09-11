@@ -320,6 +320,26 @@ complex_groups = population_margins(wage_model, data;
 
 ### Counterfactual Scenario Analysis
 
+#### Skip Rule Example: dydx(x) across x strata using a derived bin variable
+
+```julia
+using Statistics
+using CategoricalArrays
+
+# Suppose we want dydx(age) across age strata without holding age fixed or using it as the grouping key directly.
+# Create an "age_bin" column (quartiles), then group by that derived column:
+edges = quantile(data.age, 0:0.25:1.0)
+labels = ["Q1", "Q2", "Q3", "Q4"]
+data.age_bin = cut(data.age, edges; labels=labels, extend=true)
+
+age_effects_by_bin = population_margins(wage_model, data;
+    type=:effects,
+    vars=[:age],
+    groups=:age_bin)
+
+DataFrame(age_effects_by_bin)
+```
+
 ```julia
 # Policy scenarios: unemployment rate effects
 recession_scenarios = population_margins(wage_model, data;

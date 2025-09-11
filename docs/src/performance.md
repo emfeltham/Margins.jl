@@ -318,7 +318,7 @@ Profile.print()
 ```julia
 # Correct: O(1) performance with reference grids
 profile_margins(model, data, means_grid(data); type=:effects)
-profile_margins(model, data, cartesian_grid(data; x=[0,1,2]); type=:effects)
+profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)
 
 # Avoid: Improper reference grid specification
 # Always use reference grid builders or explicit DataFrames
