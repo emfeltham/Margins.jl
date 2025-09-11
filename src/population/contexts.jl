@@ -95,7 +95,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     
     # Store scenarios and groups variable information for Context column
     scenarios_vars = scenarios === nothing ? Symbol[] : (scenarios isa Dict ? collect(keys(scenarios)) : Symbol[])
-    groups_vars = groups === nothing ? Symbol[] : (groups isa Symbol ? [groups] : Symbol[])
+    groups_vars = groups === nothing ? Symbol[] : _extract_group_variables(groups)
     metadata[:scenarios_vars] = scenarios_vars
     metadata[:groups_vars] = groups_vars
     
@@ -119,6 +119,43 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     profile_values = _extract_context_profile_values(results)
     
     return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+end
+
+"""
+    _extract_group_variables(groups) -> Vector{Symbol}
+
+Extract a flat list of grouping variable names from the unified `groups` specification,
+including symbols within vectors, the left-hand variable of continuous binning tuples,
+and variables appearing in nested `=>` specifications.
+"""
+function _extract_group_variables(groups)
+    vars = Symbol[]
+    if groups isa Symbol
+        push!(vars, groups)
+    elseif groups isa AbstractVector
+        for g in groups
+            append!(vars, _extract_group_variables(g))
+        end
+    elseif groups isa Tuple && length(groups) == 2
+        var, spec = groups
+        if var isa Symbol
+            push!(vars, var)
+        end
+        # Do not include derived bin names (e.g., :x_bin) in metadata
+    elseif groups isa Pair
+        append!(vars, _extract_group_variables(groups.first))
+        append!(vars, _extract_group_variables(groups.second))
+    end
+    # Deduplicate while preserving order of first appearance
+    seen = Set{Symbol}()
+    out = Symbol[]
+    for v in vars
+        if !(v in seen)
+            push!(out, v)
+            push!(seen, v)
+        end
+    end
+    return out
 end
 
 """
@@ -852,50 +889,7 @@ function _compute_continuous_ame_context(engine::MarginsEngine{L}, var::Symbol, 
 end
 
 """
-    _compute_categorical_baseline_ame_context(engine, var, context_data, context_indices, scale, backend, weights) -> (Float64, Vector{Float64})
-
-**REPLACED WITH OPTIMAL DATASCENARIO SOLUTION**: Compute categorical baseline AME in context using DataScenario system.
-
-This function now uses the optimal DataScenario approach instead of the broken O(2n) compilation method.
-Maintains identical API for contexts while achieving ~900x performance improvement.
-
-# Arguments
-- `weights`: Observation weights vector (Vector{Float64} or nothing) already subset to context_indices
-"""
-function _compute_categorical_baseline_ame_context(engine::MarginsEngine{L}, var::Symbol, context_data::NamedTuple, context_indices::Vector{Int}, scale::Symbol, backend::Symbol, weights::Union{Vector{Float64}, Nothing}) where L
-    # Error-first: weighted categorical effects in contexts are not yet implemented correctly
-    if !isnothing(weights)
-        throw(MarginsError("Weighted categorical effects in contexts are not yet supported with statistical validity. " *
-                           "Avoid weights or use profile_margins, or compute unweighted effects until proper weighted contrasts are implemented."))
-    end
-    # Use optimal unified contrast system with baseline contrasts for this context
-    # This delegates to _compute_categorical_contrasts which uses DataScenario
-    results = _compute_categorical_contrasts(engine, var, context_indices, scale, backend, :baseline)
     
-    # Extract first (and only) result for baseline contrast
-    if isempty(results)
-        return (0.0, zeros(length(engine.β)))
-    else
-        _, _, ame_val, gβ_avg = results[1]
-        
-        # Apply weights if provided (modify the results for weighted context)
-        if !isnothing(weights)
-            # The optimal function computed unweighted averages, we need to apply context weights
-            # This is a temporary compatibility layer - ideally weights should be passed through
-            total_weight = sum(weights[row] for row in context_indices)
-            n_obs = length(context_indices)
-            
-            if total_weight > 0
-                # Scale by weight ratio to maintain weighted interpretation
-                weight_adjustment = total_weight / n_obs
-                ame_val *= weight_adjustment
-                gβ_avg .*= weight_adjustment
-            end
-        end
-        
-        return (ame_val, gβ_avg)
-    end
-end
 
 """
     _compute_population_prediction_in_context(engine, context_data, context_indices, scale, weights) -> (DataFrame, Matrix{Float64})
