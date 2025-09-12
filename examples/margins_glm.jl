@@ -42,35 +42,50 @@ println()
 
 println("=== PROFILE APPROACH ===")
 
-println("4. Profile approach (at specific covariate values):")
-println("   
-   Current examples:
-   • profile_margins(m, df, means_grid(df); type=:effects, vars=[:x])
-   • profile_margins(m, df, cartesian_grid(df; x=[-2,0,2]); type=:predictions)
-   
-   This evaluates effects/predictions at specific covariate combinations
-   rather than averaging across the observed data distribution.
-")
+# Profile marginal effects at sample means
+println("4. Profile marginal effects at sample means (MEM):")
+prof_ame = profile_margins(m, df, means_grid(df); type=:effects, vars=[:x, :z], scale=:response)
+println(DataFrame(prof_ame))
+println()
+
+# Profile predictions at specific scenarios  
+println("5. Profile predictions at specific x values:")
+prof_pred = profile_margins(m, df, cartesian_grid(x=[-2, 0, 2]); type=:predictions, scale=:response)
+println(DataFrame(prof_pred))
+println()
+
+# Profile effects comparison across scenarios
+println("6. Profile effects at different x and z combinations:")
+prof_effects = profile_margins(m, df, cartesian_grid(x=[-1, 0, 1], z=[-1, 0, 1]); type=:effects, vars=[:x], scale=:response)
+prof_df = DataFrame(prof_effects)
+# Show first few rows with key columns (adjust column names based on actual output)
+println("Effect of x at different x,z scenarios:")
+println(first(prof_df, 6))
 println()
 
 println("=== API DEMONSTRATION ===")
 
-println("7. Clean two-function API in action:")
-println("   population_margins() for true population effects:")
-pop_demo = population_margins(m, df; type=:effects, vars=[:x])
-println("   Effect of x: ", round(DataFrame(pop_demo).dydx[1], digits=5))
+println("7. Clean two-function API demonstration:")
+println("Population vs Profile comparison for variable x:")
 
-println("   
-   profile_margins() would show effects at specific covariate values
-   (Currently has compatibility issues being resolved)
-   ")
+# Population approach
+pop_demo = population_margins(m, df; type=:effects, vars=[:x], scale=:response)
+pop_effect = DataFrame(pop_demo).estimate[1]
+
+# Profile approach (at means)
+prof_demo = profile_margins(m, df, means_grid(df); type=:effects, vars=[:x], scale=:response)
+prof_effect = DataFrame(prof_demo).estimate[1]
+
+println("Population AME: ", round(pop_effect, digits=5))
+println("Profile MEM:    ", round(prof_effect, digits=5))
+println("Difference:     ", round(abs(pop_effect - prof_effect), digits=6))
 println()
 
 println("=== FRAMEWORK COMPARISON ===")
 println("Population approach gives you the TRUE average effect across your sample.")
 println("Profile approach evaluates at specific 'representative' cases.")
 println()
-println("For GLM example - Population AME: ", round(DataFrame(pop_ame).dydx[1], digits=5))
+println("For GLM example - Population AME for x: ", round(DataFrame(pop_ame).estimate[1], digits=5))
 println("For linear models: Population ≈ Profile (small differences)")
 println("For nonlinear models: Can differ substantially!")
 
@@ -82,7 +97,18 @@ println("• Direct mapping to statistical framework")
 println("• type=:effects or :predictions determines output")
 println()
 println("=== ROBUST STANDARD ERRORS ===")
-println("# For robust SEs, use the vcov parameter:")
+println("For robust/clustered standard errors, use CovarianceMatrices.jl:")
+println()
+println("# Install: using Pkg; Pkg.add(\"CovarianceMatrices\")")
 println("# using CovarianceMatrices")
-println("# robust_result = population_margins(m, df; type=:effects, vars=[:x], vcov=HC1())")
-println("# println(DataFrame(robust_result))")
+println()
+println("# Robust standard errors:")
+println("# robust_vcov = HC1(m)")
+println("# robust_result = population_margins(m, df; type=:effects, vars=[:x], vcov=robust_vcov)")
+println()
+println("# Clustered standard errors:")
+println("# clustered_vcov = CRVE1(m, df.cluster_var)")
+println("# clustered_result = population_margins(m, df; type=:effects, vcov=clustered_vcov)")
+println()
+println("Note: Margins.jl uses delta-method for all marginal effect standard errors,")
+println("properly accounting for the nonlinearity in GLM transformations.")

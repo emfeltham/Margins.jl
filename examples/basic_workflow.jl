@@ -104,7 +104,7 @@ scenario_effects = profile_margins(model, data, cartesian_grid(age=[30, 45, 60],
 scenario_df = DataFrame(scenario_effects)
 
 println("Treatment effects across age and education scenarios:")
-treatment_effects = scenario_df[scenario_df.term .== "treatment", :]
+treatment_effects = scenario_df[scenario_df.variable .== "treatment", :]
 println(treatment_effects[!, [:at_age, :at_education, :at_treatment, :estimate, :se]])
 
 # ### Custom Reference Grid
@@ -134,7 +134,7 @@ println(DataFrame(education_effects))
 # Effects within region and education groups
 region_edu_effects = population_margins(model, data; 
                                        type=:effects, 
-                                       over=[:region, :education],
+                                       groups=[:region, :education],
                                        vars=[:treatment])  # Focus on treatment effect
 println("\nTreatment effects by region and education:")
 println(DataFrame(region_edu_effects))

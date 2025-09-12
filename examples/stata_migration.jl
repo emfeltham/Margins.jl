@@ -27,11 +27,11 @@ data = DataFrame(
     education = categorical([1, 2, 3, 4][rand(1:4, n)], ordered=true),  # 1=HS, 2=College, etc.
     region = categorical([1, 2, 3, 4][rand(1:4, n)]),  # 1=North, 2=South, etc.
     
-    # Binary variables (0/1 coding like Stata)
-    female = rand([0, 1], n),
-    union = rand([0, 1], n),
-    urban = rand([0, 1], n),
-    treated = rand([0, 1], n)
+    # Binary variables (Bool type for proper categorical handling)
+    female = rand(Bool, n),
+    union = rand(Bool, n),
+    urban = rand(Bool, n),
+    treated = rand(Bool, n)
 )
 
 # Add labels for interpretation (Stata-style approach)
@@ -39,20 +39,21 @@ education_labels = Dict(1 => "High School", 2 => "Some College", 3 => "College",
 region_labels = Dict(1 => "North", 2 => "South", 3 => "East", 4 => "West")
 
 # Generate realistic outcome variable
-edu_effects = [0.0, 0.2, 0.4, 0.6]  # Returns to education
+edu_effects = Dict(1 => 0.0, 2 => 0.2, 3 => 0.4, 4 => 0.6)  # Returns to education
+edu_numeric = [edu_effects[CategoricalArrays.levelcode(edu)] for edu in data.education]
 data.log_wage = 1.8 .+ 
                 0.05 .* data.age .+ 
-                edu_effects[data.education] .+ 
+                edu_numeric .+ 
                 0.03 .* data.experience .-
-                0.15 .* data.female .+ 
-                0.12 .* data.union .+ 
-                0.08 .* data.urban .+ 
-                2.0 .* data.treated .+ 
+                0.15 .* Float64.(data.female) .+ 
+                0.12 .* Float64.(data.union) .+ 
+                0.08 .* Float64.(data.urban) .+ 
+                2.0 .* Float64.(data.treated) .+ 
                 0.3 .* randn(n)
 
 # Binary outcome for logistic examples  
-data.promoted = [rand() < (1/(1+exp(-(-1.5 + 0.02*age + 0.3*edu + 0.01*exp - 0.25*fem + 0.4*treat)))) ? 1 : 0 
-                for (age,edu,exp,fem,treat) in zip(data.age, data.education, data.experience, data.female, data.treated)]
+data.promoted = [rand() < (1/(1+exp(-(-1.5 + 0.02*age + 0.3*CategoricalArrays.levelcode(edu) + 0.01*experience - 0.25*Float64(fem) + 0.4*Float64(treat))))) ? 1 : 0 
+                for (age,edu,experience,fem,treat) in zip(data.age, data.education, data.experience, data.female, data.treated)]
 
 println("Dataset created: $(nrow(data)) observations")
 println("Variables: $(join(names(data), ", "))")
@@ -79,14 +80,14 @@ println("="^60)
 # ### 1. Basic Marginal Effects
 
 println("\n1. BASIC MARGINAL EFFECTS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, dydx(*)
 println("Stata command: margins, dydx(*)")
 stata_dydx_all = population_margins(linear_model, data; type=:effects)
 stata_df = DataFrame(stata_dydx_all)
 println("Margins.jl:   population_margins(model, data; type=:effects)")
-println(stata_df[!, [:term, :estimate, :se, :p_value]])
+println(stata_df[!, [:variable, :estimate, :se, :p_value]])
 
 # Stata: margins, dydx(age experience)  
 println("\nStata command: margins, dydx(age experience)")
@@ -97,18 +98,18 @@ println(DataFrame(stata_dydx_vars))
 # ### 2. Marginal Effects at Means
 
 println("\n2. MARGINAL EFFECTS AT MEANS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, at(means) dydx(*)
 println("Stata command: margins, at(means) dydx(*)")
 stata_at_means = profile_margins(linear_model, data, means_grid(data); type=:effects)
 println("Margins.jl:   profile_margins(model, data, means_grid(data); type=:effects)")
-println(DataFrame(stata_at_means)[!, [:term, :estimate, :se, :p_value]])
+println(DataFrame(stata_at_means))
 
 # ### 3. Predictions (Fitted Values)
 
 println("\n3. PREDICTIONS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins
 println("Stata command: margins")  
@@ -125,7 +126,7 @@ println(DataFrame(stata_pred_means))
 # ### 4. At Specific Values
 
 println("\n4. MARGINS AT SPECIFIC VALUES")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, at(age=(25 35 45) female=(0 1))
 println("Stata command: margins, at(age=(25 35 45) female=(0 1))")
@@ -134,7 +135,9 @@ stata_at_values = profile_margins(linear_model, data,
     type=:predictions)
 println("Margins.jl:   profile_margins(model, data, cartesian_grid(age=[25,35,45], female=[0,1]); type=:predictions)")
 at_df = DataFrame(stata_at_values)
-println(at_df[!, [:at_age, :at_female, :estimate, :se]])
+# Show results (column names may vary)
+println("Profile predictions:")
+println(first(at_df, 6))
 
 # Stata: margins, at(age=(25 35 45) female=(0 1)) dydx(experience)
 println("\nStata command: margins, at(age=(25 35 45) female=(0 1)) dydx(experience)")
@@ -142,12 +145,15 @@ stata_at_dydx = profile_margins(linear_model, data,
     cartesian_grid(age=[25, 35, 45], female=[0, 1]);
     type=:effects, vars=[:experience])
 println("Margins.jl:   profile_margins(model, data, cartesian_grid(age=[25,35,45], female=[0,1]); type=:effects, vars=[:experience])")
-println(DataFrame(stata_at_dydx)[!, [:at_age, :at_female, :estimate, :se]])
+# Show results for experience effects
+effects_df = DataFrame(stata_at_dydx)
+println("Experience effects at different age/gender scenarios:")
+println(first(effects_df, 6))
 
 # ### 5. Over Groups (Subgroup Analysis)
 
 println("\n5. SUBGROUP ANALYSIS")  
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, over(female)
 println("Stata command: margins, over(female)")
@@ -161,7 +167,14 @@ stata_dydx_over = population_margins(linear_model, data; type=:effects, groups=:
 over_df = DataFrame(stata_dydx_over)
 println("Margins.jl:   population_margins(model, data; type=:effects, groups=:female)")
 # Show key results
-println(over_df[over_df.term .== "treated", [:over_female, :term, :estimate, :se]])
+# Show treatment effects by gender
+treated_rows = over_df[over_df.variable .== "treated", :]
+if nrow(treated_rows) > 0
+    println(treated_rows[!, [:estimate, :se]])
+else
+    println("First few results:")
+    println(first(over_df, 4))
+end
 
 # Stata: margins, dydx(treated) over(education)
 println("\nStata command: margins, dydx(treated) over(education)")  
@@ -173,7 +186,7 @@ println(DataFrame(stata_treat_edu))
 # ### 6. Logistic Regression Margins
 
 println("\n6. LOGISTIC REGRESSION MARGINS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, dydx(*) (after logit)
 println("Stata command: margins, dydx(*) [after logit]")
@@ -193,7 +206,10 @@ logit_scenarios = profile_margins(logit_model, data,
     cartesian_grid(age=[35], education=[3], female=[0, 1]);
     type=:predictions, scale=:response)
 println("Margins.jl:   profile_margins(logit_model, data, cartesian_grid(age=[35], education=[3], female=[0,1]); type=:predictions, scale=:response)")
-println(DataFrame(logit_scenarios)[!, [:at_female, :estimate]])
+# Show logistic predictions by gender
+logit_df = DataFrame(logit_scenarios)
+println("Probability predictions:")
+println(first(logit_df, 4))
 
 # ## Advanced Stata Equivalencies
 
@@ -204,7 +220,7 @@ println("="^60)
 # ### 7. Contrast Analysis
 
 println("\n7. CONTRASTS AND COMPARISONS")
-println("-" * 40)
+println("-"^40)
 
 # Stata approach: margins treatment, pwcompare
 # Margins.jl approach: compute at different treatment levels
@@ -222,7 +238,7 @@ println("Margins.jl:   profile_margins(model, data, cartesian_grid(treated=[0,1]
 # ### 8. Multiple Group Analysis  
 
 println("\n8. MULTIPLE GROUP COMBINATIONS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins education#female
 println("Stata command: margins education#female")
@@ -230,12 +246,12 @@ multiple_groups = population_margins(linear_model, data;
     type=:predictions, groups=[:education, :female])
 println("Margins.jl:   population_margins(model, data; type=:predictions, groups=[:education, :female])")
 multi_df = DataFrame(multiple_groups)
-println(multi_df[!, [:over_education, :over_female, :estimate, :se]])
+println(first(multi_df, 8))  # Show first few rows with flexible column names
 
 # ### 9. Post-estimation Tests
 
 println("\n9. POST-ESTIMATION ANALYSIS")
-println("-" * 40)
+println("-"^40)
 
 result = population_margins(linear_model, data; type=:effects, vars=[:treated])
 result_df = DataFrame(result)
@@ -255,7 +271,7 @@ println("Treatment effect significance test:")
 # ### 10. Export Results (Stata equivalent)
 
 println("\n10. EXPORTING RESULTS")
-println("-" * 40)
+println("-"^40)
 
 # Stata: margins, post; esttab using results.csv
 all_margins = population_margins(linear_model, data; type=:effects)
@@ -267,9 +283,9 @@ println("# Then use CSV.write(\"results.csv\", results)")
 
 # Show formatted results
 println("\nFormatted results table:")
-for row in eachrow(export_df[!, [:term, :estimate, :se, :p_value]])
+for row in eachrow(export_df[!, [:variable, :estimate, :se, :p_value]])
     stars = row.p_value < 0.01 ? "***" : row.p_value < 0.05 ? "**" : row.p_value < 0.10 ? "*" : ""
-    @printf("%-12s %8.4f %8.4f %8.4f %s\n", row.term, row.estimate, row.se, row.p_value, stars)
+    @printf("%-12s %8.4f %8.4f %8.4f %s\n", row.variable, row.estimate, row.se, row.p_value, stars)
 end
 
 # ## Migration Checklist
@@ -284,10 +300,13 @@ migration_guide = [
     ("margins", "population_margins(model, data; type=:predictions)"),
     ("margins, at(means)", "profile_margins(model, data, means_grid(data); type=:predictions)"),
     ("margins, at(var=values)", "profile_margins(model, data, cartesian_grid(var=values); type=:predictions)"),
-    ("margins, over(group)", "population_margins(model, data; groups=:group, type=:predictions)"),
+    ("margins, over(group)", "population_margins(model, data; type=:predictions, groups=:group)"),
     ("margins, dydx(*) over(group)", "population_margins(model, data; type=:effects, groups=:group)"),
-    ("margins [after logit]", "population_margins(logit_model, data; scale=:response, type=:predictions)"),
-    ("margins, dydx(*) [after logit]", "population_margins(logit_model, data; scale=:response, type=:effects)")
+    ("margins [after logit]", "population_margins(logit_model, data; type=:predictions, scale=:response)"),
+    ("margins, dydx(*) [after logit]", "population_margins(logit_model, data; type=:effects, scale=:response)"),
+    ("margins, eyex(var)", "population_margins(model, data; type=:effects, vars=[:var], measure=:elasticity)"),
+    ("margins, dyex(var)", "population_margins(model, data; type=:effects, vars=[:var], measure=:semielasticity_dyex)"),
+    ("margins, eydx(var)", "population_margins(model, data; type=:effects, vars=[:var], measure=:semielasticity_eydx)")
 ]
 
 println("\nQuick Reference:")

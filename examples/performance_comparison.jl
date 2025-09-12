@@ -8,7 +8,7 @@
 
 using Margins, DataFrames, GLM, Random
 using BenchmarkTools, Statistics
-using Printf
+using Printf, CategoricalArrays
 
 Random.seed!(06515)
 
@@ -24,8 +24,8 @@ function generate_test_data(n)
         x1 = randn(n),
         x2 = randn(n), 
         x3 = randn(n),
-        group = rand(["A", "B", "C"], n),
-        region = rand(["North", "South", "East", "West"], n),
+        group = categorical(rand(["A", "B", "C"], n)),
+        region = categorical(rand(["North", "South", "East", "West"], n)),
         treatment = rand([0, 1], n)
     )
 end
@@ -116,12 +116,12 @@ end
 println("\n=== Complex Profile Scenarios ===")
 println("Profile performance should remain O(1) even with many scenarios")
 
-# Test complex scenario specification
-complex_scenarios = Dict(
-    :x1 => [-2, -1, 0, 1, 2],         # 5 values
-    :x2 => [-1, 0, 1],                # 3 values  
-    :group => ["A", "B", "C"],        # 3 values
-    :treatment => [0, 1]              # 2 values
+# Test complex scenario specification using cartesian_grid
+complex_scenarios = cartesian_grid(
+    x1=[-2, -1, 0, 1, 2],         # 5 values
+    x2=[-1, 0, 1],                # 3 values  
+    group=["A", "B", "C"],        # 3 values
+    treatment=[0, 1]              # 2 values
 )
 total_scenarios = 5 * 3 * 3 * 2  # = 90 scenarios
 
@@ -170,7 +170,8 @@ end
 # ## 6. Backend Performance Comparison
 
 println("\n=== Backend Performance Comparison ===")
-println("Finite differences (:fd) vs Automatic differentiation (:ad)")
+println("Automatic differentiation (:ad, preferred) vs Finite differences (:fd, legacy)")
+println("Note: :ad is the recommended backend for accuracy and modern workflows")
 
 test_size = 10_000
 test_data = datasets[test_size]
@@ -206,13 +207,18 @@ end
 fd_results = backend_results[:fd]
 ad_results = backend_results[:ad]
 
-println("\nBackend comparison (FD vs AD):")
-@printf("Population - Time ratio: %.2fx, Allocation ratio: %.2fx\n",
+println("\nBackend comparison (AD is preferred):")
+@printf("Population - AD vs FD: %.2fx time, %.2fx allocations\n",
         ad_results.pop_time / fd_results.pop_time,
         ad_results.pop_allocs / fd_results.pop_allocs)
-@printf("Profile    - Time ratio: %.2fx, Allocation ratio: %.2fx\n", 
+@printf("Profile    - AD vs FD: %.2fx time, %.2fx allocations\n", 
         ad_results.prof_time / fd_results.prof_time,
         ad_results.prof_allocs / fd_results.prof_allocs)
+
+println("\nBackend recommendations:")
+println("✅ :ad (default) - Higher accuracy, modern automatic differentiation")
+println("⚠️  :fd - Legacy compatibility only, use when AD fails")
+println("🔧 For production: Use :ad unless specific compatibility requirements")
 
 # ## 7. Production Optimization Strategies
 
@@ -240,9 +246,10 @@ end
 @printf("Final analysis (population): %.0f ms\n", final_time * 1000)
 
 # Strategy 2: Optimal backend selection
-println("\n2. Backend Selection Strategy:")
-println("   - :fd for production (zero allocation after warmup)")
-println("   - :ad for development/verification (higher accuracy)")
+println("\n2. Backend Selection Strategy (Updated 2024):")
+println("✅ :ad (recommended) - Default choice for accuracy and modern workflows")
+println("⚠️  :fd (legacy) - Use only when :ad compatibility issues arise")
+println("   Modern recommendation: Always use :ad unless specific constraints require :fd")
 
 # Strategy 3: Memory-efficient large dataset handling
 println("\n3. Large Dataset Strategy:")
@@ -255,7 +262,7 @@ memory_time = @elapsed begin
     key_effects = population_margins(large_model, large_data;
                                    type=:effects, 
                                    vars=[:treatment, :x1],
-                                   backend=:fd)
+                                   backend=:ad)  # Use :ad (preferred) for accuracy
 end
 
 @printf("Memory-efficient analysis (100k rows, key variables): %.0f ms\n", memory_time * 1000)
@@ -277,10 +284,10 @@ println("• < 10k observations:   Use either approach freely")
 println("• 10k-100k observations: Profile preferred for exploration")  
 println("• > 100k observations:   Profile for scenarios, population selectively")
 
-println("\nBackend Recommendations:")
-println("• Production workflows:  :fd (zero allocation)")
-println("• Development/testing:   :ad (higher accuracy)")
-println("• Large datasets:        :fd (memory efficiency)")
+println("\nBackend Recommendations (Updated):")
+println("✅ All workflows:        :ad (preferred, higher accuracy)")
+println("⚠️  Legacy compatibility: :fd (use only when required)")
+println("🔧 Default behavior:      Omit backend parameter (defaults to :ad)")
 
 println("\nOptimization Strategies:")
 println("• Use profile margins for scenario analysis (O(1) scaling)")

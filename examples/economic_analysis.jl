@@ -14,6 +14,27 @@ using StatsModels
 
 Random.seed!(06515)
 
+# Academic-style formatting function for results tables
+function format_academic_results(df::DataFrame; digits=3)
+    """Format results in academic style with significance stars"""
+    println(rpad("Variable", 12) * rpad("Coefficient", 12) * rpad("Std. Error", 12) * "Significance")
+    println("-" ^ 48)
+    
+    for row in eachrow(df)
+        coef = round(row.estimate, digits=digits)
+        se = round(row.se, digits=digits)
+        stars = row.p_value < 0.01 ? "***" : row.p_value < 0.05 ? "**" : row.p_value < 0.10 ? "*" : ""
+        
+        var_name = haskey(row, :variable) ? row.variable : string(row[1])  # Handle grouped results
+        
+        println(rpad(var_name, 12) * 
+                rpad("$coef", 12) * 
+                rpad("($se)", 12) * 
+                stars)
+    end
+    println()
+end
+
 println("=== Advanced Econometric Analysis ===")
 
 # ## 1. Generate Realistic Economic Dataset
@@ -145,20 +166,20 @@ println("\n--- Population Average Effects ---")
 overall_ame = population_margins(wage_model, data; type=:effects, 
                                 vars=[:age, :experience, :unemployment_rate])
 println("Overall population effects:")
-println(DataFrame(overall_ame))
+format_academic_results(DataFrame(overall_ame))
 
 # Gender wage gap analysis
 gender_effects = population_margins(wage_model, data; type=:effects, groups=:female)
 println("\nEffects by gender:")
 gender_df = DataFrame(gender_effects)
-println(gender_df[gender_df.term .== "experience", [:over_female, :estimate, :se, :p_value]])
+println(gender_df[gender_df.variable .== "experience", [:female, :estimate, :se, :p_value]])
 
 # Education-specific analysis
 education_effects = population_margins(wage_model, data; type=:effects, 
-                                     vars=[:experience], over=:education)
+                                     vars=[:experience], groups=:education)
 println("\nExperience returns by education level:")
 edu_df = DataFrame(education_effects)
-println(edu_df[!, [:over_education, :estimate, :se, :conf_low, :conf_high]])
+println(edu_df[!, [:education, :estimate, :se, :ci_lower, :ci_upper]])
 
 # ### Advanced Profile Analysis
 
@@ -221,7 +242,7 @@ edu_elasticities = profile_margins(wage_model, data, cartesian_grid(education=["
 )
 println("\nElasticities by education level:")
 elas_df = DataFrame(edu_elasticities)
-println(elas_df[!, [:at_education, :term, :estimate, :se]])
+println(elas_df[!, [:at_education, :variable, :estimate, :se]])
 
 # Semi-elasticity: unemployment rate effect
 unemployment_semi = population_margins(wage_model, data;
