@@ -194,6 +194,9 @@ function Base.show(io::IO, mr::EffectsResult)
         println(io, "EffectsResult: $n_results population effects$n_text")  
     end
     
+    # Optional context header for population-with-contexts
+    _show_context_header(io, mr)
+    
     # Stata-style table with horizontal lines
     _show_stata_table(io, mr)
 end
@@ -213,6 +216,9 @@ function Base.show(io::IO, mr::PredictionsResult)
     else
         println(io, "PredictionsResult: $n_results population predictions$n_text")  
     end
+    
+    # Optional context header for population-with-contexts
+    _show_context_header(io, mr)
     
     # Stata-style table with horizontal lines
     _show_stata_table(io, mr)
@@ -248,6 +254,194 @@ end
 
 # Predictions don't need display labels since they don't have variable/contrast concepts
 _generate_clean_display_labels(mr::PredictionsResult) = String[]
+
+"""
+    _show_context_header(io::IO, mr::MarginsResult)
+
+Show optional context header for population-with-contexts cases.
+Displays groups and scenarios derived from metadata in format: "Groups: a, b; Scenarios: x, y"
+
+Only shows when:
+- `has_contexts == true` 
+- `analysis_type == :population`
+- There are actually groups or scenarios to display
+
+Kept behind a guard to avoid noisy output for simple cases.
+"""
+function _show_context_header(io::IO, mr::MarginsResult)
+    has_contexts = get(mr.metadata, :has_contexts, false)
+    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    
+    # Only show for population-with-contexts
+    if !(has_contexts && analysis_type == :population)
+        return
+    end
+    
+    groups, scenarios = context_columns(mr)
+    
+    # Only show if there are groups or scenarios to display
+    if isempty(groups) && isempty(scenarios)
+        return
+    end
+    
+    parts = String[]
+    
+    if !isempty(groups)
+        group_names = join(string.(groups), ", ")
+        push!(parts, "Groups: $group_names")
+    end
+    
+    if !isempty(scenarios)
+        scenario_names = join(string.(scenarios), ", ")  
+        push!(parts, "Scenarios: $scenario_names")
+    end
+    
+    if !isempty(parts)
+        println(io, join(parts, "; "))
+    end
+end
+
+"""
+    context_columns(mr::MarginsResult) -> (groups::Vector{Symbol}, scenarios::Vector{Symbol})
+
+Extract group and scenario column names from a MarginsResult, identifying which columns in 
+`profile_values` represent groups vs scenarios based on metadata.
+
+Returns two vectors:
+- `groups`: Variable names that represent grouping (e.g., from `over` parameter)
+- `scenarios`: Variable names that represent scenarios (e.g., from `at` parameter)
+
+Only includes variables that are actually present in `mr.profile_values`.
+
+# Examples
+```julia
+result = population_margins(model, data; over=:region, at=Dict(:x => [0, 1]))
+groups, scenarios = context_columns(result)
+# groups = [:region], scenarios = [:x]
+
+result = profile_margins(model, data, means_grid(data))
+groups, scenarios = context_columns(result) 
+# groups = Symbol[], scenarios = Symbol[] (profile analysis has no contexts)
+```
+"""
+function context_columns(mr::MarginsResult)
+    # Get metadata variables
+    groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+    scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
+    
+    # Only include variables that are actually present in profile_values
+    if mr.profile_values === nothing
+        return Symbol[], Symbol[]
+    end
+    
+    profile_keys = Set(keys(mr.profile_values))
+    
+    # Filter to only include variables present in the actual result
+    groups = Symbol[var for var in groups_vars if var in profile_keys]
+    scenarios = Symbol[var for var in scenarios_vars if var in profile_keys]
+    
+    return groups, scenarios
+end
+
+"""
+    append_context_columns!(df::DataFrame, mr::MarginsResult; order=:front)
+
+Add context columns (groups and scenarios) to a DataFrame with consistent naming and placement.
+
+Implements the core naming convention:
+- **Population contexts** (`mr.metadata[:has_contexts] == true`):
+  - Group columns: unprefixed names (e.g., `region`)
+  - Scenario columns: `at_<var>` prefix (e.g., `at_x`)
+- **Profile analysis** (`mr.metadata[:analysis_type] == :profile`):
+  - All profile/grid columns: bare names (e.g., `x`, `z`) with no prefixes
+
+Dispatches on specific result types for type-safe behavior.
+
+# Arguments
+- `df::DataFrame`: DataFrame to modify in-place
+- `mr::MarginsResult`: Result containing context information (dispatches on EffectsResult/PredictionsResult)
+- `order=:front`: Place context columns at the front (`:front`) or back (`:back`)
+
+# Examples
+```julia
+# Population with contexts: groups unprefixed, scenarios prefixed
+result = population_margins(model, data; over=:region, at=Dict(:x => [0, 1]))
+df = DataFrame()
+append_context_columns!(df, result)
+# Adds columns: region, at_x (groups first, then scenarios)
+
+# Profile analysis: bare profile names
+result = profile_margins(model, data, means_grid(data))
+df = DataFrame()  
+append_context_columns!(df, result)
+# Adds columns: x, z (bare profile variable names)
+```
+"""
+function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol=:front)
+    if mr.profile_values === nothing
+        return df  # No context columns to add
+    end
+    
+    has_contexts = get(mr.metadata, :has_contexts, false)
+    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    
+    if has_contexts && analysis_type == :population
+        # Population contexts: distinguish groups from scenarios
+        groups, scenarios = context_columns(mr)
+        
+        # Add group columns first (unprefixed)
+        for group_var in groups
+            values = mr.profile_values[group_var]
+            col_name = group_var  # No prefix for groups
+            
+            if order == :front
+                DataFrames.insertcols!(df, 1, col_name => values)
+            else
+                df[!, col_name] = values
+            end
+        end
+        
+        # Add scenario columns next (with at_ prefix)
+        for scenario_var in scenarios
+            values = mr.profile_values[scenario_var]
+            col_name = Symbol("at_", scenario_var)  # at_ prefix for scenarios
+            
+            if order == :front
+                # Insert after existing columns (groups are already added)
+                insert_pos = length(groups) + 1
+                DataFrames.insertcols!(df, insert_pos, col_name => values)
+            else
+                df[!, col_name] = values
+            end
+        end
+        
+    elseif analysis_type == :profile
+        # Profile analysis: bare profile/grid column names (no prefixes)
+        for (var_name, values) in pairs(mr.profile_values)
+            col_name = var_name  # Bare variable name
+            
+            if order == :front
+                DataFrames.insertcols!(df, 1, col_name => values)
+            else
+                df[!, col_name] = values
+            end
+        end
+        
+    else
+        # Fallback: treat all as scenarios with at_ prefix
+        for (var_name, values) in pairs(mr.profile_values)
+            col_name = Symbol("at_", var_name)
+            
+            if order == :front
+                DataFrames.insertcols!(df, 1, col_name => values)
+            else
+                df[!, col_name] = values
+            end
+        end
+    end
+    
+    return df
+end
 
 function _show_stata_table(io::IO, mr::EffectsResult)
     # Calculate confidence intervals
@@ -650,16 +844,20 @@ function _standard_table(mr::EffectsResult)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
     
-    df = DataFrame(
-        type = fill(type_description, length(mr.estimates)),
-        variable = mr.variables,  # The "x" in dy/dx
-        contrast = mr.terms,      # Human-readable contrast/label
-        estimate = mr.estimates,
-        se = mr.standard_errors, 
-        t_stat = t_stats,
-        p_value = p_values
-    )
-    # Use new variable/contrast structure - no backward compatibility
+    # Build DataFrame with new column order: context columns first
+    df = DataFrame()
+    append_context_columns!(df, mr; order=:front)
+    
+    # Add type column
+    df[!, :type] = fill(type_description, length(mr.estimates))
+    
+    # Add statistical columns
+    df[!, :variable] = mr.variables  # The "x" in dy/dx
+    df[!, :contrast] = mr.terms      # Human-readable contrast/label
+    df[!, :estimate] = mr.estimates
+    df[!, :se] = mr.standard_errors
+    df[!, :t_stat] = t_stats
+    df[!, :p_value] = p_values
     
     # Add confidence intervals if alpha is specified in metadata
     if haskey(mr.metadata, :alpha)
@@ -679,7 +877,6 @@ function _standard_table(mr::EffectsResult)
         df[!, :n] = fill(n_obs, length(mr.estimates))
     end
     
-    _add_structural_columns!(df, mr)
     return df
 end
 
@@ -689,14 +886,19 @@ function _compact_table(mr::EffectsResult)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
     
-    df = DataFrame(
-        type = fill(type_description, length(mr.estimates)),
-        variable = mr.variables,  # The "x" in dy/dx
-        contrast = mr.terms,
-        estimate = mr.estimates,
-        se = mr.standard_errors
-    )
-    _add_structural_columns!(df, mr)
+    # Build DataFrame with new column order: context columns first
+    df = DataFrame()
+    append_context_columns!(df, mr; order=:front)
+    
+    # Add type column
+    df[!, :type] = fill(type_description, length(mr.estimates))
+    
+    # Add statistical columns
+    df[!, :variable] = mr.variables  # The "x" in dy/dx
+    df[!, :contrast] = mr.terms
+    df[!, :estimate] = mr.estimates
+    df[!, :se] = mr.standard_errors
+    
     return df
 end
 
@@ -709,15 +911,20 @@ function _confidence_table(mr::EffectsResult)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
     
-    df = DataFrame(
-        type = fill(type_description, length(mr.estimates)),
-        variable = mr.variables,  # The "x" in dy/dx
-        contrast = mr.terms,
-        estimate = mr.estimates,
-        lower = lower,
-        upper = upper
-    )
-    _add_structural_columns!(df, mr)
+    # Build DataFrame with new column order: context columns first
+    df = DataFrame()
+    append_context_columns!(df, mr; order=:front)
+    
+    # Add type column
+    df[!, :type] = fill(type_description, length(mr.estimates))
+    
+    # Add statistical columns
+    df[!, :variable] = mr.variables  # The "x" in dy/dx
+    df[!, :contrast] = mr.terms
+    df[!, :estimate] = mr.estimates
+    df[!, :lower] = lower
+    df[!, :upper] = upper
+    
     return df
 end
 
@@ -731,14 +938,9 @@ function _profile_table(mr::EffectsResult)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
     
+    # Build DataFrame with new column order: context columns first (using consistent helper)
     df = DataFrames.DataFrame()
-    
-    # Add profile columns first (primary organization) - just variable names
-    if mr.profile_values !== nothing
-        for (k, v) in pairs(mr.profile_values)
-            df[!, k] = v
-        end
-    end
+    append_context_columns!(df, mr; order=:front)
     
     # Add type column after profile columns but before result columns
     df[!, :type] = fill(type_description, length(mr.estimates))
@@ -755,13 +957,6 @@ function _profile_table(mr::EffectsResult)
     n_obs = get(mr.metadata, :n_obs, missing)
     df[!, :n] = fill(n_obs, length(mr.estimates))
     
-    # Add grouping columns if present
-    if mr.group_values !== nothing
-        for (k, v) in pairs(mr.group_values)
-            df[!, k] = v
-        end
-    end
-    
     return df
 end
 
@@ -774,16 +969,11 @@ function _predictions_table(mr::PredictionsResult)
     analysis_type = get(mr.metadata, :analysis_type, :population)
     type_description = _create_type_description(analysis_type, :prediction, :predictions)
     
+    # Build DataFrame with new column order: context columns first (using consistent helper)
     df = DataFrame()
+    append_context_columns!(df, mr; order=:front)
     
-    # Add profile columns first (for profile predictions) - with at_ prefix for consistency
-    if mr.profile_values !== nothing
-        for (k, v) in pairs(mr.profile_values)
-            df[!, Symbol("at_", k)] = v
-        end
-    end
-    
-    # Add type column after profile columns but before statistical columns
+    # Add type column after context columns but before statistical columns
     df[!, :type] = fill(type_description, length(mr.estimates))
     
     # Core statistical columns (no variable/contrast)
@@ -810,13 +1000,6 @@ function _predictions_table(mr::PredictionsResult)
         df[!, :n] = fill(n_obs, length(mr.estimates))
     end
     
-    # Add grouping columns if present (for population predictions with contexts)
-    if mr.group_values !== nothing
-        for (k, v) in pairs(mr.group_values)
-            df[!, k] = v
-        end
-    end
-    
     return df
 end
 
@@ -832,33 +1015,23 @@ function _stata_table(mr::EffectsResult)
     # Get sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)
     
-    df = DataFrame(
-        type = fill(type_description, length(mr.estimates)),
-        margin = mr.estimates,      # Stata uses "margin" not "estimate"
-        std_err = mr.standard_errors, # "std_err" not "se" 
-        t = t_stats,
-        P_t = p_values,            # "P>|t|" equivalent
-        N = fill(n_obs, length(mr.estimates))  # Add sample size (Stata uses uppercase N)
-    )
-    _add_structural_columns!(df, mr)
+    # Build DataFrame with new column order: context columns first (using consistent helper)
+    df = DataFrame()
+    append_context_columns!(df, mr; order=:front)
+    
+    # Add type column
+    df[!, :type] = fill(type_description, length(mr.estimates))
+    
+    # Add Stata-style statistical columns
+    df[!, :margin] = mr.estimates      # Stata uses "margin" not "estimate"
+    df[!, :std_err] = mr.standard_errors # "std_err" not "se" 
+    df[!, :t] = t_stats
+    df[!, :P_t] = p_values            # "P>|t|" equivalent
+    df[!, :N] = fill(n_obs, length(mr.estimates))  # Add sample size (Stata uses uppercase N)
+    
     return df
 end
 
-function _add_structural_columns!(df, mr::MarginsResult)
-    # Add profile columns (at_x1, at_x2, etc.) - only for non-profile formats
-    if mr.profile_values !== nothing
-        for (k, v) in pairs(mr.profile_values)
-            df[!, Symbol("at_", k)] = v
-        end
-    end
-    
-    # Add grouping columns from over/by parameters
-    if mr.group_values !== nothing
-        for (k, v) in pairs(mr.group_values)
-            df[!, k] = v
-        end
-    end
-end
 
 # Custom error types for clear user feedback
 struct MarginsError <: Exception

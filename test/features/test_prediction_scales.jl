@@ -146,9 +146,9 @@ end
     # Standard errors should generally be different due to transformation
     @test abs(DataFrame(pred_link).se[1] - DataFrame(pred_response).se[1]) > 1e-6
     
-    # Test basic result structure
-    @test all(x -> x in names(DataFrame(pred_link)), ["variable", "estimate", "se"])
-    @test all(x -> x in names(DataFrame(pred_response)), ["variable", "estimate", "se"])
+    # Test basic result structure (predictions don't have variable columns, but do have type)
+    @test all(x -> x in names(DataFrame(pred_link)), ["type", "estimate", "se"])
+    @test all(x -> x in names(DataFrame(pred_response)), ["type", "estimate", "se"])
 end
 
 @testset "Profile Prediction Grids with Scales" begin
@@ -170,7 +170,7 @@ end
     @test nrow(DataFrame(prof_link)) == 6
     @test nrow(DataFrame(prof_response)) == 6
     
-    # Check that profile columns are present
+    # Check that profile columns are present (bare names for profile analysis)
     @test "x1" in names(DataFrame(prof_link))
     @test "x2" in names(DataFrame(prof_link))
     @test "x1" in names(DataFrame(prof_response))

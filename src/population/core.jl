@@ -159,7 +159,7 @@ function population_margins(
     
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if !isnothing(scenarios) || !isnothing(groups)
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend)
+        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure)
     end
     
     if type === :effects

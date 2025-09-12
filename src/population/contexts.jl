@@ -1,7 +1,7 @@
 # population/contexts.jl - Handle at/over parameters for population contexts (Stata-compatible)
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, ci_alpha, measure)
 
 Handle population margins with scenarios/groups contexts (unified API).
 
@@ -9,9 +9,11 @@ This function implements the complex logic for counterfactual scenarios (scenari
 subgroup analysis (groups) in population margins computation.
 
 # Arguments
-- `weights`: Observation weights vector (Vector{Float64} or nothing)
+- `weights`: Observation weights vector (Vector{Float64} or nothing)  
+- `ci_alpha`: Type I error rate for confidence intervals
+- `measure`: Effect measure (:effect, :elasticity, etc.)
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend)
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, ci_alpha, measure)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     
@@ -90,8 +92,11 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     G = isempty(gradients_list) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(gradients_list...)
     
     # Build metadata
-    metadata = _build_metadata(; type, vars, scale, backend, n_obs=length(first(data_nt)), 
+    metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
                               model_type=typeof(engine.model), has_contexts=true)
+    
+    # Store confidence interval parameters in metadata
+    metadata[:alpha] = ci_alpha
     
     # Store scenarios and groups variable information for Context column
     scenarios_vars = scenarios === nothing ? Symbol[] : (scenarios isa Dict ? collect(keys(scenarios)) : Symbol[])

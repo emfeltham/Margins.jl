@@ -123,6 +123,93 @@ population_margins(
 ```
 - `profile_margins` remains reference-grid based and does not accept `scenarios`.
 
+## DataFrame Output: Column Naming and Ordering Rules
+
+`population_margins` with contexts follows consistent naming and ordering conventions in DataFrame output:
+
+### Column Naming Conventions
+
+**Population Contexts (scenarios/groups):**
+- **Group variables**: Appear with their original names (no prefix)
+  - Example: `education`, `region`, `treatment`  
+- **Scenario variables**: Appear with `at_` prefix
+  - Example: `at_x`, `at_z`, `at_income`
+
+**Profile Analysis** (via `profile_margins`):
+- **Reference grid variables**: Appear with bare names (no prefix)
+  - Example: `x`, `z`, `education` (for both continuous and categorical grid variables)
+
+### Column Ordering Rules
+
+DataFrame columns follow this consistent order across all analysis types:
+
+1. **Context columns first** (groups, then scenarios)
+2. **Type column** (`type` - describes the analysis)  
+3. **Statistical columns** (`variable`, `contrast`, `estimate`, `se`, `t_stat`, `p_value`, optional CI columns, `n`)
+
+### Examples
+
+```julia
+# Groups only: education appears unprefixed, comes first
+res = population_margins(m, data; type=:effects, vars=[:income], groups=:education)
+df = DataFrame(res)
+names(df)  # ["education", "type", "variable", "contrast", "estimate", "se", ...]
+
+# Scenarios only: at_x appears prefixed, comes first  
+res = population_margins(m, data; type=:effects, vars=[:income], scenarios=Dict(:x => [0, 1]))
+df = DataFrame(res) 
+names(df)  # ["at_x", "type", "variable", "contrast", "estimate", "se", ...]
+
+# Both groups and scenarios: groups first (unprefixed), then scenarios (prefixed)
+res = population_margins(m, data; type=:effects, vars=[:income], 
+                        groups=:education, scenarios=Dict(:x => [0, 1]))
+df = DataFrame(res)
+names(df)  # ["education", "at_x", "type", "variable", "contrast", "estimate", ...]
+
+# Profile analysis: bare column names, no prefixes
+res = profile_margins(m, data, cartesian_grid(x=[0, 1], education=:all); type=:effects)
+df = DataFrame(res)  
+names(df)  # ["x", "education", "type", "variable", "contrast", "estimate", ...]
+```
+
+### Programmatic Identification
+
+Users can programmatically distinguish groups from scenarios using result metadata:
+
+```julia
+# Extract context information
+groups, scenarios = Margins.context_columns(result)
+
+# groups contains [:education] (group variables)
+# scenarios contains [:x] (scenario variables)  
+
+# Verify in DataFrame
+df = DataFrame(result)
+@assert :education in propertynames(df)    # Group (unprefixed)
+@assert :at_x in propertynames(df)         # Scenario (prefixed)
+```
+
+This design ensures:
+- **Semantic clarity**: Groups and scenarios have distinct roles and naming
+- **Predictable ordering**: Context variables always appear first
+- **Consistent user experience**: Column names and ordering are predictable across analysis types
+
+### Implementation Details
+
+**Column Naming Rules:**
+- Group columns appear with their original variable names (e.g., `education`, `region`)
+- Scenario columns appear with `at_` prefix (e.g., `at_x`, `at_income`) 
+- Profile analysis uses bare column names for reference grid variables
+
+**Column Ordering:**
+- Context columns (groups first, then scenarios) always appear before statistical columns
+- This ensures predictable DataFrame structure for programmatic analysis
+
+**Programmatic Access:**
+- Use `Margins.context_columns(result)` to distinguish groups from scenarios
+- Result metadata contains `:groups_vars` and `:scenarios_vars` for inspection
+- DataFrame column names directly reflect the semantic meaning of each variable type
+
 ## Open Parameters
 
 - FD step size `h` for continuous effects is currently a small fixed scalar; could be exposed or auto-tuned.

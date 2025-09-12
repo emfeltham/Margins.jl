@@ -40,6 +40,7 @@ include("statistical_validation/robust_se_validation.jl")
     include("core/test_glm_basic.jl")
     include("core/test_profiles.jl")
     include("core/test_grouping.jl")
+    include("core/test_column_naming.jl")
     include("core/test_contrasts.jl")
     include("core/test_vcov.jl")
     include("core/test_errors.jl")
@@ -72,6 +73,7 @@ end
     include("validation/test_manual_counterfactual_validation.jl") 
     include("validation/test_zero_allocation_comprehensive.jl")
     include("validation/test_true_zero_allocation.jl")
+    include("validation/test_ci_and_n_logic.jl")
 end
 
 end # else (full suite)

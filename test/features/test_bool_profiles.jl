@@ -52,7 +52,7 @@ using Margins
         @test nrow(DataFrame(result)) == 2
         @test all(isfinite, DataFrame(result).estimate)
         
-        # Check that Real columns got mean values, Bool got specified values
+        # Check that Real columns got mean values, Bool got specified values (profile format uses direct names)
         @test "x" in names(DataFrame(result))
         @test "z" in names(DataFrame(result)) 
         @test "treated" in names(DataFrame(result))
@@ -73,7 +73,7 @@ using Margins
         @test all(0.0 .<= DataFrame(result).estimate .<= 1.0)  # Response scale bounded [0,1]
         @test all(isfinite, DataFrame(result).estimate)
         
-        # Check all profile columns present
+        # Check all profile columns present (bare names for profile analysis)
         @test "x" in names(DataFrame(result))
         @test "z" in names(DataFrame(result))
         @test "treated" in names(DataFrame(result)) 
@@ -89,7 +89,7 @@ using Margins
         # Check that all variables are present in the result
         result_df = DataFrame(result)
         
-        # Should have columns for all variables in the model
+        # Should have columns for all variables in the model (bare names for profile analysis)
         expected_cols = ["x", "z", "treated", "urban"]
         @test all(col -> col in names(result_df), expected_cols)
         
