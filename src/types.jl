@@ -315,7 +315,7 @@ Only includes variables that are actually present in `mr.profile_values`.
 
 # Examples
 ```julia
-result = population_margins(model, data; over=:region, at=Dict(:x => [0, 1]))
+result = population_margins(model, data; groups=:region, scenarios=Dict(:x => [0, 1]))
 groups, scenarios = context_columns(result)
 # groups = [:region], scenarios = [:x]
 
@@ -365,7 +365,7 @@ Dispatches on specific result types for type-safe behavior.
 # Examples
 ```julia
 # Population with contexts: groups unprefixed, scenarios prefixed
-result = population_margins(model, data; over=:region, at=Dict(:x => [0, 1]))
+result = population_margins(model, data; groups=:region, scenarios=Dict(:x => [0, 1]))
 df = DataFrame()
 append_context_columns!(df, result)
 # Adds columns: region, at_x (groups first, then scenarios)
