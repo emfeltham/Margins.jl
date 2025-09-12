@@ -148,7 +148,7 @@ The package provides comprehensive compatibility with models following the Stats
 
 ### Data Integration Framework
 
-Data handling utilizes the Tables.jl interface to ensure compatibility with diverse data sources including DataFrames, CSV files, and database result sets. The `MarginsResult` type implements the Tables.jl protocol to enable seamless conversion to DataFrame format for downstream analysis and reporting. This design provides maximum flexibility in data pipeline integration while maintaining type stability and computational efficiency.
+Data handling utilizes the Tables.jl interface to ensure compatibility with diverse data sources including DataFrames, CSV files, and database result sets. The specialized result types (`EffectsResult` and `PredictionsResult`) implement the Tables.jl protocol to enable seamless conversion to DataFrame format for downstream analysis and reporting. This design provides maximum flexibility in data pipeline integration while maintaining type stability and computational efficiency.
 
 ### Robust Standard Errors
 ```julia

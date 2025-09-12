@@ -18,7 +18,7 @@ Margins.jl provides comprehensive elasticity support through the `measure` param
 population_margins(model, data; type=:effects, measure=:elasticity)
 
 # Elasticities at sample means
-profile_margins(model, data; at=:means, type=:effects, measure=:elasticity)
+profile_margins(model, data, means_grid(data); type=:effects, measure=:elasticity)
 ```
 
 #### Semi-Elasticity with respect to X  
@@ -31,7 +31,7 @@ profile_margins(model, data; at=:means, type=:effects, measure=:elasticity)
 population_margins(model, data; measure=:semielasticity_dyex)
 
 # Semi-elasticities at specific scenarios
-profile_margins(model, data; at=Dict(:x1 => [0,1,2]), measure=:semielasticity_dyex)
+profile_margins(model, data, cartesian_grid(x1=[0,1,2]); measure=:semielasticity_dyex)
 ```
 
 #### Semi-Elasticity with respect to Y
@@ -76,8 +76,8 @@ edu_elasticity = population_margins(model, df;
 println("Population average education elasticity: ", DataFrame(edu_elasticity))
 
 # Education elasticity at different experience levels (profile analysis)  
-exp_scenarios = profile_margins(model, df;
-                               at=Dict(:experience => [0, 10, 20, 30]),
+exp_scenarios = profile_margins(model, df,
+                               cartesian_grid(experience=[0, 10, 20, 30]);
                                vars=[:education],
                                measure=:elasticity)
 println("Education elasticity by experience level:")
@@ -102,7 +102,7 @@ logit_model = glm(@formula(employed ~ education + experience), df, Binomial(), L
 pop_elastic = population_margins(logit_model, df; vars=[:education], measure=:elasticity)
 
 # Employment elasticity at sample means
-prof_elastic = profile_margins(logit_model, df; at=:means, vars=[:education], measure=:elasticity)
+prof_elastic = profile_margins(logit_model, df, means_grid(df); vars=[:education], measure=:elasticity)
 
 # These will differ because logistic function is nonlinear
 println("Population elasticity: ", DataFrame(pop_elastic).estimate[1])
@@ -214,8 +214,8 @@ robust_elasticities = population_margins(robust_model, data;
 
 # Profile elasticities with clustered SEs  
 clustered_model = glm(formula, data, family, vcov=Clustered(:cluster_var))
-profile_elasticities = profile_margins(clustered_model, data;
-                                      at=:means,
+profile_elasticities = profile_margins(clustered_model, data,
+                                      means_grid(data);
                                       measure=:elasticity)
 ```
 
@@ -231,11 +231,11 @@ Traditional marginal effects often use arbitrary categorical values (e.g., "set 
 using CategoricalArrays, Margins
 
 # Instead of: "All treated" (unrealistic)
-unrealistic = profile_margins(model, data; at=Dict(:treatment => 1))
+unrealistic = profile_margins(model, data, cartesian_grid(treatment=[1]); type=:predictions)
 
 # Use: Realistic treatment rate  
-realistic = profile_margins(model, data; 
-                           at=Dict(:treatment => mix(0 => 0.3, 1 => 0.7)))  # 70% treatment rate
+realistic = profile_margins(model, data, 
+                           DataFrame(treatment=[mix(0 => 0.3, 1 => 0.7)]))  # 70% treatment rate
 ```
 
 ### Frequency-Weighted Categorical Defaults
@@ -247,7 +247,7 @@ When categorical variables are unspecified in profiles, Margins.jl uses **actual
 #                   region = 60% Urban, 40% Rural
 
 # Effects "at means" uses realistic composition
-result = profile_margins(model, data; at=:means, type=:effects)
+result = profile_margins(model, data, means_grid(data); type=:effects)
 # → Continuous vars: sample means
 # → education: mix("HS" => 0.40, "College" => 0.45, "Graduate" => 0.15)  
 # → region: mix("Urban" => 0.60, "Rural" => 0.40)
@@ -258,13 +258,13 @@ result = profile_margins(model, data; at=:means, type=:effects)
 #### Demographic Transition Scenarios
 ```julia
 # Current population composition
-current_scenario = profile_margins(model, data;
-    at=Dict(:education => mix("HS" => 0.40, "College" => 0.45, "Graduate" => 0.15)),
+current_scenario = profile_margins(model, data,
+    DataFrame(education=[mix("HS" => 0.40, "College" => 0.45, "Graduate" => 0.15)]);
     type=:predictions)
 
 # Future scenario: increased college graduation
-future_scenario = profile_margins(model, data;
-    at=Dict(:education => mix("HS" => 0.25, "College" => 0.60, "Graduate" => 0.15)),
+future_scenario = profile_margins(model, data,
+    DataFrame(education=[mix("HS" => 0.25, "College" => 0.60, "Graduate" => 0.15)]);
     type=:predictions)
 
 # Policy impact
@@ -274,14 +274,14 @@ impact = DataFrame(future_scenario).estimate[1] - DataFrame(current_scenario).es
 #### Treatment Effect Heterogeneity
 ```julia
 # Treatment effects across population compositions
-treatment_scenarios = [
-    Dict(:treatment => 0, :education => mix("HS" => 0.5, "College" => 0.5)),
-    Dict(:treatment => 1, :education => mix("HS" => 0.5, "College" => 0.5)),
-    Dict(:treatment => 0, :education => mix("HS" => 0.2, "College" => 0.8)),  
-    Dict(:treatment => 1, :education => mix("HS" => 0.2, "College" => 0.8))
-]
+treatment_scenarios = DataFrame([
+    (treatment=0, education=mix("HS" => 0.5, "College" => 0.5)),
+    (treatment=1, education=mix("HS" => 0.5, "College" => 0.5)),
+    (treatment=0, education=mix("HS" => 0.2, "College" => 0.8)),  
+    (treatment=1, education=mix("HS" => 0.2, "College" => 0.8))
+])
 
-results = profile_margins(model, data; at=treatment_scenarios, type=:predictions)
+results = profile_margins(model, data, treatment_scenarios; type=:predictions)
 treatment_effects_df = DataFrame(results)
 ```
 

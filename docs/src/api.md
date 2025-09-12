@@ -45,20 +45,50 @@ Profile analysis provides representative case inference suitable for policy targ
 
 ## Result Type Specifications
 
-### `MarginsResult`
+### Type-Safe Result System (v2.0)
 
-Structured container for marginal effects analysis results implementing the Tables.jl interface protocol.
+Margins.jl implements a specialized type system that provides type safety and optimized DataFrame formatting through distinct result containers for different analysis types.
 
-The result type encapsulates computed marginal effects or adjusted predictions along with associated statistical inference quantities including standard errors, confidence intervals, and hypothesis test statistics. The implementation adheres to the Tables.jl protocol to ensure seamless integration with the broader data analysis ecosystem while maintaining type stability and computational efficiency.
+### `EffectsResult`
+
+Structured container for marginal effects analysis (AME, MEM, MER) implementing the Tables.jl interface protocol.
+
+The `EffectsResult` type encapsulates computed marginal effects along with associated statistical inference quantities including standard errors, confidence intervals, and hypothesis test statistics. The type contains variable identification fields (`variables`, `terms`) essential for effects interpretation and supports multiple DataFrame formatting options.
+
+**Key Features:**
+- Contains `variables` field (the "x" in dy/dx identification)  
+- Contains `terms` field (contrast descriptions like "derivative", "treated vs control")
+- Multiple DataFrame formats: `:standard`, `:compact`, `:confidence`, `:profile`, `:stata`
+- Auto-detects appropriate format based on analysis type
+
+### `PredictionsResult`
+
+Streamlined container for predictions analysis (AAP, APM, APR) implementing the Tables.jl interface protocol.
+
+The `PredictionsResult` type focuses specifically on predicted values without variable/contrast concepts, providing a clean interface optimized for predictions analysis. The streamlined design reflects that predictions represent "fitted values at scenarios" rather than "effects of variables."
+
+**Key Features:**
+- Omits variable/contrast fields (not applicable to predictions)
+- Single optimized DataFrame format for predictions display  
+- Clean tabular output focused on prediction values and statistics
 
 **Data Integration Framework:**
 ```julia
-# Tables.jl protocol implementation enables direct conversion
-result = population_margins(model, data)
-df = DataFrame(result)
+# Type-specific result containers with Tables.jl protocol
+effects_result = population_margins(model, data; type=:effects)  # Returns EffectsResult
+predictions_result = population_margins(model, data; type=:predictions)  # Returns PredictionsResult
 
-# Compatible with all Tables.jl-compliant output formats
-CSV.write("results.csv", result)
+# Type-specific DataFrame conversion
+effects_df = DataFrame(effects_result)  # Includes variable/contrast columns
+predictions_df = DataFrame(predictions_result)  # Streamlined predictions format
+
+# Multiple format options for effects
+DataFrame(effects_result; format=:compact)  # Minimal columns
+DataFrame(effects_result; format=:stata)    # Stata-style column names
+
+# Compatible with all Tables.jl-compliant output formats  
+CSV.write("effects.csv", effects_result)
+CSV.write("predictions.csv", predictions_result)
 ```
 
 ## Extended Analytical Capabilities

@@ -10,9 +10,9 @@
 |---------------|----------------------|-------|
 | `margins` | `population_margins(model, data; type=:predictions)` | Average adjusted predictions |
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` | Average marginal effects (AME) |
-| `margins, at(means)` | `profile_margins(model, data; at=:means, type=:predictions)` | Predictions at sample means |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data; at=:means, type=:effects)` | Marginal effects at means (MEM) |
-| `margins, dydx(*) atmeans` | `profile_margins(model, data; at=:means, type=:effects)` | Alternative MEM syntax |
+| `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` | Predictions at sample means |
+| `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type=:effects)` | Marginal effects at means (MEM) |
+| `margins, dydx(*) atmeans` | `profile_margins(model, data, means_grid(data); type=:effects)` | Alternative MEM syntax |
 
 ### Variable Selection
 
@@ -47,9 +47,9 @@
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins, at(x=0)` | `profile_margins(model, data; at=Dict(:x => 0))` | Single scenario |
-| `margins, at(x=(0 1 2))` | `profile_margins(model, data; at=Dict(:x => [0, 1, 2]))` | Multiple values |
-| `margins, at(x=0 y=1)` | `profile_margins(model, data; at=Dict(:x => 0, :y => 1))` | Multiple variables |
+| `margins, at(x=0)` | `profile_margins(model, data, cartesian_grid(x=[0]); type=:predictions)` | Single scenario |
+| `margins, at(x=(0 1 2))` | `profile_margins(model, data, cartesian_grid(x=[0, 1, 2]); type=:predictions)` | Multiple values |
+| `margins, at(x=0 y=1)` | `profile_margins(model, data, cartesian_grid(x=[0], y=[1]); type=:predictions)` | Multiple variables |
 
 ### Population-Level Counterfactuals
 
@@ -67,8 +67,8 @@
 # → Effects at two evaluation points
 
 # Margins.jl Profile Equivalent
-profile_results = profile_margins(model, data; 
-    at=Dict(:treatment => [0, 1]),
+profile_results = profile_margins(model, data, 
+    cartesian_grid(treatment=[0, 1]);
     type=:effects)
 
 # Margins.jl Population Alternative (often more relevant)  
@@ -86,10 +86,10 @@ Recommended translations:
 ```julia
 # 1) Stata: margins, dydx(x) over(x)
 # → Profile-style alternative: evaluate derivatives at specific x values
-mem_like = profile_margins(model, data;
+mem_like = profile_margins(model, data,
+    cartesian_grid(x=[-2.0, 0.0, 2.0]);
     type=:effects,
-    vars=[:x],
-    at=Dict(:x => [-2.0, 0.0, 2.0]))
+    vars=[:x])
 
 # 2) Population stratification by x without contradiction:
 #    Create a derived bin variable and group by it, not by :x directly
@@ -347,8 +347,8 @@ result = population_margins(model, data;
 # Pattern 2: Effects by groups → groups parameter  
 # margins education, dydx(*) → population_margins(model, data; type=:effects, groups=:education)
 
-# Pattern 3: Multiple at() values → scenarios or profile at
-# margins, at(x=(0 1 2)) → profile_margins(model, data; at=Dict(:x => [0, 1, 2]))
+# Pattern 3: Multiple at() values → scenarios or profile grids
+# margins, at(x=(0 1 2)) → profile_margins(model, data, cartesian_grid(x=[0, 1, 2]))
 # OR population_margins(model, data; scenarios=Dict(:x => [0, 1, 2]))  # for counterfactuals
 
 # Pattern 4: Complex manual analysis → comprehensive single call
