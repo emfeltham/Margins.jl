@@ -18,10 +18,7 @@ model = lm(@formula(y ~ x1 + x2 + x3), data)
 ame_result = population_margins(model, data; type=:effects)
 
 # Population average marginal predictions (AAP)
-ame_result = population_margins(model, data; type=:predictions)
-
-# Population average marginal predictions (AAP)
-ame_result = population_margins(model, data; scenarios=nothing, type=:predictions)
+aap_result = population_margins(model, data; type=:predictions)
 
 # Marginal effects at sample means (MEM)
 mem_result = profile_margins(
@@ -35,6 +32,8 @@ apm_result = profile_margins(
 
 # Convert to DataFrame for analysis
 DataFrame(ame_result)
+
+DataFrame(aap_result)
 
 DataFrame(mem_result)
 
