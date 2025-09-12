@@ -87,6 +87,12 @@ result = profile_margins(model, data, means_grid(data); type=:predictions)
 # Balanced factorial designs
 result = profile_margins(model, data, balanced_grid(data; education=:all, region=:all); type=:effects)
 
+# Baseline contrasts for categorical variables (default)
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:education], contrasts=:baseline)
+
+# Pairwise contrasts for categorical variables
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:education], contrasts=:pairwise)
+
 # Multiple explicit profiles for complex analysis
 reference_grid = DataFrame(
     x1=[0.0, 1.0], 
@@ -329,6 +335,12 @@ result = profile_margins(model, data, quantile_grid(data; age=[0.25, 0.5, 0.75])
 # Direct reference grid specification (maximum control)
 reference_grid = DataFrame(age=[25, 35, 45], education=[12, 16, 20], region=["North", "South", "North"])
 result = profile_margins(model, data, reference_grid; type=:effects, vars=[:income])
+
+# Baseline contrasts for categorical variables (default behavior)
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:education], contrasts=:baseline)
+
+# Pairwise contrasts for categorical variables
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:education], contrasts=:pairwise)
 
 # Complex scenarios with categorical mixtures
 using Margins: mix

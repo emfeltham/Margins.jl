@@ -1754,6 +1754,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 - `scale`: Target scale (:response or :link)
 - `backend`: Computational backend (:ad or :fd) 
 - `measure`: Effect measure (:effect, :elasticity, etc.)
+- `contrasts`: Contrast type for categorical variables (:baseline or :pairwise, default :baseline)
 
 # Returns
 - `DataFrame`: Results with estimates, standard errors, etc.
@@ -1776,7 +1777,24 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
     categorical_requested = [v for v in requested_vars if v ∉ continuous_vars]
     
     # Calculate total number of terms (for gradient matrix sizing)
-    total_terms = n_profiles * length(requested_vars)
+    # Account for pairwise contrasts which generate multiple results per categorical variable
+    total_terms = 0
+    for var in requested_vars
+        if var ∈ categorical_requested && contrasts === :pairwise
+            col = getproperty(engine.data_nt, var)
+            n_levels = if col isa CategoricalArray
+                length(CategoricalArrays.levels(col))
+            elseif eltype(col) <: Bool
+                2
+            else
+                length(unique(col))
+            end
+            n_pairs = (n_levels * (n_levels - 1)) ÷ 2  # n-choose-2
+            total_terms += n_profiles * n_pairs
+        else
+            total_terms += n_profiles  # 1 result per profile (baseline contrasts or continuous)
+        end
+    end
     
     # PRE-ALLOCATE results DataFrame to avoid dynamic growth
     results = DataFrame(
@@ -1876,47 +1894,86 @@ function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, refer
                 end
                 
             else
-                # Categorical variable: use existing contrast functions
+                # Categorical variable: handle baseline vs pairwise contrasts
                 # Extract profile as Dict for compatibility 
                 profile_dict = Dict(Symbol(k) => reference_grid[profile_idx, k] for k in names(reference_grid))
                 
-                # Use existing functions - same as the old per-profile system
-                marginal_effect = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile_dict, var, scale, backend)
-                _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile_dict, var, scale)
-                
-                # Apply measure transformations if needed 
-                final_effect = marginal_effect
-                
-                # Compute standard error
-                se = compute_se_only(engine.gβ_accumulator, engine.Σ)
-                
-                # Build descriptive term name showing the specific contrast
-                current_level = profile_dict[var]
-                baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
-                profile_parts = [string(k, "=", v) for (k, v) in pairs(profile_dict) if k != var]
-                profile_desc = join(profile_parts, ", ")
-                term_name = "$(current_level) vs $(baseline_level)"
-                
-                # Store results with profile info (convert mixtures to display values)
-                profile_dict = Dict{Symbol,Any}()
-                for k in names(reference_grid)
-                    val = reference_grid[profile_idx, k]
-                    if val isa CategoricalMixture
-                        # Store mixture as a descriptive string
-                        profile_dict[Symbol(k)] = string(val)
-                    else
-                        profile_dict[Symbol(k)] = val
+                if contrasts === :baseline
+                    # EXISTING: Single baseline contrast
+                    marginal_effect = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile_dict, var, scale, backend)
+                    _row_specific_contrast_grad_beta!(engine.gβ_accumulator, engine, refgrid_de, profile_dict, var, scale)
+                    
+                    # Apply measure transformations if needed 
+                    final_effect = marginal_effect
+                    
+                    # Compute standard error
+                    se = compute_se_only(engine.gβ_accumulator, engine.Σ)
+                    
+                    # Build descriptive term name showing the specific contrast
+                    current_level = profile_dict[var]
+                    baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
+                    term_name = "$(current_level) vs $(baseline_level)"
+                    
+                    # Store results with profile info (convert mixtures to display values)
+                    profile_display_dict = Dict{Symbol,Any}()
+                    for k in names(reference_grid)
+                        val = reference_grid[profile_idx, k]
+                        if val isa CategoricalMixture
+                            # Store mixture as a descriptive string
+                            profile_display_dict[Symbol(k)] = string(val)
+                        else
+                            profile_display_dict[Symbol(k)] = val
+                        end
                     end
+                    profile_nt = NamedTuple(profile_display_dict)
+                    push!(results.variable, string(var))  # The "x" in dy/dx
+                    push!(results.contrast, term_name)
+                    push!(results.estimate, final_effect)
+                    push!(results.se, se)
+                    push!(results.profile_desc, profile_nt)
+                    G[row_idx, :] = engine.gβ_accumulator
+                    
+                    row_idx += 1
+                    
+                elseif contrasts === :pairwise
+                    # NEW: Multiple pairwise contrasts for this profile
+                    contrast_results = _compute_profile_pairwise_contrasts(engine, profile_dict, var, scale, backend)
+                    
+                    for (level1, level2, effect, gradient) in contrast_results
+                        # Apply measure transformations if needed
+                        final_effect = effect
+                        
+                        # Compute standard error
+                        se = sqrt(dot(gradient, engine.Σ, gradient))
+                        
+                        # Build descriptive term name
+                        term_name = "$level1 vs $level2"
+                        
+                        # Store results with profile info (convert mixtures to display values)
+                        profile_display_dict = Dict{Symbol,Any}()
+                        for k in names(reference_grid)
+                            val = reference_grid[profile_idx, k]
+                            if val isa CategoricalMixture
+                                profile_display_dict[Symbol(k)] = string(val)
+                            else
+                                profile_display_dict[Symbol(k)] = val
+                            end
+                        end
+                        profile_nt = NamedTuple(profile_display_dict)
+                        
+                        # Multiple result rows for this profile
+                        push!(results.variable, string(var))
+                        push!(results.contrast, term_name)
+                        push!(results.estimate, final_effect)
+                        push!(results.se, se)
+                        push!(results.profile_desc, profile_nt)
+                        G[row_idx, :] = gradient
+                        
+                        row_idx += 1
+                    end
+                else
+                    throw(ArgumentError("Unsupported contrasts type: $contrasts. Use :baseline or :pairwise"))
                 end
-                profile_nt = NamedTuple(profile_dict)
-                push!(results.variable, string(var))  # The "x" in dy/dx
-                push!(results.contrast, term_name)
-                push!(results.estimate, final_effect)
-                push!(results.se, se)
-                push!(results.profile_desc, profile_nt)
-                G[row_idx, :] = engine.gβ_accumulator
-                
-                row_idx += 1
             end
         end
     end

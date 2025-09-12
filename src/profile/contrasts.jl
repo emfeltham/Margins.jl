@@ -225,3 +225,46 @@ function validate_contrast_specification(engine::MarginsEngine{L}, var::Symbol) 
     
     return true
 end
+
+"""
+    _compute_profile_pairwise_contrasts(engine, profile_dict, var, scale, backend) -> Vector{Tuple}
+
+Compute all pairwise contrasts for a categorical variable at a specific profile.
+
+Returns vector of (level1, level2, effect, gradient) tuples for all unique pairs.
+"""
+function _compute_profile_pairwise_contrasts(engine::MarginsEngine{L}, profile_dict::Dict, var::Symbol, scale::Symbol, backend::Symbol) where L
+    # Get all levels for this categorical variable
+    col = getproperty(engine.data_nt, var)
+    levels = if col isa CategoricalArray
+        CategoricalArrays.levels(col)
+    elseif eltype(col) <: Bool
+        [false, true]  # Standard Bool levels
+    else
+        unique(col)
+    end
+    
+    # Generate all pairwise combinations (no baseline reference needed)
+    contrast_pairs = [(level1, level2) for (i, level1) in enumerate(levels), (j, level2) in enumerate(levels) if i < j]
+    
+    results = []
+    for (level1, level2) in contrast_pairs
+        # Create profiles for both levels
+        profile1 = copy(profile_dict)
+        profile2 = copy(profile_dict)
+        profile1[var] = level1
+        profile2[var] = level2
+        
+        # Compute predictions at both profiles
+        pred1, grad1 = _profile_prediction_with_gradient(engine, profile1, scale, backend)
+        pred2, grad2 = _profile_prediction_with_gradient(engine, profile2, scale, backend)
+        
+        # Contrast effect and gradient
+        effect = pred1 - pred2
+        gradient = grad1 .- grad2
+        
+        push!(results, (level1, level2, effect, gradient))
+    end
+    
+    return results
+end

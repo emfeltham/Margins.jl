@@ -31,17 +31,29 @@ The population evaluation context encompasses approaches that compute marginal q
 
 ### Marginal Effects and Adjusted Predictions
 
+**Conceptual Foundation**: Marginal effects quantify the expected change in an outcome variable resulting from a unit change in an explanatory variable, holding all other variables constant. This fundamental concept addresses the analytical question "How does the dependent variable respond to marginal changes in specific covariates?" The formal mathematical representation ∂E[Y|X]/∂X captures the instantaneous rate of change in the conditional expectation, providing a rigorous framework for quantifying covariate effects.
+
 Marginal effects analysis concerns the derivative of the conditional expectation function with respect to the covariates of interest. For continuous covariates, this quantity is formally defined as ∂E[Y|X]/∂X, representing the instantaneous rate of change in the expected outcome with respect to marginal changes in the explanatory variable. The interpretation centers on the magnitude of response in the dependent variable per unit increase in the independent variable, with measurement units corresponding to the dependent variable scaled by the units of the explanatory variable.
 
 Adjusted predictions represent the conditional expectation E[Y|X] evaluated at specified covariate configurations. This quantity provides the expected value of the outcome variable conditional on particular covariate realizations, maintaining the same units as the dependent variable. The analytical focus shifts from rates of change to levels of the outcome under specific conditioning scenarios.
 
 ### Evaluation Context Specifications
 
+**Analytical Perspective**: The choice between profile and population approaches reflects two different ways to approach marginal effects analysis. Profile analysis examines effects for representative individuals or scenarios (analogous to asking "What happens for a typical 35-year-old college graduate?"), while population analysis characterizes average effects across the entire sample distribution (analogous to asking "What happens on average across all individuals in our dataset?"). This distinction determines both the interpretive scope and the computational approach of the marginal effects analysis.
+
 Profile approaches evaluate marginal quantities at predetermined points in the covariate space, most commonly at sample means X̄ or at theoretically motivated scenario specifications. This approach yields concrete, interpretable estimates for specific covariate combinations, facilitating clear communication of results and policy implications for particular demographic or economic profiles. The limitation lies in the potential lack of representativeness relative to the broader population distribution.
 
 Population approaches compute marginal quantities averaged across the empirical distribution of observed covariates, weighting each observation according to its sample frequency. This methodology yields population-averaged parameters that reflect the heterogeneity present in the data generating process, providing estimates that characterize the broader population represented by the sample. The limitation concerns the potential difficulty in interpreting results that may not correspond to any particular individual or realistic scenario within the population.
 
 ## Methodological Inconsistencies Across Disciplines
+
+**Why This Matters for Users**:
+Different fields use related but slightly different terminology:
+- **Economics**: "Average Marginal Effects" (AME) - mean of individual-level derivatives
+- **Biostatistics**: "Average Partial Effects" (APE) - often equivalent to AME, with some nuance for discrete variables
+- **Machine Learning**: "Partial Dependence" - conceptually similar, typically in visualization contexts
+
+While these concepts overlap substantially, each field may have specific conventions for handling categorical variables or estimation approaches. This package provides a unified framework that works consistently across disciplines.
 
 The absence of standardized terminological conventions across quantitative disciplines has generated substantial methodological confusion that impedes both theoretical development and practical implementation. This inconsistency manifests through the use of discipline-specific acronyms and conceptual frameworks that obscure the underlying mathematical equivalence of analytical approaches.
 
@@ -56,6 +68,13 @@ The proliferation of terminological variants generates several significant barri
 These inconsistencies hamper reproducibility across research contexts, create unnecessary learning barriers for practitioners attempting to apply methods across disciplines, and impede productive interdisciplinary collaboration through the introduction of artificial communication barriers.
 
 ## Statistical vs Causal Interpretation
+
+**Statistical vs Causal Interpretation**:
+The same marginal effects computation supports both descriptive and causal analysis:
+- **Descriptive**: "In our sample, education is associated with higher wages" 
+- **Causal**: "Education causes higher wages" (requires identifying assumptions)
+
+The package provides statistically valid estimates; interpretation depends on research design and identifying assumptions.
 
 The 2×2 framework applies equally to both descriptive and causal analysis. The mathematical operations are identical, but the interpretation differs:
 

@@ -82,6 +82,13 @@ intervention = profile_margins(model, data;
 
 ### Common Parameters
 
+**Quick Start Examples**:
+- `type=:effects` → "How much does the outcome change?" (most common)  
+- `type=:predictions` → "What outcome value should I expect?"
+- `measure=:elasticity` → "What's the percentage effect?" (useful for proportional changes)
+- `backend=:ad` → Use default (most accurate, zero allocation)
+- `backend=:fd` → Alternative backend (legacy compatibility)
+
 All main functions support these core parameters:
 
 #### Analysis Type (`type`)

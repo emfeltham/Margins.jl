@@ -1,5 +1,12 @@
 # Reference Grid Methodology and Implementation
 
+**Reference Grids** 
+A reference grid is simply a table that says "compute effects for people with these specific characteristics." For example:
+- Age: 30, Education: College → "What's the effect for 30-year-old college graduates?"
+- Age: 40, Education: High School → "What's the effect for 40-year-old high school graduates?"
+
+The package provides helper functions to create these tables automatically.
+
 Reference grid specification constitutes the methodological foundation for covariate scenario definition in profile-based marginal effects analysis. The implementation provides a systematic framework for scenario specification through structured builder functions and direct tabular specification interfaces.
 
 ## Methodological Foundation

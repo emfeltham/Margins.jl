@@ -36,6 +36,11 @@ DataFrame(mem_result)
 
 ## Methodological Framework
 
+**Marginal Effects Framework Overview** 
+This package addresses two core questions in marginal effects analysis:
+1. **Effects**: "How much does Y change when I change X?" (like: "How much do wages increase per year of education?")
+2. **Predictions**: "What value of Y should I expect for specific values of X?" (like: "What wage should I expect for someone with 16 years of education?")
+
 The methodological foundation of Margins.jl rests upon a two-dimensional analytical framework that systematically addresses the fundamental questions arising in marginal effects analysis. This framework distinguishes between the evaluation context and the analytical target, thereby providing a comprehensive approach to econometric inference.
 
 ### Evaluation Context
