@@ -22,7 +22,9 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:predictions` - Average Adjusted Predictions (AAP): population-averaged fitted values
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
-  - Defaults to all explanatory variables (both continuous and categorical)
+  - Defaults to all explanatory variables from the model formula (not all data columns)
+  - Only variables that appear in both the model specification and data are considered
+  - Extra columns in data that aren't in the model are automatically ignored
 - `scale::Symbol=:response`: Target scale for computation
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
@@ -205,20 +207,28 @@ end
 
 
 """
-    _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing) -> Vector{Symbol}
-
-Extract ALL explanatory variables that can have marginal effects computed (both continuous and categorical),
-filtering out the dependent variable and weight columns.
-
-# Arguments  
-- `weight_col`: Weight column name to exclude (Symbol or nothing)
-"""
-
-"""
     _get_model_formula_variables(model) -> Set{Symbol}
 
-Extract explanatory variables from model formula, excluding the dependent variable.
-Only returns variables that are actually in the model specification.
+Extract explanatory variables from the model formula's right-hand side (RHS), excluding the dependent variable.
+
+This function examines the model's formula specification and returns only variables that are 
+actually used in the model, not all variables present in the data. This ensures that marginal
+effects are computed only for variables that influence the model predictions.
+
+# Arguments
+- `model`: Fitted statistical model with a `.mf.f.rhs` formula component
+
+# Returns
+- `Set{Symbol}`: Set of variable names (symbols) from the model formula RHS
+
+# Examples
+```julia
+# For model: y ~ x1 + x2 + region
+variables = _get_model_formula_variables(model)  # -> Set([:x1, :x2, :region])
+```
+
+This filtering is critical for preventing errors when data contains extra columns
+(e.g., ID variables, alternative specifications) that aren't part of the fitted model.
 """
 function _get_model_formula_variables(model)
     # Extract all terms from the model formula RHS 
@@ -226,6 +236,41 @@ function _get_model_formula_variables(model)
     return Set{Symbol}(formula_terms)
 end
 
+"""
+    _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing) -> Vector{Symbol}
+
+Extract all explanatory variables from the model that can have marginal effects computed,
+including both continuous and categorical variables.
+
+This function performs three levels of filtering:
+1. **Model filtering**: Only considers variables present in the model formula (not all data columns)
+2. **Type filtering**: Only includes variables with computable effects (numeric, Bool, CategoricalArray)
+3. **Weight filtering**: Excludes weight columns to prevent conflicts
+
+# Arguments
+- `model`: Fitted statistical model with formula specification
+- `data_nt::NamedTuple`: Data in NamedTuple format (from Tables.columntable)
+- `weight_col=nothing`: Weight column name to exclude (Symbol or nothing)
+
+# Returns
+- `Vector{Symbol}`: Variable names that can have marginal effects computed
+
+# Variable Type Classification
+- **Continuous variables**: `Int64`, `Float64` (but not `Bool`) → get derivatives
+- **Categorical variables**: `Bool`, `CategoricalArray` → get discrete contrasts  
+- **Excluded types**: `String`, `Date`, other non-numeric types
+
+# Examples
+```julia
+# Model: y ~ x1 + x2 + education + treated
+# Data also contains: id, date_collected, alternative_outcome
+effect_vars = _get_all_effect_variables(model, data_nt, :sampling_weight)
+# -> [:x1, :x2, :education, :treated]  (only model variables, no id/date/weight)
+```
+
+This filtering ensures statistical validity by computing effects only for variables
+that actually influence the model predictions and have appropriate data types.
+"""
 function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing)
     # Get variables that are actually in the model formula
     model_vars = _get_model_formula_variables(model)
@@ -255,12 +300,34 @@ function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothin
 end
 
 """
-    _get_continuous_variables(model, data_nt, weight_col=nothing) -> Vector{Symbol}
+    _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothing) -> Vector{Symbol}
 
-Extract continuous explanatory variables from data, filtering out categorical types, the dependent variable, and weight columns.
+Extract continuous explanatory variables from the model that can have derivatives computed.
+
+This function applies the same model filtering as `_get_all_effect_variables` but restricts
+to continuous variables only, excluding categorical types (Bool, CategoricalArray).
 
 # Arguments
-- `weight_col`: Weight column name to exclude (Symbol or nothing)
+- `model`: Fitted statistical model with formula specification  
+- `data_nt::NamedTuple`: Data in NamedTuple format (from Tables.columntable)
+- `weight_col=nothing`: Weight column name to exclude (Symbol or nothing)
+
+# Returns
+- `Vector{Symbol}`: Continuous variable names that can have derivatives computed
+
+# Variable Type Classification
+- **Included**: `Int64`, `Float64` (excluding `Bool`) → get derivatives via finite differences or AD
+- **Excluded**: `Bool`, `CategoricalArray`, `String`, `Date`, etc. → not continuous
+
+# Examples
+```julia
+# Model: y ~ x1 + x2 + education + treated  (x1,x2 continuous; education,treated categorical)
+continuous_vars = _get_continuous_variables(model, data_nt)
+# -> [:x1, :x2]  (only continuous model variables)
+```
+
+This is used for backward compatibility with `vars=:all_continuous` and when users
+specifically want derivatives only (no discrete contrasts for categorical variables).
 """
 function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothing)
     # Get variables that are actually in the model formula
@@ -395,12 +462,50 @@ function _validate_groups_parameter(groups)
 end
 
 """
-    _process_vars_parameter(model, vars, data_nt, weight_col) -> Vector{Symbol}
+    _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing) -> Vector{Symbol}
 
-Process and validate the vars parameter with model awareness to exclude dependent variable and weight columns.
+Process and validate the `vars` parameter for effects analysis, applying model-aware filtering.
 
-# Arguments  
-- `weight_col`: Weight column name to exclude (Symbol or nothing)
+This function handles all possible `vars` specifications and ensures only valid model variables
+are returned for effects computation. It serves as the central validation point for variable
+selection in both `population_margins` and `profile_margins`.
+
+# Arguments
+- `model`: Fitted statistical model with formula specification
+- `vars`: User-specified variables (Symbol, Vector{Symbol}, :all_continuous, or nothing)
+- `data_nt::NamedTuple`: Data in NamedTuple format (from Tables.columntable)  
+- `weight_col=nothing`: Weight column name to exclude (Symbol or nothing)
+
+# Returns
+- `Vector{Symbol}`: Validated variable names for effects analysis
+
+# Input Processing Rules
+- `vars=nothing` → Auto-detect all model variables (continuous + categorical)
+- `vars=:all_continuous` → Auto-detect continuous model variables only  
+- `vars=:symbol` → Validate single variable exists in model and data
+- `vars=[:x1, :x2]` → Validate all variables exist in model and data
+
+# Validation Checks
+1. **Model membership**: Variables must appear in model formula
+2. **Data availability**: Variables must exist in provided data
+3. **Weight conflicts**: Variables cannot conflict with weight column
+4. **Non-empty results**: At least one valid variable must be found
+
+# Examples
+```julia
+# Auto-detection (most common)
+vars = _process_vars_parameter(model, nothing, data_nt)  # -> all model variables
+
+# Explicit specification  
+vars = _process_vars_parameter(model, [:x1, :x2], data_nt)  # -> [:x1, :x2] (if valid)
+
+# Backward compatibility
+vars = _process_vars_parameter(model, :all_continuous, data_nt)  # -> continuous only
+```
+
+# Errors Thrown
+- `MarginsError`: When no valid variables found for effects analysis
+- `ArgumentError`: When vars format is invalid or variables conflict with weights
 """
 function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
     if vars === nothing

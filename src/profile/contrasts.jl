@@ -62,11 +62,6 @@ function compute_profile_categorical_contrast(
     baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
     current_level = profile[var]
     
-    # If current level is already baseline, contrast is zero
-    if current_level == baseline_level
-        return (0.0, zeros(length(engine.β)))
-    end
-    
     # Create profiles for current and baseline levels
     current_profile = profile
     baseline_profile = copy(profile)
@@ -170,28 +165,18 @@ function _profile_prediction_with_gradient(
     scale::Symbol, 
     backend::Symbol
 ) where L
-    # Build minimal reference data for this profile
-    profile_data = _build_refgrid_data(profile, engine.data_nt)
-    profile_compiled = FormulaCompiler.compile_formula(engine.model, profile_data)
-    
-    # Compute prediction using FormulaCompiler's pattern
-    profile_compiled(engine.gβ_accumulator, profile_data, 1)  # Use existing buffer
-    η = dot(engine.β, engine.gβ_accumulator)
-    
-    if scale === :response
-        # Transform to response scale and compute gradient via chain rule  
-        μ = GLM.linkinv(engine.link, η)
-        link_deriv = GLM.mueta(engine.link, η)  # dμ/dη
-        # Avoid broadcast allocation: manual scalar multiplication
-        gradient = similar(engine.gβ_accumulator)
-        for j in 1:length(engine.gβ_accumulator)
-            gradient[j] = link_deriv * engine.gβ_accumulator[j]
-        end
-        return (μ, gradient)
-    else # scale === :link
-        # Linear predictor scale
-        return (η, copy(engine.gβ_accumulator))
+    # Use scenario-based evaluation against the precompiled engine to preserve types/levels
+    overrides = Dict{Symbol,Any}()
+    for (k, v) in pairs(profile)
+        overrides[k] = _normalize_override_value(v)
     end
+    scenario = FormulaCompiler.create_scenario("profile", engine.data_nt, overrides)
+    row = 1  # scenario fixes covariates; any row yields the same prediction
+
+    # Prediction and gradient at this scenario (no recompilation)
+    pred = _predict_with_scenario(engine.compiled, scenario, row, scale, engine.β, engine.link, engine.row_buf)
+    _gradient_with_scenario!(engine.gβ_accumulator, engine.compiled, scenario, row, scale, engine.β, engine.link, engine.row_buf)
+    return (pred, copy(engine.gβ_accumulator))
 end
 
 """

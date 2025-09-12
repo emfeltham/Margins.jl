@@ -673,7 +673,7 @@ function _compute_continuous_ame_with_scenario(
         overrides = Dict{Symbol, Any}()
         if scenario_spec !== nothing
             for (k, v) in pairs(scenario_spec)
-                overrides[k] = v
+                overrides[k] = _normalize_override_value(v)
             end
         end
         scenario = FormulaCompiler.create_scenario("ctx_effect_ad", engine.data_nt, overrides)
@@ -919,7 +919,7 @@ function _compute_population_prediction_in_context(engine::MarginsEngine{L}, con
     overrides = Dict{Symbol, Any}()
     if scenario_spec !== nothing
         for (k, v) in pairs(scenario_spec)
-            overrides[k] = v
+            overrides[k] = _normalize_override_value(v)
         end
     end
     scenario = FormulaCompiler.create_scenario("context_prediction", engine.data_nt, overrides)

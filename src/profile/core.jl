@@ -28,7 +28,9 @@ or adjusted predictions at specific profiles (APM/APR).
   - `:predictions` - Adjusted Predictions at profiles (APM/APR): fitted values at specific points
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
   - Only required when `type=:effects`
-  - Defaults to all explanatory variables (both continuous and categorical)
+  - Defaults to all explanatory variables from the model formula (not all data columns)
+  - Only variables that appear in both the model specification and data are considered
+  - Extra columns in data that aren't in the model are automatically ignored
 - `scale::Symbol=:response`: Target scale for computation
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
@@ -196,7 +198,7 @@ end
 Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64)
+function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64, contrasts::Symbol)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -226,7 +228,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     if type === :effects
         # Use complete reference grid for efficient single-compilation approach
         # CategoricalMixture objects are handled natively by FormulaCompiler
-        df, G = _mem_continuous_and_categorical_refgrid(engine, completed_reference_grid, scale, backend, measure)  # → MEM/MER
+        df, G = _mem_continuous_and_categorical_refgrid(engine, completed_reference_grid, scale, backend, measure, contrasts)  # → MEM/MER
         
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -299,7 +301,9 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   - `:effects` - Marginal Effects at profiles: derivatives/contrasts at specific points
   - `:predictions` - Adjusted Predictions at profiles: fitted values at specific points
 - `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
-  - Defaults to all explanatory variables (both continuous and categorical)
+  - Defaults to all explanatory variables from the model formula (not all data columns)
+  - Only variables that appear in both the model specification and data are considered
+  - Extra columns in data that aren't in the model are automatically ignored
 - `scale::Symbol=:response`: Target scale (:response or :link)
 - `backend::Symbol=:ad`: Computational backend (:ad or :fd)
 - `measure::Symbol=:effect`: Effect measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
@@ -336,6 +340,7 @@ function profile_margins(
     model, data, reference_grid::DataFrame;
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, measure::Symbol=:effect,
+    contrasts::Symbol=:baseline,
     ci_alpha::Float64=0.05, vcov=GLM.vcov,
 )
     # Convert data to NamedTuple for consistency
@@ -399,7 +404,7 @@ function profile_margins(
     end
     
     # Route to single implementation with reference grid directly
-    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid, ci_alpha)
+    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid, ci_alpha, contrasts)
 end
 
 

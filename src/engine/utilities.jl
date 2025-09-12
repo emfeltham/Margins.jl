@@ -3,6 +3,18 @@
 using Tables  # Required for the architectural rework
 
 """
+    _normalize_override_value(v)
+
+Normalize user/profile override values before constructing scenarios.
+
+- Converts `CategoricalValue` to its level `String` to avoid pool/levels mismatches
+  when the value originates from a different CategoricalArray than the target column.
+- Leaves all other types unchanged (including `CategoricalMixture`).
+"""
+_normalize_override_value(v) = v
+_normalize_override_value(v::CategoricalValue) = String(v)
+
+"""
     _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
 
 Extended version of FormulaCompiler._get_baseline_level with Boolean variable support.
@@ -1589,7 +1601,7 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
             overrides = Dict{Symbol,Any}()
             if scenario_overrides !== nothing
                 for (k, v) in pairs(scenario_overrides)
-                    overrides[k] = v
+                    overrides[k] = _normalize_override_value(v)
                 end
             end
             overrides[var] = level1
@@ -1600,7 +1612,7 @@ function _compute_categorical_contrasts(engine::MarginsEngine{L}, var::Symbol, r
             overrides = Dict{Symbol,Any}()
             if scenario_overrides !== nothing
                 for (k, v) in pairs(scenario_overrides)
-                    overrides[k] = v
+                    overrides[k] = _normalize_override_value(v)
                 end
             end
             overrides[var] = level2
@@ -1752,7 +1764,7 @@ Replaces the problematic per-profile compilation with a single compilation appro
 - Consistent mixture routing across all profiles
 - Memory efficient with single compiled object
 """
-function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid, scale::Symbol, backend::Symbol, measure::Symbol) where L
+function _mem_continuous_and_categorical_refgrid(engine::MarginsEngine{L}, reference_grid, scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol=:baseline) where L
     n_profiles = nrow(reference_grid)
     
     # Auto-detect variable types ONCE (not per profile)
