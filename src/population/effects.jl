@@ -40,10 +40,8 @@ function _population_predictions(
     # Delta-method SE (G is 1×p, Σ is p×p)
     se = sqrt((G * engine.Σ * G')[1, 1])
     
-    # Create results DataFrame
+    # Create results DataFrame (no variable/contrast for predictions)
     df = DataFrame(
-        variable = ["AAP"],  # AAP for predictions (Average Adjusted Prediction)
-        contrast = ["Average Adjusted Prediction"],
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],

@@ -49,56 +49,88 @@ get_profile_digits() = PROFILE_DIGITS[]
 """
     MarginsResult
 
-Container for marginal effects results with flexible table formatting.
+Abstract type for marginal effects and predictions results.
+
+See `EffectsResult` and `PredictionsResult` for concrete implementations.
+"""
+abstract type MarginsResult end
+
+"""
+    EffectsResult <: MarginsResult
+
+Container for marginal effects results (AME, MEM, MER).
+
+Effects represent "dy/dx for variable X" so they include variable/contrast information.
 
 Fields:
 - `estimates::Vector{Float64}`: Point estimates
 - `standard_errors::Vector{Float64}`: Standard errors
-- `terms::Vector{Symbol}`: Variable names (clean, no suffixes)
-- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values for profile margins
+- `variables::Vector{String}`: The "x" in dy/dx - which variable each row represents
+- `terms::Vector{String}`: Contrast descriptions (e.g., "continuous", "treated vs control")
+- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile effects MEM/MER)
 - `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
 - `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
 
 # Examples
 ```julia
-result = population_margins(model, data; type=:effects, vars=[:x1, :x2])
-DataFrame(result)                     # Auto-detect format (:standard for population)
-DataFrame(result; format=:compact)    # Just estimates and SEs
-DataFrame(result; format=:confidence) # Confidence intervals only
+result = population_margins(model, data; type=:effects, vars=[:x1, :x2])  # AME
+result = profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1])  # MEM
 
-# Confidence intervals with ci_alpha parameter
-result = population_margins(model, data; type=:effects, vars=[:x1, :x2], ci_alpha=0.05)
-DataFrame(result)                     # Includes ci_lower and ci_upper columns
-
-result.estimates      # Access raw estimates
-result.gradients      # Access parameter gradients
-result.metadata       # Access analysis metadata (includes :alpha when ci_alpha specified)
+DataFrame(result)  # Includes variable/contrast columns
 ```
 """
-struct MarginsResult
-    # Core statistical results
+struct EffectsResult <: MarginsResult
     estimates::Vector{Float64}
-    standard_errors::Vector{Float64}  
-    variables::Vector{String}  # The "x" in dy/dx - which variable each row represents
-    terms::Vector{String}  # Clean variable names (converted to strings for display)
-    
-    # Structural information
-    profile_values::Union{Nothing, NamedTuple}  # Reference grid (profile margins only)
-    group_values::Union{Nothing, NamedTuple}    # Grouping columns
-    
-    # Statistical metadata  
+    standard_errors::Vector{Float64}
+    variables::Vector{String}  # The "x" in dy/dx
+    terms::Vector{String}      # Contrast descriptions
+    profile_values::Union{Nothing, NamedTuple}  # For profile effects (MEM/MER)
+    group_values::Union{Nothing, NamedTuple}
+    gradients::Matrix{Float64}
+    metadata::Dict{Symbol, Any}
+end
+
+"""
+    PredictionsResult <: MarginsResult
+
+Container for predictions results (AAP, APM, APR).
+
+Predictions represent "fitted value at scenario" so they don't need variable/contrast information.
+
+Fields:
+- `estimates::Vector{Float64}`: Point estimates (predicted values)
+- `standard_errors::Vector{Float64}`: Standard errors
+- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile predictions APM/APR)
+- `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
+- `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
+- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
+
+# Examples
+```julia
+result = population_margins(model, data; type=:predictions)  # AAP
+result = profile_margins(model, data, means_grid(data); type=:predictions)  # APM
+
+DataFrame(result)  # No variable/contrast columns, just statistical results
+```
+"""
+struct PredictionsResult <: MarginsResult
+    estimates::Vector{Float64}
+    standard_errors::Vector{Float64}
+    profile_values::Union{Nothing, NamedTuple}  # For profile predictions (APM/APR)
+    group_values::Union{Nothing, NamedTuple}
     gradients::Matrix{Float64}
     metadata::Dict{Symbol, Any}
 end
 
 import DataFrames: DataFrame # explicit import to extend method
 
-# Analysis-type aware format dispatch with validation
-function DataFrame(mr::MarginsResult; format::Symbol=:auto)
+# Type-specific DataFrame dispatch for effects
+function DataFrame(mr::EffectsResult; format::Symbol=:auto)
     # Auto-detect natural format based on analysis type
     if format == :auto
         analysis_type = get(mr.metadata, :analysis_type, :unknown)
+        # For effects, use profile format for profile analysis, standard otherwise
         format = analysis_type == :profile ? :profile : :standard
     end
     
@@ -118,21 +150,36 @@ function DataFrame(mr::MarginsResult; format::Symbol=:auto)
     elseif format == :stata
         return _stata_table(mr)
     else
-        error("Unknown format: $format")
+        error("Unknown format: $format. EffectsResult supports: :standard, :compact, :confidence, :profile, :stata")
+    end
+end
+
+# Type-specific DataFrame dispatch for predictions
+function DataFrame(mr::PredictionsResult; format::Symbol=:auto)
+    # Auto-detect natural format - always use predictions format
+    if format == :auto
+        format = :predictions
+    end
+    
+    # Predictions only support the predictions format
+    if format == :predictions
+        return _predictions_table(mr)
+    else
+        error("Unknown format: $format. PredictionsResult only supports: :predictions (or :auto)")
     end
 end
 
 # Tables.jl interface implementation - uses auto format
-Tables.istable(::Type{MarginsResult}) = true
-Tables.rowaccess(::Type{MarginsResult}) = true
+Tables.istable(::Type{<:MarginsResult}) = true
+Tables.rowaccess(::Type{<:MarginsResult}) = true
 Tables.rows(mr::MarginsResult) = Tables.rows(DataFrame(mr))
 Tables.schema(mr::MarginsResult) = Tables.schema(DataFrame(mr))
 
 # DataFrame conversion compatibility
 Base.convert(::Type{DataFrame}, mr::MarginsResult) = DataFrame(mr)
 
-# Stata-style display methods
-function Base.show(io::IO, mr::MarginsResult)
+# Stata-style display methods for effects
+function Base.show(io::IO, mr::EffectsResult)
     n_results = length(mr.estimates)
     analysis_type = get(mr.metadata, :analysis_type, :unknown)
     
@@ -142,23 +189,49 @@ function Base.show(io::IO, mr::MarginsResult)
     
     if analysis_type == :profile
         n_profiles = get(mr.metadata, :n_profiles, 1)
-        println(io, "MarginsResult: $n_results results at $n_profiles profiles$n_text")
+        println(io, "EffectsResult: $n_results effects at $n_profiles profiles$n_text")
     else
-        println(io, "MarginsResult: $n_results population results$n_text")  
+        println(io, "EffectsResult: $n_results population effects$n_text")  
     end
     
     # Stata-style table with horizontal lines
     _show_stata_table(io, mr)
 end
 
-function Base.show(io::IO, ::MIME"text/plain", mr::MarginsResult)
+# Stata-style display methods for predictions
+function Base.show(io::IO, mr::PredictionsResult)
+    n_results = length(mr.estimates)
+    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    
+    # Header
+    n_obs = get(mr.metadata, :n_obs, missing)
+    n_text = ismissing(n_obs) ? "" : " (N=$n_obs)"
+    
+    if analysis_type == :profile
+        n_profiles = get(mr.metadata, :n_profiles, 1)
+        println(io, "PredictionsResult: $n_results predictions at $n_profiles profiles$n_text")
+    else
+        println(io, "PredictionsResult: $n_results population predictions$n_text")  
+    end
+    
+    # Stata-style table with horizontal lines
+    _show_stata_table(io, mr)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", mr::EffectsResult)
     show(io, mr)
     # unpleasant to show this every time?
     # println(io, "\nUse DataFrame(result; format=...) for different table formats")
 end
 
-# Helper function to generate clean display labels for show method
-function _generate_clean_display_labels(mr::MarginsResult)
+function Base.show(io::IO, ::MIME"text/plain", mr::PredictionsResult)
+    show(io, mr)
+    # unpleasant to show this every time?
+    # println(io, "\nUse DataFrame(result; format=...) for different table formats")
+end
+
+# Helper function to generate clean display labels for effects show method
+function _generate_clean_display_labels(mr::EffectsResult)
     # Combine variable name with contrast for clear identification
     display_labels = Vector{String}(undef, length(mr.estimates))
     
@@ -173,7 +246,10 @@ function _generate_clean_display_labels(mr::MarginsResult)
     return display_labels
 end
 
-function _show_stata_table(io::IO, mr::MarginsResult)
+# Predictions don't need display labels since they don't have variable/contrast concepts
+_generate_clean_display_labels(mr::PredictionsResult) = String[]
+
+function _show_stata_table(io::IO, mr::EffectsResult)
     # Calculate confidence intervals
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
@@ -181,53 +257,23 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     # Check if this is profile margins (has profile_values)
     has_profile = mr.profile_values !== nothing
     
-    # Check if this is predictions (don't need Variable and Contrast columns)
-    type = get(mr.metadata, :type, :effects)
-    is_predictions = type === :predictions
-    
-    # Column widths for alignment (skip Variable/Contrast for predictions)
-    var_width = if is_predictions
-        0  # Skip Variable column for predictions
-    else
-        try
-            max(8, maximum(length.(mr.variables)) + 1)
-        catch e
-            @warn "Display issue with variable names, using default width" exception=e
-            12  # Safe default width
-        end
+    # Column widths for alignment (effects always have Variable/Contrast columns)
+    var_width = try
+        max(8, maximum(length.(mr.variables)) + 1)
+    catch e
+        @warn "Display issue with variable names, using default width" exception=e
+        12  # Safe default width
     end
     
-    contrast_width = if is_predictions
-        0  # Skip Contrast column for predictions
-    else
-        try
-            max(10, maximum(length.(mr.terms)) + 1)
-        catch e
-            @warn "Display issue with contrast terms, using default width" exception=e
-            15  # Safe default width
-        end
+    contrast_width = try
+        max(10, maximum(length.(mr.terms)) + 1)
+    catch e
+        @warn "Display issue with contrast terms, using default width" exception=e
+        15  # Safe default width
     end
     
-    # Context column (for population margins with scenarios/groups)
-    context_width = 0
-    context_text = ""
+    # Context information is already conveyed by at_* column headers, so no separate Context column needed
     has_contexts = get(mr.metadata, :has_contexts, false) && get(mr.metadata, :analysis_type, :unknown) == :population
-    if has_contexts && !is_predictions  # Only for effects, not predictions
-        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
-        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
-        
-        if !isempty(scenarios_vars) && !isempty(groups_vars)
-            # Both scenarios and groups
-            context_text = "Scenario→Group: $(join(scenarios_vars, ','))→$(join(groups_vars, ','))"
-        elseif !isempty(scenarios_vars)
-            # Scenarios only
-            context_text = "Scenario: $(join(scenarios_vars, ','))"
-        elseif !isempty(groups_vars)
-            # Groups only  
-            context_text = "Group: $(join(groups_vars, ','))"
-        end
-        context_width = max(12, length(context_text) + 1)
-    end
     
     # Profile columns (for profile margins or population margins with contexts)
     profile_widths = Int[]  # Specify Int type to avoid sum() type issues
@@ -262,49 +308,31 @@ function _show_stata_table(io::IO, mr::MarginsResult)
                 6  # fallback width
             end
             header_width = length(display_name)
-            col_width = max(7, header_width + 1)  # Ensure header fits
+            col_width = max(7, max(header_width, max_val_width) + 1)  # Ensure both header and values fit
             push!(profile_widths, col_width)
         end
     end
     
     num_width = 12
     
-    # Calculate total width (account for skipped columns in predictions and Context column)
-    var_contrast_width = if is_predictions 
-        0  # Skip both Variable and Contrast columns
-    else
-        var_width + contrast_width + 1  # +1 for space between columns
-    end
-    context_width_with_space = has_contexts && !is_predictions ? context_width + 1 : 0
-    total_width = var_contrast_width + context_width_with_space + sum(profile_widths) + 4*num_width + length(profile_widths) + 4
+    # Calculate total width (effects always have Variable and Contrast columns, no Context column)
+    var_contrast_width = var_width + contrast_width + 1  # +1 for space between columns
+    total_width = var_contrast_width + sum(profile_widths) + 4*num_width + length(profile_widths) + 4
     println(io, "─"^total_width)
     
-    # Column headers - dynamic based on type and measure
+    # Column headers - dynamic based on measure (effects)
     measure = get(mr.metadata, :measure, :effect)
     
-    # For predictions, always use "Prediction" regardless of measure
-    if is_predictions
-        header_text = "Prediction"
-    else
-        # For effects, use measure-specific headers
-        header_text = measure === :effect ? "dy/dx" :
-                      measure === :elasticity ? "eyex" :
-                      measure === :semielasticity_dyex ? "dyex" :
-                      measure === :semielasticity_eydx ? "eydx" : "dy/dx"
-    end
+    # For effects, use measure-specific headers
+    header_text = measure === :effect ? "dy/dx" :
+                  measure === :elasticity ? "eyex" :
+                  measure === :semielasticity_dyex ? "dyex" :
+                  measure === :semielasticity_eydx ? "eydx" : "dy/dx"
     
-    # Print headers (skip Variable/Contrast for predictions)
-    if !is_predictions
-        print(io, rpad("Variable", var_width))
-        print(io, " ")
-        print(io, rpad("Contrast", contrast_width))
-        
-        # Context column header
-        if has_contexts
-            print(io, " ")
-            print(io, rpad("Context", context_width))
-        end
-    end
+    # Print headers (effects always have Variable/Contrast)
+    print(io, rpad("Variable", var_width))
+    print(io, " ")
+    print(io, rpad("Contrast", contrast_width))
     
     # Profile column headers
     if has_profile
@@ -325,30 +353,22 @@ function _show_stata_table(io::IO, mr::MarginsResult)
     
     # Data rows
     for i in 1:length(mr.estimates)
-        # Print Variable and Contrast columns only for effects (not predictions)
-        if !is_predictions
-            var_name = try
-                mr.variables[i]
-            catch e
-                "undefined_var_$i"
-            end
-            
-            contrast = try
-                mr.terms[i]
-            catch e
-                "undefined_contrast_$i"
-            end
-            
-            print(io, rpad(var_name, var_width))
-            print(io, " ")
-            print(io, rpad(contrast, contrast_width))
-            
-            # Context column data
-            if has_contexts
-                print(io, " ")
-                print(io, rpad(context_text, context_width))
-            end
+        # Print Variable and Contrast columns (effects always have these)
+        var_name = try
+            mr.variables[i]
+        catch e
+            "undefined_var_$i"
         end
+        
+        contrast = try
+            mr.terms[i]
+        catch e
+            "undefined_contrast_$i"
+        end
+        
+        print(io, rpad(var_name, var_width))
+        print(io, " ")
+        print(io, rpad(contrast, contrast_width))
         
         # Profile values
         if has_profile
@@ -367,6 +387,98 @@ function _show_stata_table(io::IO, mr::MarginsResult)
                     "N/A"
                 end
                 print(io, rpad(profile_val, width))
+            end
+        end
+        
+        print(io, lpad(format_number(mr.estimates[i]), num_width))
+        print(io, lpad(format_number(mr.standard_errors[i]), num_width))
+        print(io, lpad(format_number(lower[i]), num_width))
+        print(io, lpad(format_number(upper[i]), num_width))
+        println(io)
+    end
+    
+    # Bottom line
+    println(io, "─"^total_width)
+end
+
+function _show_stata_table(io::IO, mr::PredictionsResult)
+    # Calculate confidence intervals
+    alpha = get(mr.metadata, :alpha, 0.05)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    
+    # Check if this is profile margins (has profile_values)
+    has_profile = mr.profile_values !== nothing
+    
+    # Profile columns (for profile margins or population margins with contexts)
+    profile_widths = Int[]
+    profile_names = String[]
+    profile_raw_names = Symbol[]
+    if has_profile
+        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
+        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+        
+        for (name, values) in pairs(mr.profile_values)
+            push!(profile_raw_names, name)
+            
+            # For predictions, use clean column names (no at_ prefix)
+            display_name = string(name)
+            push!(profile_names, display_name)
+            
+            # Calculate width needed for this profile column
+            max_val_width = try
+                maximum(length.(string.(values)))
+            catch e
+                6  # fallback width
+            end
+            header_width = length(display_name)
+            col_width = max(7, max(header_width, max_val_width) + 1)
+            push!(profile_widths, col_width)
+        end
+    end
+    
+    num_width = 12
+    
+    # Calculate total width (no Variable/Contrast columns for predictions)
+    total_width = sum(profile_widths) + 4*num_width + length(profile_widths) + 4
+    println(io, "─"^total_width)
+    
+    # Column headers - always "Prediction" for predictions
+    header_text = "Prediction"
+    
+    # Profile column headers
+    if has_profile
+        for (name, width) in zip(profile_names, profile_widths)
+            print(io, rpad(name, width))
+            print(io, " ")
+        end
+    end
+    
+    print(io, lpad(header_text, num_width))
+    print(io, lpad("Std. Err.", num_width))
+    print(io, lpad("[$(Int(100*(1-alpha)))% Conf.", num_width))
+    print(io, lpad("Interval]", num_width))
+    println(io)
+    
+    # Separator line  
+    println(io, "─"^total_width)
+    
+    # Data rows
+    for i in 1:length(mr.estimates)
+        # Profile values
+        if has_profile
+            for (display_name, raw_name, width) in zip(profile_names, profile_raw_names, profile_widths)
+                profile_val = try
+                    val = mr.profile_values[raw_name][i]
+                    if val isa Number
+                        format_number(Float64(val); profile_column=true)
+                    else
+                        string(val)
+                    end
+                catch e
+                    "N/A"
+                end
+                print(io, rpad(profile_val, width))
+                print(io, " ")
             end
         end
         
@@ -487,13 +599,59 @@ function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_er
     return lower, upper
 end
 
+# Helper function to create self-describing type column
+function _create_type_description(analysis_type::Symbol, measure::Symbol, result_category::Symbol)
+    # Create concise but descriptive type labels
+    if result_category == :effects
+        if analysis_type == :population
+            # Population effects (AME)
+            if measure == :effect
+                return "AME"  # Average Marginal Effect
+            elseif measure == :elasticity
+                return "AME (elasticity)"
+            elseif measure == :semielasticity_dyex
+                return "AME (semi-elasticity dyex)"
+            elseif measure == :semielasticity_eydx
+                return "AME (semi-elasticity eydx)"
+            else
+                return "AME"
+            end
+        else  # profile
+            # Profile effects (MEM/MER)
+            if measure == :effect
+                return "MEM"  # Marginal Effect at the Mean / Marginal Effect at Reference
+            elseif measure == :elasticity
+                return "MEM (elasticity)"
+            elseif measure == :semielasticity_dyex
+                return "MEM (semi-elasticity dyex)"
+            elseif measure == :semielasticity_eydx
+                return "MEM (semi-elasticity eydx)"
+            else
+                return "MEM"
+            end
+        end
+    else  # predictions
+        if analysis_type == :population
+            return "AAP"  # Average Adjusted Prediction
+        else  # profile
+            return "APM"  # Adjusted Prediction at the Mean / Adjusted Prediction at Reference
+        end
+    end
+end
+
 # Format-specific table builders
 
-function _standard_table(mr::MarginsResult)
+function _standard_table(mr::EffectsResult)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
     
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    measure = get(mr.metadata, :measure, :effect)
+    type_description = _create_type_description(analysis_type, measure, :effects)
+    
     df = DataFrame(
+        type = fill(type_description, length(mr.estimates)),
         variable = mr.variables,  # The "x" in dy/dx
         contrast = mr.terms,      # Human-readable contrast/label
         estimate = mr.estimates,
@@ -525,8 +683,14 @@ function _standard_table(mr::MarginsResult)
     return df
 end
 
-function _compact_table(mr::MarginsResult)
+function _compact_table(mr::EffectsResult)
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    measure = get(mr.metadata, :measure, :effect)
+    type_description = _create_type_description(analysis_type, measure, :effects)
+    
     df = DataFrame(
+        type = fill(type_description, length(mr.estimates)),
         variable = mr.variables,  # The "x" in dy/dx
         contrast = mr.terms,
         estimate = mr.estimates,
@@ -536,11 +700,17 @@ function _compact_table(mr::MarginsResult)
     return df
 end
 
-function _confidence_table(mr::MarginsResult)
+function _confidence_table(mr::EffectsResult)
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
     
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    measure = get(mr.metadata, :measure, :effect)
+    type_description = _create_type_description(analysis_type, measure, :effects)
+    
     df = DataFrame(
+        type = fill(type_description, length(mr.estimates)),
         variable = mr.variables,  # The "x" in dy/dx
         contrast = mr.terms,
         estimate = mr.estimates,
@@ -551,10 +721,15 @@ function _confidence_table(mr::MarginsResult)
     return df
 end
 
-function _profile_table(mr::MarginsResult)
+function _profile_table(mr::EffectsResult)
     # Profile-first organization: reference grid with results attached
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    measure = get(mr.metadata, :measure, :effect)
+    type_description = _create_type_description(analysis_type, measure, :effects)
     
     df = DataFrames.DataFrame()
     
@@ -564,6 +739,9 @@ function _profile_table(mr::MarginsResult)
             df[!, k] = v
         end
     end
+    
+    # Add type column after profile columns but before result columns
+    df[!, :type] = fill(type_description, length(mr.estimates))
     
     # Add results columns
     df[!, :variable] = mr.variables  # The "x" in dy/dx
@@ -587,14 +765,75 @@ function _profile_table(mr::MarginsResult)
     return df
 end
 
-function _stata_table(mr::MarginsResult)
+function _predictions_table(mr::PredictionsResult)
+    # Predictions-specific format: omits variable/contrast columns
+    t_stats = mr.estimates ./ mr.standard_errors
+    p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
+    
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    type_description = _create_type_description(analysis_type, :prediction, :predictions)
+    
+    df = DataFrame()
+    
+    # Add profile columns first (for profile predictions) - with at_ prefix for consistency
+    if mr.profile_values !== nothing
+        for (k, v) in pairs(mr.profile_values)
+            df[!, Symbol("at_", k)] = v
+        end
+    end
+    
+    # Add type column after profile columns but before statistical columns
+    df[!, :type] = fill(type_description, length(mr.estimates))
+    
+    # Core statistical columns (no variable/contrast)
+    df[!, :estimate] = mr.estimates
+    df[!, :se] = mr.standard_errors
+    df[!, :t_stat] = t_stats
+    df[!, :p_value] = p_values
+    
+    # Add confidence intervals if alpha is specified in metadata
+    if haskey(mr.metadata, :alpha)
+        alpha = mr.metadata[:alpha]
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+        df[!, :ci_lower] = lower
+        df[!, :ci_upper] = upper
+    end
+    
+    # Add sample size
+    if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
+        # Grouped case: use the actual subgroup sizes from computation
+        df[!, :n] = mr.metadata[:subgroup_n_values]
+    else
+        # Simple case: use overall sample size  
+        n_obs = get(mr.metadata, :n_obs, missing)
+        df[!, :n] = fill(n_obs, length(mr.estimates))
+    end
+    
+    # Add grouping columns if present (for population predictions with contexts)
+    if mr.group_values !== nothing
+        for (k, v) in pairs(mr.group_values)
+            df[!, k] = v
+        end
+    end
+    
+    return df
+end
+
+function _stata_table(mr::EffectsResult)
     t_stats = mr.estimates ./ mr.standard_errors  
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
+    
+    # Create self-describing type column
+    analysis_type = get(mr.metadata, :analysis_type, :population)
+    measure = get(mr.metadata, :measure, :effect)
+    type_description = _create_type_description(analysis_type, measure, :effects)
     
     # Get sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)
     
     df = DataFrame(
+        type = fill(type_description, length(mr.estimates)),
         margin = mr.estimates,      # Stata uses "margin" not "estimate"
         std_err = mr.standard_errors, # "std_err" not "se" 
         t = t_stats,

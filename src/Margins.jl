@@ -18,7 +18,7 @@ Built on FormulaCompiler.jl for high-performance zero-allocation evaluation.
 
 - `population_margins(model, data; type, vars, scale, backend, scenarios, groups, measure, vcov)`: Population-level analysis
 - `profile_margins(model, data, reference_grid; type, vars, scale, backend, measure, vcov)`: Profile-level analysis  
-- `MarginsResult`: Result container with Tables.jl interface
+- `EffectsResult`, `PredictionsResult`: Type-specific result containers with Tables.jl interface
 
 # Examples
 
@@ -55,7 +55,7 @@ using Distributions: Normal, cdf, quantile
 const VERSION = v"2.0.0"
 
 # Core API - Clean 2×2 framework  
-export population_margins, profile_margins, MarginsResult
+export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult
 
 # Display configuration
 export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits

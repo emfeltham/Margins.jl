@@ -1159,7 +1159,7 @@ end
 """
     _build_metadata(; type, vars, scale, backend, measure, n_obs, model_type, timestamp, at_spec, has_contexts) -> Dict
 
-Build metadata dictionary for MarginsResult.
+Build metadata dictionary for EffectsResult/PredictionsResult.
 
 # Keyword Arguments
 - `type::Symbol=:unknown`: Analysis type (:effects, :predictions)

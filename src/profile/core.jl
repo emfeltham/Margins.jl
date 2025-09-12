@@ -4,7 +4,7 @@
 using Distributions: Normal, cdf
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -50,7 +50,7 @@ or adjusted predictions at specific profiles (APM/APR).
   - Custom function for robust/clustered standard errors
 
 # Returns
-`MarginsResult` containing:
+`EffectsResult` or `PredictionsResult` containing:
 - Results DataFrame with estimates, standard errors, t-statistics, p-values
 - Profile columns (at_varname) showing covariate values for each estimate
 - Parameter gradients matrix for delta-method standard errors
@@ -191,7 +191,7 @@ function _extract_and_filter_profile_values(reference_grid, result_length::Int, 
 end
 
 """
-    _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> MarginsResult
+    _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, at_spec) -> Union{EffectsResult, PredictionsResult}
 
 Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
@@ -251,7 +251,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Filter to show only original reference grid variables (hide automatic typical values)
         profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
         
-        return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+        return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
         df, G = _profile_predictions(engine, completed_reference_grid, scale)  # → APM/APR
@@ -268,19 +268,17 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        variables = string.(df.variable)  # The "x" in dy/dx
-        terms = string.(df.contrast)  # Convert Symbol to String
         
         # Extract profile values from reference grid - expand to match result length
         # Filter to show only original reference grid variables (hide automatic typical values)
         profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
         
-        return MarginsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+        return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
     end
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> MarginsResult
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -447,10 +445,8 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
         se_vals[i] = sqrt((G[i:i, :] * engine.Σ * G[i:i, :]')[1, 1])
     end
     
-    # Create results DataFrame with profile information
+    # Create results DataFrame with profile information (no variable/contrast for predictions)
     results = DataFrame()
-    results.variable = ["" for _ in 1:n_profiles]  # Empty for predictions (no specific x)
-    results.contrast = ["APM/APR" for _ in 1:n_profiles]
     results.estimate = predictions
     results.se = se_vals
     results.t_stat = predictions ./ se_vals

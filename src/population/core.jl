@@ -4,7 +4,7 @@
 # Unified caching system (see engine/caching.jl)
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> MarginsResult
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -55,7 +55,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - Weights enable proper survey inference: `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
 
 # Returns
-`MarginsResult` containing:
+`EffectsResult` or `PredictionsResult` containing:
 - Results DataFrame with estimates, standard errors, t-statistics, p-values
 - Parameter gradients matrix for delta-method standard errors
 - Analysis metadata (options used, model info, etc.)
@@ -181,7 +181,7 @@ function population_margins(
         variables = df.variable  # The "x" in dy/dx
         terms = df.contrast
         
-        return MarginsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+        return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
@@ -198,10 +198,8 @@ function population_margins(
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        variables = df.variable  # The "x" in dy/dx
-        terms = df.contrast
         
-        return MarginsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+        return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
     end
 end
 
