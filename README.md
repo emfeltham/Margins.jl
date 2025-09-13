@@ -185,7 +185,7 @@ DataFrame(treatment_by_edu)
 
 ```julia
 using Pkg
-Pkg.add("Margins")
+Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 ```
 
 **Requirements**: Julia ≥ 1.10
