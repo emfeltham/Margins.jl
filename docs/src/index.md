@@ -244,7 +244,3 @@ Margins.jl builds upon FormulaCompiler.jl for high-performance statistical compu
   year = {2025}
 }
 ```
-
----
-
-*For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For comprehensive function reference, see [API Reference](api.md).*
