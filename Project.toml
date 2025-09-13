@@ -1,7 +1,7 @@
 name = "Margins"
 uuid = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"
 authors = ["Eric Martin Feltham"]
-version = "1.0.1"
+version = "2.0.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
@@ -34,7 +34,7 @@ Revise = "3.9.0"
 Statistics = "1.11.1"
 StatsModels = "0.7.6"
 Tables = "1.12.1"
-julia = "1"
+julia = "1.10"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
