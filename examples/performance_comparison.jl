@@ -293,7 +293,7 @@ println("\nOptimization Strategies:")
 println("• Use profile margins for scenario analysis (O(1) scaling)")
 println("• Use population margins for final parameter estimates") 
 println("• Specify vars parameter to focus on key variables")
-println("• Consider subgroup analysis with 'over' parameter")
+println("• Consider subgroup analysis with 'groups' parameter")
 println("• Leverage constant-time profile performance for complex scenarios")
 
 println("\n=== Performance Analysis Complete ===")

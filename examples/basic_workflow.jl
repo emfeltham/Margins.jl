@@ -5,7 +5,7 @@
 # This example demonstrates the fundamental Margins.jl workflow using the clean 2×2 framework:
 # Population vs Profile × Effects vs Predictions
 
-using Margins, DataFrames, GLM, Random
+using Margins, DataFrames, GLM, Random, CategoricalArrays
 using Statistics
 
 # Set seed for reproducible results
@@ -24,11 +24,11 @@ data = DataFrame(
     income = rand(30000:120000, n),
     
     # Categorical variables  
-    education = rand(["High School", "College", "Graduate"], n),
-    region = rand(["North", "South", "East", "West"], n),
+    education = categorical(rand(["High School", "College", "Graduate"], n)),
+    region = categorical(rand(["North", "South", "East", "West"], n)),
     
     # Binary outcome
-    treatment = rand([0, 1], n)
+    treatment = rand(Bool, n)
 )
 
 # Generate realistic outcome variable
@@ -40,7 +40,7 @@ data.outcome = 50 .+
                0.2 .* (data.age .- 45) .+
                0.00001 .* (data.income .- 75000) .+
                edu_numeric .+
-               3.0 .* data.treatment .+
+               3.0 .* Float64.(data.treatment) .+
                2.0 .* randn(n)
 
 println("Dataset: $(nrow(data)) observations, $(ncol(data)) variables")
@@ -99,13 +99,12 @@ println("\n=== Profile Specification Examples ===")
 
 # Using cartesian grid for systematic exploration
 # Creates all combinations of specified values
-
-scenario_effects = profile_margins(model, data, cartesian_grid(age=[30, 45, 60], treatment=[0, 1], education=["High School", "College", "Graduate"]); type=:effects)
+scenario_effects = profile_margins(model, data, cartesian_grid(age=[30, 45, 60], treatment=[false, true], education=["High School", "College", "Graduate"]); type=:effects)
 scenario_df = DataFrame(scenario_effects)
 
 println("Treatment effects across age and education scenarios:")
 treatment_effects = scenario_df[scenario_df.variable .== "treatment", :]
-println(treatment_effects[!, [:at_age, :at_education, :at_treatment, :estimate, :se]])
+println(treatment_effects[!, [:age, :education, :treatment, :estimate, :se]])
 
 # ### Custom Reference Grid
 # Maximum control using DataFrame specification
@@ -115,7 +114,7 @@ custom_grid = DataFrame(
     income = [50000, 75000, 100000],  
     education = ["College", "College", "Graduate"],
     region = ["North", "South", "East"],
-    treatment = [1, 1, 1]  # All treated
+    treatment = [true, true, true]  # All treated
 )
 
 custom_predictions = profile_margins(model, data, custom_grid; type=:predictions)
@@ -167,7 +166,7 @@ println(names(df))
 # Select significant effects (p < 0.05)
 significant = df[df.p_value .< 0.05, :]
 println("\nStatistically significant effects (p < 0.05):")
-println(significant[!, [:term, :estimate, :se, :p_value]])
+println(significant[!, [:variable, :estimate, :se, :p_value]])
 
 # Export to CSV (example)
 # using CSV
