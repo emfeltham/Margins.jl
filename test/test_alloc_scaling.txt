@@ -1,0 +1,25 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Precompiling Margins...
+   3287.5 ms  ✓ Margins
+  1 dependency successfully precompiled in 4 seconds. 180 already precompiled.
+ERROR: LoadError: Some tests did not pass: 1 passed, 1 failed, 0 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/performance/test_allocation_scaling.jl:15
+Large Scale Allocation Scaling Analysis: Test Failed at /Users/emf/.julia/dev/Margins/test/performance/test_allocation_scaling.jl:107
+  Expression: pop_alloc_increase < 100
+   Evaluated: 17236.228448275862 < 100
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/performance/test_allocation_scaling.jl:107 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] top-level scope
+   @ ~/.julia/dev/Margins/test/performance/test_allocation_scaling.jl:18
+Test Summary:                           | Pass  Fail  Total   Time
+Large Scale Allocation Scaling Analysis |    1     1      2  20.6s

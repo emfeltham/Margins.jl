@@ -1,0 +1,13 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+ERROR: SystemError: opening file "/Users/emf/.julia/dev/Margins/test/test_boolean_ame.jl": No such file or directory
+Stacktrace:
+ [1] include(mod::Module, _path::String)
+   @ Base ./Base.jl:557
+ [2] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:323
+ [3] _start()
+   @ Base ./client.jl:531

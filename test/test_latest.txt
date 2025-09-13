@@ -1,0 +1,12 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+     Testing Margins
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StaticArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "Git_jll" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
