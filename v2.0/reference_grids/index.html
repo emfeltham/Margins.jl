@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Reference Grids · Margins.jl</title><meta name="title" content="Reference Grids · Margins.jl"/><meta property="og:title" content="Reference Grids · Margins.jl"/><meta property="twitter:title" content="Reference Grids · Margins.jl"/><meta name="description" content="Documentation for Margins.jl."/><meta property="og:description" content="Documentation for Margins.jl."/><meta property="twitter:description" content="Documentation for Margins.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Margins.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Introduction</a></li><li><a class="tocitem" href="../mathematical_foundation/">Mathematical Foundation</a></li><li><a class="tocitem" href="../computational_architecture/">Computational Architecture</a></li><li><span class="tocitem">User Guide</span><ul><li class="is-active"><a class="tocitem" href>Reference Grids</a><ul class="internal"><li><a class="tocitem" href="#Methodological-Foundation"><span>Methodological Foundation</span></a></li><li><a class="tocitem" href="#Reference-Grid-Builders"><span>Reference Grid Builders</span></a></li><li><a class="tocitem" href="#Direct-DataFrame-Specification"><span>Direct DataFrame Specification</span></a></li><li><a class="tocitem" href="#Advanced-Patterns"><span>Advanced Patterns</span></a></li><li><a class="tocitem" href="#Performance-Considerations"><span>Performance Considerations</span></a></li><li><a class="tocitem" href="#Validation-and-Error-Handling"><span>Validation and Error Handling</span></a></li><li><a class="tocitem" href="#Statistical-Properties"><span>Statistical Properties</span></a></li><li><a class="tocitem" href="#Migration-Guide"><span>Migration Guide</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li></ul></li><li><a class="tocitem" href="../profile_margins/">Profile Analysis</a></li><li><a class="tocitem" href="../grouping/">Population Grouping</a></li><li><a class="tocitem" href="../backend_selection/">Backend Selection</a></li><li><a class="tocitem" href="../performance/">Performance Guide</a></li><li><a class="tocitem" href="../advanced/">Advanced Features</a></li></ul></li><li><a class="tocitem" href="../stata_migration/">Migration Guide</a></li><li><a class="tocitem" href="../comparison/">Package Comparison</a></li><li><a class="tocitem" href="../api/">API Reference</a></li><li><a class="tocitem" href="../examples/">Examples</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Reference Grids</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Reference Grids</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/emfeltham/Margins.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/emfeltham/Margins.jl/" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Reference-Grid-Methodology-and-Implementation"><a class="docs-heading-anchor" href="#Reference-Grid-Methodology-and-Implementation">Reference Grid Methodology and Implementation</a><a id="Reference-Grid-Methodology-and-Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Reference-Grid-Methodology-and-Implementation" title="Permalink"></a></h1><p><strong>Reference Grids</strong>  A reference grid is simply a table that says &quot;compute effects for people with these specific characteristics.&quot; For example:</p><ul><li>Age: 30, Education: College → &quot;What&#39;s the effect for 30-year-old college graduates?&quot;</li><li>Age: 40, Education: High School → &quot;What&#39;s the effect for 40-year-old high school graduates?&quot;</li></ul><p>The package provides helper functions to create these tables automatically.</p><p>Reference grid specification constitutes the methodological foundation for covariate scenario definition in profile-based marginal effects analysis. The implementation provides a systematic framework for scenario specification through structured builder functions and direct tabular specification interfaces.</p><h2 id="Methodological-Foundation"><a class="docs-heading-anchor" href="#Methodological-Foundation">Methodological Foundation</a><a id="Methodological-Foundation-1"></a><a class="docs-heading-anchor-permalink" href="#Methodological-Foundation" title="Permalink"></a></h2><p>The analytical framework employs explicit reference grid specification to ensure transparency and computational precision:</p><pre><code class="language-julia hljs">profile_margins(model, data, reference_grid; type=:effects, ...)</code></pre><p>The <code>reference_grid</code> parameter accepts DataFrame specifications that enumerate the covariate combinations where marginal effects are computed.</p><h2 id="Reference-Grid-Builders"><a class="docs-heading-anchor" href="#Reference-Grid-Builders">Reference Grid Builders</a><a id="Reference-Grid-Builders-1"></a><a class="docs-heading-anchor-permalink" href="#Reference-Grid-Builders" title="Permalink"></a></h2><h3 id="1.-Sample-Means-means_grid(data)"><a class="docs-heading-anchor" href="#1.-Sample-Means-means_grid(data)">1. Sample Means - <code>means_grid(data)</code></a><a id="1.-Sample-Means-means_grid(data)-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Sample-Means-means_grid(data)" title="Permalink"></a></h3><p>Creates reference grid with sample means for continuous variables and frequency-weighted mixtures for categorical variables:</p><pre><code class="language-julia hljs"># Build grid with realistic defaults
+grid = means_grid(data)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Custom typical value function (default is mean)
+grid = means_grid(data; typical=median)
+result = profile_margins(model, data, grid; type=:effects)</code></pre><p><strong>Output structure:</strong></p><ul><li><strong>Continuous variables</strong>: Sample mean (or custom typical function)</li><li><strong>Categorical variables</strong>: Frequency-weighted mixture based on actual data distribution</li><li><strong>Bool variables</strong>: Probability of true (proportion of true values)</li></ul><h3 id="2.-Cartesian-Product-cartesian_grid(vars...)"><a class="docs-heading-anchor" href="#2.-Cartesian-Product-cartesian_grid(vars...)">2. Cartesian Product - <code>cartesian_grid(vars...)</code></a><a id="2.-Cartesian-Product-cartesian_grid(vars...)-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Cartesian-Product-cartesian_grid(vars...)" title="Permalink"></a></h3><p>Creates all combinations of specified values across variables:</p><pre><code class="language-julia hljs"># 3×2 = 6 scenarios: all combinations of x and education values
+grid = cartesian_grid(x=[-1, 0, 1], education=[&quot;High School&quot;, &quot;College&quot;])
+result = profile_margins(model, data, grid; type=:effects)
+
+# Single variable varying, others at typical values
+grid = cartesian_grid(age=20:10:70)
+result = profile_margins(model, data, grid; type=:predictions)
+
+# Complex scenarios with multiple variables
+grid = cartesian_grid(
+    income=[25000, 50000, 75000],
+    education=[&quot;HS&quot;, &quot;College&quot;],
+    region=[&quot;North&quot;, &quot;South&quot;]
+)  # Creates 3×2×2 = 12 scenarios
+result = profile_margins(model, data, grid; type=:effects)</code></pre><h3 id="3.-Balanced-Factorial-balanced_grid(data;-vars...)"><a class="docs-heading-anchor" href="#3.-Balanced-Factorial-balanced_grid(data;-vars...)">3. Balanced Factorial - <code>balanced_grid(data; vars...)</code></a><a id="3.-Balanced-Factorial-balanced_grid(data;-vars...)-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Balanced-Factorial-balanced_grid(data;-vars...)" title="Permalink"></a></h3><p>Creates balanced (equal-weight) mixtures for categorical variables, useful for orthogonal factorial designs:</p><pre><code class="language-julia hljs"># Balanced factorial for categorical variables
+grid = balanced_grid(data; education=:all, region=:all)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Mixed specification
+grid = balanced_grid(data; 
+    education=:all,           # All levels with equal weight
+    income=mean(data.income)  # Fixed at mean
+)
+result = profile_margins(model, data, grid; type=:effects)</code></pre><h3 id="4.-Quantile-Based-quantile_grid(data;-vars...)"><a class="docs-heading-anchor" href="#4.-Quantile-Based-quantile_grid(data;-vars...)">4. Quantile-Based - <code>quantile_grid(data; vars...)</code></a><a id="4.-Quantile-Based-quantile_grid(data;-vars...)-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Quantile-Based-quantile_grid(data;-vars...)" title="Permalink"></a></h3><p>Uses quantiles of continuous variables:</p><pre><code class="language-julia hljs"># Effects at income quartiles
+grid = quantile_grid(data; income=[0.25, 0.5, 0.75])
+result = profile_margins(model, data, grid; type=:effects)
+
+# Multiple quantile specifications
+grid = quantile_grid(data; 
+    income=[0.1, 0.5, 0.9],
+    age=[0.25, 0.75]
+)  # Creates 3×2 = 6 scenarios
+result = profile_margins(model, data, grid; type=:effects)</code></pre><h3 id="5.-Hierarchical-Grammar-hierarchical_grid(data,-spec)"><a class="docs-heading-anchor" href="#5.-Hierarchical-Grammar-hierarchical_grid(data,-spec)">5. Hierarchical Grammar - <code>hierarchical_grid(data, spec)</code></a><a id="5.-Hierarchical-Grammar-hierarchical_grid(data,-spec)-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Hierarchical-Grammar-hierarchical_grid(data,-spec)" title="Permalink"></a></h3><p>Creates systematic reference grids using the group nesting grammar (<code>=&gt;</code> operator) for complex multi-dimensional covariate scenario construction:</p><pre><code class="language-julia hljs"># Simple hierarchical: region-specific education representatives
+spec = :region =&gt; :education
+grid = hierarchical_grid(data, spec)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Complex hierarchy with multiple representative types
+spec = :region =&gt; [
+    (:income, :quartiles),  # Income quartiles within each region
+    (:age, :mean),          # Mean age within each region  
+    :education              # All education levels within each region
+]
+grid = hierarchical_grid(data, spec)
+result = profile_margins(model, data, grid; type=:effects)
+
+# Deep nesting (3+ levels) with automatic safety validation
+spec = :country =&gt; (
+    :region =&gt; (
+        :education =&gt; [(:income, :quartiles), (:age, :mean)]
+    )
+)
+grid = hierarchical_grid(data, spec; max_depth=4, warn_large=true)
+result = profile_margins(model, data, grid; type=:effects)</code></pre><p><strong>Advanced Representative Types:</strong></p><pre><code class="language-julia hljs"># Statistical representatives within hierarchical groups
+spec = :region =&gt; [
+    (:income, :mean),           # Mean income per region
+    (:income, :median),         # Median income per region
+    (:income, :quartiles),      # Q1, Q2, Q3, Q4 per region
+    (:income, :quintiles),      # Quintiles per region
+    (:income, :deciles),        # Deciles per region
+    (:income, [0.1, 0.5, 0.9]), # Custom percentiles per region
+    (:age, [25, 45, 65]),       # Fixed representative ages
+    (:score, (:range, 5))       # 5 evenly spaced points from min to max
+]
+grid = hierarchical_grid(data, spec)</code></pre><p><strong>Mixture Integration:</strong></p><pre><code class="language-julia hljs"># Population-proportion mixtures for realistic scenarios
+spec = :region =&gt; [
+    (:education, :mix_proportional),  # Use actual data proportions
+    (:income, :quartiles),
+    (:age, :mean)
+]
+grid = hierarchical_grid(data, spec)
+
+# Custom mixtures for policy analysis
+using Margins: mix
+spec = :region =&gt; [
+    (:education, mix(&quot;HS&quot; =&gt; 0.3, &quot;College&quot; =&gt; 0.7)),  # Policy scenario
+    (:income, :median)
+]
+grid = hierarchical_grid(data, spec)</code></pre><h2 id="Direct-DataFrame-Specification"><a class="docs-heading-anchor" href="#Direct-DataFrame-Specification">Direct DataFrame Specification</a><a id="Direct-DataFrame-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#Direct-DataFrame-Specification" title="Permalink"></a></h2><p>For maximum control, create reference grids directly:</p><pre><code class="language-julia hljs"># Simple custom grid
+reference_grid = DataFrame(
+    age=[25, 35, 45], 
+    education=[&quot;High School&quot;, &quot;College&quot;, &quot;Graduate&quot;],
+    experience=[2, 8, 15],
+    treated=[true, false, true]
+)
+result = profile_margins(model, data, reference_grid; type=:effects)
+
+# Grid with categorical mixtures
+using Margins: mix
+
+policy_grid = DataFrame(
+    age=[35, 45, 55],
+    education=[
+        mix(&quot;HS&quot; =&gt; 0.4, &quot;College&quot; =&gt; 0.6),        # Current composition
+        mix(&quot;HS&quot; =&gt; 0.2, &quot;College&quot; =&gt; 0.8),        # Policy scenario 1
+        mix(&quot;HS&quot; =&gt; 0.1, &quot;College&quot; =&gt; 0.9)         # Policy scenario 2
+    ]
+)
+result = profile_margins(model, data, policy_grid; type=:predictions)</code></pre><h2 id="Advanced-Patterns"><a class="docs-heading-anchor" href="#Advanced-Patterns">Advanced Patterns</a><a id="Advanced-Patterns-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Patterns" title="Permalink"></a></h2><h3 id="Frequency-Weighted-Defaults"><a class="docs-heading-anchor" href="#Frequency-Weighted-Defaults">Frequency-Weighted Defaults</a><a id="Frequency-Weighted-Defaults-1"></a><a class="docs-heading-anchor-permalink" href="#Frequency-Weighted-Defaults" title="Permalink"></a></h3><p>When variables are unspecified in builder functions, they use actual data composition:</p><pre><code class="language-julia hljs"># Your data composition:
+# - education: 40% HS, 45% College, 15% Graduate  
+# - region: 75% Urban, 25% Rural
+# - treated: 60% true, 40% false
+
+# Builder uses realistic defaults
+grid = cartesian_grid(income=[30000, 50000, 70000])
+# → income varies as specified
+# → education: mix(&quot;HS&quot; =&gt; 0.4, &quot;College&quot; =&gt; 0.45, &quot;Graduate&quot; =&gt; 0.15)
+# → region: mix(&quot;Urban&quot; =&gt; 0.75, &quot;Rural&quot; =&gt; 0.25)  
+# → treated: 0.6 (probability of true)</code></pre><h3 id="Hierarchical-Policy-Analysis"><a class="docs-heading-anchor" href="#Hierarchical-Policy-Analysis">Hierarchical Policy Analysis</a><a id="Hierarchical-Policy-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Hierarchical-Policy-Analysis" title="Permalink"></a></h3><p>Systematic multi-dimensional policy evaluation using hierarchical grids:</p><pre><code class="language-julia hljs"># Complex policy analysis across administrative levels
+policy_spec = :state =&gt; (
+    :county =&gt; [
+        (:education, :mix_proportional),     # Actual education composition per county
+        (:income, :quintiles),               # Income distribution per county
+        (:age, [25, 45, 65]),               # Key demographic groups
+        (:employment_status, :all)           # All employment categories
+    ]
+)
+grid = hierarchical_grid(data, policy_spec)
+result = profile_margins(policy_model, data, grid; vars=[:policy_treatment])
+
+# Comparative scenario analysis
+baseline_spec = :region =&gt; [(:education, :mix_proportional), (:income, :mean)]
+intervention_spec = :region =&gt; [(:education, mix(&quot;HS&quot; =&gt; 0.2, &quot;College&quot; =&gt; 0.8)), (:income, :mean)]
+
+baseline_grid = hierarchical_grid(data, baseline_spec)
+intervention_grid = hierarchical_grid(data, intervention_spec)
+
+baseline_results = profile_margins(model, data, baseline_grid; type=:predictions)
+intervention_results = profile_margins(model, data, intervention_grid; type=:predictions)
+
+# Calculate policy impact
+baseline_df = DataFrame(baseline_results)
+intervention_df = DataFrame(intervention_results)
+policy_impact = intervention_df.estimate .- baseline_df.estimate</code></pre><h3 id="Scenario-Comparison"><a class="docs-heading-anchor" href="#Scenario-Comparison">Scenario Comparison</a><a id="Scenario-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario-Comparison" title="Permalink"></a></h3><p>Compare different policy scenarios:</p><pre><code class="language-julia hljs"># Current scenario (status quo)
+current_grid = means_grid(data)
+current = profile_margins(model, data, current_grid; type=:predictions)
+
+# Policy scenario (increased education)
+policy_grid = DataFrame(
+    age=mean(data.age),
+    income=mean(data.income),
+    education=mix(&quot;HS&quot; =&gt; 0.2, &quot;College&quot; =&gt; 0.5, &quot;Graduate&quot; =&gt; 0.3)  # Policy target
+)
+future = profile_margins(model, data, policy_grid; type=:predictions)
+
+# Compare outcomes
+current_pred = DataFrame(current).estimate[1]
+future_pred = DataFrame(future).estimate[1]
+policy_impact = future_pred - current_pred</code></pre><h3 id="Sequential-Analysis"><a class="docs-heading-anchor" href="#Sequential-Analysis">Sequential Analysis</a><a id="Sequential-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Sequential-Analysis" title="Permalink"></a></h3><p>Analyze effects along ranges of key variables:</p><pre><code class="language-julia hljs"># Effects across age ranges
+age_grid = cartesian_grid(age=25:5:65)
+age_effects = profile_margins(model, data, age_grid; type=:effects, vars=[:education])
+
+# Plot age-varying effects
+using Plots
+plot(25:5:65, DataFrame(age_effects).estimate, 
+     xlabel=&quot;Age&quot;, ylabel=&quot;Education Effect&quot;, 
+     title=&quot;Age-Varying Education Effects&quot;)</code></pre><h2 id="Performance-Considerations"><a class="docs-heading-anchor" href="#Performance-Considerations">Performance Considerations</a><a id="Performance-Considerations-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Considerations" title="Permalink"></a></h2><h3 id="Grid-Size-and-Efficiency"><a class="docs-heading-anchor" href="#Grid-Size-and-Efficiency">Grid Size and Efficiency</a><a id="Grid-Size-and-Efficiency-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-Size-and-Efficiency" title="Permalink"></a></h3><p>Reference grid size affects performance linearly, but is independent of dataset size:</p><pre><code class="language-julia hljs"># Small grid: 3 scenarios
+small_grid = cartesian_grid(x=[0, 1, 2])
+@time profile_margins(model, huge_data, small_grid)  # ~150μs
+
+# Large grid: 27 scenarios  
+large_grid = cartesian_grid(x=[0,1,2], y=[0,1,2], z=[0,1,2])
+@time profile_margins(model, huge_data, large_grid)  # ~400μs
+
+# Dataset size doesn&#39;t matter
+@time profile_margins(model, small_data, large_grid)  # Still ~400μs</code></pre><h3 id="Hierarchical-Grid-Performance"><a class="docs-heading-anchor" href="#Hierarchical-Grid-Performance">Hierarchical Grid Performance</a><a id="Hierarchical-Grid-Performance-1"></a><a class="docs-heading-anchor-permalink" href="#Hierarchical-Grid-Performance" title="Permalink"></a></h3><p>Hierarchical grids provide automatic size estimation and safety validation:</p><pre><code class="language-julia hljs"># Automatic grid size warnings for large combinations
+large_spec = :country =&gt; (:region =&gt; (:education =&gt; (:income, :deciles)))
+# Warning: Estimated grid size ~50,000 combinations may impact performance
+grid = hierarchical_grid(data, large_spec; warn_large=true)
+
+# Depth protection prevents excessive nesting
+deep_spec = :a =&gt; (:b =&gt; (:c =&gt; (:d =&gt; (:e =&gt; (:f =&gt; :g)))))
+# Error: Nesting depth 7 exceeds maximum allowed depth 5
+grid = hierarchical_grid(data, deep_spec; max_depth=5)
+
+# Efficient construction through systematic generation
+complex_spec = :region =&gt; [(:income, :quartiles), (:age, :mean), :education]
+@time hierarchical_grid(data, complex_spec)  # ~50μs regardless of data size</code></pre><h3 id="Memory-Management"><a class="docs-heading-anchor" href="#Memory-Management">Memory Management</a><a id="Memory-Management-1"></a><a class="docs-heading-anchor-permalink" href="#Memory-Management" title="Permalink"></a></h3><p>Builder functions are optimized for memory efficiency:</p><pre><code class="language-julia hljs"># Efficient: builders avoid unnecessary allocations
+grid = means_grid(large_data)  # O(1) memory for typical values
+
+# Less efficient: explicit grids require full materialization  
+explicit_grid = DataFrame(
+    x1=fill(mean(large_data.x1), 1000),  # O(n) memory
+    x2=fill(mean(large_data.x2), 1000)
+)</code></pre><h2 id="Validation-and-Error-Handling"><a class="docs-heading-anchor" href="#Validation-and-Error-Handling">Validation and Error Handling</a><a id="Validation-and-Error-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Validation-and-Error-Handling" title="Permalink"></a></h2><p>Reference grids are validated automatically:</p><pre><code class="language-julia hljs"># Error: Missing model variables
+incomplete_grid = DataFrame(x1=[0, 1])  # Missing x2 from model
+profile_margins(model, data, incomplete_grid)  
+# → ArgumentError: Missing model variables: x2
+
+# Error: Invalid categorical levels
+invalid_grid = DataFrame(
+    x1=[0, 1], 
+    group=[&quot;InvalidLevel&quot;, &quot;AnotherInvalid&quot;]  # Not in original data
+)
+profile_margins(model, data, invalid_grid)
+# → ArgumentError: Invalid levels for categorical variable &#39;group&#39;
+
+# Warning: Large grid size
+huge_grid = cartesian_grid(x=1:100, y=1:100)  # 10,000 scenarios
+profile_margins(model, data, huge_grid)
+# → Warning: Large reference grid (10000 scenarios) may impact performance</code></pre><h2 id="Statistical-Properties"><a class="docs-heading-anchor" href="#Statistical-Properties">Statistical Properties</a><a id="Statistical-Properties-1"></a><a class="docs-heading-anchor-permalink" href="#Statistical-Properties" title="Permalink"></a></h2><h3 id="Delta-Method-Standard-Errors"><a class="docs-heading-anchor" href="#Delta-Method-Standard-Errors">Delta-Method Standard Errors</a><a id="Delta-Method-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Delta-Method-Standard-Errors" title="Permalink"></a></h3><p>Standard errors are computed consistently across all reference grid types:</p><pre><code class="language-julia hljs"># Same statistical rigor regardless of grid construction method
+grid1 = means_grid(data)
+grid2 = DataFrame(age=mean(data.age), education=mode(data.education))
+grid3 = cartesian_grid(age=[mean(data.age)])
+
+# All use identical delta-method computation
+result1 = profile_margins(model, data, grid1; type=:effects)
+result2 = profile_margins(model, data, grid2; type=:effects)  
+result3 = profile_margins(model, data, grid3; type=:effects)
+
+# Standard errors are mathematically equivalent
+all(DataFrame(result1).se .≈ DataFrame(result2).se .≈ DataFrame(result3).se)  # true</code></pre><h3 id="Categorical-Mixture-Handling"><a class="docs-heading-anchor" href="#Categorical-Mixture-Handling">Categorical Mixture Handling</a><a id="Categorical-Mixture-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Categorical-Mixture-Handling" title="Permalink"></a></h3><p>Categorical mixtures are handled natively throughout the system:</p><pre><code class="language-julia hljs"># Fractional specifications work seamlessly
+mixed_grid = DataFrame(
+    age=[35, 45],
+    treated=[0.3, mix(0 =&gt; 0.6, 1 =&gt; 0.4)]  # Mix of scalar and mixture
+)
+result = profile_margins(model, data, mixed_grid; type=:predictions)
+
+# Standard errors account for mixture uncertainty automatically
+DataFrame(result)  # Includes proper SEs for mixed scenarios</code></pre><h2 id="Migration-Guide"><a class="docs-heading-anchor" href="#Migration-Guide">Migration Guide</a><a id="Migration-Guide-1"></a><a class="docs-heading-anchor-permalink" href="#Migration-Guide" title="Permalink"></a></h2><h3 id="From-Old-at-Parameter-Syntax"><a class="docs-heading-anchor" href="#From-Old-at-Parameter-Syntax">From Old <code>at</code> Parameter Syntax</a><a id="From-Old-at-Parameter-Syntax-1"></a><a class="docs-heading-anchor-permalink" href="#From-Old-at-Parameter-Syntax" title="Permalink"></a></h3><pre><code class="language-julia hljs"># OLD (deprecated):
+profile_margins(model, data; at=:means)
+profile_margins(model, data; at=Dict(:x =&gt; [0,1,2]))
+profile_margins(model, data; at=[Dict(:x =&gt; 0), Dict(:x =&gt; 1)])
+
+# NEW (current):
+profile_margins(model, data, means_grid(data))
+profile_margins(model, data, cartesian_grid(x=[0,1,2]))
+
+explicit_grid = DataFrame(x=[0, 1])
+profile_margins(model, data, explicit_grid)</code></pre><h3 id="Builder-Function-Evolution"><a class="docs-heading-anchor" href="#Builder-Function-Evolution">Builder Function Evolution</a><a id="Builder-Function-Evolution-1"></a><a class="docs-heading-anchor-permalink" href="#Builder-Function-Evolution" title="Permalink"></a></h3><pre><code class="language-julia hljs"># OLD (deprecated internal names):
+refgrid_means(data)
+refgrid_cartesian(specs, data)
+
+# NEW (exported public API):
+means_grid(data)
+cartesian_grid(vars...)
+balanced_grid(data; vars...)
+quantile_grid(data; vars...)</code></pre><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><ol><li><strong>Start with <code>means_grid()</code></strong> for basic analysis</li><li><strong>Use <code>cartesian_grid()</code></strong> for systematic exploration</li><li><strong>Use <code>balanced_grid()</code></strong> for orthogonal factorial designs</li><li><strong>Use <code>quantile_grid()</code></strong> for distributional analysis</li><li><strong>Use <code>hierarchical_grid()</code></strong> for complex multi-dimensional policy analysis</li><li><strong>Use explicit DataFrame</strong> for maximum custom control</li><li><strong>Validate grids</strong> with small examples before scaling up</li><li><strong>Consider grid size</strong> vs computational requirements</li><li><strong>Leverage frequency weighting</strong> for realistic defaults</li><li><strong>Use mixture specifications</strong> for policy counterfactual analysis</li></ol><p>See also: <a href="../api/#profile_margins"><code>profile_margins</code></a> for the main function interface.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../computational_architecture/">« Computational Architecture</a><a class="docs-footer-nextpage" href="../profile_margins/">Profile Analysis »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 13 September 2025 00:58">Saturday 13 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
