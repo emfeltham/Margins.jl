@@ -11,10 +11,12 @@ The package integrates seamlessly with the established JuliaStats ecosystem, pro
 ## Implementation Overview
 
 ```julia
+using Random
 using CategoricalArrays, DataFrames, GLM, Margins
 
 # Generate sample data
 n = 1000
+Random.seed!(06515)
 df = DataFrame(
     y = randn(n),
     x1 = randn(n), 

@@ -22,6 +22,8 @@ makedocs(;
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
       "Profile Analysis" => "profile_margins.md", 
+      "Population Scenarios" => "population_scenarios.md",
+      "Weights" => "weights.md",
       "Population Grouping" => "grouping.md",
       "Backend Selection" => "backend_selection.md",
       "Performance Guide" => "performance.md",
@@ -36,8 +38,12 @@ makedocs(;
   checkdocs = :none    # Skip docstring checking for now
 )
 
-deploydocs(;
+deploydocs(; 
   repo = "https://github.com/emfeltham/Margins.jl",
   devbranch = "main",
+  versions = [
+    "stable" => "v^",
+    "dev" => "main",
+  ],
   push_preview = true
 )

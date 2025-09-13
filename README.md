@@ -1,7 +1,9 @@
 # Margins.jl
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
-[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://emfeltham.github.io/Margins.jl/stable/)
+[![Docs Build](https://github.com/emfeltham/Margins.jl/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/emfeltham/Margins.jl/actions/workflows/docs.yml)
+[![Docs: Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://emfeltham.github.io/Margins.jl/stable/)
+[![Docs: Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://emfeltham.github.io/Margins.jl/dev/)
 
 Marginal effects and adjusted predictions for Julia statistical models.
 
@@ -183,7 +185,7 @@ DataFrame(treatment_by_edu)
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/emfeltham/Margins.jl")
+Pkg.add("Margins")
 ```
 
 **Requirements**: Julia ≥ 1.10
@@ -202,7 +204,7 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 - **Profile margins**: Constant-time complexity independent of data size
 
 ### System Integration
-- Native support for GLM.jl and MixedModels.jl fitted models
+- Support for GLM.jl and MixedModels.jl fitted models
 - Tables.jl interface for flexible data input and result output
 - CovarianceMatrices.jl integration for robust standard error computation
 - FormulaCompiler.jl backend for high-performance evaluation
@@ -221,7 +223,7 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 
 ## Citation
 
-If you use Margins.jl in your research, please cite:
+If you use Margins.jl, please cite:
 
 ```bibtex
 @software{margins_jl,

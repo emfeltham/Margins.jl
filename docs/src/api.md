@@ -29,6 +29,8 @@ Population analysis provides unbiased estimates of population parameters suitabl
 **Computational Characteristics**: Linear scaling with respect to sample size while maintaining minimal per-observation computational overhead through optimized implementations.
 *Detailed performance analysis and computational complexity comparisons are provided in the [Performance Guide](performance.md)*
 
+See also: [Population Scenarios](population_scenarios.md) for counterfactual analysis and [Weights](weights.md) for sampling/frequency weights.
+
 ### Profile Analysis
 
 ### `profile_margins`

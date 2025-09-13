@@ -281,6 +281,8 @@ Margins.jl brings several distinctive features to marginal effects analysis:
 
 **Elasticity support**: Provides comprehensive elasticity computation including standard elasticities, x-semi-elasticities, and y-semi-elasticities across both population and profile approaches.
 
+For population-level counterfactuals, see [Population Scenarios](population_scenarios.md). For profile evaluation at specified covariate combinations, see [Reference Grids](reference_grids.md).
+
 **Ecosystem integration**: Works within Julia's statistical ecosystem, supporting mixed models, robust standard errors, and custom model types through common interfaces.
 
 ## Future Development

@@ -39,4 +39,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           julia --project=docs docs/make.jl
-

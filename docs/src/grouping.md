@@ -161,6 +161,8 @@ complex_demographics = population_margins(model, data;
 
 ## Counterfactual Scenario Analysis
 
+See [Population Scenarios](population_scenarios.md) for detailed semantics and implementation notes on scenarios in population analysis.
+
 ### Policy Scenario Framework
 
 The `scenarios` parameter modifies variable values for the entire population, creating counterfactual analyses:

@@ -13,10 +13,12 @@ This guide demonstrates practical implementation of the two-dimensional analytic
 ### Fundamental Usage Pattern
 
 ```julia
+using Random
 using Margins, DataFrames, GLM
 
 # Generate sample data
 n = 1000
+Random.seed!(06515)
 df = DataFrame(
     y = randn(n),
     x1 = randn(n), 
@@ -385,6 +387,42 @@ stata_scenarios = profile_margins(wage_model, data, stata_grid; type=:effects)
 stata_subgroups = population_margins(wage_model, data; 
                                    type=:effects, 
                                    groups=:female)
+```
+
+## MixedModels.jl Examples
+
+Minimal linear and generalized linear mixed models with population analysis.
+
+```julia
+# Illustrative example (not executed in docs CI): MixedModels integration
+using Random
+using DataFrames, CategoricalArrays, MixedModels, StatsModels, Margins
+
+# Synthetic random-intercept dataset
+Random.seed!(42)
+n_groups = 20; n_per = 30; n = n_groups * n_per
+group = repeat(1:n_groups, inner=n_per)
+x = randn(n)
+u = randn(n_groups)  # random intercepts
+y = 1.0 .+ 0.5 .* x .+ u[group] .+ 0.2 .* randn(n)
+df = DataFrame(y=y, x=x, group=categorical(string.(group)))
+
+# Linear mixed model
+lmm = fit(MixedModel, @formula(y ~ 1 + x + (1 | group)), df)
+
+# Population AME for x (averaged across sample distribution)
+ame_lmm = population_margins(lmm, df; type=:effects, vars=[:x])
+
+# Generalized linear mixed model (binary outcome)
+η = -0.5 .+ 1.2 .* x .+ u[group]
+p = 1.0 ./ (1 .+ exp.(-η))
+ybin = rand.(Bernoulli.(p))
+df_bin = DataFrame(y=ybin, x=x, group=df.group)
+
+glmm = GeneralizedLinearMixedModel(@formula(y ~ 1 + x + (1 | group)), df_bin, Binomial()) |> fit!
+
+# Probability-scale effects
+prob_effects_glmm = population_margins(glmm, df_bin; type=:effects, vars=[:x], scale=:response)
 ```
 
 ## Best Practices
