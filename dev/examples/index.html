@@ -29,50 +29,37 @@ reference_grid = DataFrame(
 )
 
 # Predictions at specific points
-predictions = profile_margins(model, reference_grid; type=:predictions)
+predictions = profile_margins(model, df, reference_grid; type=:predictions)
 
 # Effects at specific points  
-effects = profile_margins(model, reference_grid; type=:effects, vars=[:x1, :x2])</code></pre><h3 id="2.-Cartesian-Product-Specification"><a class="docs-heading-anchor" href="#2.-Cartesian-Product-Specification">2. Cartesian Product Specification</a><a id="2.-Cartesian-Product-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Cartesian-Product-Specification" title="Permalink"></a></h3><p>For systematic scenario construction, use dictionaries to specify value combinations:</p><pre><code class="language-julia hljs"># Systematic scenario grid (Cartesian product)
-scenarios = (
-    :x1 =&gt; [-1.0, 0.0, 1.0],
-    :x2 =&gt; [10, 20], 
-    :group =&gt; [&quot;A&quot;, &quot;B&quot;]
-)
+effects = profile_margins(model, df, reference_grid; type=:effects, vars=[:x1, :x2])</code></pre><h3 id="2.-Cartesian-Product-Specification"><a class="docs-heading-anchor" href="#2.-Cartesian-Product-Specification">2. Cartesian Product Specification</a><a id="2.-Cartesian-Product-Specification-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Cartesian-Product-Specification" title="Permalink"></a></h3><p>For systematic scenario construction, use grid builders to specify value combinations:</p><pre><code class="language-julia hljs"># Systematic scenario grid (Cartesian product)
+scenarios = cartesian_grid(x1=[-1.0, 0.0, 1.0], x2=[10, 20], group=[&quot;A&quot;, &quot;B&quot;])  
 # Creates 3×2×2 = 12 evaluation points
 
 # Effects across all scenarios
-scenario_effects = profile_margins(model, df; 
-    at=scenarios, 
-    type=:effects, 
-    vars=[:x1]
-)
+scenario_effects = profile_margins(model, df, scenarios; type=:effects, vars=[:x1])
 DataFrame(scenario_effects)</code></pre><h3 id="3.-At-Sample-Means-(Most-Common)"><a class="docs-heading-anchor" href="#3.-At-Sample-Means-(Most-Common)">3. At Sample Means (Most Common)</a><a id="3.-At-Sample-Means-(Most-Common)-1"></a><a class="docs-heading-anchor-permalink" href="#3.-At-Sample-Means-(Most-Common)" title="Permalink"></a></h3><p>For representative case analysis:</p><pre><code class="language-julia hljs"># Effects at sample means - most interpretable approach
 means_effects = profile_margins(model, df, means_grid(df); type=:effects)
 
 # Predictions at sample means
-means_predictions = profile_margins(model, df, means_grid(df); type=:predictions)</code></pre><h3 id="4.-Explicit-Profile-Lists"><a class="docs-heading-anchor" href="#4.-Explicit-Profile-Lists">4. Explicit Profile Lists</a><a id="4.-Explicit-Profile-Lists-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Explicit-Profile-Lists" title="Permalink"></a></h3><p>For irregular or custom evaluation points:</p><pre><code class="language-julia hljs"># Explicit profile specification
-custom_profiles = [
-    Dict(:x1 =&gt; -1.0, :x2 =&gt; 10, :group =&gt; &quot;A&quot;),
-    Dict(:x1 =&gt;  0.0, :x2 =&gt; 15, :group =&gt; &quot;B&quot;), 
-    Dict(:x1 =&gt;  1.0, :x2 =&gt; 20, :group =&gt; &quot;A&quot;)
-]
-
-results = profile_margins(model, df; at=custom_profiles, type=:effects)</code></pre><h3 id="5.-Categorical-Mixtures-for-Policy-Analysis"><a class="docs-heading-anchor" href="#5.-Categorical-Mixtures-for-Policy-Analysis">5. Categorical Mixtures for Policy Analysis</a><a id="5.-Categorical-Mixtures-for-Policy-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Categorical-Mixtures-for-Policy-Analysis" title="Permalink"></a></h3><p>For realistic population scenarios using categorical mixtures:</p><pre><code class="language-julia hljs">using CategoricalArrays
-
-# Realistic policy scenarios with population composition
-policy_scenario = profile_margins(model, df;
-    at=Dict(:group =&gt; mix(&quot;A&quot; =&gt; 0.5, &quot;B&quot; =&gt; 0.3, &quot;C&quot; =&gt; 0.2)),
-    type=:predictions
+means_predictions = profile_margins(model, df, means_grid(df); type=:predictions)</code></pre><h3 id="4.-Explicit-Profile-Tables"><a class="docs-heading-anchor" href="#4.-Explicit-Profile-Tables">4. Explicit Profile Tables</a><a id="4.-Explicit-Profile-Tables-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Explicit-Profile-Tables" title="Permalink"></a></h3><p>For irregular or custom evaluation points, pass an explicit DataFrame:</p><pre><code class="language-julia hljs">custom_profiles = DataFrame(
+    x1 = [-1.0, 0.0, 1.0],
+    x2 = [10, 15, 20],
+    group = [&quot;A&quot;, &quot;B&quot;, &quot;A&quot;]
 )
 
+results = profile_margins(model, df, custom_profiles; type=:effects)</code></pre><h3 id="5.-Categorical-Mixtures-for-Policy-Analysis"><a class="docs-heading-anchor" href="#5.-Categorical-Mixtures-for-Policy-Analysis">5. Categorical Mixtures for Policy Analysis</a><a id="5.-Categorical-Mixtures-for-Policy-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Categorical-Mixtures-for-Policy-Analysis" title="Permalink"></a></h3><p>For realistic population scenarios using categorical mixtures:</p><pre><code class="language-julia hljs">using CategoricalArrays
+
+# Realistic policy scenarios with population composition
+mixture_grid = DataFrame(group=[mix(&quot;A&quot; =&gt; 0.5, &quot;B&quot; =&gt; 0.3, &quot;C&quot; =&gt; 0.2)])
+policy_scenario = profile_margins(model, df, mixture_grid; type=:predictions)
+
 # Multiple policy scenarios
-policy_effects = profile_margins(model, df;
-    at=Dict(
-        :x1 =&gt; [0, 1],  # Policy intervention levels
-        :group =&gt; mix(&quot;A&quot; =&gt; 0.6, &quot;B&quot; =&gt; 0.4)  # Target population
-    ),
-    type=:effects
-)</code></pre><h2 id="Economic-Analysis-Workflow"><a class="docs-heading-anchor" href="#Economic-Analysis-Workflow">Economic Analysis Workflow</a><a id="Economic-Analysis-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Economic-Analysis-Workflow" title="Permalink"></a></h2><h3 id="Wage-Determination-Analysis"><a class="docs-heading-anchor" href="#Wage-Determination-Analysis">Wage Determination Analysis</a><a id="Wage-Determination-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Wage-Determination-Analysis" title="Permalink"></a></h3><p>Complete econometric workflow using human capital theory:</p><pre><code class="language-julia hljs">using GLM, CategoricalArrays, Random
+policy_grid = DataFrame(
+    x1 = [0, 1],  # Policy intervention levels
+    group = [mix(&quot;A&quot; =&gt; 0.6, &quot;B&quot; =&gt; 0.4), mix(&quot;A&quot; =&gt; 0.6, &quot;B&quot; =&gt; 0.4)]
+)
+policy_effects = profile_margins(model, df, policy_grid; type=:effects)</code></pre><h2 id="Economic-Analysis-Workflow"><a class="docs-heading-anchor" href="#Economic-Analysis-Workflow">Economic Analysis Workflow</a><a id="Economic-Analysis-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Economic-Analysis-Workflow" title="Permalink"></a></h2><h3 id="Wage-Determination-Analysis"><a class="docs-heading-anchor" href="#Wage-Determination-Analysis">Wage Determination Analysis</a><a id="Wage-Determination-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Wage-Determination-Analysis" title="Permalink"></a></h3><p>Complete econometric workflow using human capital theory:</p><pre><code class="language-julia hljs">using GLM, CategoricalArrays, Random
 
 # Generate realistic econometric dataset
 Random.seed!(06515)
@@ -121,13 +108,9 @@ println(&quot;Effects for typical person:&quot;)
 println(DataFrame(mem_results))
 
 # Policy scenarios: education and unemployment effects
-policy_analysis = profile_margins(wage_model, data;
-    at=Dict(
-        :education =&gt; [&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;],
-        :unemployment_rate =&gt; [3.0, 6.0, 9.0]  # Recession scenarios
-    ),
-    type=:predictions
-)
+policy_grid = cartesian_grid(education=[&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;],
+                             unemployment_rate=[3.0, 6.0, 9.0])
+policy_analysis = profile_margins(wage_model, data, policy_grid; type=:predictions)
 println(&quot;Policy scenario predictions:&quot;)
 println(DataFrame(policy_analysis))</code></pre><h3 id="Logistic-Regression-Example"><a class="docs-heading-anchor" href="#Logistic-Regression-Example">Logistic Regression Example</a><a id="Logistic-Regression-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Logistic-Regression-Example" title="Permalink"></a></h3><p>Binary outcome analysis with proper probability interpretation:</p><pre><code class="language-julia hljs"># Generate binary outcome data
 data.manager = [rand() &lt; (1/(1+exp(-(-1.0 + 0.03*age + 0.5*edu + 0.02*exp - 0.3*fem)))) ? 1 : 0 
@@ -140,19 +123,14 @@ logit_model = glm(@formula(manager ~ age + education + experience + female),
 # Effects on probability scale (most interpretable)
 prob_effects = population_margins(logit_model, data; 
                                 type=:effects, 
-                                target=:mu)
+                                scale=:response)
 println(&quot;Effects on probability of management position:&quot;)
 println(DataFrame(prob_effects))
 
 # Gender gap analysis across education levels
-gender_gap = profile_margins(logit_model, data;
-    at=Dict(
-        :education =&gt; [&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;],
-        :female =&gt; [0, 1]
-    ),
-    type=:predictions,
-    target=:mu
-)
+gender_grid = cartesian_grid(education=[&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;], female=[0, 1])
+gender_gap = profile_margins(logit_model, data, gender_grid;
+    type=:predictions, scale=:response)
 println(&quot;Gender gap in management probability by education:&quot;)
 println(DataFrame(gender_gap))</code></pre><h2 id="Elasticity-Analysis"><a class="docs-heading-anchor" href="#Elasticity-Analysis">Elasticity Analysis</a><a id="Elasticity-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Elasticity-Analysis" title="Permalink"></a></h2><h3 id="Basic-Elasticity-Computation"><a class="docs-heading-anchor" href="#Basic-Elasticity-Computation">Basic Elasticity Computation</a><a id="Basic-Elasticity-Computation-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Elasticity-Computation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Population average elasticities
 elasticities = population_margins(wage_model, data; 
@@ -163,12 +141,9 @@ println(&quot;Population average elasticities:&quot;)
 println(DataFrame(elasticities))
 
 # Elasticities at different education levels
-edu_elasticities = profile_margins(wage_model, data;
-    at=Dict(:education =&gt; [&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;]),
-    type=:effects,
-    measure=:elasticity,
-    vars=[:age, :experience]
-)
+edu_grid = cartesian_grid(education=[&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;]) 
+edu_elasticities = profile_margins(wage_model, data, edu_grid;
+    type=:effects, measure=:elasticity, vars=[:age, :experience])
 println(&quot;Elasticities by education level:&quot;)
 println(DataFrame(edu_elasticities))</code></pre><h3 id="Semi-Elasticities"><a class="docs-heading-anchor" href="#Semi-Elasticities">Semi-Elasticities</a><a id="Semi-Elasticities-1"></a><a class="docs-heading-anchor-permalink" href="#Semi-Elasticities" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Semi-elasticity: % change in wages per unit change in unemployment
 unemployment_semi = population_margins(wage_model, data;
@@ -234,11 +209,8 @@ complex_policy = population_margins(wage_model, data;
                                   scenarios=(:urban =&gt; [0, 1], 
                                                :unemployment_rate =&gt; [3.0, 9.0]))</code></pre><h3 id="Robust-Standard-Errors"><a class="docs-heading-anchor" href="#Robust-Standard-Errors">Robust Standard Errors</a><a id="Robust-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Standard-Errors" title="Permalink"></a></h3><pre><code class="language-julia hljs">using CovarianceMatrices
 
-# Heteroskedasticity-robust standard errors
-robust_model = glm(@formula(log_wage ~ age + education + experience + female), 
-                   data, Normal(), vcov=HC1())
-
-robust_effects = population_margins(robust_model, data; type=:effects)
+# Heteroskedasticity-robust standard errors (HC1)
+robust_effects = population_margins(wage_model, data; vcov=CovarianceMatrices.HC1, type=:effects)
 println(&quot;Robust standard errors:&quot;)
 println(DataFrame(robust_effects))</code></pre><h3 id="Performance-Comparison"><a class="docs-heading-anchor" href="#Performance-Comparison">Performance Comparison</a><a id="Performance-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Comparison" title="Permalink"></a></h3><pre><code class="language-julia hljs">using BenchmarkTools
 
@@ -251,23 +223,19 @@ println(&quot;Population margins performance (scales with n):&quot;)
 @btime population_margins($wage_model, $data; type=:effects)
 
 # Complex scenario analysis (still O(1) for profiles)
-complex_scenarios = (
-    :age =&gt; [25, 35, 45, 55],
-    :education =&gt; [&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;],
-    :urban =&gt; [0, 1]
-)
+complex_scenarios = cartesian_grid(age=[25, 35, 45, 55],
+                                   education=[&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;],
+                                   urban=[0, 1])
 println(&quot;Complex scenario performance (24 profiles, still O(1)):&quot;)
-@btime profile_margins($wage_model, $data; at=$complex_scenarios, type=:effects)</code></pre><h2 id="Stata-Migration-Examples"><a class="docs-heading-anchor" href="#Stata-Migration-Examples">Stata Migration Examples</a><a id="Stata-Migration-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Stata-Migration-Examples" title="Permalink"></a></h2><p>Direct equivalency for economists familiar with Stata:</p><pre><code class="language-julia hljs"># Stata: margins, dydx(*)
+@btime profile_margins($wage_model, $data, $complex_scenarios; type=:effects)</code></pre><h2 id="Stata-Migration-Examples"><a class="docs-heading-anchor" href="#Stata-Migration-Examples">Stata Migration Examples</a><a id="Stata-Migration-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Stata-Migration-Examples" title="Permalink"></a></h2><p>Direct equivalency for economists familiar with Stata:</p><pre><code class="language-julia hljs"># Stata: margins, dydx(*)
 stata_ame = population_margins(wage_model, data; type=:effects)
 
 # Stata: margins, at(means) dydx(*)  
 stata_mem = profile_margins(wage_model, data, means_grid(data); type=:effects)
 
 # Stata: margins, at(age=(25 35 45) education=(1 2 3))
-stata_scenarios = profile_margins(wage_model, data;
-    at=Dict(:age =&gt; [25, 35, 45], :education =&gt; [&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;]),
-    type=:effects
-)
+stata_grid = cartesian_grid(age=[25, 35, 45], education=[&quot;HS&quot;, &quot;College&quot;, &quot;Graduate&quot;]) 
+stata_scenarios = profile_margins(wage_model, data, stata_grid; type=:effects)
 
 # Stata: margins, over(female)
 stata_subgroups = population_margins(wage_model, data; 
@@ -288,4 +256,4 @@ function robust_margins_analysis(model, data)
         @warn &quot;AD backend failed, using finite differences&quot; exception=e
         return population_margins(model, data; backend=:fd, type=:effects)
     end
-end</code></pre><hr/><p><em>These examples demonstrate the full range of Margins.jl capabilities. For detailed API documentation, see <a href="../api/">API Reference</a>. For performance optimization, see <a href="../performance/">Performance Guide</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../api/">« API Reference</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 13 September 2025 01:11">Saturday 13 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><hr/><p><em>These examples demonstrate the full range of Margins.jl capabilities. For detailed API documentation, see <a href="../api/">API Reference</a>. For performance optimization, see <a href="../performance/">Performance Guide</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../api/">« API Reference</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 13 September 2025 01:52">Saturday 13 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
