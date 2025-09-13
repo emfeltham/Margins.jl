@@ -1,6 +1,7 @@
 # Margins.jl
 
 [![Build Status](https://github.com/emfeltham/Margins.jl/workflows/CI/badge.svg)](https://github.com/emfeltham/Margins.jl/actions)
+[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://emfeltham.github.io/Margins.jl/stable/)
 
 Marginal effects and adjusted predictions for Julia statistical models.
 
