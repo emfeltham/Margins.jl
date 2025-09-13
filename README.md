@@ -218,3 +218,29 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 | `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)` |
 | `margins` | `population_margins(model, data; type=:predictions)` |
 | `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` |
+
+## Citation
+
+If you use Margins.jl in your research, please cite:
+
+```bibtex
+@software{margins_jl,
+  author = {Feltham, Eric M.},
+  title = {Margins.jl: Marginal Effects and Adjusted Predictions for Julia Statistical Models},
+  url = {https://github.com/emfeltham/Margins.jl},
+  version = {2.0.0},
+  year = {2025}
+}
+```
+
+Margins.jl builds upon FormulaCompiler.jl for high-performance statistical computation. Please also cite:
+
+```bibtex
+@software{formulacompiler_jl,
+  author = {Feltham, Eric M.},
+  title = {FormulaCompiler.jl: High-Performance Formula Evaluation and Automatic Differentiation for Julia},
+  url = {https://github.com/emfeltham/FormulaCompiler.jl},
+  version = {1.0.0},
+  year = {2025}
+}
+```

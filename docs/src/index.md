@@ -219,6 +219,32 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 
 **Requirements**: Julia ≥ 1.10
 
+## Citation
+
+If you use Margins.jl in your research, please cite:
+
+```bibtex
+@software{margins_jl,
+  author = {Feltham, Eric M.},
+  title = {Margins.jl: Marginal Effects and Adjusted Predictions for Julia Statistical Models},
+  url = {https://github.com/emfeltham/Margins.jl},
+  version = {2.0.0},
+  year = {2025}
+}
+```
+
+Margins.jl builds upon FormulaCompiler.jl for high-performance statistical computation. Please also cite:
+
+```bibtex
+@software{formulacompiler_jl,
+  author = {Feltham, Eric M.},
+  title = {FormulaCompiler.jl: High-Performance Formula Evaluation and Automatic Differentiation for Julia},
+  url = {https://github.com/emfeltham/FormulaCompiler.jl},
+  version = {1.0.0},
+  year = {2025}
+}
+```
+
 ---
 
 *For conceptual background on the 2×2 framework, see [Mathematical Foundation](mathematical_foundation.md). For comprehensive function reference, see [API Reference](api.md).*
