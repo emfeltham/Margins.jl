@@ -217,7 +217,7 @@ using Pkg
 Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 ```
 
-**Requirements**: Julia ≥ 1.9
+**Requirements**: Julia ≥ 1.10
 
 ---
 
