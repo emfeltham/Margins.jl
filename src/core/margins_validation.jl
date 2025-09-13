@@ -68,8 +68,8 @@ end
 Population-specific validation for scenarios parameter.
 """
 function _validate_scenarios_specific(scenarios, vars, type)
-    if !(scenarios isa Dict)
-        throw(ArgumentError("scenarios parameter must be a Dict specifying counterfactual scenarios"))
+    if !(scenarios isa NamedTuple)
+        throw(ArgumentError("scenarios parameter must be a NamedTuple specifying counterfactual scenarios. Example: scenarios=(treatment=[0, 1], income=[30000, 50000])"))
     end
     
     # Teaching validation: Check for vars/scenarios overlap

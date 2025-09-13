@@ -1834,3 +1834,79 @@ function quantile_grid(data; vars...)
     
     return _build_cartesian_refgrid(at_dict, data_nt, mean)
 end
+
+# =============================================================================
+# String-to-Categorical Conversion for Reference Grids
+# =============================================================================
+
+"""
+    process_reference_grid(data::DataFrame, grid::DataFrame) -> DataFrame
+
+Process reference grid to convert string values to proper categorical values.
+
+When users specify categorical levels using strings in reference grids
+(e.g., `cartesian_grid(education=["High School", "College"])`), this function
+automatically converts those strings to proper `CategoricalValue` objects
+that match the categorical structure of the original data.
+
+# Arguments
+- `data::DataFrame`: Original data containing categorical variables
+- `grid::DataFrame`: Reference grid potentially containing string specifications
+
+# Returns
+- `DataFrame`: Processed grid with string values converted to categorical values
+
+# Algorithm
+1. For each column in the grid:
+   - Check if corresponding data column is categorical
+   - If grid column contains strings AND data column is categorical:
+     - Validate all strings exist as valid levels in the data
+     - Convert strings to proper `CategoricalValue` objects using CategoricalArrays.jl
+   - Otherwise, pass through unchanged
+
+# Error Handling
+- Throws informative error if string doesn't match any categorical level
+- Suggests available levels when conversion fails
+
+# Examples
+```julia
+# Original data has categorical education variable
+data = DataFrame(education = categorical(["High School", "College", "Graduate"]))
+
+# User specifies grid with strings
+grid = DataFrame(education = ["High School", "College"])
+
+# Automatic conversion to proper categorical values
+processed_grid = process_reference_grid(data, grid)
+```
+"""
+function process_reference_grid(data::DataFrame, grid::DataFrame)
+    processed_grid = copy(grid)
+    
+    for col_name in names(grid)
+        # Convert to Symbol for property access
+        col_symbol = Symbol(col_name)
+        
+        if hasproperty(data, col_symbol) && isa(data[!, col_symbol], CategoricalVector)
+            data_cat_vec = data[!, col_symbol]
+            data_levels = levels(data_cat_vec)
+            grid_values = grid[!, col_symbol]
+            
+            if eltype(grid_values) <: AbstractString
+                # Validate all strings exist in categorical levels
+                for str_val in grid_values
+                    if !(str_val in data_levels)
+                        error("Level '$str_val' not found in column '$col_name'. Available levels: $data_levels")
+                    end
+                end
+                
+                # Use CategoricalArrays.jl to create proper categorical vector
+                # This preserves the same levels, ordering, and structure as original
+                converted_vec = CategoricalArrays.categorical(grid_values, levels=data_levels, ordered=isordered(data_cat_vec))
+                processed_grid[!, col_symbol] = converted_vec
+            end
+        end
+    end
+    
+    return processed_grid
+end

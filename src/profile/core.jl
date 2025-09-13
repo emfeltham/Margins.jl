@@ -358,6 +358,10 @@ function profile_margins(
     # Convert data to NamedTuple for consistency
     data_nt = Tables.columntable(data)
     
+    # Process reference grid to convert string categorical specifications to proper categorical values
+    # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
+    processed_reference_grid = process_reference_grid(data, reference_grid)
+    
     # Shared input validation for common parameters  
     validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
     
@@ -366,18 +370,18 @@ function profile_margins(
         throw(ArgumentError("reference_grid cannot be nothing"))
     end
     
-    # Reference grid specific validation
-    if nrow(reference_grid) == 0
+    # Reference grid specific validation (use processed grid for actual validation)
+    if nrow(processed_reference_grid) == 0
         throw(ArgumentError("reference_grid cannot be empty"))
     end
     
-    # Validate data types in reference grid - explicit error policy
-    for col_name in names(reference_grid)
-        col = reference_grid[!, col_name]
+    # Validate data types in reference grid - explicit error policy (use processed grid)
+    for col_name in names(processed_reference_grid)
+        col = processed_reference_grid[!, col_name]
         _validate_reference_grid_column_type(col, col_name)
     end
     
-    if ncol(reference_grid) == 0
+    if ncol(processed_reference_grid) == 0
         throw(ArgumentError("reference_grid must have at least one column"))
     end
     
@@ -398,7 +402,7 @@ function profile_margins(
         end
         
         # Check reference grid variables against both data and model variables
-        for col_name in names(reference_grid)
+        for col_name in names(processed_reference_grid)
             col_symbol = Symbol(col_name)
             if !(col_symbol in data_vars) && !(col_symbol in model_vars)
                 throw(ArgumentError("Reference grid variable '$col_name' not found in model data. Available variables: $(sort(collect(data_vars)))"))
@@ -407,7 +411,7 @@ function profile_margins(
     catch e
         # If we can't compile the formula (which might happen if the reference grid is invalid),
         # just check against data variables for basic validation
-        for col_name in names(reference_grid)
+        for col_name in names(processed_reference_grid)
             col_symbol = Symbol(col_name)
             if !(col_symbol in data_vars)
                 throw(ArgumentError("Reference grid variable '$col_name' not found in data. Available variables: $(sort(collect(data_vars)))"))
@@ -415,8 +419,8 @@ function profile_margins(
         end
     end
     
-    # Route to single implementation with reference grid directly
-    return _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, vcov, reference_grid, ci_alpha, contrasts)
+    # Route to single implementation with processed reference grid
+    return _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts)
 end
 
 

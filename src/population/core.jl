@@ -36,8 +36,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
   - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
-- `scenarios=nothing`: Counterfactual scenarios (Dict mapping variables to values)
-  - Example: `Dict(:x1 => 0, :x2 => [1, 2])` creates scenarios for all combinations
+- `scenarios=nothing`: Counterfactual scenarios (NamedTuple mapping variables to values)
+  - Example: `(x1=0, x2=[1, 2])` creates scenarios for all combinations
 - `groups=nothing`: Grouping specification for stratified analysis
   - Simple: `:education` or `[:region, :gender]` for categorical grouping
   - Continuous: `(:income, 4)` for quartiles, `(:age, [25, 50, 75])` for thresholds
@@ -90,7 +90,7 @@ result = population_margins(model, data; vars=[:x1], ci_alpha=0.01)
 DataFrame(result)  # Includes ci_lower and ci_upper columns
 
 # Counterfactual analysis: effects when x2 is set to 0 vs 1
-result = population_margins(model, data; vars=[:x1], scenarios=Dict(:x2 => [0, 1]))
+result = population_margins(model, data; vars=[:x1], scenarios=(x2=[0, 1],))
 
 # Grouping examples
 result = population_margins(model, data; groups=:education)  # By education level
@@ -360,7 +360,7 @@ end
     Teaching validation that provides helpful error messages when users 
 incorrectly specify the same variable in both vars and scenarios parameters.
 """
-function _validate_vars_scenarios_overlap(vars, scenarios::Dict)
+function _validate_vars_scenarios_overlap(vars, scenarios::NamedTuple)
     # Convert vars to vector for consistent handling
     vars_vec = vars isa Symbol ? [vars] : (vars === :all_continuous ? Symbol[] : vars)
     
@@ -377,17 +377,17 @@ function _validate_vars_scenarios_overlap(vars, scenarios::Dict)
         
         What you're asking:
            vars = [$(join(vars_vec, ", "))]        -> "What's the marginal effect of these variables?"
-           scenarios = Dict(...)  -> "Hold these variables constant at specific values"
+           scenarios = (...)  -> "Hold these variables constant at specific values"
         
         This is contradictory! You can't compute the effect of changing a variable while holding it constant.
         
         What you probably want:
         
         1. Effect of OTHER variables when $(overlapping_list) varies:
-           population_margins(model, data; vars=[:other_var], scenarios=Dict(:$(overlapping_list) => [value1, value2]))
+           population_margins(model, data; vars=[:other_var], scenarios=($(overlapping_list) = [value1, value2],))
            
         2. Predicted outcomes when $(overlapping_list) varies:
-           population_margins(model, data; type=:predictions, scenarios=Dict(:$(overlapping_list) => [value1, value2]))
+           population_margins(model, data; type=:predictions, scenarios=($(overlapping_list) = [value1, value2],))
            
         3. Effect of $(overlapping_list) within subgroups:
            population_margins(model, data; vars=[$(overlapping_list)], groups=:grouping_var)

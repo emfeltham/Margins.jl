@@ -99,7 +99,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     metadata[:alpha] = ci_alpha
     
     # Store scenarios and groups variable information for Context column
-    scenarios_vars = scenarios === nothing ? Symbol[] : (scenarios isa Dict ? collect(keys(scenarios)) : Symbol[])
+    scenarios_vars = scenarios === nothing ? Symbol[] : (scenarios isa NamedTuple ? collect(keys(scenarios)) : Symbol[])
     groups_vars = groups === nothing ? Symbol[] : _extract_group_variables(groups)
     metadata[:scenarios_vars] = scenarios_vars
     metadata[:groups_vars] = groups_vars
@@ -206,10 +206,10 @@ Creates all combinations of scenario values for Cartesian product expansion.
 Note: Function name preserved for compatibility, but now processes 'scenarios' parameter.
 """
 function _parse_at_specification(scenarios)
-    if scenarios isa Dict
+    if scenarios isa NamedTuple
         # Create all combinations of scenario values
         var_names = collect(keys(scenarios))
-        var_values = [scenarios[k] isa Vector ? scenarios[k] : [scenarios[k]] for k in var_names]  # Ensure vectors
+        var_values = [getproperty(scenarios, k) isa Vector ? getproperty(scenarios, k) : [getproperty(scenarios, k)] for k in var_names]  # Ensure vectors
         contexts = []
         for combo in Iterators.product(var_values...)
             context = Dict(zip(var_names, combo))
@@ -217,7 +217,7 @@ function _parse_at_specification(scenarios)
         end
         return contexts
     else
-        error("scenarios parameter must be a Dict specifying variable values")
+        error("scenarios parameter must be a NamedTuple specifying variable values")
     end
 end
 
