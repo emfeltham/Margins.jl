@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog. Version bump is deferred; entries are under "Unreleased" until a tag is cut.
 
+## v2.0.1 — 2025-09-13
+
+### Docs and CI
+- Replaced legacy `at=` examples with explicit reference grids (api, index, performance, examples, mathematical_foundation, computational_architecture).
+- Clarified backend policy: no `:auto`, no silent fallback; `backend=:ad` default with explicit `:fd` when requested.
+- Consolidated Population Scenarios into `docs/src/population_scenarios.md`; added to User Guide nav.
+- Added Weights guide (`docs/src/weights.md`) with correct weighted averaging and delta‑method SEs.
+- Fixed grouping grammar (`=>`), corrected `vcov` examples to use `population_margins(...; vcov=...)`.
+- Switched Installation to GitHub URL (unregistered) in README and docs.
+- Seeded RNGs in doctested examples (seed 06515) to stabilize outputs.
+- Added cross-links between API/Grouping/Comparison and Scenarios/Weights.
+- Added Docs CI workflow (GH Actions), enabled versioned docs (stable via tags, dev via main), and manual dispatch.
+
+### Other
+- Bumped package version to 2.0.1.
+
 ## v2.0.0 — 2025-09-12
 
 ### Breaking Changes - Type System Redesign
@@ -102,4 +118,3 @@ This major version bump reflects the significant type system improvements while 
 
 ### Tests
 - Full test suite passes (core, features, performance, statistical validation, validation); no behavior changes.
-
