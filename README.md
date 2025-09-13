@@ -11,7 +11,7 @@ using Margins, DataFrames, GLM
 
 # Fit your model
 n = 1_000_00
-data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n), x3 = x2 = randn(n))
+data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n), x3 = randn(n))
 model = lm(@formula(y ~ x1 + x2 + x3), data)
 
 # Population average marginal effects (AME)
@@ -89,13 +89,13 @@ profile_margins(model, data, means_grid(data); type=:predictions)     # Predicti
 ### Population Scenarios (at) and Groups
 ```julia
 # Effects at counterfactual values (continuous + boolean)
-population_margins(model, data; type=:effects, vars=[:x], scenarios=Dict(:z => 0.5))
+population_margins(model, data; type=:effects, vars=[:x], scenarios=(z=0.5,))
 
 # Predictions under scenario grids (Cartesian expansion)
-population_margins(model, data; type=:predictions, scenarios=Dict(:x => [-1, 0, 1], :treated => [true, false]))
+population_margins(model, data; type=:predictions, scenarios=(x=[-1, 0, 1], treated=[true, false]))
 
 # Weighted contexts (e.g., survey weights)
-population_margins(model, data; type=:effects, vars=[:g], scenarios=Dict(:x => 0.0), weights=:w)
+population_margins(model, data; type=:effects, vars=[:g], scenarios=(x=0.0,), weights=:w)
 
 # Grouped analysis (Stata `over()` analogue)
 population_margins(model, data; type=:effects, vars=[:x], groups=(:z, 4))     # quartiles of z
@@ -128,8 +128,8 @@ reference_grid = DataFrame(group=["A", "B"])
 profile_margins(model, data, reference_grid; type=:effects)
 
 # Population scenarios (Stata `at()` analogue)
-population_margins(model, data; type=:effects, scenarios=Dict(:x1 => 0.0, :treatment => true))
-population_margins(model, data; type=:predictions, scenarios=Dict(:x1 => [-2.0, 0.0, 2.0]))
+population_margins(model, data; type=:effects, scenarios=(x1=0.0, treatment=true))
+population_margins(model, data; type=:predictions, scenarios=(x1=[-2.0, 0.0, 2.0],))
 ```
 
 ### Stratified Analysis
@@ -185,7 +185,7 @@ using Pkg
 Pkg.add("Margins")
 ```
 
-**Requirements**: Julia ≥ 1.9
+**Requirements**: Julia ≥ 1.10
 
 ## Implementation Details
 

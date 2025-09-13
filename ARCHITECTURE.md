@@ -43,12 +43,12 @@ Profile            │  MEM          │  APM
 
 **User Interface:**
 - `population_margins(model, data; type=:effects, vars=[:x1, :x2])` → **AME**
-- `population_margins(model, data; type=:effects, vars=[:x1], over=[:region])` → **AME stratified by region**
-- `population_margins(model, data; type=:effects, vars=[:x1], over=Dict(:x2 => [1, 2, 3]))` → **AME at specific x2 values**
+- `population_margins(model, data; type=:effects, vars=[:x1], groups=:region)` → **AME stratified by region**
+- `population_margins(model, data; type=:effects, vars=[:x1], scenarios=(x2=[1, 2, 3],))` → **AME at specific x2 values**
 - `population_margins(model, data; type=:predictions)` → **AAP** (vars not needed)
-- `profile_margins(model, reference_grid; type=:effects, vars=[:x1, :x2])` → **MEM** (derivatives/row-specific contrasts at each reference point)
-- `profile_margins(model, reference_grid, data; type=:effects, vars=[:x1])` → **MEM** (smart: fills missing vars, row-specific contrasts for categorical)
-- `profile_margins(model, reference_grid; type=:predictions)` → **APM** (fitted values at each reference point)
+- `profile_margins(model, data, means_grid(data); type=:effects, vars=[:x1, :x2])` → **MEM** (derivatives/contrasts at sample means)
+- `profile_margins(model, data, cartesian_grid(x1=[0,1,2]); type=:effects, vars=[:x1])` → **MER** (effects at specific profiles)  
+- `profile_margins(model, data, reference_grid; type=:predictions)` → **APM/APR** (fitted values at profiles)
 
 **Future Extensions:**
 - `profile_contrasts(model, reference_grid; vars=[:x1])` → **Pairwise contrasts between reference points**
@@ -59,7 +59,7 @@ Profile            │  MEM          │  APM
 ```
 src/
 ├── Margins.jl              # Module definition, exports
-├── types.jl                 # MarginsResult, error types  
+├── types.jl                 # EffectsResult, PredictionsResult, MarginsResult (abstract), error types  
 ├── engine/
 │   ├── core.jl             # MarginsEngine, construction
 │   ├── utilities.jl        # Shared utilities, validation
@@ -181,16 +181,9 @@ function profile_margins(model, reference_grid::DataFrame, data::DataFrame; kwar
     return profile_margins(model, complete_reference_grid; kwargs...)
 end
 
-# Other convenience methods build reference grids, then call primary method
-function profile_margins(model, data::DataFrame; at=:means, kwargs...)
-    reference_grid = _build_means_refgrid(data)
-    return profile_margins(model, reference_grid; kwargs...)
-end
-
-function profile_margins(model, data::DataFrame; at::Dict, kwargs...)
-    reference_grid = _build_cartesian_refgrid(at, data)  # Dict(:x => [1,2], :y => [3])
-    return profile_margins(model, reference_grid; kwargs...)
-end
+# Reference grid builders create grids, then call primary method
+# Users call: profile_margins(model, data, means_grid(data))
+# Users call: profile_margins(model, data, cartesian_grid(x=[1,2], y=[3]))
 ```
 
 ##  **Data Flow Architecture**
@@ -214,7 +207,7 @@ MarginsResult(df, G, metadata)   # Return structured result
 
 **Population Margins with `at` (Counterfactual):**
 ```
-population_margins(model, data; type=:effects, at=Dict(:income => [30k, 50k]))
+population_margins(model, data; type=:effects, scenarios=(income=[30000, 50000],))
     ↓
 For each at specification:
     Override specified variables for entire population
@@ -228,7 +221,7 @@ MarginsResult(df, G, metadata)
 
 **Population Margins with `over` (Subgroup Analysis):**
 ```
-population_margins(model, data; type=:effects, over=(:age => [30, 50, 70], :region))
+population_margins(model, data; type=:effects, groups=(:age => [30, 50, 70], :region))
     ↓
 Parse over specification:
     Continuous vars: create subgroups around specified values
@@ -248,7 +241,7 @@ MarginsResult(df, G, metadata)
 
 **Population Margins with Both `at` and `over`:**
 ```
-population_margins(model, data; over=[:region], at=Dict(:income => [30k, 50k]))
+population_margins(model, data; groups=:region, scenarios=(income=[30000, 50000],))
     ↓
 Create evaluation contexts: subgroups × counterfactual scenarios
     ↓
@@ -288,7 +281,7 @@ profile_margins(model, complete_reference_grid; ...)  # Call primary method
 
 **Option 3: Convenience method builds reference grid**
 ```
-profile_margins(model, data; at=Dict(:x => [1,2], :y => [3]), type=:effects)  # MEM
+profile_margins(model, data, cartesian_grid(x=[1,2], y=[3]); type=:effects)  # MER at specific profiles
     ↓
 _build_cartesian_refgrid(at, data)   # Build reference grid from Dict + typical values
     ↓
@@ -430,7 +423,7 @@ end
     @test @allocated(population_margins(model, data)) == 0
     
     # Profile should be bounded (ForwardDiff overhead)
-    @test @allocated(profile_margins(model, data; at=:means)) < 1000
+    @test @allocated(profile_margins(model, data, means_grid(data))) < 1000
 end
 ```
 
@@ -461,7 +454,7 @@ end
 **Allocating Versions (Convenience):**
 ```julia
 result = population_margins(model, data; type=:effects)
-result = profile_margins(model, data; at=:means, type=:effects)
+result = profile_margins(model, data, means_grid(data); type=:effects)
 ```
 
 **In-Place Versions (Performance):**
@@ -473,26 +466,26 @@ profile_margins!(df, G, engine, profiles; type=:effects)
 ### **Parameter Consistency**
 ```julia
 # Both functions share core parameter semantics
-population_margins(model, data; type, vars, target, backend, at, over, vcov, ...)
-profile_margins(model, reference_grid; type, vars, target, backend, vcov, ...)
-#                     ↑ at/over for counterfactuals/subgroups    ↑ reference_grid for evaluation points
+population_margins(model, data; type, vars, scale, backend, scenarios, groups, vcov, ...)
+profile_margins(model, data, reference_grid; type, vars, scale, backend, vcov, ...)
+#                     ↑ scenarios/groups for counterfactuals/subgroups    ↑ explicit reference_grid
 
-# Convenience methods for profile_margins:
-profile_margins(model, data; type, vars, target, backend, vcov, ...)           # at defaults to :means
-profile_margins(model, data; at=:means, type, vars, target, backend, vcov, ...)
-profile_margins(model, data; at=Dict(...), type, vars, target, backend, vcov, ...)
+# Reference grid builders for profile_margins:
+profile_margins(model, data, means_grid(data); type, vars, scale, backend, vcov, ...)
+profile_margins(model, data, cartesian_grid(vars...); type, vars, scale, backend, vcov, ...)
+profile_margins(model, data, balanced_grid(data; vars...); type, vars, scale, backend, vcov, ...)
 ```
 
-### **`at` vs `over` Parameters for Population Margins**
+### **`scenarios` vs `groups` Parameters for Population Margins**
 
 **Key Distinction (Following Stata's `margins` Command):**
-- **`at`**: Counterfactual scenarios - override variable values for entire population
-- **`over`**: Subgroup analysis - stratify by observed data groups
+- **`scenarios`**: Counterfactual scenarios - override variable values for entire population  
+- **`groups`**: Subgroup analysis - stratify by observed data groups
 
-#### **`at` Parameter - Counterfactual Analysis (Stata's `at()` Option):**
+#### **`scenarios` Parameter - Counterfactual Analysis (Stata's `at()` Option):**
 ```julia
 # Equivalent to Stata: margins, dydx(education) at(income=(30000 50000))
-population_margins(model, data; vars=[:education], at=Dict(:income => [30000, 50000]))
+population_margins(model, data; vars=[:education], scenarios=(income=[30000, 50000],))
 # "AME of education IF everyone had income=30k, IF everyone had income=50k"
 ```
 
@@ -502,12 +495,12 @@ population_margins(model, data; vars=[:education], at=Dict(:income => [30000, 50
 3. Set **everyone's** income to 50,000  
 4. Compute education AME across full population with this override
 
-#### **`over` Parameter - Subgroup Analysis (Stata's `over()` Option):**
+#### **`groups` Parameter - Subgroup Analysis (Stata's `over()` Option):**
 
 **Simple Categorical Stratification:**
 ```julia
 # Equivalent to Stata: margins, dydx(education) over(region)
-population_margins(model, data; vars=[:education], over=[:region])
+population_margins(model, data; vars=[:education], groups=:region)
 # "AME of education within each observed region group"
 ```
 
@@ -515,12 +508,12 @@ population_margins(model, data; vars=[:education], over=[:region])
 ```julia
 # Hybrid syntax with precise control
 population_margins(model, data; vars=[:education], 
-                  over=(:age => [25, 45, 65],           # Continuous: specify subgroup centers
-                       :gender => ["Man", "Woman"],     # Categorical: specify subset
-                       :region))                         # Categorical: all observed levels
+                  groups=(:age => [25, 45, 65],         # Continuous: specify subgroup centers
+                          :gender => ["Man", "Woman"],   # Categorical: specify subset
+                          :region))                       # Categorical: all observed levels
 ```
 
-**Rules for Enhanced `over`:**
+**Rules for Enhanced `groups`:**
 - **Continuous variables**: Must specify values (creates subgroups around those values)
 - **Categorical variables**: 
   - Specified → use those levels only
@@ -530,17 +523,17 @@ population_margins(model, data; vars=[:education],
 #### **Combined Usage:**
 ```julia
 population_margins(model, data; vars=[:education], 
-                  over=[:region],                    # Subgroups: within each region
-                  at=Dict(:income => [30k, 50k]))   # Counterfactual: at these income levels
+                  groups=:region,                    # Subgroups: within each region
+                  scenarios=(income=[30000, 50000],))  # Counterfactual: at these income levels
 # "AME of education within each region, at income=30k and at income=50k"
 ```
 
 #### **Conflict Resolution:**
-When a variable appears in both `vars` and `at`/`over`, the specification for that variable is ignored:
+When a variable appears in both `vars` and `scenarios`/`groups`, the specification for that variable is ignored:
 ```julia
-population_margins(model, data; vars=[:education, :income], at=Dict(:income => [30k, 50k]))
+population_margins(model, data; vars=[:education, :income], scenarios=(income=[30000, 50000],))
 # education AME: computed at income = 30k, 50k
-# income AME: computed across full sample (at[:income] ignored for income's own effect)
+# income AME: computed across full sample (scenarios[:income] ignored for income's own effect)
 ```
 
 ### **vars Parameter Usage**
