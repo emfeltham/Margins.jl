@@ -346,12 +346,12 @@ mixed_groups = population_margins(model, data;
 policy_analysis = population_margins(model, data;
                                    type=:effects,
                                    vars=[:outcome],
-                                   scenarios=Dict(:policy => [0, 1]))
+                                   scenarios=(:policy => [0, 1]))
 
 # Multi-variable scenarios
 complex_scenarios = population_margins(model, data;
                                      type=:effects,
-                                     scenarios=Dict(:treatment => [0, 1], 
+                                     scenarios=(:treatment => [0, 1], 
                                                    :policy => ["current", "reform"]))
 ```
 
@@ -362,7 +362,7 @@ full_analysis = population_margins(model, data;
                                  type=:effects,
                                  vars=[:outcome],
                                  groups=[:education, :region],
-                                 scenarios=Dict(:treatment => [0, 1]))
+                                 scenarios=(:treatment => [0, 1]))
 ```
 
 ### Complex Nested Patterns
@@ -381,7 +381,7 @@ parallel_groups = population_margins(model, data;
 healthcare_analysis = population_margins(health_model, health_data;
     type=:effects,
     groups=:state => (:urban => [:insurance_type, (:income, 3)]),
-    scenarios=Dict(:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
+    scenarios=(:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
 )
 
 # Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios

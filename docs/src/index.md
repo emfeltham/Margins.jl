@@ -176,7 +176,7 @@ Profile analysis achieves computational complexity independent of dataset size t
 @time profile_margins(model, large_data, means_grid(large_data))    # identical complexity
 
 # Complex scenario specifications maintain constant-time properties
-scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 profiles
+scenarios = (x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
 @time profile_margins(model, huge_data; at=scenarios)  # remains constant time
 ```
 

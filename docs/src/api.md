@@ -196,7 +196,7 @@ population_margins(model, data; groups=(:income, [20000, 50000, 80000]))
 #### Counterfactual Analysis (`scenarios`)
 ```julia
 # Effects when treatment is set to 1 vs 0 for entire population
-population_margins(model, data; scenarios=Dict(:treatment => [0, 1]), type=:effects)
+population_margins(model, data; scenarios=(treatment=[0, 1]), type=:effects)
 ```
 
 ## Usage Patterns
@@ -212,7 +212,7 @@ aap = population_margins(model, data; type=:predictions)
 
 # 3. Profile analysis for specific scenarios
 mem = profile_margins(model, data; at=:means)
-scenarios = profile_margins(model, data; at=Dict(:x1 => [0,1,2]))
+scenarios = profile_margins(model, data, cartesian_grid(x1=[0,1,2]))
 
 # 4. Convert to DataFrame for analysis
 DataFrame(ame)
@@ -224,7 +224,7 @@ DataFrame(ame)
 fast_result = population_margins(model, data; backend=:fd, scale=:link)
 
 # Profile analysis is O(1) - efficient regardless of data size
-scenarios = Dict(:var1 => [-2,-1,0,1,2], :var2 => ["A","B","C"])  # 15 scenarios
+scenarios = (var1=[-2,-1,0,1,2], var2=["A","B","C"])  # 15 scenarios
 profile_result = profile_margins(model, huge_data; at=scenarios)  # ~300μs regardless of data size
 ```
 
@@ -243,7 +243,7 @@ robust_effects = population_margins(robust_model, data)
 # Complex categorical scenarios
 policy_scenario = profile_margins(model, data;
     at=Dict(
-        :treatment => mix(0 => 0.3, 1 => 0.7),           # 70% treatment rate
+        treatment=mix(0 => 0.3, 1 => 0.7),           # 70% treatment rate
         :education => mix("HS" => 0.3, "College" => 0.7)  # Education composition
     ),
     type=:predictions

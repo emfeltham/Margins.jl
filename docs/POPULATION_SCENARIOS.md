@@ -111,14 +111,14 @@ Core internal functions
 ```julia
 # Effects at z=0.5
 population_margins(
-    m, data; type=:effects, vars=[:x], scenarios=Dict(:z => 0.5)
+    m, data; type=:effects, vars=[:x], scenarios=(z=0.5,)
 )
 
 # Predictions under an x grid and treated/untreated
 population_margins(
     m, data;
     type = :predictions,
-    scenarios = Dict(:x => [-1, 0, 1], :treated => [true, false])
+    scenarios = (x=[-1, 0, 1], treated=[true, false])
 )
 ```
 - `profile_margins` remains reference-grid based and does not accept `scenarios`.
@@ -156,13 +156,13 @@ df = DataFrame(res)
 names(df)  # ["education", "type", "variable", "contrast", "estimate", "se", ...]
 
 # Scenarios only: at_x appears prefixed, comes first  
-res = population_margins(m, data; type=:effects, vars=[:income], scenarios=Dict(:x => [0, 1]))
+res = population_margins(m, data; type=:effects, vars=[:income], scenarios=(x=[0, 1],))
 df = DataFrame(res) 
 names(df)  # ["at_x", "type", "variable", "contrast", "estimate", "se", ...]
 
 # Both groups and scenarios: groups first (unprefixed), then scenarios (prefixed)
 res = population_margins(m, data; type=:effects, vars=[:income], 
-                        groups=:education, scenarios=Dict(:x => [0, 1]))
+                        groups=:education, scenarios=(x=[0, 1],))
 df = DataFrame(res)
 names(df)  # ["education", "at_x", "type", "variable", "contrast", "estimate", ...]
 

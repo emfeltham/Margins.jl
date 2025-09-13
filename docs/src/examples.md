@@ -69,7 +69,7 @@ For systematic scenario construction, use dictionaries to specify value combinat
 
 ```julia
 # Systematic scenario grid (Cartesian product)
-scenarios = Dict(
+scenarios = (
     :x1 => [-1.0, 0.0, 1.0],
     :x2 => [10, 20], 
     :group => ["A", "B"]
@@ -344,18 +344,18 @@ DataFrame(age_effects_by_bin)
 # Policy scenarios: unemployment rate effects
 recession_scenarios = population_margins(wage_model, data;
                                        type=:effects,
-                                       scenarios=Dict(:unemployment_rate => [3.0, 6.0, 12.0]))
+                                       scenarios=(:unemployment_rate => [3.0, 6.0, 12.0]))
 
 # Combined grouping and scenarios
 education_recession = population_margins(wage_model, data;
                                        type=:effects,
                                        groups=:education,
-                                       scenarios=Dict(:unemployment_rate => [3.0, 12.0]))
+                                       scenarios=(:unemployment_rate => [3.0, 12.0]))
 
 # Multi-variable scenarios
 complex_policy = population_margins(wage_model, data;
                                   type=:effects,
-                                  scenarios=Dict(:urban => [0, 1], 
+                                  scenarios=(:urban => [0, 1], 
                                                :unemployment_rate => [3.0, 9.0]))
 ```
 
@@ -387,7 +387,7 @@ println("Population margins performance (scales with n):")
 @btime population_margins($wage_model, $data; type=:effects)
 
 # Complex scenario analysis (still O(1) for profiles)
-complex_scenarios = Dict(
+complex_scenarios = (
     :age => [25, 35, 45, 55],
     :education => ["HS", "College", "Graduate"],
     :urban => [0, 1]

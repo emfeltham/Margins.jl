@@ -57,8 +57,8 @@
 
 | Stata Approach | Margins.jl Population Approach | Notes |
 |-----------------|-------------------------------|-------|
-| `margins, at(treatment=(0 1))` | `population_margins(model, data; scenarios=Dict(:treatment => [0, 1]))` | Everyone untreated vs everyone treated |
-| `margins education, at(policy=(0 1))` | `population_margins(model, data; groups=:education, scenarios=Dict(:policy => [0, 1]))` | Policy effects by education |
+| `margins, at(treatment=(0 1))` | `population_margins(model, data; scenarios=(treatment=[0, 1]))` | Everyone untreated vs everyone treated |
+| `margins education, at(policy=(0 1))` | `population_margins(model, data; groups=:education, scenarios=(policy=[0, 1]))` | Policy effects by education |
 
 ### Profile vs Population Interpretation
 
@@ -73,7 +73,7 @@ profile_results = profile_margins(model, data,
 
 # Margins.jl Population Alternative (often more relevant)  
 population_results = population_margins(model, data;
-    scenarios=Dict(:treatment => [0, 1]),
+    scenarios=(treatment=[0, 1]),
     type=:effects)
 ```
 
@@ -108,7 +108,7 @@ effects_in_xbins = population_margins(model, data;
 # 4) Counterfactual predictions as x changes (not effects of x)
 preds_under_x = population_margins(model, data;
     type=:predictions,
-    scenarios=Dict(:x => [-2.0, 0.0, 2.0]))
+    scenarios=(x=[-2.0, 0.0, 2.0]))
 ```
 
 See also: “Skip Rule” note in the Population Grouping docs for rationale and guidance.
@@ -153,7 +153,7 @@ DataFrame(res)  # Shows dydx(x) by Q1..Q4
 
 | Stata Pattern | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins education, at(treatment=(0 1))` | `population_margins(model, data; groups=:education, scenarios=Dict(:treatment => [0, 1]))` | Group × scenario analysis |
+| `margins education, at(treatment=(0 1))` | `population_margins(model, data; groups=:education, scenarios=(treatment=[0, 1]))` | Group × scenario analysis |
 | Multiple `margins` commands | Single comprehensive call | More efficient in Julia |
 
 ## Advanced Patterns Beyond Stata
@@ -221,7 +221,7 @@ margins, at(treatment=1 policy=1)
 
 ```julia
 # Julia approach (automatic Cartesian product):
-population_margins(model, data; scenarios=Dict(:treatment => [0, 1], :policy => [0, 1]))
+population_margins(model, data; scenarios=(treatment=[0, 1], policy=[0, 1]))
 ```
 
 Note: `scenarios` in Julia are population‑level counterfactuals (everyone receives each setting in turn). For Stata’s point‑evaluation semantics of `at()`, use `profile_margins(..., at=...)`.
@@ -267,7 +267,7 @@ education_effects = population_margins(model, data;
 policy_analysis = population_margins(model, data;
                                    type=:effects,
                                    groups=:education,
-                                   scenarios=Dict(:policy_treatment => [0, 1]))
+                                   scenarios=(:policy_treatment => [0, 1]))
 
 # All results readily available as DataFrames
 DataFrame(policy_analysis)
@@ -320,7 +320,7 @@ DataFrame(comprehensive_results)
 # This single Julia command:
 result = population_margins(model, data;
     groups=:region => [:education, (:income, 4)],
-    scenarios=Dict(:treatment => [0, 1], :policy => ["old", "new"])
+    scenarios=(treatment=[0, 1], policy=["old", "new"])
 )
 
 # Replaces ~30 individual Stata margins commands:
@@ -349,7 +349,7 @@ result = population_margins(model, data;
 
 # Pattern 3: Multiple at() values → scenarios or profile grids
 # margins, at(x=(0 1 2)) → profile_margins(model, data, cartesian_grid(x=[0, 1, 2]))
-# OR population_margins(model, data; scenarios=Dict(:x => [0, 1, 2]))  # for counterfactuals
+# OR population_margins(model, data; scenarios=(x=[0, 1, 2]))  # for counterfactuals
 
 # Pattern 4: Complex manual analysis → comprehensive single call
 # Multiple Stata commands → single population_margins with groups + scenarios

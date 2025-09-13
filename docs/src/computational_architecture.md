@@ -131,7 +131,7 @@ FormulaCompiler.jl enables sophisticated scenario analysis while maintaining typ
 
 ```julia
 # Representative scenarios with mixed types
-scenarios = Dict(
+scenarios = (
     :income => [30000, 50000, 80000],        # Continuous override
     :education => ["High School", "College"], # Categorical override  
     :treatment => [0.2, 0.8]                 # Fractional Bool override

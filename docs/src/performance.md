@@ -31,7 +31,7 @@ using BenchmarkTools, Margins
 @btime profile_margins($model, data_1M; at=:means, type=:effects)       # same complexity
 
 # Complex scenarios also O(1)
-scenarios = Dict(:x1 => [0,1,2], :x2 => [10,20,30], :group => ["A","B"])  # 18 profiles
+scenarios = (x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
 @btime profile_margins($model, $huge_data; at=scenarios)                    # still constant time
 ```
 
@@ -164,7 +164,7 @@ Margins.jl achieves zero-allocation performance for computational workflows:
 #### For Large Datasets
 ```julia
 # Use profile analysis for exploration (O(1) memory)
-scenarios = Dict(:x1 => [-1, 0, 1], :treatment => [0, 1])
+scenarios = (x1=[-1, 0, 1], treatment=[0, 1])
 results = profile_margins(model, large_data; at=scenarios)
 
 # Use population analysis with zero-allocation backends
@@ -420,9 +420,9 @@ result2 = profile_margins(model, data; at=:means, type=:effects)  # Reuses compi
 ```julia
 # Process multiple scenarios efficiently
 scenarios = [
-    Dict(:x1 => 0, :group => "A"),
-    Dict(:x1 => 1, :group => "B"), 
-    Dict(:x1 => 2, :group => "C")
+    Dict(x1=0, group="A"),
+    Dict(x1=1, group="B"), 
+    Dict(x1=2, group="C")
 ]
 
 # Single compilation, multiple scenario evaluations

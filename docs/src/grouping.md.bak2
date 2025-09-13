@@ -74,12 +74,12 @@ Multiple levels of nesting support complex organizational structures:
 # Three-level hierarchy: country → region → education
 deep_hierarchy = population_margins(model, data;
                                   type=:effects,
-                                  groups=:country = (:region => :education))
+                                  groups=:country => (:region => :education))
 
 # Four-level hierarchy: sector → company → department → position
 organizational = population_margins(model, data;
                                   type=:effects, 
-                                  groups=:sector = (:company = (:department = :position)))
+                                  groups=:sector => (:company => (:department => :position)))
 ```
 
 ### Parallel Grouping Within Hierarchy
@@ -90,12 +90,12 @@ Complex patterns combining hierarchical and cross-tabulated structures:
 # Region first, then education×gender cross-tab within each region
 parallel_nested = population_margins(model, data;
                                    type=:effects,
-                                   groups=:region = [:education, :gender])
+                                   groups=:region => [:education, :gender])
 
 # Region first, then separate analyses for education levels AND income quartiles
 mixed_parallel = population_margins(model, data;
                                   type=:effects,
-                                  groups=:region = [:education, (:income, 4)])
+                                  groups=:region => [:education, (:income, 4)])
 ```
 
 ## Continuous Variable Binning
@@ -169,12 +169,12 @@ The `scenarios` parameter modifies variable values for the entire population, cr
 # Binary treatment analysis
 treatment_effects = population_margins(model, data;
                                      type=:effects,
-                                     scenarios=(:treatment = [0, 1]))
+                                     scenarios=(:treatment => [0, 1]))
 
 # Multi-level policy scenarios
 policy_scenarios = population_margins(model, data;
                                     type=:effects,
-                                    scenarios=(:policy_level = ["none", "moderate", "aggressive"]))
+                                    scenarios=(:policy_level => ["none", "moderate", "aggressive"]))
 ```
 
 ### Multi-Variable Scenarios
@@ -185,17 +185,17 @@ Cartesian product expansion for complex policy analysis:
 # Treatment × policy combinations
 comprehensive_policy = population_margins(model, data;
                                         type=:effects,
-                                        scenarios=(:treatment = [0, 1], 
-                                                      :policy = ["current", "reform"]))
+                                        scenarios=(:treatment => [0, 1], 
+                                                      :policy => ["current", "reform"]))
 
 # Results: 4 scenarios (2×2 combinations)
 
 # Three-dimensional policy space
 complex_scenarios = population_margins(model, data;
                                      type=:effects,
-                                     scenarios=(:treatment = [0, 1],
-                                                   :funding = [0.8, 1.0, 1.2],
-                                                   :regulation = ["light", "standard", "strict"]))
+                                     scenarios=(:treatment => [0, 1],
+                                                   :funding => [0.8, 1.0, 1.2],
+                                                   :regulation => ["light", "standard", "strict"]))
 
 # Results: 18 scenarios (2×3×3 combinations)
 ```
@@ -211,7 +211,7 @@ Groups and scenarios combine multiplicatively for complete analytical coverage:
 full_analysis = population_margins(model, data;
                                  type=:effects,
                                  groups=[:education, :region],
-                                 scenarios=(:treatment = [0, 1]))
+                                 scenarios=(:treatment => [0, 1]))
 
 # Results: Each education×region combination under both treatment scenarios
 ```
@@ -222,8 +222,8 @@ full_analysis = population_margins(model, data;
 # Healthcare policy evaluation
 healthcare_comprehensive = population_margins(health_model, health_data;
     type=:effects,
-    groups=:state = (:urban_rural = [:insurance_type, (:income, 3)]),
-    scenarios=(:aca_expansion = [0, 1], :medicaid_funding = [0.8, 1.2])
+    groups=:state => (:urban_rural => [:insurance_type, (:income, 3)]),
+    scenarios=(:aca_expansion => [0, 1], :medicaid_funding => [0.8, 1.2])
 )
 
 # Results: State × Urban/Rural × (Insurance×Income-Tertiles) × ACA×Medicaid scenarios
@@ -240,14 +240,14 @@ tax_analysis = population_margins(tax_model, tax_data;
     type=:effects,
     vars=[:after_tax_income],
     groups=(:pre_tax_income, 5),  # Income quintiles
-    scenarios=(:tax_rate = [0.15, 0.25, 0.35], :deduction_cap = [10000, 25000])
+    scenarios=(:tax_rate => [0.15, 0.25, 0.35], :deduction_cap => [10000, 25000])
 )
 
 # Labor market analysis with unemployment scenarios  
 labor_analysis = population_margins(employment_model, labor_data;
     type=:effects,
     groups=[:education, (:experience, 4)],  # Education × experience quartiles
-    scenarios=(:unemployment_rate = [3.0, 6.0, 9.0])  # Economic conditions
+    scenarios=(:unemployment_rate => [3.0, 6.0, 9.0])  # Economic conditions
 )
 ```
 
@@ -257,9 +257,9 @@ labor_analysis = population_margins(employment_model, labor_data;
 # Treatment effectiveness across patient subgroups
 clinical_analysis = population_margins(treatment_model, patient_data;
     type=:effects,
-    groups=:hospital = [:condition_severity, (:age, 4)],
-    scenarios=(:treatment_protocol = ["standard", "intensive"],
-                   :resource_level = ["constrained", "adequate"])
+    groups=:hospital => [:condition_severity, (:age, 4)],
+    scenarios=(:treatment_protocol => ["standard", "intensive"],
+                   :resource_level => ["constrained", "adequate"])
 )
 ```
 
@@ -269,8 +269,8 @@ clinical_analysis = population_margins(treatment_model, patient_data;
 # Educational intervention analysis
 education_policy = population_margins(achievement_model, student_data;
     type=:effects,
-    groups=:district = (:school_type = [:socioeconomic_status, (:baseline_score, 3)]),
-    scenarios=(:intervention = [0, 1], :funding_increase = [0.0, 0.1, 0.2])
+    groups=:district => (:school_type => [:socioeconomic_status, (:baseline_score, 3)]),
+    scenarios=(:intervention => [0, 1], :funding_increase => [0.0, 0.1, 0.2])
 )
 ```
 
@@ -287,10 +287,10 @@ using BenchmarkTools
 @btime population_margins($model, $data; groups=:education)
 
 # Complex hierarchical grouping: O(n/k) per final subgroup
-@btime population_margins($model, $data; groups=:region = (:education = :gender))
+@btime population_margins($model, $data; groups=:region => (:education => :gender))
 
 # With scenarios: same O(n/k) complexity repeated for each scenario
-@btime population_margins($model, $data; groups=:education, scenarios=(:treatment = [0, 1]))
+@btime population_margins($model, $data; groups=:education, scenarios=(:treatment => [0, 1]))
 ```
 
 ### Memory Efficiency
@@ -314,7 +314,7 @@ key_analysis = population_margins(model, large_data;
 # Complex patterns still feasible for large n
 complex_large = population_margins(model, large_data;
                                  type=:effects,
-                                 groups=:region = [:education, (:income, 4)])
+                                 groups=:region => [:education, (:income, 4)])
 ```
 
 ## Best Practices
@@ -331,7 +331,7 @@ complex_large = population_margins(model, large_data;
 - Policy targets multiple demographics simultaneously
 - Comprehensive coverage needed
 
-**Hierarchical Grouping** (`groups=:var1 = :var2`):
+**Hierarchical Grouping** (`groups=:var1 => :var2`):
 - Natural organizational structure exists
 - Context matters (e.g., regions have different education systems)
 - Nested decision-making processes
@@ -349,7 +349,7 @@ complex_large = population_margins(model, large_data;
 # groups=[:var1, :var2, :var3, (:var4, 10), (:var5, 5)]
 
 # Better: use hierarchical structure
-groups=:var1 = [:var2, (:var4, 4)]
+groups=:var1 => [:var2, (:var4, 4)]
 ```
 
 #### Empty Subgroups
@@ -364,19 +364,19 @@ groups=:var1 = [:var2, (:var4, 4)]
 - Practical guidance:
   - If you need Stata-style `dydx(x) over(x)`, consider whether you intend profile analysis instead. Use `profile_margins(..., at=...)` to evaluate derivatives at specific values of `x`.
   - If you want effects within strata of `x`, group by a coarser or external variable, or compute effects for other variables while stratifying by `x`.
-  - If you want counterfactual predictions as `x` changes, use `type=:predictions` with `scenarios=(:x = [...])` and omit `x` from `vars`.
+  - If you want counterfactual predictions as `x` changes, use `type=:predictions` with `scenarios=(:x => [...])` and omit `x` from `vars`.
 
 #### Interpretation Complexity
 ```julia
 # For presentation, consider simpler patterns:
 presentation_analysis = population_margins(model, data;
                                          groups=:education,
-                                         scenarios=(:policy = [0, 1]))
+                                         scenarios=(:policy => [0, 1]))
 
 # For comprehensive analysis, use full complexity:
 research_analysis = population_margins(model, data;
-                                     groups=:region = [:education, (:income, 4)],
-                                     scenarios=(:policy = [0, 1], :funding = [0.8, 1.2]))
+                                     groups=:region => [:education, (:income, 4)],
+                                     scenarios=(:policy => [0, 1], :funding => [0.8, 1.2]))
 ```
 
 ---
