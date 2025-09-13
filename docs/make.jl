@@ -1,4 +1,8 @@
-using Documenter, Margins
+using Documenter
+import Pkg
+Pkg.develop(Pkg.PackageSpec(path=joinpath(@__DIR__, "..")))
+Pkg.instantiate()
+using Margins
 
 makedocs(; 
   modules = [Margins],
@@ -28,7 +32,7 @@ makedocs(;
     "API Reference" => "api.md",
     "Examples" => "examples.md"
   ],
-  doctest = false,    # Disable doctests in this build context to avoid missing deps
+  doctest = true,    # Enable doctests
   checkdocs = :none    # Skip docstring checking for now
 )
 
