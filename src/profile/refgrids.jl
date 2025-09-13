@@ -1754,12 +1754,16 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     # Create complete reference grid
     n_rows = nrow(reference_grid)
     complete_cols = Dict{Symbol, Vector}()
-    
-    # First, add all columns from the original reference grid
+
+    # First, add only MODEL columns from the original reference grid
+    # This prevents non-model variables from leaking through
     for col_name in names(reference_grid)
-        complete_cols[Symbol(col_name)] = reference_grid[!, col_name]
+        col_sym = Symbol(col_name)
+        if haskey(typical_values, col_sym)  # Only include if it's a model variable
+            complete_cols[col_sym] = reference_grid[!, col_name]
+        end
     end
-    
+
     # Then, add typical values for missing model variables
     for (var, typical_val) in typical_values
         if !haskey(complete_cols, var)

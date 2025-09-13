@@ -214,7 +214,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     
     # Store original reference grid variable names for output filtering
     original_grid_vars = Set(Symbol.(names(reference_grid)))
-    
+
     # Attempt to remove response variable from display if it appears in the provided grid.
     # Be defensive: formulas with transformed responses (e.g., log(y)) may not expose `.sym`.
     try
@@ -224,9 +224,15 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         # If we cannot determine a simple response symbol, do nothing.
         # Reference grids almost never include the response variable anyway.
     end
-    
-    # Automatically complete reference grid with typical values for missing model variables
+
+    # Complete reference grid with typical values for missing model variables
+    # Note: complete_reference_grid now filters to model variables internally
     completed_reference_grid = complete_reference_grid(reference_grid, model, data_nt)
+
+    # Filter original_grid_vars to only model variables for proper output display
+    # Get model variables from the completed grid to know what was actually kept
+    model_vars_in_grid = Set(Symbol.(names(completed_reference_grid)))
+    original_grid_vars = intersect(original_grid_vars, model_vars_in_grid)
     
     # Build zero-allocation engine with ProfileUsage optimization (including vcov function)
     engine = get_or_build_engine(ProfileUsage, model, data_nt, vars === nothing ? Symbol[] : vars, vcov)

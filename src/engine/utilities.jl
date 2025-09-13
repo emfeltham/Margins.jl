@@ -27,8 +27,8 @@ function _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
         # Boolean variables: baseline is always false
         return false
     else
-        # Categorical variables: delegate to FormulaCompiler's implementation
-        return _get_baseline_level(model, var)
+        # Use FormulaCompiler's implementation
+        return FormulaCompiler._get_baseline_level(model, var)
     end
 end
 

@@ -231,8 +231,10 @@ This filtering is critical for preventing errors when data contains extra column
 (e.g., ID variables, alternative specifications) that aren't part of the fitted model.
 """
 function _get_model_formula_variables(model)
-    # Extract all terms from the model formula RHS 
-    formula_terms = StatsModels.termvars(model.mf.f.rhs)
+    # Extract all terms from the model formula RHS, handling mixed models properly
+    # Use FormulaCompiler's fixed_effects_form to get only fixed effects for mixed models
+    fixed_effects_formula = FormulaCompiler.fixed_effects_form(model)
+    formula_terms = StatsModels.termvars(fixed_effects_formula.rhs)
     return Set{Symbol}(formula_terms)
 end
 
@@ -330,26 +332,18 @@ This is used for backward compatibility with `vars=:all_continuous` and when use
 specifically want derivatives only (no discrete contrasts for categorical variables).
 """
 function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothing)
-    # Get variables that are actually in the model formula
-    model_vars = _get_model_formula_variables(model)
-    
-    continuous_vars = Symbol[]
-    for (name, col) in pairs(data_nt)
-        # CRITICAL FIX: Only process variables that are in the model formula
-        if !(name in model_vars)
-            continue
-        end
-        
-        # Skip weight column - it's not a model variable
-        if !isnothing(weight_col) && name == weight_col
-            continue
-        end
-        
-        # Continuous: numeric types except Bool
-        if eltype(col) <: Real && !(eltype(col) <: Bool)
-            push!(continuous_vars, name)
-        end
+    # Use FormulaCompiler's robust implementation instead of manual type checking
+    # FormulaCompiler analyzes compiled operations to correctly distinguish
+    # continuous vs categorical variables and automatically handles formula filtering
+    compiled = FormulaCompiler.compile_formula(model, data_nt)
+    continuous_vars = FormulaCompiler.continuous_variables(compiled, data_nt)
+
+    # Weight column filtering (defensive check - FormulaCompiler should exclude this automatically
+    # since weight columns shouldn't be in model formulas, but we keep for extra safety)
+    if !isnothing(weight_col)
+        continuous_vars = filter(v -> v != weight_col, continuous_vars)
     end
+
     return continuous_vars
 end
 
