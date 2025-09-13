@@ -3,6 +3,9 @@ The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.d
   juliaup update
 
 in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+┌ Warning: The project dependencies or compat requirements have changed since the manifest was last resolved.
+│ It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary.
+└ @ Pkg.API ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/API.jl:1200
      Testing Margins
 ┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StaticArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
@@ -10,7 +13,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
 ┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
 └ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_QzmG4M/Project.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_9kouzv/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.0
 ⌅ [324d7699] CategoricalArrays v0.10.8
   [60f91f6f] CovarianceMatrices v0.22.0
@@ -18,7 +21,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [31c24e10] Distributions v0.25.120
   [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
   [38e38edf] GLM v1.9.0
-  [883ce5cb] Margins v1.0.1 `~/.julia/dev/Margins`
+  [883ce5cb] Margins v2.0.0 `~/.julia/dev/Margins`
 ⌅ [ff71e718] MixedModels v4.38.1
   [ce6b1742] RDatasets v0.7.7
   [10745b16] Statistics v1.11.1
@@ -30,7 +33,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [de0858da] Printf v1.11.0
   [9a3f8284] Random v1.11.0
   [8dfed614] Test v1.11.0
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_QzmG4M/Manifest.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_9kouzv/Manifest.toml`
   [a4c015fc] ANSIColoredPrinters v0.0.1
   [1520ce14] AbstractTrees v0.4.5
   [79e6a3ab] Adapt v4.3.0
@@ -95,7 +98,7 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [2ab3a3ac] LogExpFunctions v0.3.29
   [6f1432cf] LoweredCodeUtils v3.4.3
   [1914dd2f] MacroTools v0.5.16
-  [883ce5cb] Margins v1.0.1 `~/.julia/dev/Margins`
+  [883ce5cb] Margins v2.0.0 `~/.julia/dev/Margins`
   [d0879d2d] MarkdownAST v0.1.2
   [e1d29d7a] Missings v1.2.0
 ⌅ [ff71e718] MixedModels v4.38.1
@@ -206,13 +209,10 @@ in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and upda
   [8e850ede] nghttp2_jll v1.59.0+0
   [3f19e933] p7zip_jll v17.4.0+2
         Info Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading.
-Precompiling project for configuration --code-coverage=none --color=auto --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none...
-   3584.4 ms  ✓ Margins
-  1 dependency successfully precompiled in 4 seconds. 189 already precompiled.
      Testing Running tests...
-Minimizing 2    Time: 0:00:00 ( 0.14  s/it)[K
+Minimizing 2    Time: 0:00:00 ( 0.16  s/it)[K
    objective: 126.3474937319155[K[A
-[K[AMinimizing 73    Time: 0:00:00 ( 4.52 ms/it)[K
+[K[AMinimizing 73    Time: 0:00:00 ( 5.29 ms/it)[K
 ┌ Warning: Empty dataset provided to hierarchical_grid(). Representative values may be undefined (NaN/missing).
 └ @ Margins ~/.julia/dev/Margins/src/profile/refgrids.jl:1057
 ┌ Warning: Categorical combination Dict(:education => "Graduate", :country => "USA", :region => "South", :city => "CityB") matches no observations in data
@@ -225,15 +225,15 @@ Precompiling project for configuration --code-coverage=none --color=auto --check
 └ @ Margins ~/.julia/dev/Margins/src/profile/refgrids.jl:1210
 [ Info: Medium grid estimated: 15000 combinations.
 Test Summary:        | Pass  Total   Time
-Robust SE Validation |   10     10  22.6s
+Robust SE Validation |   10     10  25.6s
 Test Summary:      | Pass  Total   Time
-Core Functionality |  228    228  44.6s
+Core Functionality |  228    228  50.9s
 Test Summary:     | Pass  Total   Time
-Advanced Features |  495    495  26.7s
+Advanced Features |  495    495  30.1s
 Test Summary: | Pass  Total   Time
-Performance   |   68     68  40.4s
+Performance   |   68     68  45.1s
 Test Summary:           | Pass  Total     Time
-Statistical Correctness |  738    738  1m37.3s
+Statistical Correctness |  738    738  1m47.1s
 Test Summary:    | Pass  Total   Time
-Validation Tests |  147    147  34.2s
+Validation Tests |  147    147  35.0s
      Testing Margins tests passed 

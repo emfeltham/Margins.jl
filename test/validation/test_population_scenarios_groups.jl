@@ -13,7 +13,7 @@ using Margins
     m = lm(@formula(y ~ x + z), df)
 
     # Compute AME of x at a counterfactual z = 0.7 (should be ≈ β1 on identity/link scale)
-    res = population_margins(m, df; type=:effects, vars=[:x], scenarios=Dict(:z => 0.7), scale=:link)
+    res = population_margins(m, df; type=:effects, vars=[:x], scenarios=(z=0.7,), scale=:link)
     dfres = DataFrame(res)
     @test length(dfres.estimate) == 1
     @test dfres.estimate[1] ≈ coef(m)[2] atol=1e-6
@@ -28,7 +28,7 @@ end
     m = lm(@formula(y ~ x + g), df)
 
     # Under identity/link scale, the baseline contrast B vs A should equal coefficient for g:B
-    res = population_margins(m, df; type=:effects, vars=[:g], scenarios=Dict(:x => 0.0), scale=:link)
+    res = population_margins(m, df; type=:effects, vars=[:g], scenarios=(x=0.0,), scale=:link)
     dfr = DataFrame(res)
     # One non-baseline level (B) ⇒ single row
     @test length(dfr.estimate) == 1

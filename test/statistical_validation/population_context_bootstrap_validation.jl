@@ -21,14 +21,14 @@ include("bootstrap_se_validation.jl")
 
     # Compute SEs under scenario at(z=z0) for effect of x on link scale
     original_model = model_func(formula, df)
-    res = population_margins(original_model, df; type=:effects, vars=[:x], scenarios=Dict(:z => 0.5), scale=:link)
+    res = population_margins(original_model, df; type=:effects, vars=[:x], scenarios=(z=0.5,), scale=:link)
     dfr = DataFrame(res)
     computed_ses = dfr.se
 
     # Bootstrap under same scenario
     _, boot_ses, n_successful = bootstrap_margins_computation(
         model_func, formula, df, population_margins;
-        n_bootstrap=150, vars=[:x], type=:effects, scenarios=Dict(:z => 0.5), scale=:link
+        n_bootstrap=150, vars=[:x], type=:effects, scenarios=(z=0.5,), scale=:link
     )
 
     validation = validate_bootstrap_se_agreement(computed_ses, boot_ses; tolerance=0.20, var_names=["x @ z=0.5"]) 
@@ -48,13 +48,13 @@ end
     formula = @formula(y ~ x + g)
 
     original_model = model_func(formula, df)
-    res = population_margins(original_model, df; type=:effects, vars=[:g], scenarios=Dict(:x => 0.0), scale=:link)
+    res = population_margins(original_model, df; type=:effects, vars=[:g], scenarios=(x=0.0,), scale=:link)
     dfr = DataFrame(res)
     computed_ses = dfr.se
 
     _, boot_ses, n_successful = bootstrap_margins_computation(
         model_func, formula, df, population_margins;
-        n_bootstrap=200, vars=[:g], type=:effects, scenarios=Dict(:x => 0.0), scale=:link
+        n_bootstrap=200, vars=[:g], type=:effects, scenarios=(x=0.0,), scale=:link
     )
 
     # Categorical often noisier; tolerance looser
