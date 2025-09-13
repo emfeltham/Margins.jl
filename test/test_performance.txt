@@ -1,0 +1,28 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+ERROR: LoadError: Some tests did not pass: 25 passed, 1 failed, 0 errored, 0 broken.
+in expression starting at /Users/emf/.julia/dev/Margins/test/performance/test_performance.jl:7
+O(1) Profile Margins Scaling: Test Failed at /Users/emf/.julia/dev/Margins/test/performance/test_performance.jl:65
+  Expression: time_ratio < 5.0
+   Evaluated: 10.137535400479267 < 5.0
+
+Stacktrace:
+ [1] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:679 [inlined]
+ [2] macro expansion
+   @ ~/.julia/dev/Margins/test/performance/test_performance.jl:65 [inlined]
+ [3] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [4] macro expansion
+   @ ~/.julia/dev/Margins/test/performance/test_performance.jl:20 [inlined]
+ [5] macro expansion
+   @ ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Test/src/Test.jl:1704 [inlined]
+ [6] top-level scope
+   @ ~/.julia/dev/Margins/test/performance/test_performance.jl:10
+Test Summary:                              | Pass  Fail  Total  Time
+Performance Regression Prevention          |   25     1     26  7.6s
+  O(1) Profile Margins Scaling             |   19     1     20  7.0s
+  Performance Characteristics Verification |    6            6  0.6s

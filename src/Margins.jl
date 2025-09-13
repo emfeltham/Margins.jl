@@ -1,129 +1,87 @@
+"""
+    Margins.jl
+
+A Julia package for computing marginal effects with Stata-like functionality.
+Built on FormulaCompiler.jl for high-performance zero-allocation evaluation.
+
+# 2×2 Framework
+
+**Population vs Profile**:
+- `population_margins()`: Effects/predictions averaged over observed data (AME/AAP)
+- `profile_margins()`: Effects/predictions at specific evaluation points (MEM/APM)
+
+**Effects vs Predictions**:
+- `type=:effects`: Marginal effects (derivatives for continuous, contrasts for categorical)
+- `type=:predictions`: Adjusted predictions (fitted values)
+
+# Core API
+
+- `population_margins(model, data; type, vars, scale, backend, scenarios, groups, measure, vcov)`: Population-level analysis
+- `profile_margins(model, data, reference_grid; type, vars, scale, backend, measure, vcov)`: Profile-level analysis  
+- `EffectsResult`, `PredictionsResult`: Type-specific result containers with Tables.jl interface
+
+# Examples
+
+```julia
+using Margins, DataFrames, GLM
+
+# Fit model
+model = lm(@formula(y ~ x1 + x2), data)
+
+# Population average marginal effects (AME)
+result = population_margins(model, data; type=:effects)
+
+# Marginal effects at sample means (MEM)
+result = profile_margins(model, data, means_grid(data); type=:effects)
+
+# Convert to DataFrame
+df = DataFrame(result)
+```
+"""
 module Margins
 
+# Dependencies
+using Tables, DataFrames, StatsModels, GLM
+using FormulaCompiler
+using FormulaCompiler: CategoricalMixture, MixtureWithLevels, create_balanced_mixture, validate_mixture_against_data, mixture_to_scenario_value
+import FormulaCompiler: mix, _get_baseline_level
+using LinearAlgebra: dot
+using Statistics: mean
 using CategoricalArrays
-import CategoricalArrays.pool
+using Printf: @sprintf
+using Distributions: Normal, cdf, quantile
 
-using DataFrames, Tables
-import DataFrames.DataFrame
-import Tables.columntable
+# Version info
+const VERSION = v"2.0.0"
 
-using Statistics
-using StatsBase, StatsModels
-using Distributions
+# Core API - Clean 2×2 framework  
+export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult
 
-using StatsModels
-using StatsModels: formula, termvars
-import StatsModels: TupleTerm,ColumnTable
+# Display configuration
+export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits
 
-using StatsBase
-import StatsBase.confint
-using StatsBase: vcov
-using StatsModels: AbstractTerm, width, termvars
+# Categorical mixture utilities
+# Re-export FormulaCompiler's native mixture functionality
+export CategoricalMixture, mix
 
-# Needed from Effects.jl to compute effects!:
-using Effects: TypicalTerm  # Import the type only
-import Effects: diag,vcov, _difference_method!, _responsename, something
-import Effects: _invlink_and_deriv, AutoInvLink
-import Effects: expand_grid
+# Reference grid builders (NEW - AsBalanced support)
+export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid, complete_reference_grid
 
-using GLM
-import GLM: LinearModel, GeneralizedLinearModel
-import MixedModels
-import MixedModels: LinearMixedModel, GeneralizedLinearMixedModel
-import MixedModels: sdest
-using MixedModels: MixedModel, fnames, RandomEffectsTerm
-using MixedModels: fixef, fixefnames
+# Include all submodules in dependency order
+include("types.jl")
+include("core/validation.jl")
+include("core/margins_validation.jl")
+include("computation/predictions.jl")
+include("computation/statistics.jl")
+include("engine/measures.jl")  # Measure transformation utilities
+include("engine/core.jl")
+include("engine/utilities.jl") 
+include("engine/caching.jl")  # Unified caching system
+include("population/core.jl")
+include("population/contexts.jl")
+include("population/effects.jl")
+include("profile/core.jl")
+include("profile/refgrids.jl")
+include("profile/contrasts.jl")
 
-using StandardizedPredictors
-
-# INTEGRATION WITH EfficientModelMatrices.jl
-using EfficientModelMatrices
-using EfficientModelMatrices: InplaceModeler, modelmatrix!, fixed_effects_form
-
-## formula helpers
-# Logical negation on Bool → Bool, so modelmatrix sees a Bool dummy
-not(x::Bool) = !x
-
-# Numeric negation on any Real (Float64, Dual, etc.) → one(x) - x
-# Calculates complement
-not(x::T) where {T<:Real} = one(x) - x
-import StatsModels: term
-# whenever you write !term, turn it into function‐term not(term)
-Base.:!(t::StatsModels.Term) = term(not, t)
-
-export not
-##
-
-include("family.jl")
-export Family, family
-
-# APMs and MEMs
-include("reference grid.jl")
-include("modelcols_alt.jl") # new function based on modelcols
-include("modelcols.jl")
-include("typicals.jl")
-include("effects2.jl")
-include("deltaeffects2.jl")
-include("standardized.jl")
-include("typicals get.jl")
-
-export setup_refgrid, setup_contrast_grid
-export get_typicals, typicals!
-export modelvariables
-
-export effects2!
-export effectsΔyΔx, effectsΔyΔx, group_effectsΔyΔx
-
-# AMEs with EfficientModelMatrices integration
-using ForwardDiff, LinearAlgebra
-using LinearAlgebra.BLAS
-import LinearAlgebra.dot
-using GLM: linkinv, mueta
-using MixedModels: RandomEffectsTerm
-
-# Core type definitions
-import Base: show
-using Printf, Distributions
-
-include("workspace.jl")
-
-# Exported types
-include("marginsresult.jl")
-export MarginsResult
-include("margins_to_df.jl")
-
-# Helper functions for AMEs
-include("mueta2.jl")
-include("link.jl")
-
-# Core AME functions with EfficientModelMatrices integration
-include("core.jl")
-include("ame_continuous.jl")
-include("ame_factor.jl")
-include("ame_representation.jl")
-
-include("confint.jl")
-export confint
-
-# Exported types and functions
-export margins
-
-# AME contrasts
-include("contrastresult.jl")
-include("contrasts.jl")
-include("contrast_to_df.jl")
-
-export DataFrame
-
-# Export type; functions
-export ContrastResult, contrast, contrast_levels
-
-# Bayesian methods (very early stage; may be removed)
-
-# Methods for Bayesian models
-import LinearAlgebra.mul!
-
-include("hpdi.jl")
-include("bayes.jl")
-
-end # end module
+end # module

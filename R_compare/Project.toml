@@ -1,0 +1,7 @@
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+CovarianceMatrices = "60f91f6f-d783-54cb-84f9-544141854719"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Margins = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"

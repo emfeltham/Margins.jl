@@ -1,0 +1,229 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+     Testing Margins
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StaticArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "Git_jll" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_qWODar/Project.toml`
+  [6e4b80f9] BenchmarkTools v1.6.0
+⌅ [324d7699] CategoricalArrays v0.10.8
+  [60f91f6f] CovarianceMatrices v0.22.0
+  [a93c6f00] DataFrames v1.7.1
+  [31c24e10] Distributions v0.25.120
+  [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
+  [38e38edf] GLM v1.9.0
+  [883ce5cb] Margins v1.0.0 `~/.julia/dev/Margins`
+⌅ [ff71e718] MixedModels v4.38.1
+  [ce6b1742] RDatasets v0.7.7
+  [10745b16] Statistics v1.11.1
+  [2913bbd2] StatsBase v0.34.6
+  [3eaba693] StatsModels v0.7.6
+  [bd369af6] Tables v1.12.1
+  [ade2ca70] Dates v1.11.0
+  [37e2e46d] LinearAlgebra v1.11.0
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [8dfed614] Test v1.11.0
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_qWODar/Manifest.toml`
+  [a4c015fc] ANSIColoredPrinters v0.0.1
+  [1520ce14] AbstractTrees v0.4.5
+  [79e6a3ab] Adapt v4.3.0
+  [66dad0bd] AliasTables v1.1.3
+  [4c555306] ArrayLayouts v1.11.2
+  [69666777] Arrow v2.8.0
+  [31f734f8] ArrowTypes v2.3.0
+  [093aae92] BSplineKit v0.19.0
+  [aae01518] BandedMatrices v1.9.4
+  [6e4b80f9] BenchmarkTools v1.6.0
+  [c3b6d118] BitIntegers v0.3.5
+  [fa961155] CEnum v0.5.0
+  [336ed68f] CSV v0.10.15
+⌅ [324d7699] CategoricalArrays v0.10.8
+  [da1fd8a2] CodeTracking v2.0.0
+  [5ba52731] CodecLz4 v0.4.6
+  [944b1d66] CodecZlib v0.7.8
+  [6b39b394] CodecZstd v0.8.6
+  [861a8166] Combinatorics v1.0.3
+  [bbf7d656] CommonSubexpressions v0.3.1
+  [f70d9fcc] CommonWorldInvalidations v1.0.0
+  [34da2185] Compat v4.18.0
+  [807dbc54] Compiler v0.1.1
+  [f0e56b4a] ConcurrentUtilities v2.5.0
+  [60f91f6f] CovarianceMatrices v0.22.0
+  [a8cc5b0e] Crayons v4.1.1
+  [9a962f9c] DataAPI v1.16.0
+  [a93c6f00] DataFrames v1.7.1
+⌅ [864edb3b] DataStructures v0.18.22
+  [e2d170a0] DataValueInterfaces v1.0.0
+  [85a47980] Dictionaries v0.4.5
+  [163ba53b] DiffResults v1.1.0
+  [b552c78f] DiffRules v1.15.1
+  [31c24e10] Distributions v0.25.120
+  [ffbed154] DocStringExtensions v0.9.5
+  [e30172f5] Documenter v1.14.1
+  [4e289a0a] EnumX v1.0.5
+  [e2ba6199] ExprTools v0.1.10
+  [442a2c76] FastGaussQuadrature v1.0.2
+  [5789e2e9] FileIO v1.17.0
+  [48062228] FilePathsBase v0.9.24
+  [1a297f60] FillArrays v1.13.0
+  [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
+  [f6369f11] ForwardDiff v1.1.0
+  [38e38edf] GLM v1.9.0
+  [d7ba0133] Git v1.5.0
+  [6407cd72] GroupedArrays v0.3.3
+  [34004b35] HypergeometricFunctions v0.3.28
+  [b5f81e59] IOCapture v0.2.5
+  [615f187c] IfElse v0.1.1
+  [313cdc1a] Indexing v1.1.1
+  [842dd82b] InlineStrings v1.4.5
+  [41ab1584] InvertedIndices v1.3.1
+  [92d709cd] IrrationalConstants v0.2.4
+  [82899510] IteratorInterfaceExtensions v1.0.0
+  [692b3bcd] JLLWrappers v1.7.1
+  [682c06a0] JSON v0.21.4
+  [0f8b85d8] JSON3 v1.14.3
+  [aa1ae85d] JuliaInterpreter v0.10.5
+  [b964fa9f] LaTeXStrings v1.4.0
+  [0e77f7df] LazilyInitializedFields v1.3.0
+  [2ab3a3ac] LogExpFunctions v0.3.29
+  [6f1432cf] LoweredCodeUtils v3.4.3
+  [1914dd2f] MacroTools v0.5.16
+  [883ce5cb] Margins v1.0.0 `~/.julia/dev/Margins`
+  [d0879d2d] MarkdownAST v0.1.2
+  [e1d29d7a] Missings v1.2.0
+⌅ [ff71e718] MixedModels v4.38.1
+  [7e9fb7ac] MixedModelsDatasets v0.1.2
+  [78c3b35d] Mocking v0.8.1
+  [76087f3c] NLopt v1.2.1
+  [77ba4419] NaNMath v1.1.3
+  [bac558e1] OrderedCollections v1.8.1
+  [90014a1f] PDMats v0.11.35
+  [69de0a69] Parsers v2.8.3
+  [2dfb63ee] PooledArrays v1.4.3
+⌅ [aea7be01] PrecompileTools v1.2.1
+  [21216c6a] Preferences v1.5.0
+⌅ [08abe8d2] PrettyTables v2.4.0
+  [92933f4c] ProgressMeter v1.11.0
+  [43287f4e] PtrArrays v1.3.0
+  [1fd47b50] QuadGK v2.11.2
+⌅ [df47a6cb] RData v0.8.3
+  [ce6b1742] RDatasets v0.7.7
+  [189a3867] Reexport v1.2.2
+  [2792f1a3] RegistryInstances v0.1.0
+  [ae029012] Requires v1.3.1
+  [295af30f] Revise v3.9.0
+  [79098fc4] Rmath v0.8.0
+  [6c6a2e73] Scratch v1.3.0
+  [91c51154] SentinelArrays v1.4.8
+  [1277b4bf] ShiftedArrays v2.0.0
+  [a2af1166] SortingAlgorithms v1.2.2
+  [276daf66] SpecialFunctions v2.5.1
+  [03a91e81] SplitApplyCombine v1.2.3
+  [5064a6a7] StandardizedPredictors v1.0.1
+  [aedffcd0] Static v1.2.0
+  [90137ffa] StaticArrays v1.9.15
+  [1e83bf80] StaticArraysCore v1.4.3
+  [10745b16] Statistics v1.11.1
+  [82ae8749] StatsAPI v1.7.1
+  [2913bbd2] StatsBase v0.34.6
+  [4c63d2b9] StatsFuns v1.5.0
+  [3eaba693] StatsModels v0.7.6
+  [892a3eda] StringManipulation v0.4.1
+  [354b36f9] StringViews v1.3.5
+  [856f2bd8] StructTypes v1.11.0
+  [dc5dba14] TZJData v1.5.0+2025b
+  [3783bdb8] TableTraits v1.0.1
+  [bd369af6] Tables v1.12.1
+  [f269a46b] TimeZones v1.22.0
+  [3bb67fe8] TranscodingStreams v0.11.3
+  [9d95f2ec] TypedTables v1.4.6
+  [ea10d353] WeakRefStrings v1.4.2
+  [76eceee3] WorkerUtilities v1.6.1
+  [2e619515] Expat_jll v2.7.1+0
+  [020c3dae] Git_LFS_jll v3.7.0+0
+  [f8c6e375] Git_jll v2.51.1+0
+  [94ce4f54] Libiconv_jll v1.18.0+0
+  [5ced341a] Lz4_jll v1.10.1+0
+  [079eb43e] NLopt_jll v2.10.0+0
+  [9bd350c2] OpenSSH_jll v10.0.1+0
+  [458c3c95] OpenSSL_jll v3.5.2+0
+  [efe28fd5] OpenSpecFun_jll v0.5.6+0
+  [f50d1b31] Rmath_jll v0.5.1+0
+  [3161d3a3] Zstd_jll v1.5.7+1
+  [0dad84c5] ArgTools v1.1.2
+  [56f22d72] Artifacts v1.11.0
+  [2a0f44e3] Base64 v1.11.0
+  [ade2ca70] Dates v1.11.0
+  [8ba89e20] Distributed v1.11.0
+  [f43a241f] Downloads v1.6.0
+  [7b1f6079] FileWatching v1.11.0
+  [9fa8497b] Future v1.11.0
+  [b77e0a4c] InteractiveUtils v1.11.0
+  [4af54fe1] LazyArtifacts v1.11.0
+  [b27032c2] LibCURL v0.6.4
+  [76f85450] LibGit2 v1.11.0
+  [8f399da3] Libdl v1.11.0
+  [37e2e46d] LinearAlgebra v1.11.0
+  [56ddb016] Logging v1.11.0
+  [d6f4376e] Markdown v1.11.0
+  [a63ad114] Mmap v1.11.0
+  [ca575930] NetworkOptions v1.2.0
+  [44cfe95a] Pkg v1.11.0
+  [de0858da] Printf v1.11.0
+  [9abbd945] Profile v1.11.0
+  [3fa0cd96] REPL v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [9e88b42a] Serialization v1.11.0
+  [6462fe0b] Sockets v1.11.0
+  [2f01184e] SparseArrays v1.11.0
+  [f489334b] StyledStrings v1.11.0
+  [4607b0f0] SuiteSparse
+  [fa267f1f] TOML v1.0.3
+  [a4e569a6] Tar v1.10.0
+  [8dfed614] Test v1.11.0
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
+  [e66e0078] CompilerSupportLibraries_jll v1.1.1+0
+  [deac9b47] LibCURL_jll v8.6.0+0
+  [e37daf67] LibGit2_jll v1.7.2+0
+  [29816b5a] LibSSH2_jll v1.11.0+1
+  [c8ffd9c3] MbedTLS_jll v2.28.6+0
+  [14a3606d] MozillaCACerts_jll v2023.12.12
+  [4536629a] OpenBLAS_jll v0.3.27+1
+  [05823500] OpenLibm_jll v0.8.1+2
+  [efcefdf7] PCRE2_jll v10.42.0+1
+  [bea87d4a] SuiteSparse_jll v7.7.0+0
+  [83775a58] Zlib_jll v1.2.13+1
+  [8e850b90] libblastrampoline_jll v5.11.0+0
+  [8e850ede] nghttp2_jll v1.59.0+0
+  [3f19e933] p7zip_jll v17.4.0+2
+        Info Packages marked with ⌅ have new versions available but compatibility constraints restrict them from upgrading.
+Precompiling project for configuration --code-coverage=none --color=auto --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none...
+   3435.6 ms  ✓ Margins
+  1 dependency successfully precompiled in 4 seconds. 189 already precompiled.
+     Testing Running tests...
+┌ Info: Including test file
+└   path = "/Users/emf/.julia/dev/Margins/test/statistical_validation/population_context_bootstrap_validation.jl"
+┌ Info: Including test file
+└   path = "/Users/emf/.julia/dev/Margins/test/validation/test_population_scenarios_groups.jl"
+Test Summary:                                                | Pass  Total  Time
+Bootstrap SE: population_margins with scenarios (continuous) |    2      2  5.2s
+Test Summary:                                                 | Pass  Total  Time
+Bootstrap SE: population_margins with scenarios (categorical) |    2      2  1.9s
+Test Summary:                                         | Pass  Total  Time
+population_margins: scenario-aware continuous effects |    2      2  0.0s
+Test Summary:                                                        | Pass  Total  Time
+population_margins: categorical effects under scenarios (unweighted) |    2      2  0.4s
+Test Summary:                                                | Pass  Total  Time
+population_margins: weighted categorical effects in contexts |    4      4  1.2s
+Test Summary:                                                | Pass  Total  Time
+population_margins: weighted categorical effects with groups |    2      2  1.1s
+     Testing Margins tests passed 

@@ -1,0 +1,205 @@
+The latest version of Julia in the `release` channel is 1.11.6+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.6+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Running R vs Julia comparison...
+
+60×7 DataFrame
+ Row │ dataset      model   type    n_match  n_est_ok  n_se_ok  status
+     │ String       String  String  Int64    Int64     Int64    String
+─────┼─────────────────────────────────────────────────────────────────
+   1 │ mtcars       m1      ame           2         2        2  ok
+   2 │ mtcars       m1      mem           2         2        2  ok
+   3 │ mtcars       m1      aap           1         1        1  ok
+   4 │ mtcars       m1      apm           1         1        1  ok
+   5 │ mtcars       m2      ame           2         2        2  ok
+   6 │ mtcars       m2      mem           2         2        2  ok
+   7 │ mtcars       m2      aap           1         1        1  ok
+   8 │ mtcars       m2      apm           1         1        1  ok
+   9 │ mtcars       m3      ame           3         3        3  ok
+  10 │ mtcars       m3      mem           3         3        3  ok
+  11 │ mtcars       m3      aap           1         1        1  ok
+  12 │ mtcars       m3      apm           1         1        1  ok
+  13 │ mtcars       m4      ame           3         3        3  ok
+  14 │ mtcars       m4      mem           3         3        3  ok
+  15 │ mtcars       m4      aap           1         1        1  ok
+  16 │ mtcars       m4      apm           1         1        1  ok
+  17 │ mtcars       m5      ame           4         4        4  ok
+  18 │ mtcars       m5      mem           4         4        4  ok
+  19 │ mtcars       m5      aap           1         1        1  ok
+  20 │ mtcars       m5      apm           1         1        1  ok
+  21 │ toothgrowth  m1      ame           2         2        2  ok
+  22 │ toothgrowth  m1      mem           2         2        2  ok
+  23 │ toothgrowth  m1      aap           1         1        1  ok
+  24 │ toothgrowth  m1      apm           1         1        1  ok
+  25 │ toothgrowth  m2      ame           2         2        2  ok
+  26 │ toothgrowth  m2      mem           2         2        2  ok
+  27 │ toothgrowth  m2      aap           1         1        1  ok
+  28 │ toothgrowth  m2      apm           1         1        1  ok
+  29 │ toothgrowth  m3      ame           2         2        2  ok
+  30 │ toothgrowth  m3      mem           2         2        2  ok
+  31 │ toothgrowth  m3      aap           1         1        1  ok
+  32 │ toothgrowth  m3      apm           1         1        1  ok
+  33 │ toothgrowth  m4      ame           2         2        2  ok
+  34 │ toothgrowth  m4      mem           2         2        2  ok
+  35 │ toothgrowth  m4      aap           1         1        1  ok
+  36 │ toothgrowth  m4      apm           1         1        1  ok
+  37 │ toothgrowth  m5      ame           2         2        2  ok
+  38 │ toothgrowth  m5      mem           2         2        2  ok
+  39 │ toothgrowth  m5      aap           1         1        1  ok
+  40 │ toothgrowth  m5      apm           1         1        1  ok
+  41 │ titanic      m1      ame           4         4        4  ok
+  42 │ titanic      m1      mem           2         2        2  ok
+  43 │ titanic      m1      aap           1         1        1  ok
+  44 │ titanic      m1      apm           1         1        1  ok
+  45 │ titanic      m2      ame           5         5        5  ok
+  46 │ titanic      m2      mem           3         3        3  ok
+  47 │ titanic      m2      aap           1         1        1  ok
+  48 │ titanic      m2      apm           1         1        1  ok
+  49 │ titanic      m3      ame           5         5        5  ok
+  50 │ titanic      m3      mem           3         3        3  ok
+  51 │ titanic      m3      aap           1         1        1  ok
+  52 │ titanic      m3      apm           1         1        1  ok
+  53 │ titanic      m4      ame           5         5        5  ok
+  54 │ titanic      m4      mem           3         3        3  ok
+  55 │ titanic      m4      aap           1         1        1  ok
+  56 │ titanic      m4      apm           1         1        1  ok
+  57 │ titanic      m5      ame           5         5        5  ok
+  58 │ titanic      m5      mem           3         3        3  ok
+  59 │ titanic      m5      aap           1         1        1  ok
+  60 │ titanic      m5      apm           1         1        1  ok
+
+=== COMPARISON SUMMARY ===
+Total comparisons: 60
+Perfect matches (ok): 60 (100.0%)
+Differences (diff): 0 (0.0%)
+Errors: 0 (0.0%)
+
+ALL COMPARISONS PASSED!
+ok
+116×10 DataFrame
+ Row │ term     est_diff     se_diff      est_ok  se_ok  status  contrast        dataset      model   result_type
+     │ String7  Float64      Float64      Bool    Bool   String  String?         String       String  String
+─────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   1 │ hp       1.23998e-14  2.3531e-7      true   true  ok      derivative      mtcars       m1      ame
+   2 │ wt       1.60494e-12  1.31681e-5     true   true  ok      derivative      mtcars       m1      ame
+   3 │ hp       1.09281e-13  3.37782e-6     true   true  ok      derivative      mtcars       m1      mem
+   4 │ wt       1.04317e-12  1.62803e-5     true   true  ok      derivative      mtcars       m1      mem
+   5 │ AAP      3.55271e-15  1.21865e-10    true   true  ok      missing         mtcars       m1      aap
+   6 │ APM      3.55271e-15  1.21864e-10    true   true  ok      missing         mtcars       m1      apm
+   7 │ cyl      1.36491e-12  9.28562e-5     true   true  ok      derivative      mtcars       m2      ame
+   8 │ wt       1.39533e-12  8.02106e-6     true   true  ok      derivative      mtcars       m2      ame
+   9 │ cyl      1.36557e-12  0.000108225    true   true  ok      derivative      mtcars       m2      mem
+  10 │ wt       1.96376e-12  6.45038e-5     true   true  ok      derivative      mtcars       m2      mem
+  11 │ AAP      0.0          1.98594e-9     true   true  ok      missing         mtcars       m2      aap
+  12 │ APM      0.0          1.98594e-9     true   true  ok      missing         mtcars       m2      apm
+  13 │ hp       1.46758e-15  6.10249e-7     true   true  ok      derivative      mtcars       m3      ame
+  14 │ wt       3.24629e-13  1.81468e-6     true   true  ok      derivative      mtcars       m3      ame
+  15 │ am       9.67004e-14  4.30831e-9     true   true  ok      true vs false   mtcars       m3      ame
+  16 │ hp       2.60417e-14  2.61984e-6     true   true  ok      derivative      mtcars       m3      mem
+  17 │ wt       6.39933e-13  0.00023309     true   true  ok      derivative      mtcars       m3      mem
+  18 │ am       9.5958e-14   2.8758e-8      true   true  ok      true vs false   mtcars       m3      mem
+  19 │ AAP      3.55271e-15  1.28708e-9     true   true  ok      missing         mtcars       m3      aap
+  20 │ APM      1.03029e-13  2.03449e-8     true   true  ok      missing         mtcars       m3      apm
+  21 │ cyl      2.06457e-12  8.59591e-5     true   true  ok      derivative      mtcars       m4      ame
+  22 │ vs       9.99201e-14  7.30623e-8     true   true  ok      true vs false   mtcars       m4      ame
+  23 │ am       7.19425e-14  4.61496e-8     true   true  ok      true vs false   mtcars       m4      ame
+  24 │ cyl      6.78435e-12  0.000129539    true   true  ok      derivative      mtcars       m4      mem
+  25 │ vs       9.83658e-14  7.30623e-8     true   true  ok      true vs false   mtcars       m4      mem
+  26 │ am       6.83897e-14  4.61496e-8     true   true  ok      true vs false   mtcars       m4      mem
+  27 │ AAP      3.55271e-15  1.09242e-9     true   true  ok      missing         mtcars       m4      aap
+  28 │ APM      2.84217e-14  6.93234e-8     true   true  ok      missing         mtcars       m4      apm
+  29 │ cyl      4.15246e-12  0.00077535     true   true  ok      derivative      mtcars       m5      ame
+  30 │ hp       5.13131e-15  8.07406e-7     true   true  ok      derivative      mtcars       m5      ame
+  31 │ wt       1.84253e-12  5.20769e-5     true   true  ok      derivative      mtcars       m5      ame
+  32 │ am       5.68288e-13  2.12821e-8     true   true  ok      true vs false   mtcars       m5      ame
+  33 │ cyl      4.13708e-12  0.000388358    true   true  ok      derivative      mtcars       m5      mem
+  34 │ hp       5.22325e-14  8.18134e-7     true   true  ok      derivative      mtcars       m5      mem
+  35 │ wt       5.81357e-12  0.000182881    true   true  ok      derivative      mtcars       m5      mem
+  36 │ am       5.68413e-13  1.34993e-7     true   true  ok      true vs false   mtcars       m5      mem
+  37 │ AAP      1.06581e-14  1.69181e-9     true   true  ok      missing         mtcars       m5      aap
+  38 │ APM      5.32907e-14  3.56824e-8     true   true  ok      missing         mtcars       m5      apm
+  39 │ dose     3.85292e-12  1.78852e-5     true   true  ok      derivative      toothgrowth  m1      ame
+  40 │ supp     1.02141e-14  2.99494e-8     true   true  ok      VC vs OJ        toothgrowth  m1      ame
+  41 │ dose     1.19353e-11  4.16842e-5     true   true  ok      derivative      toothgrowth  m1      mem
+  42 │ supp     7.99361e-15  1.40938e-8     true   true  ok      VC vs OJ        toothgrowth  m1      mem
+  43 │ AAP      2.13163e-14  1.18101e-8     true   true  ok      missing         toothgrowth  m1      aap
+  44 │ APM      2.84217e-14  3.18133e-9     true   true  ok      missing         toothgrowth  m1      apm
+  45 │ dose     4.04476e-12  3.31184e-5     true   true  ok      derivative      toothgrowth  m2      ame
+  46 │ supp     8.88178e-15  1.20273e-8     true   true  ok      VC vs OJ        toothgrowth  m2      ame
+  47 │ dose     2.43308e-11  0.000127925    true   true  ok      derivative      toothgrowth  m2      mem
+  48 │ supp     4.44089e-15  1.46155e-8     true   true  ok      VC vs OJ        toothgrowth  m2      mem
+  49 │ AAP      3.19744e-14  8.70496e-9     true   true  ok      missing         toothgrowth  m2      aap
+  50 │ APM      2.84217e-14  3.07767e-9     true   true  ok      missing         toothgrowth  m2      apm
+  51 │ dose     1.06581e-11  0.00170867     true   true  ok      derivative      toothgrowth  m3      ame
+  52 │ supp     1.11022e-14  1.80848e-8     true   true  ok      VC vs OJ        toothgrowth  m3      ame
+  53 │ dose     4.62581e-11  0.000293661    true   true  ok      derivative      toothgrowth  m3      mem
+  54 │ supp     4.44089e-15  5.09458e-8     true   true  ok      VC vs OJ        toothgrowth  m3      mem
+  55 │ AAP      2.84217e-14  1.03085e-7     true   true  ok      missing         toothgrowth  m3      aap
+  56 │ APM      3.90799e-14  2.9649e-7      true   true  ok      missing         toothgrowth  m3      apm
+  57 │ dose     3.84404e-12  1.78852e-5     true   true  ok      derivative      toothgrowth  m4      ame
+  58 │ supp     1.19904e-14  1.85726e-8     true   true  ok      VC vs OJ        toothgrowth  m4      ame
+  59 │ dose     1.1946e-11   4.16842e-5     true   true  ok      derivative      toothgrowth  m4      mem
+  60 │ supp     1.5099e-14   1.40938e-8     true   true  ok      VC vs OJ        toothgrowth  m4      mem
+  61 │ AAP      2.13163e-14  3.16986e-9     true   true  ok      missing         toothgrowth  m4      aap
+  62 │ APM      1.77636e-14  4.48286e-9     true   true  ok      missing         toothgrowth  m4      apm
+  63 │ dose     3.20632e-12  1.89253e-5     true   true  ok      derivative      toothgrowth  m5      ame
+  64 │ supp     4.44089e-15  1.342e-8       true   true  ok      VC vs OJ        toothgrowth  m5      ame
+  65 │ dose     1.04423e-11  0.000175248    true   true  ok      derivative      toothgrowth  m5      mem
+  66 │ supp     3.55271e-15  4.10933e-8     true   true  ok      VC vs OJ        toothgrowth  m5      mem
+  67 │ AAP      3.90799e-14  6.12156e-9     true   true  ok      missing         toothgrowth  m5      aap
+  68 │ APM      1.42109e-14  1.33778e-8     true   true  ok      missing         toothgrowth  m5      apm
+  69 │ Class    1.02696e-15  2.28728e-9     true   true  ok      2nd vs 1st      titanic      m1      ame
+  70 │ Class    5.27356e-15  3.87068e-10    true   true  ok      3rd vs 1st      titanic      m1      ame
+  71 │ Class    6.85563e-15  8.81853e-10    true   true  ok      Crew vs 1st     titanic      m1      ame
+  72 │ Sex      3.33067e-16  9.58056e-10    true   true  ok      Male vs Female  titanic      m1      ame
+  73 │ Class    2.02616e-15  1.22464e-9     true   true  ok      2nd vs 1st      titanic      m1      mem
+  74 │ Sex      8.32667e-15  1.3712e-11     true   true  ok      Male vs Female  titanic      m1      mem
+  75 │ AAP      4.55191e-15  2.53834e-9     true   true  ok      missing         titanic      m1      aap
+  76 │ APM      1.33227e-15  6.52615e-10    true   true  ok      missing         titanic      m1      apm
+  77 │ Class    4.60743e-15  7.36123e-9     true   true  ok      2nd vs 1st      titanic      m2      ame
+  78 │ Class    9.71445e-15  2.69988e-10    true   true  ok      3rd vs 1st      titanic      m2      ame
+  79 │ Class    3.60822e-15  1.00234e-9     true   true  ok      Crew vs 1st     titanic      m2      ame
+  80 │ Sex      7.77156e-15  3.52828e-10    true   true  ok      Male vs Female  titanic      m2      ame
+  81 │ Age      1.37113e-14  2.0449e-9      true   true  ok      Child vs Adult  titanic      m2      ame
+  82 │ Age      5.67602e-15  4.88591e-10    true   true  ok      Child vs Adult  titanic      m2      mem
+  83 │ Class    1.58207e-15  5.05506e-11    true   true  ok      2nd vs 1st      titanic      m2      mem
+  84 │ Sex      5.44009e-15  1.59853e-11    true   true  ok      Male vs Female  titanic      m2      mem
+  85 │ AAP      2.60902e-15  5.82585e-9     true   true  ok      missing         titanic      m2      aap
+  86 │ APM      7.10543e-15  9.10407e-11    true   true  ok      missing         titanic      m2      apm
+  87 │ Class    5.04131e-8   4.58378e-7     true   true  ok      2nd vs 1st      titanic      m3      ame
+  88 │ Class    5.04146e-8   4.89592e-7     true   true  ok      3rd vs 1st      titanic      m3      ame
+  89 │ Class    5.04108e-8   4.6889e-7      true   true  ok      Crew vs 1st     titanic      m3      ame
+  90 │ Sex      3.66903e-8   2.64129e-7     true   true  ok      Male vs Female  titanic      m3      ame
+  91 │ Age      1.05376e-8   6.68491e-8     true   true  ok      Child vs Adult  titanic      m3      ame
+  92 │ Age      1.60524e-7   1.76051e-5     true   true  ok      Child vs Adult  titanic      m3      mem
+  93 │ Class    2.51449e-7   1.05515e-5     true   true  ok      2nd vs 1st      titanic      m3      mem
+  94 │ Sex      2.51449e-7   1.02912e-5     true   true  ok      Male vs Female  titanic      m3      mem
+  95 │ AAP      1.64922e-8   1.97519e-7     true   true  ok      missing         titanic      m3      aap
+  96 │ APM      2.51448e-7   2.84909e-5     true   true  ok      missing         titanic      m3      apm
+  97 │ Class    3.08087e-15  2.01461e-9     true   true  ok      2nd vs 1st      titanic      m4      ame
+  98 │ Class    1.04361e-14  9.87555e-10    true   true  ok      3rd vs 1st      titanic      m4      ame
+  99 │ Class    2.58127e-15  2.51463e-9     true   true  ok      Crew vs 1st     titanic      m4      ame
+ 100 │ Sex      1.44329e-15  2.64949e-10    true   true  ok      Male vs Female  titanic      m4      ame
+ 101 │ Age      6.4948e-15   1.70274e-7     true   true  ok      Child vs Adult  titanic      m4      ame
+ 102 │ Age      1.09288e-16  6.54031e-9     true   true  ok      Child vs Adult  titanic      m4      mem
+ 103 │ Class    3.63598e-15  8.54004e-10    true   true  ok      2nd vs 1st      titanic      m4      mem
+ 104 │ Sex      5.55112e-15  1.47972e-10    true   true  ok      Male vs Female  titanic      m4      mem
+ 105 │ AAP      2.16493e-15  4.15892e-9     true   true  ok      missing         titanic      m4      aap
+ 106 │ APM      1.9984e-15   3.55909e-10    true   true  ok      missing         titanic      m4      apm
+ 107 │ Class    5.18232e-8   4.91372e-7     true   true  ok      2nd vs 1st      titanic      m5      ame
+ 108 │ Class    5.18239e-8   5.17966e-7     true   true  ok      3rd vs 1st      titanic      m5      ame
+ 109 │ Class    5.18225e-8   5.06371e-7     true   true  ok      Crew vs 1st     titanic      m5      ame
+ 110 │ Sex      3.62764e-8   2.59771e-7     true   true  ok      Male vs Female  titanic      m5      ame
+ 111 │ Age      2.54669e-9   6.92046e-8     true   true  ok      Child vs Adult  titanic      m5      ame
+ 112 │ Age      3.87661e-8   1.11277e-6     true   true  ok      Child vs Adult  titanic      m5      mem
+ 113 │ Class    2.46401e-7   1.08389e-5     true   true  ok      2nd vs 1st      titanic      m5      mem
+ 114 │ Sex      2.46398e-7   1.01438e-5     true   true  ok      Male vs Female  titanic      m5      mem
+ 115 │ AAP      1.62149e-8   1.95766e-7     true   true  ok      missing         titanic      m5      aap
+ 116 │ APM      2.46398e-7   2.81601e-5     true   true  ok      missing         titanic      m5      apm
+not ok
+0×10 DataFrame
+ Row │ term     est_diff  se_diff  est_ok  se_ok  status  contrast  dataset  model   result_type
+     │ String7  Float64   Float64  Bool    Bool   String  String?   String   String  String
+─────┴───────────────────────────────────────────────────────────────────────────────────────────
