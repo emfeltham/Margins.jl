@@ -209,10 +209,14 @@ Technical support and bug reports should be directed to the [GitHub Issues](http
 
 ```julia
 using Pkg
-Pkg.add("Margins")
+Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 ```
 
 **Requirements**: Julia ≥ 1.10
+
+Note on documentation versions:
+- The “dev” docs reflect the latest commits on `main` and update after each successful docs build.
+- The “stable” docs update when a new tagged release is published. If you don’t see your recent changes on “stable”, check the “dev” docs or tag a release to promote changes to “stable”.
 
 ## Citation
 

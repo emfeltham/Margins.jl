@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -34,8 +35,11 @@ jobs:
             Pkg.instantiate();
           '
 
-      - name: Build and deploy docs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build docs
         run: |
           julia --project=docs docs/make.jl
+
+      - name: Deploy docs (gh-pages)
+        uses: julia-actions/julia-docdeploy@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
