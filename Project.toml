@@ -1,7 +1,23 @@
 name = "Margins"
 uuid = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"
-authors = ["Eric Martin Feltham"]
+license = "MIT"
+authors = ["Eric Martin Feltham <eric.feltham@aya.yale.edu>"]
 version = "2.0.0"
+categories = ["Statistics", "Sociology", "Econometrics", "Political Science", "Psychology"]
+keywords = [
+    "marginal-effects",
+    "econometrics", 
+    "statistics",
+    "regression",
+    "glm",
+    "predictions",
+    "linear-models",
+    "average-marginal-effects",
+    "contrasts",
+    "statistical-modeling"
+]
+description = "Marginal effects and adjusted predictions for statistical models in Julia"
+homepage = "https://github.com/emfeltham/Margins.jl"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
