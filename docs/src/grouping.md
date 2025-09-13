@@ -74,12 +74,12 @@ Multiple levels of nesting support complex organizational structures:
 # Three-level hierarchy: country → region → education
 deep_hierarchy = population_margins(model, data;
                                   type=:effects,
-                                  groups=:country = (:region => :education))
+                                  groups=:country => (:region => :education))
 
 # Four-level hierarchy: sector → company → department → position
 organizational = population_margins(model, data;
                                   type=:effects, 
-                                  groups=:sector = (:company = (:department = :position)))
+                                  groups=:sector => (:company => (:department => :position)))
 ```
 
 ### Parallel Grouping Within Hierarchy
@@ -331,7 +331,7 @@ complex_large = population_margins(model, large_data;
 - Policy targets multiple demographics simultaneously
 - Comprehensive coverage needed
 
-**Hierarchical Grouping** (`groups=:var1 = :var2`):
+**Hierarchical Grouping** (`groups=:var1 => :var2`):
 - Natural organizational structure exists
 - Context matters (e.g., regions have different education systems)
 - Nested decision-making processes
@@ -349,7 +349,7 @@ complex_large = population_margins(model, large_data;
 # groups=[:var1, :var2, :var3, (:var4, 10), (:var5, 5)]
 
 # Better: use hierarchical structure
-groups=:var1 = [:var2, (:var4, 4)]
+groups=:var1 => [:var2, (:var4, 4)]
 ```
 
 #### Empty Subgroups
@@ -362,7 +362,7 @@ groups=:var1 = [:var2, (:var4, 4)]
 - For population analysis, computing the effect of a variable while simultaneously holding it fixed (via `scenarios`) or using it to define subgroups (via `groups`) is contradictory.
 - To preserve statistical correctness and interpretability, `population_margins` skips variables that appear in `vars` if they also appear in `groups` or `scenarios`.
 - Practical guidance:
-  - If you need Stata-style `dydx(x) over(x)`, consider whether you intend profile analysis instead. Use `profile_margins(..., at=...)` to evaluate derivatives at specific values of `x`.
+  - If you need Stata-style `dydx(x) over(x)`, consider whether you intend profile analysis instead. Use `profile_margins(model, data, cartesian_grid(x=[...]));` to evaluate derivatives at specific values of `x`.
   - If you want effects within strata of `x`, group by a coarser or external variable, or compute effects for other variables while stratifying by `x`.
   - If you want counterfactual predictions as `x` changes, use `type=:predictions` with `scenarios=(:x = [...])` and omit `x` from `vars`.
 
@@ -381,4 +381,4 @@ research_analysis = population_margins(model, data;
 
 ---
 
-*The population grouping framework enables sophisticated econometric analysis while maintaining computational efficiency and statistical rigor. For implementation details, see the complete specification in `POP_GROUPING.md`. For performance optimization, see [Performance Guide](performance.md).*
+*The population grouping framework enables sophisticated econometric analysis while maintaining computational efficiency and statistical rigor. For related details on scenarios and reference grids, see [Reference Grids](reference_grids.md) and for performance optimization, see [Performance Guide](performance.md).*

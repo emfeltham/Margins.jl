@@ -99,13 +99,13 @@ The package implements sophisticated categorical mixture functionality to enable
 
 **Policy Counterfactual Analysis:**
 ```julia
-# Current population educational composition
-baseline = profile_margins(model, data; 
-    at=Dict(:education => mix("HS" => 0.4, "College" => 0.4, "Graduate" => 0.2)))
+# Current population educational composition (predictions at a mixture)
+baseline_grid = DataFrame(education=[mix("HS" => 0.4, "College" => 0.4, "Graduate" => 0.2)])
+baseline = profile_margins(model, data, baseline_grid; type=:predictions)
 
-# Policy counterfactual: educational attainment improvement
-intervention = profile_margins(model, data;
-    at=Dict(:education => mix("HS" => 0.2, "College" => 0.5, "Graduate" => 0.3)))
+# Policy counterfactual: educational attainment improvement (new mixture)
+intervention_grid = DataFrame(education=[mix("HS" => 0.2, "College" => 0.5, "Graduate" => 0.3)])
+intervention = profile_margins(model, data, intervention_grid; type=:predictions)
 ```
 
 ## Parameter Reference
@@ -131,9 +131,9 @@ All main functions support these core parameters:
 - `:variable_name` - Single variable
 - `[:var1, :var2]` - Multiple specific variables
 
-#### Target Scale (`target`)
-- `:mu` - Response scale (default, applies inverse link function)
-- `:eta` - Linear predictor scale (link scale)
+#### Target Scale (`scale`)
+- `:response` - Response scale (default, applies inverse link function)
+- `:link` - Linear predictor scale (link scale)
 
 #### Computational Backend (`backend`)
 - `:ad` - Automatic differentiation (default; higher accuracy, zero allocation after warmup)
@@ -211,7 +211,7 @@ ame = population_margins(model, data)
 aap = population_margins(model, data; type=:predictions)
 
 # 3. Profile analysis for specific scenarios
-mem = profile_margins(model, data; at=:means)
+mem = profile_margins(model, data, means_grid(data))
 scenarios = profile_margins(model, data, cartesian_grid(x1=[0,1,2]))
 
 # 4. Convert to DataFrame for analysis
@@ -225,29 +225,27 @@ fast_result = population_margins(model, data; backend=:fd, scale=:link)
 
 # Profile analysis is O(1) - efficient regardless of data size
 scenarios = (var1=[-2,-1,0,1,2], var2=["A","B","C"])  # 15 scenarios
-profile_result = profile_margins(model, huge_data; at=scenarios)  # ~300μs regardless of data size
+scenarios = cartesian_grid(x1=[0,1,2])
+profile_result = profile_margins(model, huge_data, scenarios)  # ~300μs regardless of data size
 ```
 
 ### Advanced Analysis Patterns
 ```julia
-# Elasticity analysis across scenarios
-elasticities = profile_margins(model, data; 
-    at=Dict(:x1 => [0, 1, 2]), 
-    measure=:elasticity,
-    vars=[:x2])
+# Elasticity analysis across scenarios (profile)
+scenarios = cartesian_grid(x1=[0, 1, 2])
+elasticities = profile_margins(model, data, scenarios; 
+    measure=:elasticity, vars=[:x2])
 
 # Robust standard errors (with CovarianceMatrices.jl)
-robust_model = glm(formula, data, family, vcov=HC1())
-robust_effects = population_margins(robust_model, data)
+using CovarianceMatrices
+robust_effects = population_margins(model, data; vcov=CovarianceMatrices.HC1)
 
-# Complex categorical scenarios
-policy_scenario = profile_margins(model, data;
-    at=Dict(
-        treatment=mix(0 => 0.3, 1 => 0.7),           # 70% treatment rate
-        :education => mix("HS" => 0.3, "College" => 0.7)  # Education composition
-    ),
-    type=:predictions
+# Complex categorical scenarios via reference grid
+policy_grid = DataFrame(
+    treatment=[mix(0 => 0.3, 1 => 0.7)],           # 70% treatment rate
+    education=[mix("HS" => 0.3, "College" => 0.7)] # Education composition
 )
+policy_scenario = profile_margins(model, data, policy_grid; type=:predictions)
 ```
 
 ## Error Handling
@@ -266,14 +264,14 @@ population_margins(model, data; vars=[:categorical_var], type=:effects)
 ```
 
 #### Profile Specification Errors
-```julia  
-# Error: Invalid at parameter
-profile_margins(model, data; at="invalid")
-# → Clear guidance on valid at specifications
+```julia
+# Error: Invalid reference grid argument (must be DataFrame or a grid builder output)
+profile_margins(model, data, "invalid")
+# → Clear guidance on valid reference grid specifications
 
 # Error: Reference grid missing model variables
 incomplete_grid = DataFrame(x1=[0,1])  # Missing x2, group from model
-profile_margins(model, incomplete_grid)
+profile_margins(model, data, incomplete_grid)
 # → Error with list of missing variables
 ```
 
@@ -287,16 +285,6 @@ population_margins(model, tiny_data)
 
 ### Error Recovery Patterns
 ```julia
-# Backend fallback
-function robust_margins(model, data; kwargs...)
-    try
-        return population_margins(model, data; backend=:ad, kwargs...)
-    catch e
-        @warn "AD backend failed, falling back to FD"
-        return population_margins(model, data; backend=:fd, kwargs...)
-    end
-end
-
 # Input validation
 function validated_margins(model, data; vars=nothing, kwargs...)
     # Validate variable existence
@@ -332,16 +320,11 @@ logodds_effects = population_margins(model, data; scale=:link, type=:effects)
 ```julia
 using CovarianceMatrices
 
-# Various robust estimators
-models = [
-    glm(formula, data, family, vcov=HC1()),      # Heteroskedasticity-robust
-    glm(formula, data, family, vcov=HC3()),      # High-leverage robust  
-    glm(formula, data, family, vcov=Clustered(:cluster_var)),  # Clustered
-    glm(formula, data, family, vcov=HAC(kernel=:bartlett))     # HAC
-]
-
-# All margin computations automatically use model's covariance
-results = [population_margins(m, data) for m in models]
+# Apply different estimators via vcov parameter
+ame_hc1 = population_margins(model, data; vcov=CovarianceMatrices.HC1)
+ame_hc3 = population_margins(model, data; vcov=CovarianceMatrices.HC3)
+ame_clustered = population_margins(model, data; vcov=CovarianceMatrices.Clustered(:cluster_var))
+ame_hac = population_margins(model, data; vcov=CovarianceMatrices.HAC(kernel=:bartlett))
 ```
 
 ### With DataFrames Ecosystem

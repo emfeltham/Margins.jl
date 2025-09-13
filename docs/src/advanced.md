@@ -125,11 +125,8 @@ Margins.jl integrates seamlessly with Julia's robust standard error ecosystem, p
 ```julia
 using CovarianceMatrices
 
-# Fit model with robust standard errors
-robust_model = glm(@formula(y ~ x1 + x2 + group), data, Normal(), vcov=HC1())
-
-# Marginal effects automatically use robust covariance
-robust_effects = population_margins(robust_model, data; type=:effects)
+# Apply robust covariance via vcov parameter
+robust_effects = population_margins(model, data; vcov=CovarianceMatrices.HC1, type=:effects)
 ```
 
 #### Available Robust Estimators
@@ -143,8 +140,7 @@ HC4()  # High-leverage robust
 HC5()  # Outlier-robust
 
 # Example with HC3
-robust_model = glm(formula, data, family, vcov=HC3())
-result = population_margins(robust_model, data)
+result = population_margins(model, data; vcov=CovarianceMatrices.HC3)
 ```
 
 ### Clustered Standard Errors
@@ -152,50 +148,35 @@ result = population_margins(robust_model, data)
 #### Single-Level Clustering
 ```julia
 # Cluster by firm ID
-clustered_model = glm(@formula(wages ~ education + experience), data, 
-                     Normal(), vcov=Clustered(:firm_id))
-
-# Marginal effects with clustered standard errors
-clustered_effects = population_margins(clustered_model, data; type=:effects)
+clustered_effects = population_margins(model, data; 
+    vcov=CovarianceMatrices.Clustered(:firm_id), type=:effects)
 ```
 
 #### Multi-Level Clustering  
 ```julia
 # Two-way clustering (firm and year)
-twoway_model = glm(formula, data, family, vcov=Clustered([:firm_id, :year]))
-result = population_margins(twoway_model, data)
+result = population_margins(model, data; vcov=CovarianceMatrices.Clustered([:firm_id, :year]))
 ```
 
 ### HAC (Heteroskedasticity and Autocorrelation Consistent) Standard Errors
 
 ```julia
 # Newey-West HAC estimator
-hac_model = glm(@formula(returns ~ lagged_returns + market_factor), data,
-               Normal(), vcov=HAC(kernel=:bartlett, bandwidth=4))
-
-effects_hac = population_margins(hac_model, data; type=:effects)
+effects_hac = population_margins(model, data; 
+    vcov=CovarianceMatrices.HAC(kernel=:bartlett, bandwidth=4), type=:effects)
 ```
 
-### Manual Covariance Matrix Specification
-
-#### Direct Matrix Input
-```julia
-# User-provided covariance matrix
-custom_vcov = your_covariance_computation(model, data)
-
-# Specify via vcov parameter (not yet implemented - placeholder)
-result = population_margins(model, data; vcov=custom_vcov)
-```
+### Custom Covariance Providers
 
 #### Function-Based Covariance
 ```julia
-# Custom covariance function
+# Custom covariance function (must return an AbstractMatrix)
 function my_robust_vcov(model)
-    # Custom robust covariance computation
-    return robust_covariance_matrix
+    # ... compute covariance from model ...
+    return Σ::AbstractMatrix
 end
 
-# Use custom function (not yet implemented - placeholder)
+# Use custom function directly
 result = population_margins(model, data; vcov=my_robust_vcov)
 ```
 
@@ -205,18 +186,14 @@ Robust standard errors work seamlessly with all elasticity measures:
 
 ```julia
 # Robust elasticity estimates
-robust_model = glm(formula, data, family, vcov=HC1())
-
-# Population elasticities with robust SEs
-robust_elasticities = population_margins(robust_model, data; 
-                                        measure=:elasticity, 
-                                        type=:effects)
+robust_elasticities = population_margins(model, data; 
+    vcov=CovarianceMatrices.HC1,
+    measure=:elasticity, type=:effects)
 
 # Profile elasticities with clustered SEs  
-clustered_model = glm(formula, data, family, vcov=Clustered(:cluster_var))
-profile_elasticities = profile_margins(clustered_model, data,
-                                      means_grid(data);
-                                      measure=:elasticity)
+profile_elasticities = profile_margins(model, data,
+    means_grid(data); vcov=CovarianceMatrices.Clustered(:cluster_var),
+    measure=:elasticity)
 ```
 
 ## Categorical Mixtures for Policy Analysis

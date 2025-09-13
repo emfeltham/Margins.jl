@@ -151,13 +151,14 @@ population_margins(model, data; type=:effects, measure=:elasticity)
 Computes profile analysis (MEM/APM equivalent):
 ```julia
 # Effects at sample means
-profile_margins(model, data; at=:means, type=:effects)
+profile_margins(model, data, means_grid(data); type=:effects)
 
 # Effects at specific scenarios
-profile_margins(model, data; at=Dict(:age => [25, 45, 65]), type=:effects)
+age_grid = cartesian_grid(age=[25, 45, 65])
+profile_margins(model, data, age_grid; type=:effects)
 
 # Predictions at representative points
-profile_margins(model, data; at=:means, type=:predictions)
+profile_margins(model, data, means_grid(data); type=:predictions)
 ```
 
 ## Practical Guidelines

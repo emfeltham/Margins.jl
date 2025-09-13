@@ -57,31 +57,23 @@ reference_grid = DataFrame(
 )
 
 # Predictions at specific points
-predictions = profile_margins(model, reference_grid; type=:predictions)
+predictions = profile_margins(model, df, reference_grid; type=:predictions)
 
 # Effects at specific points  
-effects = profile_margins(model, reference_grid; type=:effects, vars=[:x1, :x2])
+effects = profile_margins(model, df, reference_grid; type=:effects, vars=[:x1, :x2])
 ```
 
 ### 2. Cartesian Product Specification
 
-For systematic scenario construction, use dictionaries to specify value combinations:
+For systematic scenario construction, use grid builders to specify value combinations:
 
 ```julia
 # Systematic scenario grid (Cartesian product)
-scenarios = (
-    :x1 => [-1.0, 0.0, 1.0],
-    :x2 => [10, 20], 
-    :group => ["A", "B"]
-)
+scenarios = cartesian_grid(x1=[-1.0, 0.0, 1.0], x2=[10, 20], group=["A", "B"])  
 # Creates 3×2×2 = 12 evaluation points
 
 # Effects across all scenarios
-scenario_effects = profile_margins(model, df; 
-    at=scenarios, 
-    type=:effects, 
-    vars=[:x1]
-)
+scenario_effects = profile_margins(model, df, scenarios; type=:effects, vars=[:x1])
 DataFrame(scenario_effects)
 ```
 
@@ -97,19 +89,18 @@ means_effects = profile_margins(model, df, means_grid(df); type=:effects)
 means_predictions = profile_margins(model, df, means_grid(df); type=:predictions)
 ```
 
-### 4. Explicit Profile Lists
+### 4. Explicit Profile Tables
 
-For irregular or custom evaluation points:
+For irregular or custom evaluation points, pass an explicit DataFrame:
 
 ```julia
-# Explicit profile specification
-custom_profiles = [
-    Dict(:x1 => -1.0, :x2 => 10, :group => "A"),
-    Dict(:x1 =>  0.0, :x2 => 15, :group => "B"), 
-    Dict(:x1 =>  1.0, :x2 => 20, :group => "A")
-]
+custom_profiles = DataFrame(
+    x1 = [-1.0, 0.0, 1.0],
+    x2 = [10, 15, 20],
+    group = ["A", "B", "A"]
+)
 
-results = profile_margins(model, df; at=custom_profiles, type=:effects)
+results = profile_margins(model, df, custom_profiles; type=:effects)
 ```
 
 ### 5. Categorical Mixtures for Policy Analysis
@@ -120,19 +111,15 @@ For realistic population scenarios using categorical mixtures:
 using CategoricalArrays
 
 # Realistic policy scenarios with population composition
-policy_scenario = profile_margins(model, df;
-    at=Dict(:group => mix("A" => 0.5, "B" => 0.3, "C" => 0.2)),
-    type=:predictions
-)
+mixture_grid = DataFrame(group=[mix("A" => 0.5, "B" => 0.3, "C" => 0.2)])
+policy_scenario = profile_margins(model, df, mixture_grid; type=:predictions)
 
 # Multiple policy scenarios
-policy_effects = profile_margins(model, df;
-    at=Dict(
-        :x1 => [0, 1],  # Policy intervention levels
-        :group => mix("A" => 0.6, "B" => 0.4)  # Target population
-    ),
-    type=:effects
+policy_grid = DataFrame(
+    x1 = [0, 1],  # Policy intervention levels
+    group = [mix("A" => 0.6, "B" => 0.4), mix("A" => 0.6, "B" => 0.4)]
 )
+policy_effects = profile_margins(model, df, policy_grid; type=:effects)
 ```
 
 ## Economic Analysis Workflow
@@ -203,13 +190,9 @@ println("Effects for typical person:")
 println(DataFrame(mem_results))
 
 # Policy scenarios: education and unemployment effects
-policy_analysis = profile_margins(wage_model, data;
-    at=Dict(
-        :education => ["HS", "College", "Graduate"],
-        :unemployment_rate => [3.0, 6.0, 9.0]  # Recession scenarios
-    ),
-    type=:predictions
-)
+policy_grid = cartesian_grid(education=["HS", "College", "Graduate"],
+                             unemployment_rate=[3.0, 6.0, 9.0])
+policy_analysis = profile_margins(wage_model, data, policy_grid; type=:predictions)
 println("Policy scenario predictions:")
 println(DataFrame(policy_analysis))
 ```
@@ -230,19 +213,14 @@ logit_model = glm(@formula(manager ~ age + education + experience + female),
 # Effects on probability scale (most interpretable)
 prob_effects = population_margins(logit_model, data; 
                                 type=:effects, 
-                                target=:mu)
+                                scale=:response)
 println("Effects on probability of management position:")
 println(DataFrame(prob_effects))
 
 # Gender gap analysis across education levels
-gender_gap = profile_margins(logit_model, data;
-    at=Dict(
-        :education => ["HS", "College", "Graduate"],
-        :female => [0, 1]
-    ),
-    type=:predictions,
-    target=:mu
-)
+gender_grid = cartesian_grid(education=["HS", "College", "Graduate"], female=[0, 1])
+gender_gap = profile_margins(logit_model, data, gender_grid;
+    type=:predictions, scale=:response)
 println("Gender gap in management probability by education:")
 println(DataFrame(gender_gap))
 ```
@@ -261,12 +239,9 @@ println("Population average elasticities:")
 println(DataFrame(elasticities))
 
 # Elasticities at different education levels
-edu_elasticities = profile_margins(wage_model, data;
-    at=Dict(:education => ["HS", "College", "Graduate"]),
-    type=:effects,
-    measure=:elasticity,
-    vars=[:age, :experience]
-)
+edu_grid = cartesian_grid(education=["HS", "College", "Graduate"]) 
+edu_elasticities = profile_margins(wage_model, data, edu_grid;
+    type=:effects, measure=:elasticity, vars=[:age, :experience])
 println("Elasticities by education level:")
 println(DataFrame(edu_elasticities))
 ```
@@ -364,11 +339,8 @@ complex_policy = population_margins(wage_model, data;
 ```julia
 using CovarianceMatrices
 
-# Heteroskedasticity-robust standard errors
-robust_model = glm(@formula(log_wage ~ age + education + experience + female), 
-                   data, Normal(), vcov=HC1())
-
-robust_effects = population_margins(robust_model, data; type=:effects)
+# Heteroskedasticity-robust standard errors (HC1)
+robust_effects = population_margins(wage_model, data; vcov=CovarianceMatrices.HC1, type=:effects)
 println("Robust standard errors:")
 println(DataFrame(robust_effects))
 ```
@@ -387,13 +359,11 @@ println("Population margins performance (scales with n):")
 @btime population_margins($wage_model, $data; type=:effects)
 
 # Complex scenario analysis (still O(1) for profiles)
-complex_scenarios = (
-    :age => [25, 35, 45, 55],
-    :education => ["HS", "College", "Graduate"],
-    :urban => [0, 1]
-)
+complex_scenarios = cartesian_grid(age=[25, 35, 45, 55],
+                                   education=["HS", "College", "Graduate"],
+                                   urban=[0, 1])
 println("Complex scenario performance (24 profiles, still O(1)):")
-@btime profile_margins($wage_model, $data; at=$complex_scenarios, type=:effects)
+@btime profile_margins($wage_model, $data, $complex_scenarios; type=:effects)
 ```
 
 ## Stata Migration Examples
@@ -408,10 +378,8 @@ stata_ame = population_margins(wage_model, data; type=:effects)
 stata_mem = profile_margins(wage_model, data, means_grid(data); type=:effects)
 
 # Stata: margins, at(age=(25 35 45) education=(1 2 3))
-stata_scenarios = profile_margins(wage_model, data;
-    at=Dict(:age => [25, 35, 45], :education => ["HS", "College", "Graduate"]),
-    type=:effects
-)
+stata_grid = cartesian_grid(age=[25, 35, 45], education=["HS", "College", "Graduate"]) 
+stata_scenarios = profile_margins(wage_model, data, stata_grid; type=:effects)
 
 # Stata: margins, over(female)
 stata_subgroups = population_margins(wage_model, data; 

@@ -224,7 +224,7 @@ margins, at(treatment=1 policy=1)
 population_margins(model, data; scenarios=(treatment=[0, 1], policy=[0, 1]))
 ```
 
-Note: `scenarios` in Julia are population‑level counterfactuals (everyone receives each setting in turn). For Stata’s point‑evaluation semantics of `at()`, use `profile_margins(..., at=...)`.
+Note: `scenarios` in Julia are population‑level counterfactuals (everyone receives each setting in turn). For Stata’s point‑evaluation semantics of `at()`, use `profile_margins(model, data, reference_grid)` with a grid builder (e.g., `means_grid`, `cartesian_grid`) or an explicit DataFrame.
 
 ## Complete Workflow Examples
 

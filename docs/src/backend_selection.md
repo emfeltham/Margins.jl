@@ -148,20 +148,11 @@ DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
 
 ## Production Recommendations
 
-### Automatic Backend Selection Pattern
+### Backend Selection Policy
 
-```julia
-# Safe automatic selection function
-function safe_margins(model, data; formula_has_log=false, formula_has_sqrt=false, kwargs...)
-    # Always use AD for domain-sensitive functions
-    backend = (formula_has_log || formula_has_sqrt) ? :ad : :fd
-    return population_margins(model, data; backend=backend, kwargs...)
-end
-
-# Usage examples
-safe_margins(model, data; formula_has_log=true)   # Uses :ad automatically
-safe_margins(model, data)                         # Uses :fd for performance
-```
+- No `:auto` mode is provided.
+- No implicit backend fallbacks are performed.
+- Select `backend` explicitly. Use `:ad` by default; use `:fd` only when explicitly intended and theoretically safe.
 
 ### Backend Selection by Use Case
 
@@ -175,34 +166,11 @@ safe_margins(model, data)                         # Uses :fd for performance
 | **High-precision requirements** | `:ad` | Machine precision + zero allocation |
 | **Simple linear formulas** | `:fd` | May be slightly faster for basic operations |
 
-### Production Configuration Examples
+### Production Configuration Guidance
 
-```julia
-# Safe production default (handles most cases)
-function production_margins(model, data; kwargs...)
-    # Start with AD for safety, fallback to FD if needed
-    try
-        return population_margins(model, data; backend=:ad, kwargs...)
-    catch e
-        if e isa DomainError
-            rethrow(e)  # Don't fallback for domain errors - formula needs fixing
-        else
-            @warn "AD backend failed, using FD fallback" exception=e
-            return population_margins(model, data; backend=:fd, kwargs...)
-        end
-    end
-end
-
-# Memory-optimized production (for well-conditioned functions only)
-function memory_optimized_margins(model, data; kwargs...)
-    return population_margins(model, data; backend=:fd, kwargs...)
-end
-
-# High-reliability production (when memory is not critical)  
-function high_reliability_margins(model, data; kwargs...)
-    return population_margins(model, data; backend=:ad, kwargs...)
-end
-```
+- Default to `backend=:ad` for reliability and accuracy (also zero allocation).
+- Use `backend=:fd` only for simple, well-conditioned formulas and when you explicitly want FD.
+- For domain-sensitive functions (log, sqrt, 1/x near 0), always use `:ad`.
 
 ## Troubleshooting Backend Issues
 

@@ -200,7 +200,7 @@ FormulaCompiler.jl automatically caches compiled evaluators:
 result1 = population_margins(model, data)  # ~milliseconds (compile + compute)
 
 # Subsequent calls: pure computation  
-result2 = profile_margins(model, data; at=:means)  # ~microseconds (reuse compilation)
+result2 = profile_margins(model, data, means_grid(data))  # ~microseconds (reuse compilation)
 ```
 
 ## Integration with JuliaStats Ecosystem

@@ -26,13 +26,13 @@ Profile margins achieve **constant-time performance** regardless of dataset size
 using BenchmarkTools, Margins
 
 # Performance is independent of dataset size
-@btime profile_margins($model, $data_1k; at=:means, type=:effects)     # constant time
-@btime profile_margins($model, $data_100k; at=:means, type=:effects)   # same complexity
-@btime profile_margins($model, data_1M; at=:means, type=:effects)       # same complexity
+@btime profile_margins($model, $data_1k, means_grid($data_1k); type=:effects)     # constant time
+@btime profile_margins($model, $data_100k, means_grid($data_100k); type=:effects) # same complexity
+@btime profile_margins($model, data_1M, means_grid(data_1M); type=:effects)       # same complexity
 
 # Complex scenarios also O(1)
-scenarios = (x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
-@btime profile_margins($model, $huge_data; at=scenarios)                    # still constant time
+scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
+@btime profile_margins($model, $huge_data, scenarios)                       # still constant time
 ```
 
 **Why this matters**: Profile analysis cost is **independent of sample size**, making it efficient for large-scale econometric analysis.
@@ -149,8 +149,8 @@ Margins.jl achieves zero-allocation performance for computational workflows:
 
 ```julia
 # Profile margins: constant allocation regardless of data size
-@allocated profile_margins(model, small_data; at=:means)  # small constant allocation
-@allocated profile_margins(model, large_data; at=:means)  # same allocation pattern
+@allocated profile_margins(model, small_data, means_grid(small_data))  # small constant allocation
+@allocated profile_margins(model, large_data, means_grid(large_data))  # same allocation pattern
 
 # Population margins: zero allocation after warmup (both backends)
 @allocated population_margins(model, data_1k; backend=:fd)   # 0 bytes
@@ -164,8 +164,8 @@ Margins.jl achieves zero-allocation performance for computational workflows:
 #### For Large Datasets
 ```julia
 # Use profile analysis for exploration (O(1) memory)
-scenarios = (x1=[-1, 0, 1], treatment=[0, 1])
-results = profile_margins(model, large_data; at=scenarios)
+scenarios = cartesian_grid(x1=[-1, 0, 1], treatment=[0, 1])
+results = profile_margins(model, large_data, scenarios)
 
 # Use population analysis with zero-allocation backends
 key_effects = population_margins(model, large_data; vars=[:treatment], backend=:ad)  # Recommended
@@ -413,20 +413,16 @@ gβ_accumulator = Vector{Float64}(undef, n_coef) # Parameter gradient buffer
 # FormulaCompiler artifacts are cached automatically
 # Multiple margin calls on same model/data reuse compilation
 result1 = population_margins(model, data; type=:effects)      # Compiles
-result2 = profile_margins(model, data; at=:means, type=:effects)  # Reuses compilation
+result2 = profile_margins(model, data, means_grid(data); type=:effects)  # Reuses compilation
 ```
 
 #### Batch Processing Optimization
 ```julia
 # Process multiple scenarios efficiently
-scenarios = [
-    Dict(x1=0, group="A"),
-    Dict(x1=1, group="B"), 
-    Dict(x1=2, group="C")
-]
+scenarios = cartesian_grid(x1=[0,1,2], group=["A","B","C"])  # 9 profiles
 
 # Single compilation, multiple scenario evaluations
-results = profile_margins(model, data; at=scenarios, type=:effects)  # Efficient
+results = profile_margins(model, data, scenarios; type=:effects)  # Efficient
 ```
 
 ## Production Deployment Guidelines
@@ -436,8 +432,8 @@ results = profile_margins(model, data; at=scenarios, type=:effects)  # Efficient
 # High-performance production settings
 result = population_margins(
     model, data;
-    backend = :fd,           # Zero allocation
-    target = :eta,           # Often faster than :mu for GLMs
+    backend = :fd,           # Zero allocation (explicitly requested)
+    scale = :link,           # Link scale
     type = :effects          # Core functionality
 )
 ```
@@ -466,14 +462,7 @@ end
 ### Error Handling
 ```julia
 # Robust production wrapper
-function robust_margins(model, data; fallback_backend=:fd, kwargs...)
-    try
-        return population_margins(model, data; backend=:ad, kwargs...)
-    catch e
-        @warn "AD backend failed, falling back to FD" exception=e
-        return population_margins(model, data; backend=fallback_backend, kwargs...)
-    end
-end
+# Note: No implicit backend fallbacks. Select `backend` explicitly.
 ```
 
 ---

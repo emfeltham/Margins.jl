@@ -88,21 +88,17 @@ Multiple ways to specify evaluation points:
 profile_margins(model, data, means_grid(data); type=:effects)
 
 # Custom scenarios
-profile_margins(model, data; 
-    at=Dict(:x1 => [0, 1, 2], :group => ["A", "B"]), 
-    type=:effects
-)
+scenarios = cartesian_grid(x1=[0, 1, 2], group=["A", "B"]) 
+profile_margins(model, data, scenarios; type=:effects)
 
 # Complex realistic scenarios with categorical mixtures
 using CategoricalArrays
-profile_margins(model, data;
-    at=Dict(:group => mix("A" => 0.5, "B" => 0.3, "C" => 0.2)),
-    type=:predictions
-)
+mixture_grid = DataFrame(group=[mix("A" => 0.5, "B" => 0.3, "C" => 0.2)])
+profile_margins(model, data, mixture_grid; type=:predictions)
 
 # Pre-built reference grids (maximum control)
 reference_grid = DataFrame(x1=[0, 1], x2=[0, 0], group=["A", "A"])  
-profile_margins(model, reference_grid; type=:effects)
+profile_margins(model, data, reference_grid; type=:effects)
 ```
 
 ### Elasticity Analysis
@@ -155,13 +151,11 @@ Data handling utilizes the Tables.jl interface to ensure compatibility with dive
 # Using CovarianceMatrices.jl
 using CovarianceMatrices
 
-# Robust standard errors
-robust_model = glm(formula, data, family, vcov=HC1())
-population_margins(robust_model, data)
+# Robust standard errors (HC1)
+population_margins(model, data; vcov=CovarianceMatrices.HC1)
 
 # Clustered standard errors  
-cluster_model = glm(formula, data, family, vcov=Clustered(:firm_id))
-population_margins(cluster_model, data)
+population_margins(model, data; vcov=CovarianceMatrices.Clustered(:firm_id))
 ```
 
 ## Computational Performance Analysis
@@ -177,7 +171,8 @@ Profile analysis achieves computational complexity independent of dataset size t
 
 # Complex scenario specifications maintain constant-time properties
 scenarios = (x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
-@time profile_margins(model, huge_data; at=scenarios)  # remains constant time
+scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
+@time profile_margins(model, huge_data, scenarios)  # remains constant time
 ```
 
 ### Linear Scaling in Population Analysis
@@ -210,11 +205,9 @@ Technical support and bug reports should be directed to the [GitHub Issues](http
 
 ## Installation
 
-Since Margins.jl is not yet registered, install directly from GitHub:
-
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/emfeltham/Margins.jl")
+Pkg.add("Margins")
 ```
 
 **Requirements**: Julia ≥ 1.10
