@@ -1,0 +1,301 @@
+================================================================================
+Generating synthetic data (5K observations)...
+================================================================================
+julia --project=. generate_data.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Dataset generated: 5000 rows, 53 columns
+
+Exporting data to CSV...
+Data exported to: r_comparison_data.csv
+
+================================================================================
+=== CATEGORICAL VARIABLE LEVELS (for R factor conversion) ===
+================================================================================
+relation levels: ["family", "free_time", "friend", "neighbor", "work"]
+religion_c_p levels: ["Catholic", "No Religion", "Other", "Protestant"]
+village_code levels: [152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
+man_x levels: ["false", "false, true", "true", "true, false"]
+religion_c_x levels: ["Catholic", "Catholic, No Religion", "Catholic, Other", "Catholic, Protestant", "No Religion", "No Religion, Catholic", "No Religion, Other", "No Religion, Protestant", "Other", "Other, Catholic", "Other, No Religion", "Other, Protestant", "Protestant", "Protestant, Catholic", "Protestant, No Religion", "Protestant, Other"]
+isindigenous_x levels: ["false", "false, true", "true", "true, false"]
+
+NOTE: First level in each array is the reference category.
+R factors MUST use identical level order for coefficient matching.
+================================================================================
+
+================================================================================
+=== DATA TYPES ===
+================================================================================
+
+Boolean variables (exported as 0/1 integers):
+
+Categorical variables (exported as strings):
+
+Integer variables:
+
+✓ Data generation complete!
+
+Next steps:
+1. Run: julia --project=. julia_model.jl
+2. Update factor levels in r_model.R based on levels printed above
+3. Run: Rscript r_model.R
+4. Run: julia --project=. compare_results.jl
+
+================================================================================
+Running performance benchmarks...
+================================================================================
+
+Step 1: Julia benchmark...
+julia --project=. performance_benchmark.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Precompiling Margins...
+   3383.9 ms  ✓ FormulaCompiler
+   3725.8 ms  ✓ Margins
+  2 dependencies successfully precompiled in 8 seconds. 189 already precompiled.
+================================================================================
+JULIA PERFORMANCE BENCHMARK (Speed & Memory)
+================================================================================
+
+Loading data...
+  N = 5000 observations
+
+Converting data types...
+  ✓ Done
+
+Fitting model...
+--------------------------------------------------------------------------------
+Model fitting: 4.406s
+  K = 65 parameters
+
+================================================================================
+RUNNING BENCHMARKS
+================================================================================
+
+1. APM (Adjusted Predictions at Profiles)
+   Time: 0.0007s
+   Memory: 0.75 MB
+
+2. MEM (Marginal Effects at Profiles)
+   Time: 0.0024s
+   Memory: 1.67 MB
+
+3. AAP (Average Adjusted Predictions)
+   Time: 0.0005s
+   Memory: 0.29 MB
+
+4. AME (Average Marginal Effects - all variables)
+   Time: 0.0444s
+   Memory: 0.63 MB
+
+5. AME (single variable: age_h)
+   Time: 0.0015s
+   Memory: 0.29 MB
+
+6. AME (with scenario - wealth at are_related_dists_a_inv=1/6)
+   Time: 0.0196s
+   Memory: 10.07 MB
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ julia_benchmarks.csv
+
+================================================================================
+SUMMARY
+================================================================================
+
+6×4 DataFrame
+ Row │ operation       time_s       memory_mb  allocs
+     │ String          Float64      Float64    Int64
+─────┼────────────────────────────────────────────────
+   1 │ APM             0.000721917   0.754753   17002
+   2 │ MEM             0.00241562    1.66855    26691
+   3 │ AAP             0.00053825    0.29126      474
+   4 │ AME (all)       0.0444285     0.63073     2065
+   5 │ AME (age_h)     0.001457      0.292137     483
+   6 │ AME (scenario)  0.0196274    10.0743      1363
+
+Dataset: N=5000 observations
+Total benchmark time: 0.07s (Julia)
+
+Next: Compare with R using compare_performance.jl
+
+
+Step 2: R benchmark...
+Rscript r_benchmarks.R
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.2
+✔ ggplot2   4.0.0     ✔ tibble    3.3.0
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+Welcome to emmeans.
+Caution: You lose important information if you filter this package's results.
+See '? untidy'
+================================================================================
+R PERFORMANCE BENCHMARK (Speed & Memory)
+================================================================================
+
+Loading data from CSV...
+  N = 5000 observations
+
+Converting data types...
+  ✓ Done
+
+Fitting model...
+--------------------------------------------------------------------------------
+Model fitting: 0.027 s
+  K = 65 parameters
+
+================================================================================
+RUNNING BENCHMARKS
+================================================================================
+
+1. APM (Adjusted Predictions at Profiles)
+Warning message:
+In microbenchmark(prediction(model_r, at = list(socio4 = c(FALSE,  :
+  less accurate nanosecond times to avoid potential integer overflows
+   Time: 0.1024 s (median)
+   Memory: 123.47 MB
+
+2. MEM (Marginal Effects at Profiles - emtrends)
+   Time: 0.3507 s (median)
+   Memory: 164.69 MB
+   Note: emtrends computes derivatives at grid points (O(1)), matching Julia
+
+3. AAP (Average Adjusted Predictions)
+   Time: 0.0198 s (median)
+   Memory: 28.27 MB
+
+4. AME (Average Marginal Effects - all variables)
+   Time: 13.2509 s (median)
+   Memory: 37428.6 MB
+
+5. AME (single variable: age_h)
+   Time: 0.4601 s (median)
+   Memory: 1367.86 MB
+
+6. AME (with scenario - wealth at are_related_dists_a_inv=1/6)
+   Time: 0.9868 s (median)
+   Memory: 2703.58 MB
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ r_benchmarks.rds
+
+================================================================================
+SUMMARY
+================================================================================
+
+Dataset: N = 5000 observations
+Total operation time: 15.17 s (R)
+
+Next: Compare with Julia using compare_performance.jl
+
+
+Step 3: Comparing performance...
+julia --project=. compare_performance.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+================================================================================
+JULIA vs R PERFORMANCE COMPARISON
+================================================================================
+
+Loading benchmark results...
+  ✓ Julia results: 6 operations
+  ✓ R results: 6 operations
+
+================================================================================
+DETAILED COMPARISON
+================================================================================
+
+AAP:
+  Julia:   0.0005s  |  0.29 MB
+  R:       0.0198s  |  28.27 MB
+  Speedup: 36.77×  |  Memory: 97.08×
+  Improvement: 97.3% faster  |  99.0% less memory
+
+AME (all):
+  Julia:   0.0444s  |  0.63 MB
+  R:       13.2509s  |  37428.6 MB
+  Speedup: 298.25×  |  Memory: 59341.74×
+  Improvement: 99.7% faster  |  100.0% less memory
+
+AME (age_h):
+  Julia:   0.0015s  |  0.29 MB
+  R:       0.4601s  |  1367.86 MB
+  Speedup: 315.79×  |  Memory: 4682.27×
+  Improvement: 99.7% faster  |  100.0% less memory
+
+AME (scenario):
+  Julia:   0.0196s  |  10.07 MB
+  R:       0.9868s  |  2703.58 MB
+  Speedup: 50.28×  |  Memory: 268.36×
+  Improvement: 98.0% faster  |  99.6% less memory
+
+APM:
+  Julia:   0.0007s  |  0.75 MB
+  R:       0.1024s  |  123.47 MB
+  Speedup: 141.81×  |  Memory: 163.59×
+  Improvement: 99.3% faster  |  99.4% less memory
+
+MEM:
+  Julia:   0.0024s  |  1.67 MB
+  R:       0.3507s  |  164.69 MB
+  Speedup: 145.16×  |  Memory: 98.7×
+  Improvement: 99.3% faster  |  99.0% less memory
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Speed Performance:
+  Average speedup:  164.68×
+  Median speedup:   143.48×
+  Range:            36.77× to 315.79×
+
+Memory Performance:
+  Average memory ratio:    10775.29× (R/Julia)
+  Median memory ratio:     215.98×
+
+Overall Performance:
+  Total Julia time: 0.07s
+  Total R time:     15.17s
+  Overall speedup:  219.26×
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ performance_comparison.csv
+
+================================================================================
+INTERPRETATION
+================================================================================
+
+🚀 EXCEPTIONAL: Julia is 164.7× faster than R on average
+   This represents a major performance advantage for large-scale analysis.
+
+Dataset: N=5000 observations
+
+
+================================================================================
+✓ Performance comparison complete!
+================================================================================

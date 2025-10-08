@@ -1,0 +1,490 @@
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+     Testing Margins
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "BSplineKit" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StaticArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "Git_jll" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "DataFrames" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "CodeTracking" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "Static" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "StatsModels" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "DataStructures" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "PrettyTables" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FormulaCompiler" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "TimeZones" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "Adapt" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "OpenSSH_jll" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "ForwardDiff" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+┌ Warning: Entry in manifest at "/Users/emf/.julia/dev/Margins/test" for package "FillArrays" differs from that in "/Users/emf/.julia/dev/Margins/Manifest.toml"
+└ @ Pkg.Operations ~/.julia/juliaup/julia-1.11.2+0.aarch64.apple.darwin14/share/julia/stdlib/v1.11/Pkg/src/Operations.jl:1871
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_ezNkSO/Project.toml`
+  [6e4b80f9] BenchmarkTools v1.6.0
+  [336ed68f] CSV v0.10.15
+⌅ [324d7699] CategoricalArrays v0.10.8
+  [60f91f6f] CovarianceMatrices v0.22.0
+  [a93c6f00] DataFrames v1.8.0
+⌃ [31c24e10] Distributions v0.25.120
+  [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
+  [38e38edf] GLM v1.9.0
+  [883ce5cb] Margins v2.0.2 `~/.julia/dev/Margins`
+⌅ [ff71e718] MixedModels v4.38.1
+  [ce6b1742] RDatasets v0.7.7
+  [10745b16] Statistics v1.11.1
+  [2913bbd2] StatsBase v0.34.6
+  [3eaba693] StatsModels v0.7.7
+  [bd369af6] Tables v1.12.1
+  [ade2ca70] Dates v1.11.0
+  [37e2e46d] LinearAlgebra v1.11.0
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [8dfed614] Test v1.11.0
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_ezNkSO/Manifest.toml`
+  [a4c015fc] ANSIColoredPrinters v0.0.1
+  [1520ce14] AbstractTrees v0.4.5
+  [79e6a3ab] Adapt v4.4.0
+  [66dad0bd] AliasTables v1.1.3
+⌃ [4c555306] ArrayLayouts v1.11.2
+  [69666777] Arrow v2.8.0
+  [31f734f8] ArrowTypes v2.3.0
+  [093aae92] BSplineKit v0.19.1
+⌃ [aae01518] BandedMatrices v1.9.4
+  [6e4b80f9] BenchmarkTools v1.6.0
+  [c3b6d118] BitIntegers v0.3.5
+  [fa961155] CEnum v0.5.0
+  [336ed68f] CSV v0.10.15
+⌅ [324d7699] CategoricalArrays v0.10.8
+  [da1fd8a2] CodeTracking v2.0.1
+  [5ba52731] CodecLz4 v0.4.6
+  [944b1d66] CodecZlib v0.7.8
+  [6b39b394] CodecZstd v0.8.6
+  [861a8166] Combinatorics v1.0.3
+  [bbf7d656] CommonSubexpressions v0.3.1
+  [f70d9fcc] CommonWorldInvalidations v1.0.0
+⌃ [34da2185] Compat v4.18.0
+  [807dbc54] Compiler v0.1.1
+  [f0e56b4a] ConcurrentUtilities v2.5.0
+  [60f91f6f] CovarianceMatrices v0.22.0
+  [a8cc5b0e] Crayons v4.1.1
+  [9a962f9c] DataAPI v1.16.0
+  [a93c6f00] DataFrames v1.8.0
+  [864edb3b] DataStructures v0.19.1
+  [e2d170a0] DataValueInterfaces v1.0.0
+  [85a47980] Dictionaries v0.4.5
+  [163ba53b] DiffResults v1.1.0
+  [b552c78f] DiffRules v1.15.1
+⌃ [31c24e10] Distributions v0.25.120
+  [ffbed154] DocStringExtensions v0.9.5
+  [e30172f5] Documenter v1.14.1
+  [4e289a0a] EnumX v1.0.5
+  [e2ba6199] ExprTools v0.1.10
+  [442a2c76] FastGaussQuadrature v1.0.2
+  [5789e2e9] FileIO v1.17.0
+  [48062228] FilePathsBase v0.9.24
+  [1a297f60] FillArrays v1.14.0
+  [72341345] FormulaCompiler v1.0.0 `~/.julia/dev/FormulaCompiler`
+  [f6369f11] ForwardDiff v1.2.1
+  [38e38edf] GLM v1.9.0
+  [d7ba0133] Git v1.5.0
+  [6407cd72] GroupedArrays v0.3.3
+  [34004b35] HypergeometricFunctions v0.3.28
+  [b5f81e59] IOCapture v0.2.5
+  [615f187c] IfElse v0.1.1
+  [313cdc1a] Indexing v1.1.1
+  [842dd82b] InlineStrings v1.4.5
+  [41ab1584] InvertedIndices v1.3.1
+  [92d709cd] IrrationalConstants v0.2.4
+  [82899510] IteratorInterfaceExtensions v1.0.0
+  [692b3bcd] JLLWrappers v1.7.1
+⌅ [682c06a0] JSON v0.21.4
+  [0f8b85d8] JSON3 v1.14.3
+  [aa1ae85d] JuliaInterpreter v0.10.5
+  [b964fa9f] LaTeXStrings v1.4.0
+  [0e77f7df] LazilyInitializedFields v1.3.0
+  [2ab3a3ac] LogExpFunctions v0.3.29
+⌃ [6f1432cf] LoweredCodeUtils v3.4.3
+  [1914dd2f] MacroTools v0.5.16
+  [883ce5cb] Margins v2.0.2 `~/.julia/dev/Margins`
+  [d0879d2d] MarkdownAST v0.1.2
+  [e1d29d7a] Missings v1.2.0
+⌅ [ff71e718] MixedModels v4.38.1
+  [7e9fb7ac] MixedModelsDatasets v0.1.2
+  [78c3b35d] Mocking v0.8.1
+  [76087f3c] NLopt v1.2.1
+  [77ba4419] NaNMath v1.1.3
+  [bac558e1] OrderedCollections v1.8.1
+  [90014a1f] PDMats v0.11.35
+  [69de0a69] Parsers v2.8.3
+  [2dfb63ee] PooledArrays v1.4.3
+⌅ [aea7be01] PrecompileTools v1.2.1
+  [21216c6a] Preferences v1.5.0
+⌃ [08abe8d2] PrettyTables v3.0.10
+  [92933f4c] ProgressMeter v1.11.0
+  [43287f4e] PtrArrays v1.3.0
+  [1fd47b50] QuadGK v2.11.2
+⌅ [df47a6cb] RData v0.8.3
+  [ce6b1742] RDatasets v0.7.7
+  [189a3867] Reexport v1.2.2
+  [2792f1a3] RegistryInstances v0.1.0
+  [ae029012] Requires v1.3.1
+  [295af30f] Revise v3.9.0
+  [79098fc4] Rmath v0.8.0
+  [431bcebd] SciMLPublic v1.0.0
+  [6c6a2e73] Scratch v1.3.0
+  [91c51154] SentinelArrays v1.4.8
+  [1277b4bf] ShiftedArrays v2.0.0
+  [a2af1166] SortingAlgorithms v1.2.2
+⌃ [276daf66] SpecialFunctions v2.5.1
+  [03a91e81] SplitApplyCombine v1.2.3
+  [5064a6a7] StandardizedPredictors v1.0.1
+  [aedffcd0] Static v1.3.0
+  [90137ffa] StaticArrays v1.9.15
+  [1e83bf80] StaticArraysCore v1.4.3
+  [10745b16] Statistics v1.11.1
+  [82ae8749] StatsAPI v1.7.1
+  [2913bbd2] StatsBase v0.34.6
+  [4c63d2b9] StatsFuns v1.5.0
+  [3eaba693] StatsModels v0.7.7
+  [892a3eda] StringManipulation v0.4.1
+  [354b36f9] StringViews v1.3.5
+  [856f2bd8] StructTypes v1.11.0
+  [dc5dba14] TZJData v1.5.0+2025b
+  [3783bdb8] TableTraits v1.0.1
+  [bd369af6] Tables v1.12.1
+  [f269a46b] TimeZones v1.22.1
+  [3bb67fe8] TranscodingStreams v0.11.3
+  [9d95f2ec] TypedTables v1.4.6
+  [ea10d353] WeakRefStrings v1.4.2
+  [76eceee3] WorkerUtilities v1.6.1
+  [2e619515] Expat_jll v2.7.1+0
+  [020c3dae] Git_LFS_jll v3.7.0+0
+  [f8c6e375] Git_jll v2.51.1+0
+  [94ce4f54] Libiconv_jll v1.18.0+0
+  [5ced341a] Lz4_jll v1.10.1+0
+  [079eb43e] NLopt_jll v2.10.0+0
+  [9bd350c2] OpenSSH_jll v10.0.2+0
+⌃ [458c3c95] OpenSSL_jll v3.5.2+0
+  [efe28fd5] OpenSpecFun_jll v0.5.6+0
+  [f50d1b31] Rmath_jll v0.5.1+0
+  [3161d3a3] Zstd_jll v1.5.7+1
+  [0dad84c5] ArgTools v1.1.2
+  [56f22d72] Artifacts v1.11.0
+  [2a0f44e3] Base64 v1.11.0
+  [ade2ca70] Dates v1.11.0
+  [8ba89e20] Distributed v1.11.0
+  [f43a241f] Downloads v1.6.0
+  [7b1f6079] FileWatching v1.11.0
+  [9fa8497b] Future v1.11.0
+  [b77e0a4c] InteractiveUtils v1.11.0
+  [4af54fe1] LazyArtifacts v1.11.0
+  [b27032c2] LibCURL v0.6.4
+  [76f85450] LibGit2 v1.11.0
+  [8f399da3] Libdl v1.11.0
+  [37e2e46d] LinearAlgebra v1.11.0
+  [56ddb016] Logging v1.11.0
+  [d6f4376e] Markdown v1.11.0
+  [a63ad114] Mmap v1.11.0
+  [ca575930] NetworkOptions v1.2.0
+  [44cfe95a] Pkg v1.11.0
+  [de0858da] Printf v1.11.0
+  [9abbd945] Profile v1.11.0
+  [3fa0cd96] REPL v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [9e88b42a] Serialization v1.11.0
+  [6462fe0b] Sockets v1.11.0
+  [2f01184e] SparseArrays v1.11.0
+  [f489334b] StyledStrings v1.11.0
+  [4607b0f0] SuiteSparse
+  [fa267f1f] TOML v1.0.3
+  [a4e569a6] Tar v1.10.0
+  [8dfed614] Test v1.11.0
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
+  [e66e0078] CompilerSupportLibraries_jll v1.1.1+0
+  [deac9b47] LibCURL_jll v8.6.0+0
+  [e37daf67] LibGit2_jll v1.7.2+0
+  [29816b5a] LibSSH2_jll v1.11.0+1
+  [c8ffd9c3] MbedTLS_jll v2.28.6+0
+  [14a3606d] MozillaCACerts_jll v2023.12.12
+  [4536629a] OpenBLAS_jll v0.3.27+1
+  [05823500] OpenLibm_jll v0.8.1+2
+  [efcefdf7] PCRE2_jll v10.42.0+1
+  [bea87d4a] SuiteSparse_jll v7.7.0+0
+  [83775a58] Zlib_jll v1.2.13+1
+  [8e850b90] libblastrampoline_jll v5.11.0+0
+  [8e850ede] nghttp2_jll v1.59.0+0
+  [3f19e933] p7zip_jll v17.4.0+2
+        Info Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading.
+     Testing Running tests...
+Minimizing 2    Time: 0:00:00 ( 0.16  s/it)[K
+   objective: 126.3474937319155[K[A
+[K[AMinimizing 73    Time: 0:00:00 ( 5.02 ms/it)[K
+[ Info: Skipping contrasts for variable education: specified as mixture in reference grid (use discrete levels if contrasts desired)
+┌ Warning: Empty dataset provided to hierarchical_grid(). Representative values may be undefined (NaN/missing).
+└ @ Margins ~/.julia/dev/Margins/src/profile/reference_grids.jl:904
+┌ Warning: Categorical combination Dict(:education => "Graduate", :country => "USA", :region => "South", :city => "CityB") matches no observations in data
+└ @ Margins ~/.julia/dev/Margins/src/profile/reference_grids.jl:1048
+┌ Warning: Categorical combination Dict(:education => "HS", :country => "USA", :region => "South", :city => "CityA") matches no observations in data
+└ @ Margins ~/.julia/dev/Margins/src/profile/reference_grids.jl:1048
+┌ Warning: Categorical combination Dict(:education => "HS", :country => "USA", :region => "East", :city => "CityB") matches no observations in data
+└ @ Margins ~/.julia/dev/Margins/src/profile/reference_grids.jl:1048
+┌ Warning: 16 out of 24 categorical combinations (66.7%) match no data. Consider reviewing specification.
+└ @ Margins ~/.julia/dev/Margins/src/profile/reference_grids.jl:1057
+[ Info: Medium grid estimated: 15000 combinations.
+WARNING: Method definition analytical_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:37 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_logistic_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:87 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition _construct_eval_vector(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:142 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition analytical_poisson_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:224 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition compute_population_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:279 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition verify_linear_se_consistency(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:299 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_linear_se_consistency), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:299 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition verify_glm_se_chain_rule(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:347 overwritten on the same line (check for duplicate calls to `include`).
+WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_glm_se_chain_rule), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:347 overwritten on the same line (check for duplicate calls to `include`).
+┌ Info: Two-way interaction (Control level)
+│   analytical_se = 0.019191938757811656
+│   computed_se = 0.019191938757811656
+└   relative_error = 0.0
+┌ Info: Two-way interaction (Treatment level)
+│   analytical_se = 0.017657961696003824
+│   computed_se = 0.017657961696003824
+└   relative_error = 0.0
+┌ Info: GLM interaction (Control level)
+│   analytical_se = 0.029420807340945886
+│   computed_se = 0.029420807340945886
+└   relative_error = 0.0
+┌ Info: Three-way interaction (Control level)
+│   analytical_se = 0.0357273969141199
+│   computed_se = 0.0357273969141199
+└   relative_error = 0.0
+┌ Info: Contributing coefficients
+│   contributing_terms =
+│    4-element Vector{Tuple{String, Float64}}:
+│     ("x", 1.0)
+│     ("x & y", 2.0)
+│     ("x & group: Treatment", 0.0)
+└     ("x & y & group: Treatment", 0.0)
+┌ Info: Three-way interaction (Treatment level)
+│   analytical_se = 0.04195067543742632
+│   computed_se = 0.041950675437426324
+└   relative_error = 1.6540601150170494e-16
+┌ Info: Contributing coefficients
+│   contributing_terms =
+│    4-element Vector{Tuple{String, Float64}}:
+│     ("x", 1.0)
+│     ("x & y", 2.0)
+│     ("x & group: Treatment", 1.0)
+└     ("x & y & group: Treatment", 2.0)
+┌ Info: Three-way interaction (y=-1.0, Treatment)
+│   analytical_se = 0.023077964192648827
+│   computed_se = 0.023077964192648827
+└   relative_error = 0.0
+┌ Info: Mixed model (random intercept)
+│   analytical_se = 0.015003630415821841
+│   computed_se = 0.015003630415821851
+└   relative_error = 6.937214905590377e-16
+┌ Info: Random slope (fixed effects approach)
+│   analytical_se = 0.03418879930246711
+│   computed_se = 0.03418879930246701
+└   relative_error = 3.044371568529978e-15
+┌ Info: Mixed interaction (Control level)
+│   analytical_se = 0.021655807518806656
+│   computed_se = 0.021655807518806656
+└   relative_error = 0.0
+┌ Info: Mixed interaction (Treatment level)
+│   analytical_se = 0.02416288220619948
+│   computed_se = 0.02416288220619948
+└   relative_error = 0.0
+┌ Info: LHS log transformation
+│   analytical_se = 0.008268055141649704
+│   computed_se = 0.00826805514164971
+└   relative_error = 6.294310256489226e-16
+┌ Info: RHS log function backend consistency
+│   ad_se = 0.024384928204518364
+│   fd_se = 0.024384928235856928
+└   relative_difference = 1.2851612039081311e-9
+┌ Info: Exponential function backend consistency
+│   ad_se = 0.010370572493933784
+└   fd_se = 0.010370572493949352
+┌ Info: Trigonometric function backend consistency
+│   ad_se = 0.022727216738993243
+└   fd_se = 0.022727216739050007
+┌ Info: Power terms backend consistency
+│   ad_se = 0.017902593288661735
+└   fd_se = 0.01790259328868164
+┌ Info: Specialized SE validation coverage
+│   compatible_formulas = 11
+└   specialized_formulas = 8
+┌ Info: Validation methods
+│   interactions = "Hand-coded analytical"
+│   mixed_models = "Fixed effects vcov"
+└   functions = "Backend consistency"
+Test Summary:      | Pass  Total     Time
+Core Functionality |  292    292  1m39.0s
+Test Summary:     | Pass  Total   Time
+Advanced Features |  495    495  32.2s
+
+=== Row Scaling (ad) ===
+  n=100: 0.0 total, 0.0 per row
+  n=1000: 0.0 total, 0.0 per row
+  n=5000: 0.0 total, 0.0 per row
+  n=10000: 0.0 total, 0.0 per row
+
+=== Variable Scaling (ad) ===
+  nvars=1: 0.0 total, 0.0 per var
+  nvars=2: 0.0 total, 0.0 per var
+  nvars=4: 0.0 total, 0.0 per var
+
+=== Measure Selection (ad) ===
+  effect: 0.0
+  elasticity: 0.0
+  semielasticity_dyex: 0.0
+  semielasticity_eydx: 0.0
+
+=== Fixed Overhead (ad) ===
+  Total allocations: 0.0
+
+=== Row Scaling (fd) ===
+  n=100: 0.0 total, 0.0 per row
+  n=1000: 0.0 total, 0.0 per row
+  n=5000: 0.0 total, 0.0 per row
+  n=10000: 0.0 total, 0.0 per row
+
+=== Variable Scaling (fd) ===
+  nvars=1: 0.0 total, 0.0 per var
+  nvars=2: 0.0 total, 0.0 per var
+  nvars=4: 0.0 total, 0.0 per var
+
+=== Measure Selection (fd) ===
+  effect: 0.0
+  elasticity: 0.0
+  semielasticity_dyex: 0.0
+  semielasticity_eydx: 0.0
+
+=== Fixed Overhead (fd) ===
+  Total allocations: 0.0
+
+Multi-level categorical batch:
+  Time (median): 11.833 μs
+  Allocations:   0
+  Memory:        0 bytes
+
+Weighted computation:
+  Time (median): 12.083 μs
+  Allocations:   0
+  Memory:        0 bytes
+
+Boolean categorical batch:
+  Time (median): 3.5130625 μs
+  Allocations:   0
+  Memory:        0 bytes
+
+Performance Results:
+  Time (median): 13.125 μs
+  Time (min):    12.459 μs
+  Allocations:   0
+  Memory:        0 bytes
+
+=== Continuous Derivatives ===
+1. Warmup call (may allocate for compilation):
+  114.789 ns (0 allocations: 0 bytes)
+
+2. Steady-state call (should be 0 bytes):
+   Allocations: 0
+
+3. Loop over rows (should be 0 bytes):
+   Allocations: 0
+
+=== Continuous Derivatives (Response Scale) ===
+1. Warmup call:
+  103.989 ns (0 allocations: 0 bytes)
+
+2. Steady-state call (should be 0 bytes):
+   Allocations: 0
+
+=== Categorical Contrasts ===
+1. Warmup call:
+  65.525 ns (0 allocations: 0 bytes)
+
+2. Steady-state call (should be 0 bytes):
+   Allocations: 0
+
+3. Binary variable contrast (should be 0 bytes):
+   Allocations: 0
+
+4. Loop over multiple contrasts (should be 0 bytes):
+   Allocations: 0
+
+=== Categorical Contrast Gradients ===
+1. Linear scale gradient (warmup):
+  62.500 ns (0 allocations: 0 bytes)
+
+2. Linear scale gradient (should be 0 bytes):
+   Allocations: 0
+
+3. Response scale gradient with link (warmup):
+  48.330 ns (0 allocations: 0 bytes)
+
+4. Response scale gradient with link (should be 0 bytes):
+   Allocations: 0
+
+=== Interaction Terms ===
+1. Continuous ME with interaction (warmup):
+  60.652 ns (0 allocations: 0 bytes)
+
+2. Continuous ME with interaction (should be 0 bytes):
+   Allocations: 0
+
+3. Categorical contrast with interaction (should be 0 bytes):
+   Allocations: 0
+
+=== Delta Method SE ===
+1. Delta method SE (warmup):
+  107.251 ns (0 allocations: 0 bytes)
+
+2. Delta method SE (should be 0 bytes):
+   Allocations: 0
+
+=== Evaluator Reuse ===
+1. Multiple rows with same evaluator (should be 0 bytes):
+   Allocations: 0 (50 rows × 2 contrasts = 100 calls)
+
+=== Warm-up Behavior Analysis ===
+1. First call on fresh evaluator:
+   Allocations: 0
+
+2. Second call (steady state):
+   Allocations: 0
+
+3. 10th call (fully warmed up):
+   Allocations: 0
+
+Conclusion: Warm-up phase complete, steady-state achieves 0 allocations
+
+============================================================
+SUMMARY: All per-row operations achieve zero allocations
+after warm-up, validating production-ready performance.
+============================================================
+Test Summary: | Pass  Total     Time
+Performance   |  110    110  1m18.8s
+Test Summary:           | Pass  Total     Time
+Statistical Correctness |  755    755  2m43.1s
+Test Summary:    | Pass  Total   Time
+Validation Tests |  148    148  26.2s
+     Testing Margins tests passed 

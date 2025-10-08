@@ -1,0 +1,353 @@
+================================================================================
+Generating large dataset (500K observations)...
+================================================================================
+julia --project=. generate_data_large.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Dataset generated: 500000 rows, 53 columns
+
+Exporting data to CSV...
+Data exported to: r_comparison_data_large.csv
+
+================================================================================
+=== CATEGORICAL VARIABLE LEVELS ===
+================================================================================
+relation levels: ["family", "free_time", "friend", "neighbor", "work"]
+religion_c_p levels: ["Catholic", "No Religion", "Other", "Protestant"]
+village_code levels: [152, 153, 154, 155, 156, 157, 158, 159, 160, 161]
+man_x levels: ["false", "false, true", "true", "true, false"]
+religion_c_x levels: ["Catholic", "Catholic, No Religion", "Catholic, Other", "Catholic, Protestant", "No Religion", "No Religion, Catholic", "No Religion, Other", "No Religion, Protestant", "Other", "Other, Catholic", "Other, No Religion", "Other, Protestant", "Protestant", "Protestant, Catholic", "Protestant, No Religion", "Protestant, Other"]
+isindigenous_x levels: ["false", "false, true", "true", "true, false"]
+================================================================================
+
+✓ Large dataset generation complete!
+
+Next steps:
+1. Run: make performance-large
+
+================================================================================
+Running large-scale performance benchmark (500K observations)...
+================================================================================
+
+Step 1: Julia benchmark...
+julia --project=. performance_benchmark_large.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+Precompiling Margins...
+   3439.1 ms  ✓ Margins
+  1 dependency successfully precompiled in 4 seconds. 190 already precompiled.
+================================================================================
+JULIA LARGE-SCALE PERFORMANCE BENCHMARK (500K observations)
+================================================================================
+
+Loading large dataset...
+  N = 500000 observations
+
+Converting data types...
+  ✓ Done
+
+Fitting model...
+--------------------------------------------------------------------------------
+Model fitting: 6.018s
+  K = 65 parameters
+
+================================================================================
+RUNNING BENCHMARKS
+================================================================================
+
+1. APM (Adjusted Predictions at Profiles)
+   Time: 0.0384s
+   Memory: 72.51 MB
+
+2. MEM (Marginal Effects at Profiles)
+   Time: 0.0411s
+   Memory: 73.42 MB
+
+3. AAP (Average Adjusted Predictions)
+   Time: 0.045s
+   Memory: 26.73 MB
+
+4. AME (Average Marginal Effects - all variables)
+   Time: 4.4899s
+   Memory: 27.07 MB
+
+5. AME (single variable: age_h)
+   Time: 0.1546s
+   Memory: 26.73 MB
+
+6. AME (with scenario - wealth at are_related_dists_a_inv=1/6)
+   Time: 1.9912s
+   Memory: 995.75 MB
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ julia_benchmarks_large.csv
+
+================================================================================
+SUMMARY
+================================================================================
+
+6×4 DataFrame
+ Row │ operation       time_s     memory_mb  allocs
+     │ String          Float64    Float64    Int64
+─────┼───────────────────────────────────────────────
+   1 │ APM             0.0384303    72.5088  1997002
+   2 │ MEM             0.041079     73.4226  2006691
+   3 │ AAP             0.0449942    26.7267      474
+   4 │ AME (all)       4.48987      27.0662     2065
+   5 │ AME (age_h)     0.154553     26.7276      483
+   6 │ AME (scenario)  1.99115     995.753      1363
+
+Dataset: N=500000 observations
+Total operation time: 6.76s
+
+================================================================================
+PERFORMANCE ASSESSMENT
+================================================================================
+
+Average operation time: 1.127s
+Total memory usage: 1222.21 MB
+
+Profile operations (APM, MEM) demonstrate O(1) scaling:
+  - Independent of dataset size
+  - Reference grid evaluation only
+
+Population operations (AAP, AME) demonstrate O(n) scaling:
+  - Linear with dataset size
+  - Zero-allocation per-row computation
+
+
+Step 2: R benchmark...
+Rscript r_benchmarks_large.R
+── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+✔ dplyr     1.1.4     ✔ readr     2.1.5
+✔ forcats   1.0.0     ✔ stringr   1.5.2
+✔ ggplot2   4.0.0     ✔ tibble    3.3.0
+✔ lubridate 1.9.4     ✔ tidyr     1.3.1
+✔ purrr     1.1.0     
+── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+✖ dplyr::filter() masks stats::filter()
+✖ dplyr::lag()    masks stats::lag()
+ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+Welcome to emmeans.
+Caution: You lose important information if you filter this package's results.
+See '? untidy'
+================================================================================
+R LARGE-SCALE PERFORMANCE BENCHMARK (500K observations)
+================================================================================
+
+WARNING: This benchmark uses a 500K observation dataset.
+R may require significant time and memory.
+
+Loading large dataset from CSV...
+  N = 500000 observations
+
+Converting data types...
+  ✓ Done
+
+Fitting model...
+--------------------------------------------------------------------------------
+Model fitting: 4.115 s
+  K = 65 parameters
+
+================================================================================
+RUNNING BENCHMARKS
+================================================================================
+
+NOTE: Using 3 samples instead of 5 due to large dataset size
+
+1. APM (Adjusted Predictions at Profiles)
+Warning message:
+In microbenchmark(prediction(model_r, at = list(socio4 = c(FALSE,  :
+  less accurate nanosecond times to avoid potential integer overflows
+   Time: 10.104 s (median)
+   Memory: 12146.25 MB
+
+2. MEM (Marginal Effects at Profiles - emtrends)
+   Time: 10.187 s (median)
+   Memory: 14351.62 MB
+   Note: emtrends computes derivatives at grid points (O(1)), matching Julia
+
+3. AAP (Average Adjusted Predictions)
+   Time: 0.7122 s (median)
+   Memory: 2725.54 MB
+
+4. AME (Average Marginal Effects - all variables)
+   Time: 1346.893 s (median)
+   Memory: 3687466 MB
+
+5. AME (single variable: age_h)
+   Time: 50.7759 s (median)
+   Memory: 134828.1 MB
+
+6. AME (with scenario - wealth at are_related_dists_a_inv=1/6)
+   Time: 123.0595 s (median)
+   Memory: 266576.3 MB
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ r_benchmarks_large.rds
+
+================================================================================
+SUMMARY
+================================================================================
+
+Dataset: N = 500000 observations
+Total operation time: 1541.73 s (R)
+
+Next: Compare with Julia using compare_performance_large.jl
+
+
+Step 3: Comparing performance...
+julia --project=. compare_performance_large.jl
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+================================================================================
+JULIA vs R PERFORMANCE COMPARISON (500K observations)
+================================================================================
+
+Loading benchmark results...
+  ✓ Julia results: 6 operations
+  ✓ R results: 6 operations
+
+================================================================================
+DETAILED COMPARISON
+================================================================================
+
+AAP:
+  Julia:   0.045s  |  26.73 MB
+  R:       0.7122s  |  2725.54 MB
+  Speedup: 15.83×  |  Memory: 101.98×
+  Improvement: 93.7% faster  |  99.0% less memory
+
+AME (all):
+  Julia:   4.4899s  |  27.07 MB
+  R:       1346.8935s  |  3.68746604e6 MB
+  Speedup: 299.98×  |  Memory: 136239.01×
+  Improvement: 99.7% faster  |  100.0% less memory
+
+AME (age_h):
+  Julia:   0.1546s  |  26.73 MB
+  R:       50.7759s  |  134828.07 MB
+  Speedup: 328.53×  |  Memory: 5044.53×
+  Improvement: 99.7% faster  |  100.0% less memory
+
+AME (scenario):
+  Julia:   1.9912s  |  995.75 MB
+  R:       123.0595s  |  266576.31 MB
+  Speedup: 61.8×  |  Memory: 267.71×
+  Improvement: 98.4% faster  |  99.6% less memory
+
+APM:
+  Julia:   0.0384s  |  72.51 MB
+  R:       10.104s  |  12146.25 MB
+  Speedup: 262.92×  |  Memory: 167.51×
+  Improvement: 99.6% faster  |  99.4% less memory
+
+MEM:
+  Julia:   0.0411s  |  73.42 MB
+  R:       10.187s  |  14351.62 MB
+  Speedup: 247.99×  |  Memory: 195.47×
+  Improvement: 99.6% faster  |  99.5% less memory
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Speed Performance:
+  Average speedup:  202.84×
+  Median speedup:   255.45×
+  Range:            15.83× to 328.53×
+
+Memory Performance:
+  Average memory ratio:    23669.37× (R/Julia)
+  Median memory ratio:     231.59×
+
+Overall Performance:
+  Total Julia time: 6.76s
+  Total R time:     1541.73s
+  Overall speedup:  228.06×
+
+================================================================================
+RESULTS SAVED
+================================================================================
+
+✓ performance_comparison_large.csv
+
+================================================================================
+INTERPRETATION
+================================================================================
+
+🚀 EXCEPTIONAL: Julia is 202.8× faster than R on average
+   This represents a major performance advantage for large-scale analysis.
+
+Dataset: N=500000 observations
+
+================================================================================
+SCALING CHARACTERISTICS
+================================================================================
+
+Profile operations (APM, MEM):
+  - O(1) complexity: independent of dataset size
+  - Reference grid evaluation only
+  - Performance advantage critical for interactive analysis
+
+Population operations (AAP, AME):
+  - O(n) complexity: linear scaling with dataset size
+  - Zero-allocation per-row computation in Julia
+  - Speedup multiplies benefit at large N
+
+================================================================================
+SCALING ANALYSIS: 5K vs 500K observations
+================================================================================
+
+Comparing performance at different scales:
+  Dataset:  5K → 500K (100× increase)
+
+  AAP:
+    5K:   36.77× speedup
+    500K: 15.83× speedup
+    → Speedup decreases at larger scale
+
+  AME (all):
+    5K:   298.25× speedup
+    500K: 299.98× speedup
+    → Consistent speedup across scales
+
+  AME (age_h):
+    5K:   315.79× speedup
+    500K: 328.53× speedup
+    → Consistent speedup across scales
+
+  AME (scenario):
+    5K:   50.28× speedup
+    500K: 61.8× speedup
+    → Speedup INCREASES at larger scale
+
+  APM:
+    5K:   141.81× speedup
+    500K: 262.92× speedup
+    → Speedup INCREASES at larger scale
+
+  MEM:
+    5K:   145.16× speedup
+    500K: 247.99× speedup
+    → Speedup INCREASES at larger scale
+
+
+================================================================================
+✓ Large-scale performance comparison complete!
+================================================================================

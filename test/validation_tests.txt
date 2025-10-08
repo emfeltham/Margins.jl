@@ -1,0 +1,13 @@
+The latest version of Julia in the `release` channel is 1.11.7+0.aarch64.apple.darwin14. You currently have `1.11.2+0.aarch64.apple.darwin14` installed. Run:
+
+  juliaup update
+
+in your terminal shell to install Julia 1.11.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+┌ Warning: Skipping categorical variable treatment_cat due to processing error: ErrorException("Baseline level 'false' not found in categorical variable :treatment_cat")
+└ @ Margins ~/.julia/dev/Margins/src/population/categorical_effects.jl:151
+┌ Warning: Skipping categorical variable treatment_cat due to processing error: ErrorException("Baseline level 'false' not found in categorical variable :treatment_cat")
+└ @ Margins ~/.julia/dev/Margins/src/population/categorical_effects.jl:151
+┌ Warning: Skipping categorical variable treatment_cat due to processing error: ErrorException("Baseline level 'false' not found in categorical variable :treatment_cat")
+└ @ Margins ~/.julia/dev/Margins/src/population/categorical_effects.jl:151
+Test Summary:    | Pass  Total   Time
+Validation Tests |  148    148  34.2s

@@ -1,0 +1,12 @@
+# Data and results
+data/
+results_r/
+results_julia/
+*.csv
+
+# OS/editor
+.DS_Store
+
+# other
+notes/
+manuals/
