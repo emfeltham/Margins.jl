@@ -126,44 +126,44 @@ end
 import DataFrames: DataFrame # explicit import to extend method
 
 # Type-specific DataFrame dispatch for effects
-function DataFrame(mr::EffectsResult; format::Symbol=:auto)
+function DataFrame(mr::EffectsResult; format::Symbol=:auto, include_gradients::Bool=false)
     # Auto-detect natural format based on analysis type
     if format == :auto
         analysis_type = get(mr.metadata, :analysis_type, :unknown)
         # For effects, use profile format for profile analysis, standard otherwise
         format = analysis_type == :profile ? :profile : :standard
     end
-    
+
     # Validate format compatibility
     if format == :profile && isnothing(mr.profile_values)
         throw(ArgumentError("format=:profile requires profile-based results (from profile_margins)"))
     end
-    
+
     if format == :standard
-        return _standard_table(mr)
+        return _standard_table(mr; include_gradients)
     elseif format == :compact
-        return _compact_table(mr)
+        return _compact_table(mr; include_gradients)
     elseif format == :confidence
-        return _confidence_table(mr)
+        return _confidence_table(mr; include_gradients)
     elseif format == :profile
-        return _profile_table(mr)
+        return _profile_table(mr; include_gradients)
     elseif format == :stata
-        return _stata_table(mr)
+        return _stata_table(mr; include_gradients)
     else
         error("Unknown format: $format. EffectsResult supports: :standard, :compact, :confidence, :profile, :stata")
     end
 end
 
 # Type-specific DataFrame dispatch for predictions
-function DataFrame(mr::PredictionsResult; format::Symbol=:auto)
+function DataFrame(mr::PredictionsResult; format::Symbol=:auto, include_gradients::Bool=false)
     # Auto-detect natural format - always use predictions format
     if format == :auto
         format = :predictions
     end
-    
+
     # Predictions only support the predictions format
     if format == :predictions
-        return _predictions_table(mr)
+        return _predictions_table(mr; include_gradients)
     else
         error("Unknown format: $format. PredictionsResult only supports: :predictions (or :auto)")
     end
@@ -835,22 +835,22 @@ end
 
 # Format-specific table builders
 
-function _standard_table(mr::EffectsResult)
+function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
-    
+
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
-    
+
     # Build DataFrame with new column order: context columns first
     df = DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Add statistical columns
     df[!, :variable] = mr.variables  # The "x" in dy/dx
     df[!, :contrast] = mr.terms      # Human-readable contrast/label
@@ -858,7 +858,7 @@ function _standard_table(mr::EffectsResult)
     df[!, :se] = mr.standard_errors
     df[!, :t_stat] = t_stats
     df[!, :p_value] = p_values
-    
+
     # Add confidence intervals if alpha is specified in metadata
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
@@ -866,85 +866,100 @@ function _standard_table(mr::EffectsResult)
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end
-    
+
     # CRITICAL: Use actual subgroup sizes, never fallback to incorrect quantities
     if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
         # Grouped case: use the actual subgroup sizes from computation
         df[!, :n] = mr.metadata[:subgroup_n_values]
     else
-        # Simple case: use overall sample size  
+        # Simple case: use overall sample size
         n_obs = get(mr.metadata, :n_obs, missing)
         df[!, :n] = fill(n_obs, length(mr.estimates))
     end
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 
-function _compact_table(mr::EffectsResult)
+function _compact_table(mr::EffectsResult; include_gradients::Bool=false)
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
-    
+
     # Build DataFrame with new column order: context columns first
     df = DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Add statistical columns
     df[!, :variable] = mr.variables  # The "x" in dy/dx
     df[!, :contrast] = mr.terms
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 
-function _confidence_table(mr::EffectsResult)
+function _confidence_table(mr::EffectsResult; include_gradients::Bool=false)
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
-    
+
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
-    
+
     # Build DataFrame with new column order: context columns first
     df = DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Add statistical columns
     df[!, :variable] = mr.variables  # The "x" in dy/dx
     df[!, :contrast] = mr.terms
     df[!, :estimate] = mr.estimates
     df[!, :lower] = lower
     df[!, :upper] = upper
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 
-function _profile_table(mr::EffectsResult)
+function _profile_table(mr::EffectsResult; include_gradients::Bool=false)
     # Profile-first organization: reference grid with results attached
     alpha = get(mr.metadata, :alpha, 0.05)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
-    
+
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
-    
+
     # Build DataFrame with new column order: context columns first (using consistent helper)
     df = DataFrames.DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column after profile columns but before result columns
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Add results columns
     df[!, :variable] = mr.variables  # The "x" in dy/dx
     df[!, :contrast] = mr.terms  # Clean variable names
@@ -952,36 +967,41 @@ function _profile_table(mr::EffectsResult)
     df[!, :se] = mr.standard_errors
     df[!, :lower] = lower
     df[!, :upper] = upper
-    
+
     # Add sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)
     df[!, :n] = fill(n_obs, length(mr.estimates))
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 
-function _predictions_table(mr::PredictionsResult)
+function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false)
     # Predictions-specific format: omits variable/contrast columns
     t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
-    
+
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     type_description = _create_type_description(analysis_type, :prediction, :predictions)
-    
+
     # Build DataFrame with new column order: context columns first (using consistent helper)
     df = DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column after context columns but before statistical columns
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Core statistical columns (no variable/contrast)
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
     df[!, :t_stat] = t_stats
     df[!, :p_value] = p_values
-    
+
     # Add confidence intervals if alpha is specified in metadata
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
@@ -989,46 +1009,56 @@ function _predictions_table(mr::PredictionsResult)
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end
-    
+
     # Add sample size
     if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
         # Grouped case: use the actual subgroup sizes from computation
         df[!, :n] = mr.metadata[:subgroup_n_values]
     else
-        # Simple case: use overall sample size  
+        # Simple case: use overall sample size
         n_obs = get(mr.metadata, :n_obs, missing)
         df[!, :n] = fill(n_obs, length(mr.estimates))
     end
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 
-function _stata_table(mr::EffectsResult)
-    t_stats = mr.estimates ./ mr.standard_errors  
+function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
+    t_stats = mr.estimates ./ mr.standard_errors
     p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
-    
+
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
-    
+
     # Get sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)
-    
+
     # Build DataFrame with new column order: context columns first (using consistent helper)
     df = DataFrame()
     append_context_columns!(df, mr; order=:front)
-    
+
     # Add type column
     df[!, :type] = fill(type_description, length(mr.estimates))
-    
+
     # Add Stata-style statistical columns
     df[!, :margin] = mr.estimates      # Stata uses "margin" not "estimate"
-    df[!, :std_err] = mr.standard_errors # "std_err" not "se" 
+    df[!, :std_err] = mr.standard_errors # "std_err" not "se"
     df[!, :t] = t_stats
     df[!, :P_t] = p_values            # "P>|t|" equivalent
     df[!, :N] = fill(n_obs, length(mr.estimates))  # Add sample size (Stata uses uppercase N)
-    
+
+    # Add gradient vectors if requested
+    if include_gradients
+        df[!, :gradient] = [mr.gradients[i, :] for i in 1:length(mr.estimates)]
+    end
+
     return df
 end
 

@@ -119,7 +119,13 @@ include("profile/reference_grids.jl")
 include("profile/categorical_effects.jl")  # Phase 4 migration: ContrastEvaluator-based categorical effects
 # profile/contrasts.jl DELETED (2025-10-01): Obsolete DataScenario code replaced by ContrastEvaluator in profile/core.jl
 
-include("second_diffs.jl")
-export second_difference, second_differences_all_contrasts, second_differences_table
+# Second differences module
+include("second_differences/contrasts.jl")
+include("second_differences/at_point.jl")
+include("second_differences/utilities.jl")
+
+export second_differences, second_difference, second_differences_all_contrasts,
+       second_differences_table, second_differences_pairwise,
+       second_differences_at
 
 end # module
