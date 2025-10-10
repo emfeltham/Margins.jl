@@ -50,7 +50,7 @@ using FormulaCompiler:
     LoadOp, ContrastOp,
     CategoricalCounterfactualVector,  # Needed by continuous_variables
     fixed_effects_form,
-    ContrastEvaluator, contrast_modelrow!, contrast_gradient!,
+    ContrastEvaluator, contrast_modelrow!,
     get_or_compile_formula,
     mix,
     _dmu_deta, _d2mu_deta2  # Link function derivatives for marginal_effects_mu!
@@ -90,6 +90,7 @@ include("inference/marginal_effects.jl")                 # marginal_effects_eta!
 include("inference/marginal_effects_automatic_diff.jl")  # marginal_effects_eta!, marginal_effects_mu! (AD backend)
 include("inference/marginal_effects_finite_diff.jl")     # marginal_effects_eta!, marginal_effects_mu! (FD backend)
 include("inference/delta_method.jl")                     # delta_method_se
+include("inference/contrast_gradient.jl")                # contrast_gradient!, contrast_gradient (migrated from FormulaCompiler)
 include("inference/mixture_utilities.jl")                # create_mixture_column, expand_mixture_grid, create_balanced_mixture
 
 include("core/data_conversion.jl")  # Data type conversion utilities

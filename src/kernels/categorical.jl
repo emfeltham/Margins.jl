@@ -4,7 +4,8 @@
 # This module implements the categorical kernel layer (MARGINS_PLAN.md Section 4.2)
 # using FormulaCompiler's ContrastEvaluator for zero-allocation contrast computation.
 
-using FormulaCompiler: contrast_modelrow!, contrast_gradient!
+using FormulaCompiler: contrast_modelrow!
+# contrast_gradient! now defined in Margins/src/inference/contrast_gradient.jl
 using LinearAlgebra: dot
 using GLM: linkinv
 
