@@ -21,8 +21,9 @@ makedocs(;
     "Computational Architecture" => "computational_architecture.md",
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
-      "Profile Analysis" => "profile_margins.md", 
+      "Profile Analysis" => "profile_margins.md",
       "Population Scenarios" => "population_scenarios.md",
+      "Second Differences" => "second_differences.md",
       "Weights" => "weights.md",
       "Population Grouping" => "grouping.md",
       "Backend Selection" => "backend_selection.md",

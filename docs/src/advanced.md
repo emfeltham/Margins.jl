@@ -501,6 +501,21 @@ healthcare_analysis = population_margins(health_model, health_data;
 # Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios
 ```
 
+## Second Differences (Interaction Effects)
+
+For comprehensive coverage of second differences—interaction effects on the predicted outcome scale—see the dedicated [Second Differences](second_differences.md) guide. Second differences quantify how marginal effects vary across moderator levels, extending the Margins.jl framework to address effect heterogeneity questions.
+
+**Quick reference**:
+```julia
+# Compute AMEs across modifier levels
+ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
+
+# Calculate second differences
+sd = second_differences(ames, :age, :treated, vcov(model))
+```
+
+Available functions: `second_differences()`, `second_difference()`, `second_differences_pairwise()`, `second_differences_all_contrasts()`.
+
 ## Error Handling and Diagnostics
 
 ### Robust Error Detection

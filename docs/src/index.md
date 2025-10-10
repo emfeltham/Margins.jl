@@ -77,7 +77,7 @@ Statistical inference employs rigorous delta-method standard error computation w
 
 ### Extended Analytical Capabilities
 
-The package supports comprehensive elasticity analysis through parametric specification of effect measures, including standard elasticities and semi-elasticity variants for both dependent and independent variable transformations. Policy analysis applications are supported through categorical mixture specifications that enable realistic population composition modeling. The inference framework accommodates robust and clustered standard error computation through integration with CovarianceMatrices.jl, while flexible subgroup analysis capabilities facilitate stratified inference across multiple dimensions of heterogeneity. Comprehensive coverage of these advanced methodological features is provided in [Advanced Features](advanced.md).
+The package supports comprehensive elasticity analysis through parametric specification of effect measures, including standard elasticities and semi-elasticity variants for both dependent and independent variable transformations. Second differences (interaction effects) enable analysis of effect heterogeneity across moderator levels, addressing whether marginal effects vary with other covariates. Policy analysis applications are supported through categorical mixture specifications that enable realistic population composition modeling. The inference framework accommodates robust and clustered standard error computation through integration with CovarianceMatrices.jl, while flexible subgroup analysis capabilities facilitate stratified inference across multiple dimensions of heterogeneity. Comprehensive coverage of these advanced methodological features is provided in [Advanced Features](advanced.md) and [Second Differences](second_differences.md).
 
 ## Implementation Examples
 
@@ -123,11 +123,26 @@ population_margins(model, data; measure=:semielasticity_eydx)  # % change Y per 
 # Effects by categorical groups
 population_margins(model, data; type=:effects, groups=:region)
 
-# Multiple grouping variables  
+# Multiple grouping variables
 population_margins(model, data; type=:effects, groups=[:region, :year])
 
 # Complex nested grouping
 population_margins(model, data; type=:effects, groups=[:region, :income_quartile])
+```
+
+### Second Differences (Interaction Effects)
+
+```julia
+# Compute AMEs across modifier levels
+ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
+
+# Calculate second differences (does X's effect depend on treatment?)
+sd = second_differences(ames, :age, :treated, vcov(model))
+DataFrame(sd)
+
+# Categorical moderators with multiple levels
+ames = population_margins(model, data; scenarios=(education=["hs","college","grad"],), type=:effects)
+sd = second_differences(ames, :income, :education, vcov(model))
 ```
 
 ## Statistical Validity and Methodological Standards
@@ -192,6 +207,7 @@ Population analysis exhibits optimal linear scaling characteristics with respect
 
 ### Conceptual Foundation
 - **[Mathematical Foundation](mathematical_foundation.md)**: Theoretical basis and statistical properties
+- **[Second Differences](second_differences.md)**: Interaction effects and effect heterogeneity
 - **[Comparison Guide](comparison.md)**: Methodological comparison with alternative approaches
 
 ### Implementation Reference

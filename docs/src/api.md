@@ -129,6 +129,36 @@ CSV.write("effects.csv", effects_result)
 CSV.write("predictions.csv", predictions_result)
 ```
 
+## Second Differences (Interaction Effects)
+
+Margins.jl provides comprehensive support for computing second differences—interaction effects on the predicted outcome scale. Second differences quantify how marginal effects vary across levels of a moderating variable, addressing the fundamental question: **"Does the effect of X depend on Z?"**
+
+### Quick Start
+
+```julia
+# Step 1: Compute AMEs across modifier levels
+ames = population_margins(model, data;
+                         scenarios=(treated=[0, 1],),
+                         type=:effects)
+
+# Step 2: Calculate second differences
+sd = second_differences(ames, :age, :treated, vcov(model))
+DataFrame(sd)
+```
+
+### Available Functions
+
+**Discrete Contrast Approach** (Population-based):
+- **`second_differences()`**: Unified interface (recommended) - handles binary, categorical, and continuous moderators
+- **`second_difference()`**: Binary moderators only (backward compatibility)
+- **`second_differences_pairwise()`**: All pairwise modifier comparisons
+- **`second_differences_all_contrasts()`**: All focal contrasts × all modifier pairs
+
+**Local Derivative Approach** (Profile-based):
+- **`second_differences_at()`**: Compute ∂AME/∂modifier at specific evaluation points via finite differences
+
+For comprehensive coverage including methodological foundation, usage patterns, and interpretation guidance, see [Second Differences](second_differences.md).
+
 ## Extended Analytical Capabilities
 
 ### Categorical Mixture Specifications
