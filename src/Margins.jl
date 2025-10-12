@@ -73,10 +73,14 @@ export population_margins, profile_margins, MarginsResult, EffectsResult, Predic
 # Display configuration
 export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits
 
+# Statistical utilities
+export contrast
+
 # Categorical mixture utilities
 # Re-export FormulaCompiler's native mixture functionality
 export CategoricalMixture, mix
 export create_balanced_mixture, create_mixture_column, expand_mixture_grid
+export validate_mixture_weights, validate_mixture_levels
 
 # Reference grid builders (NEW - AsBalanced support)
 export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid, complete_reference_grid
