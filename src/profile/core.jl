@@ -594,6 +594,14 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
             continue
         end
 
+        # Skip if Bool variable has non-Bool values (indicates mixture specification)
+        # Check original data type to detect Bool variables with Float64 mixture values
+        orig_col = getproperty(engine.data_nt, var)
+        if eltype(orig_col) <: Bool && !(eltype(refgrid_col) <: Bool)
+            @info "Skipping contrasts for variable $var: specified as mixture in reference grid (use discrete levels if contrasts desired)"
+            continue
+        end
+
         # Skip if it's explicitly in the reference grid (scenario-defining variable)
         if var ∈ refgrid_vars
             @debug "Skipping contrasts for variable $var: specified in reference grid (scenario-defining variable)"

@@ -404,4 +404,82 @@ function _find_unique_row(df::DataFrame, spec::NamedTuple)
     return matching_rows[1]
 end
 
+"""
+    DataFrame(contrast_result::NamedTuple; include_gradient::Bool=false)
+
+Convert contrast result NamedTuple to a single-row DataFrame.
+
+# Arguments
+- `contrast_result`: NamedTuple returned by `contrast()` functions
+- `include_gradient`: Whether to include the gradient vector column (default: false)
+
+# Returns
+- `DataFrame`: Single-row DataFrame with contrast statistics
+
+# Columns
+The resulting DataFrame contains:
+- `contrast`: The estimated contrast (difference)
+- `se`: Standard error
+- `t_stat`: t-statistic
+- `p_value`: Two-tailed p-value
+- `ci_lower`: Lower confidence interval bound
+- `ci_upper`: Upper confidence interval bound
+- `estimate1`: First estimate value
+- `estimate2`: Second estimate value
+- `row1`: First row index (if available in result)
+- `row2`: Second row index (if available in result)
+- `gradient`: Contrast gradient vector (only if `include_gradient=true` and available)
+
+# Examples
+```julia
+using Margins, GLM, DataFrames
+
+# Profile predictions
+pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]))
+df_pred = DataFrame(pred_result; include_gradients=true)
+
+# Compute contrast
+result = contrast(df_pred, 1, 2, vcov(model))
+
+# Convert to DataFrame
+df_contrast = DataFrame(result)
+# → Single row with: contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2
+
+# Include gradient for further analysis
+df_contrast_full = DataFrame(result; include_gradient=true)
+```
+
+# See Also
+- `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
+- `contrast(::DataFrame, ...)`: Compute contrasts from DataFrames
+"""
+function DataFrames.DataFrame(contrast_result::NamedTuple; include_gradient::Bool=false)
+    # Extract required fields that all contrast results have
+    required_fields = [:contrast, :se, :t_stat, :p_value, :ci_lower, :ci_upper,
+                       :estimate1, :estimate2]
+
+    # Start building the DataFrame with required fields
+    df_dict = Dict{Symbol, Any}()
+    for field in required_fields
+        if haskey(contrast_result, field)
+            df_dict[field] = [contrast_result[field]]
+        end
+    end
+
+    # Add optional row indices if present
+    if haskey(contrast_result, :row1)
+        df_dict[:row1] = [contrast_result.row1]
+    end
+    if haskey(contrast_result, :row2)
+        df_dict[:row2] = [contrast_result.row2]
+    end
+
+    # Add gradient if requested and present
+    if include_gradient && haskey(contrast_result, :gradient)
+        df_dict[:gradient] = [contrast_result.gradient]
+    end
+
+    return DataFrame(df_dict)
+end
+
 # End of statistics.jl
