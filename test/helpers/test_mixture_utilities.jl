@@ -2,9 +2,10 @@
 # These utilities support reference grid construction for marginal effects
 
 using Test
-using Margins: create_mixture_column, expand_mixture_grid, create_balanced_mixture
+using Margins: create_mixture_column, expand_mixture_grid, create_balanced_mixture,
+    validate_mixture_weights, validate_mixture_levels
 using FormulaCompiler: mix, is_mixture_column, validate_mixture_consistency!,
-    extract_mixture_spec, validate_mixture_weights, validate_mixture_levels
+    extract_mixture_spec
 
 @testset "Mixture Workflow Utilities" begin
 

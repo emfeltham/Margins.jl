@@ -25,6 +25,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_grouping.jl")
     include("core/test_column_naming.jl")
     include("core/test_contrasts.jl")
+    include("core/test_contrast_dataframe.jl")
     include("core/test_vcov.jl")
     include("core/test_errors.jl")
     include("core/test_automatic_variable_detection.jl")
@@ -35,11 +36,12 @@ end
 
 @testset "Advanced Features" begin
     include("features/test_elasticities.jl")
-    include("features/test_categorical_mixtures.jl") 
+    include("features/test_categorical_mixtures.jl")
     include("features/test_bool_profiles.jl")
     include("features/test_table_profiles.jl")
     include("features/test_prediction_scales.jl")
     include("features/test_hierarchical_grids.jl")
+    include("regression/test_bool_mixture_skip.jl")
 end
 
 @testset "Performance" begin
@@ -64,9 +66,19 @@ end
     include("helpers/test_mixture_utilities.jl")
 end
 
+@testset "Inference Methods" begin
+    include("inference/test_delta_method_glm.jl")
+    include("inference/test_delta_method_mixedmodels.jl")
+end
+
+@testset "Profiling and Allocations" begin
+    include("performance/profiling/test_contrast_gradient_allocations.jl")
+end
+
 @testset "Validation Tests" begin
     include("validation/test_contrast_invariance.jl")
     include("validation/test_manual_counterfactual_validation.jl")
     include("validation/test_ci_and_n_logic.jl")
     include("validation/test_population_scenarios_groups.jl")
+    include("validation/test_gradient_correctness.jl")
 end
