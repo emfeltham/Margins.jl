@@ -107,17 +107,6 @@ result = population_margins(model, data; weights=:sampling_weight)
 result = population_margins(model, data; weights=data.freq_weights)
 ```
 
-# Frequency-Weighted Categorical Handling
-Unspecified categorical variables automatically use population frequencies:
-```julia
-# Your data: education = 40% HS, 45% College, 15% Graduate
-#           treated = 67% true, 33% false
-
-result = population_margins(model, data; type=:effects)
-# → Averages effects across actual population composition
-# → Not arbitrary first levels or 50-50 assumptions
-```
-
 See also: [`profile_margins`](@ref) for effects at specific covariate combinations.
 """
 function population_margins(
