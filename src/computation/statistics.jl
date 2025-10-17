@@ -163,7 +163,7 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
 end
 
 """
-    contrast(df::DataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05)
+    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05)
 
 Compute contrast between two rows in a margins DataFrame using row indices.
 
@@ -209,7 +209,7 @@ contrast(df, 2, 1, vcov(model))  # Compare row 2 vs row 1
 - `contrast(::DataFrame, ::NamedTuple, ::NamedTuple, ...)`: Column-based row selection
 """
 function contrast(
-    df::DataFrame,
+    df::AbstractDataFrame,
     row1::Int,
     row2::Int,
     Σ::Matrix{Float64};
@@ -247,7 +247,7 @@ function contrast(
 end
 
 """
-    contrast(df::DataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; α::Float64=0.05)
+    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; α::Float64=0.05)
 
 Compute contrast between two rows identified by column values in a margins DataFrame.
 
@@ -312,10 +312,10 @@ contrast(df, (variable="x1", at_age=60), (variable="x1", at_age=30), vcov(model)
 
 # See Also
 - `contrast(::MarginsResult, ::Int, ::Int, ...)`: Direct result object method
-- `contrast(::DataFrame, ::Int, ::Int, ...)`: Simple integer-based row selection
+- `contrast(::AbstractDataFrame, ::Int, ::Int, ...)`: Simple integer-based row selection
 """
 function contrast(
-    df::DataFrame,
+    df::AbstractDataFrame,
     row1_spec::NamedTuple,
     row2_spec::NamedTuple,
     Σ::Matrix{Float64};
@@ -451,7 +451,7 @@ df_contrast_full = DataFrame(result; include_gradient=true)
 
 # See Also
 - `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
-- `contrast(::DataFrame, ...)`: Compute contrasts from DataFrames
+- `contrast(::AbstractDataFrame, ...)`: Compute contrasts from DataFrames
 """
 function DataFrames.DataFrame(contrast_result::NamedTuple; include_gradient::Bool=false)
     # Extract required fields that all contrast results have
