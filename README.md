@@ -12,7 +12,7 @@ Marginal effects and adjusted predictions for Julia statistical models.
 ```julia
 using Margins, DataFrames, GLM
 
-# Fit your model
+# Fit a model
 n = 100_000
 data = DataFrame(y = randn(n), x1 = randn(n), x2 = randn(n), x3 = randn(n))
 model = lm(@formula(y ~ x1 + x2 + x3), data)
