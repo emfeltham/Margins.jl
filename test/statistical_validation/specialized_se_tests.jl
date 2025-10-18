@@ -462,7 +462,7 @@ using Margins: mix
             
             model = lm(@formula(y ~ x1 + x2 + z), df)
             
-            # Per CLAUDE.md: "Error out rather than approximate when statistical correctness cannot be guaranteed"
+            # Error out rather than approximate when statistical correctness cannot be guaranteed
             # With perfect collinearity, SE computation should fail (produce NaN)
             result = population_margins(model, df; type=:effects, vars=[:x1, :x2])
             result_df = DataFrame(result)
