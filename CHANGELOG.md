@@ -182,7 +182,6 @@ This major version bump reflects the significant type system improvements while 
 - Internal refactors preserve statistical correctness guarantees and public API.
 
 ### Documentation
-- Updated AGENTS.md to clarify that weighted categorical effects in population contexts are supported via DataScenario-based contrasts with proper SEs.
 - Revised DEAD.md to accurately reflect which helpers are unused vs active.
 - Added RELEASE.md with end-to-end release checklist and statistical gates.
 
