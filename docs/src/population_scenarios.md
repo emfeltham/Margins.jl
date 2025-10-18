@@ -98,7 +98,7 @@ result = population_margins(model, data;
 # Result: (# education levels × # regions × 2 treatments × 3 dosages) rows
 ```
 
-## Real-World Applications
+## Application examples
 
 ### Policy Impact Analysis
 

@@ -220,7 +220,7 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         @test hierarchical_single.age[1] ≈ means_single.age[1] rtol=1e-10
     end
     
-    @testset "Complex Real-World Example" begin
+    @testset "Complex Example" begin
         # Policy analysis scenario from the proposal
         spec = :region => [
             :education,

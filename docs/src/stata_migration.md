@@ -330,14 +330,6 @@ result = population_margins(model, data;
 
 ## Migration Best Practices
 
-### Workflow Translation Strategy
-
-1. **Start with basic commands**: Translate simple `margins` and `margins, dydx(*)` first
-2. **Identify grouping patterns**: Map Stata `over()` and `by:` to Julia `groups`  
-3. **Distinguish scenarios vs profiles**: Decide whether Stata `at()` should become Julia `scenarios` or `at`
-4. **Leverage advanced features**: Use continuous binning and hierarchical grouping where beneficial
-5. **Consolidate analyses**: Combine multiple Stata commands into single Julia calls
-
 ### Common Translation Patterns
 
 ```julia
@@ -354,39 +346,3 @@ result = population_margins(model, data;
 # Pattern 4: Complex manual analysis → comprehensive single call
 # Multiple Stata commands → single population_margins with groups + scenarios
 ```
-
-### Verification Strategy
-
-```julia
-# Verify translation accuracy by comparing key results:
-# 1. Basic AME should match Stata margins, dydx(*)
-# 2. Group means should match Stata margins groupvar
-# 3. Scenario analysis should match Stata at() where comparable
-```
-
-## Julia Advantages for Economists
-
-### Research Productivity
-
-- **Fewer commands**: Complex analyses require single function calls
-- **Automatic labeling**: Professional statistical terminology (Q1-Q4, T1-T3, P1-P5)
-- **Integrated workflows**: Results immediately available as DataFrames for further analysis
-- **Reproducible research**: Single script replaces multiple Stata command sequences
-
-### Advanced Capabilities
-
-- **Hierarchical analysis**: Organizational structures represented naturally
-- **Policy thresholds**: Custom economically-relevant cutpoints without manual coding
-- **Scenario space exploration**: Automatic Cartesian product expansion
-- **Large dataset support**: Memory-efficient computation for modern data sizes
-
-### Statistical Rigor  
-
-- **Zero tolerance for statistical errors**: Package errors rather than producing invalid results
-- **Bootstrap validation**: All standard errors validated against bootstrap estimates  
-- **Delta method implementation**: Proper covariance matrix handling throughout
-- **Publication quality**: Results meet econometric publication standards
-
----
-
-*This guide provides complete translation patterns for migrating from Stata to Margins.jl. The Julia approach often simplifies complex analyses while providing more sophisticated capabilities. For detailed examples, see [Examples](examples.md). For comprehensive grouping documentation, see [Population Grouping Framework](grouping.md).*

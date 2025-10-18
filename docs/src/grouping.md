@@ -339,53 +339,7 @@ df = DataFrame(result)
 unique(df.variable)  # Will only show "z" (x was skipped)
 ```
 
----
-
-## Real-World Applications
-
-### Economic Policy Analysis
-
-```julia
-# Tax policy impact across income distribution
-tax_analysis = population_margins(tax_model, tax_data;
-    type=:effects,
-    vars=[:after_tax_income],
-    groups=(:pre_tax_income, 5),  # Income quintiles
-    scenarios=(:tax_rate = [0.15, 0.25, 0.35], :deduction_cap = [10000, 25000])
-)
-
-# Labor market analysis with unemployment scenarios  
-labor_analysis = population_margins(employment_model, labor_data;
-    type=:effects,
-    groups=[:education, (:experience, 4)],  # Education × experience quartiles
-    scenarios=(:unemployment_rate = [3.0, 6.0, 9.0])  # Economic conditions
-)
-```
-
-### Healthcare Research
-
-```julia
-# Treatment effectiveness across patient subgroups
-clinical_analysis = population_margins(treatment_model, patient_data;
-    type=:effects,
-    groups=:hospital = [:condition_severity, (:age, 4)],
-    scenarios=(:treatment_protocol = ["standard", "intensive"],
-                   :resource_level = ["constrained", "adequate"])
-)
-```
-
-### Educational Policy
-
-```julia
-# Educational intervention analysis
-education_policy = population_margins(achievement_model, student_data;
-    type=:effects,
-    groups=:district = (:school_type = [:socioeconomic_status, (:baseline_score, 3)]),
-    scenarios=(:intervention = [0, 1], :funding_increase = [0.0, 0.1, 0.2])
-)
-```
-
-## Performance Characteristics
+## Performance
 
 ### Computational Complexity
 
