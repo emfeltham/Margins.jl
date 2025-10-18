@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="432.94724"
+   height="414.75067"
+   viewBox="0 0 432.94724 414.75067"
+   fill="none"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="Margins graphic CI.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   inkscape:export-filename="Margins graphic CI.png"
+   inkscape:export-xdpi="85.010002"
+   inkscape:export-ydpi="85.010002"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs5" />
+  <sodipodi:namedview
+     id="namedview5"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.2495499"
+     inkscape:cx="220.87953"
+     inkscape:cy="194.87017"
+     inkscape:window-width="1512"
+     inkscape:window-height="916"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg5" />
+  <style
+     id="style1">
+    .stroke { stroke:#2B2B2B; stroke-width:16; stroke-linecap:round; stroke-linejoin:round; }
+    .label  { font: 64px/1.1 -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Helvetica, Arial, &quot;Noto Sans&quot;, &quot;Liberation Sans&quot;, sans-serif; fill:#555; }
+  </style>
+  <!-- Curve (single stroke) -->
+  <path
+     class="stroke"
+     d="m 48.50064,8 c 0,0 3.061044,94.91326 95.93735,214.91326 61.77671,86.01847 145.50924,96.44096 280.50924,96.44096"
+     id="path1"
+     sodipodi:nodetypes="ccc"
+     style="stroke-width:14;stroke-dasharray:none" />
+  <path
+     class="stroke"
+     d="m 49,7 c 0,0 3.061044,94.91326 95.93735,214.91326 61.77671,86.01847 145.50924,96.44096 280.50924,96.44096"
+     id="path1-8"
+     sodipodi:nodetypes="ccc"
+     style="opacity:0.2;stroke:#2b2b2b;stroke-width:56;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none" />
+  <!-- Tangent line (single stroke), touching at the red point with the same visual slope as in your image -->
+  <line
+     class="stroke"
+     x1="8.0316715"
+     y1="53.349262"
+     x2="287.13428"
+     y2="406.71899"
+     id="line1"
+     style="stroke-width:14;stroke-dasharray:none" />
+  <!-- Data points on the curve -->
+  <circle
+     cx="61.220322"
+     cy="65.800804"
+     r="18"
+     fill="#389826"
+     id="circle1" />
+  <!-- green -->
+  <circle
+     cx="134.94722"
+     cy="213.42249"
+     r="20"
+     fill="#cb3c33"
+     id="circle2" />
+  <!-- red (tangent point) -->
+  <circle
+     cx="314.94724"
+     cy="309.35419"
+     r="18"
+     fill="#4063d8"
+     id="circle3" />
+  <!-- blue -->
+  <!-- ∂y/∂x -->
+  <g
+     transform="translate(23.319917,303.7751)"
+     id="g4">
+    <text
+       class="label"
+       x="24"
+       y="4"
+       id="text3"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:64px;line-height:1.1;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif">∂y</text>
+    <line
+       x1="18"
+       y1="18"
+       x2="106"
+       y2="18"
+       stroke="#555555"
+       stroke-width="8"
+       stroke-linecap="round"
+       id="line3" />
+    <text
+       class="label"
+       x="24"
+       y="74"
+       id="text4"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:64px;line-height:1.1;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif">∂x</text>
+  </g>
+  <!-- Wordmark -->
+  <text
+     class="label"
+     x="124.12231"
+     y="85.251419"
+     font-size="88"
+     id="text5"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:64px;line-height:1.1;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif">Margins.jl</text>
+</svg>
