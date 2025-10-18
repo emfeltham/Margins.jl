@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-Margins.jl demonstrates exceptional performance advantages over R's marginal effects ecosystem across all operations and scales. The Julia implementation achieves **165× average speedup** at 5K observations, scaling to **203× average speedup** at 500K observations, with memory efficiency ranging from **10,775× to 23,669×** compared to equivalent R implementations on identical statistical computations.
+Margins.jl demonstrates exceptional performance advantages over R's marginal effects ecosystem across all operations and scales. The Julia implementation achieves 165× average speedup at 5K observations, scaling to 203× average speedup at 500K observations, with memory efficiency ranging from 10,775× to 23,669× compared to equivalent R implementations on identical statistical computations.
 
 **Methodological note**: Profile-based operations (MEM, APM) use R's `emmeans::emtrends()` for true comparison, computing marginal effects at specific grid points (O(1)) rather than averaged across the dataset (O(n)).
 
