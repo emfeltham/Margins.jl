@@ -9,16 +9,6 @@ Margins.jl provides a clean **2×2 framework** for marginal analysis:
 - **Population vs Profile**: Average effects across sample vs. effects at specific scenarios
 - **Effects vs Predictions**: Marginal effects (derivatives/contrasts) vs. adjusted predictions (fitted values)
 
-## Core API
-
-```julia
-# Population analysis (AME/AAP)
-population_margins(model, data; type=:effects, vars=:all, scale=:response)
-
-# Profile analysis (MEM/APM) 
-profile_margins(model, data, reference_grid; type=:effects, vars=:all, scale=:response)
-```
-
 ## Example Files
 
 ### 1. **basic_usage.jl** - Getting Started
@@ -218,61 +208,12 @@ julia> include("examples/basic_workflow.jl")
    - **Performance needs**: `performance_comparison.jl` - Optimization
    - **Advanced research**: `economic_analysis.jl` - Publication methods
 
-## Common Patterns
-
-### Population Analysis (True Average Effects)
-```julia
-# Average marginal effects across sample
-population_margins(model, data; type=:effects, vars=[:x1, :x2])
-
-# Average predictions
-population_margins(model, data; type=:predictions, scale=:response)
-
-# Subgroup analysis
-population_margins(model, data; type=:effects, groups=:category)
-```
-
-### Profile Analysis (Representative Scenarios)
-```julia
-# Effects at sample means
-profile_margins(model, data, means_grid(data); type=:effects)
-
-# Policy scenarios
-profile_margins(model, data, cartesian_grid(policy=[0, 1], age=[30, 50]); type=:predictions)
-
-# Custom scenarios
-custom_scenarios = DataFrame(x1=[1, 2], x2=[0.5, 0.8], category=["A", "B"])
-profile_margins(model, data, custom_scenarios; type=:effects)
-```
-
-### Advanced Features
-```julia
-# Elasticities
-population_margins(model, data; measure=:elasticity, vars=[:continuous_vars])
-
-# Categorical mixtures for realistic scenarios  
-scenarios = (education=mix("College" => 0.7, "Graduate" => 0.3),)
-population_margins(model, data; scenarios=scenarios, type=:predictions)
-
-# Multiple grouping variables
-population_margins(model, data; type=:effects, groups=[:region, :education])
-```
-
-## Statistical Validity
-
-All examples maintain **publication-grade statistical rigor**:
-
-- **Delta-method standard errors** for all marginal effects and predictions
-- **Proper covariance handling** across all transformations
-- **Zero tolerance policy** for invalid statistical results
-- **Error-first approach** when statistical validity cannot be guaranteed
-
 ## Getting Help
 
 - **Quick questions**: Check the relevant example file
 - **API reference**: See function docstrings (`?population_margins`)
-- **Statistical methods**: Consult CLAUDE.md for methodological details
-- **Performance**: Review performance_comparison.jl benchmarks
+- **Statistical methods**: See [Mathematical Foundation](../docs/src/mathematical_foundation.md) and [Computational Architecture](../docs/src/computational_architecture.md)
+- **Performance**: Review performance_comparison.jl benchmarks or see [Performance Guide](../docs/src/performance.md)
 
 ## Contributing Examples
 
@@ -280,7 +221,7 @@ When adding new examples:
 
 1. **Follow naming convention**: `topic_description.jl`
 2. **Include purpose statement** and key features at the top
-3. **Use academic documentation style** (see CLAUDE.md)
+3. **Use clear documentation style** with proper explanations and comments
 4. **Verify statistical correctness** before submission
 5. **Test execution** on clean environment
 6. **Update this EXAMPLES.md** with new entry
