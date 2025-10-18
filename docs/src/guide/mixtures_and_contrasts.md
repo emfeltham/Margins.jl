@@ -163,7 +163,7 @@ result = profile_margins(model, df, ref_grid; type=:predictions)
 
 ## Design Rationale
 
-This design follows the **statistical correctness principles** in [`CLAUDE.md`](../../CLAUDE.md):
+This design follows statistical correctness principles:
 
 1. **Statistical Validity is Paramount**: Prevents meaningless "mixture vs mixture" contrasts
 2. **Error-First Policy**: Skips invalid operations rather than approximating
@@ -178,7 +178,6 @@ The APM + manual `contrast()` workflow provides:
 
 ## See Also
 
-- [`contrast()` function documentation](../api/statistics.md#contrast)
-- [Reference Grid Guide](./reference_grids.md)
-- [Categorical Mixture Reference](./categorical_mixtures.md)
-- [Profile vs Population Margins](./profile_vs_population.md)
+- [API Reference](../api.md) - See `contrast()` function documentation
+- [Reference Grid Guide](../reference_grids.md)
+- [Profile Margins](../profile_margins.md)
