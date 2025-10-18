@@ -7,14 +7,14 @@ This study validates Margins.jl against R's `margins` package by comparing:
 - Marginal effects computations (AME, AAP, APM)
 - Delta-method standard error calculations
 
-**Conclusion**: Margins.jl produces statistically equivalent results to R's established margins package, confirming the package meets publication-grade standards for econometric analysis.
+Margins.jl produces statistically equivalent results to R's established margins package, confirming the package meets publication-grade standards for econometric analysis.
 
 ## Model Validation
 
 ### Dataset
-- **Size**: 5,000 observations
-- **Model**: Logistic regression with 65 coefficients
-- **Complexity**: Binary × continuous interactions, categorical variables, continuous × continuous interactions
+- Size: 5,000 observations
+- Model: Logistic regression with 65 coefficients
+- Complexity: Binary × continuous interactions, categorical variables, continuous × continuous interactions
 
 ### Model Coefficients
 
@@ -26,11 +26,7 @@ This study validates Margins.jl against R's `margins` package by comparing:
 | Max SE relative error | 0.04% |
 | Mean SE relative error | 0.034% |
 
-**Verdict**: ✓✓✓ **SUCCESS** - Statistically equivalent model estimates
-
-## Marginal Effects Validation
-
-All marginal effects compared use proper **delta-method standard errors** in both implementations.
+**Verdict**: Statistically equivalent model estimates
 
 ### AME (Average Marginal Effects)
 
@@ -44,7 +40,7 @@ Average marginal effects across the observed sample distribution - the primary u
 | Max SE relative error | 0.04% |
 | Mean SE relative error | 0.03% |
 
-**Verdict**: ✓✓✓ **SUCCESS** - Statistically equivalent
+**Verdict**: Statistically equivalent
 
 ### AAP (Average Adjusted Predictions)
 
@@ -56,9 +52,7 @@ Population average of fitted values across the observed sample.
 | Max estimate relative error | 0.0001% |
 | Max SE relative error | 0.03% |
 
-**Verdict**: ✓✓✓ **SUCCESS** - Statistically equivalent
-
-**Critical validation**: Both implementations use proper delta-method standard errors. Initial discrepancies during development were due to incorrect R implementation using naive `sd/sqrt(n)` instead of the margins package's delta-method computation.
+**Verdict**: Statistically equivalent
 
 ### APM (Adjusted Predictions at Profiles)
 
@@ -72,7 +66,7 @@ Predictions averaged over data at specific covariate profiles.
 | Max SE relative error | 1.98% |
 | Mean SE relative error | 1.54% |
 
-**Verdict**: ✓ **PASS** - Agreement within acceptable tolerance
+**Verdict**: Agreement within acceptable tolerance
 
 ### AME by Age Groups
 
@@ -83,7 +77,7 @@ Average marginal effects for a single variable (age_h).
 | Max estimate relative error | 0.0003% |
 | Max SE relative error | 0.04% |
 
-**Verdict**: ✓✓✓ **SUCCESS** - Statistically equivalent
+**Verdict**: Statistically equivalent
 
 ### AME by Scenario
 
@@ -95,7 +89,7 @@ Average marginal effects computed at specific counterfactual scenarios.
 | Max estimate relative error | 0.0017% |
 | Max SE relative error | 0.04% |
 
-**Verdict**: ✓✓✓ **SUCCESS** - Statistically equivalent
+**Verdict**: Statistically equivalent
 
 ### MEM (Marginal Effects at Profiles)
 
@@ -108,15 +102,14 @@ R's `margins(at=...)` computes marginal effects for all variables at each profil
 
 ## Statistical Methodology Validation
 
-### Delta Method Standard Errors
+### Standard Errors
 
-Both Margins.jl and R's margins package implement proper delta-method standard errors:
+Both Margins.jl and R's margins package implement delta-method standard errors:
 
-- **For marginal effects**: ∇g(β)' Σ ∇g(β), where g is the effect function
-- **For predictions**: Proper variance computation using model covariance matrix Σ
-- **No independence assumptions**: Full covariance structure preserved
+- For marginal effects: ∇g(β)' Σ ∇g(β), where g is the effect function
+- For predictions: Proper variance computation using model covariance matrix Σ
 
-This validation confirms that Margins.jl follows the same rigorous statistical methodology as R's established package.
+This Margins.jl follows the same methodology as R's established package.
 
 ### Tolerance Criteria
 
@@ -125,24 +118,7 @@ Validation uses realistic thresholds for cross-platform numerical comparison:
 - **SUCCESS**: Max coefficient relative error < 0.01%, Max SE relative error < 1%
 - **PASS**: Max coefficient relative error < 0.1%, Max SE relative error < 5%
 
-All core functionality (AME, AAP, coefficients) achieves **SUCCESS** level agreement.
-
-## Key Findings
-
-1. **Model estimation**: Identical coefficient estimates and standard errors within numerical precision
-2. **Core marginal effects (AME)**: Perfect agreement (< 0.004% error) - validates primary use case
-3. **Predictions (AAP, APM)**: Excellent agreement with proper delta-method SEs
-4. **Statistical correctness**: Both implementations use rigorous delta-method variance computation
-5. **No silent failures**: All SE computations are statistically valid
-
-## Implications for Users
-
-This validation demonstrates that:
-
-- Margins.jl produces publication-quality results equivalent to R's margins package
-- Standard errors are computed correctly using the delta method
-- Results can be trusted for academic and professional publication
-- The package meets the "zero tolerance for invalid statistical results" mandate in CLAUDE.md
+All core functionality (AME, AAP, coefficients) achieves agreement.
 
 ## Technical Notes
 
@@ -150,16 +126,16 @@ This validation demonstrates that:
 
 While results are statistically equivalent, the implementations differ in:
 
-1. **Term naming conventions**:
+1. Term naming conventions:
    - Julia: `&` for interactions, `var: level` for categoricals
    - R: `:` for interactions, `varlevel` for categoricals, `TRUE` suffix for booleans
 
-2. **Profile marginal effects**:
+2. Profile marginal effects:
    - Julia: Flexible contrast specification (baseline, pairwise, etc.)
    - R: Computes effects for all variables at each profile point
 
-3. **Performance**:
-   - Not compared in this validation study (focus on statistical correctness)
+3. Performance:
+   - Not compared in this validation study (focus on statistical correctness, see separate performance study)
 
 ### Numerical Precision
 
