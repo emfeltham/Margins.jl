@@ -4,15 +4,9 @@
 
 This document describes the implemented architecture of Margins.jl following the completion of the FormulaCompiler integration and ContrastEvaluator migration.
 
-**Related Documentation:**
-- **CLAUDE.md** - Primary instructions for AI assistants working with this codebase
-- **README.md** - User-facing documentation and API reference
-- **notes/MARGINS_PLAN.md** - Historical implementation plan (archived)
-- **notes/FILE_PLAN.md** - Detailed reorganization plan (archived)
-
 ## Overview
 
-Margins.jl implements a clean **2×2 framework** for marginal effects computation, built on FormulaCompiler.jl's zero-allocation foundation. The architecture prioritizes statistical correctness, performance, Julian style, and proper FormulaCompiler integration.
+Margins.jl implements a **2×2 framework** for marginal effects computation, built on FormulaCompiler.jl's zero-allocation foundation. The architecture prioritizes statistical correctness, performance, Julian style, and proper FormulaCompiler integration.
 
 ##  **System Architecture**
 
