@@ -261,7 +261,7 @@ If you use Margins.jl in your research, please cite:
 ```bibtex
 @software{margins_jl,
   author = {Feltham, Eric M.},
-  title = {Margins.jl: Marginal Effects and Adjusted Predictions for Julia Statistical Models},
+  title = {Margins.jl: Marginal Effects and Adjusted Predictions for Statistical Models},
   url = {https://github.com/emfeltham/Margins.jl},
   version = {2.0.0},
   year = {2025}
