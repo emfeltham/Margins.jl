@@ -806,20 +806,59 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
         marginal_effect = g_buf_view[var_idx]
 
         # Apply measure transformations (extracted from lines 1325-1334)
+        local estimate, transform_factor, ∂μ_∂β
         if measure === :effect
             estimate = marginal_effect
+            transform_factor = 1.0
+            ∂μ_∂β = nothing
         else
             var_value = refgrid_data[var][profile_idx]
+            # Compute predicted value at profile point
             # Use passed output buffer (0 bytes allocation - PHASE 3 FIX)
             refgrid_compiled(output_buf, refgrid_data, profile_idx)
-            pred_value = sum(output_buf)
-            estimate = apply_measure_transformation(marginal_effect, var_value, pred_value, measure)
+            η = dot(output_buf, local_β)  # Linear predictor = X'β
+            # Apply link inverse if on response scale
+            pred_value = scale === :response ? GLM.linkinv(local_link, η) : η
+            (estimate, transform_factor) = apply_measure_transformation(marginal_effect, var_value, pred_value, measure)
+
+            # Compute ∂μ/∂β at this profile point for quotient rule correction
+            # For measures that divide by μ, we need this gradient for the quotient rule
+            if measure === :elasticity || measure === :semielasticity_eydx
+                ∂μ_∂β = if scale === :response
+                    # For response scale: μ = g⁻¹(η), so ∂μ/∂β = g⁻¹'(η) × X
+                    dμ_dη = GLM.mueta(local_link, η)
+                    dμ_dη .* output_buf  # Element-wise: creates vector
+                else
+                    # For linear scale: η = X'β, so ∂η/∂β = X
+                    copy(output_buf)  # X is already in output_buf
+                end
+            else
+                ∂μ_∂β = nothing
+            end
         end
 
         # Extract parameter gradients for this variable from Gβ matrix
         # Gβ is already computed above by marginal_effects_eta!/marginal_effects_mu!
         # Gβ has shape (n_params, n_vars), so column j contains gradient for variable j
-        engine.gβ_accumulator .= view(Gβ, :, var_idx)
+        gradient_view = view(Gβ, :, var_idx)
+
+        # Scale gradient by transformation factor AND apply quotient rule correction
+        if transform_factor != 1.0
+            # First term: k × ∂(∂μ/∂x)/∂β (existing transformation)
+            engine.gβ_accumulator .= gradient_view .* transform_factor
+
+            # Second term: quotient rule correction for measures that divide by μ
+            # For ε = (x/μ) × ∂μ/∂x, the full quotient rule is:
+            # ∂ε/∂β = (x/μ) × ∂(∂μ/∂x)/∂β - (ε/μ) × ∂μ/∂β
+            if !isnothing(∂μ_∂β)
+                quotient_correction = estimate / pred_value
+                @inbounds for j in eachindex(engine.gβ_accumulator)
+                    engine.gβ_accumulator[j] -= quotient_correction * ∂μ_∂β[j]
+                end
+            end
+        else
+            engine.gβ_accumulator .= gradient_view
+        end
 
         # Store result (extracted from lines 1355-1374)
         se = compute_se_only(engine.gβ_accumulator, engine.Σ)
