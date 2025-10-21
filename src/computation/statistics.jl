@@ -117,7 +117,7 @@ Identical to compute_delta_method_se but with clearer naming for single-purpose 
 end
 
 """
-    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05)
+    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
 
 Compute contrast between two result rows with delta-method inference.
 
@@ -131,24 +131,34 @@ computing the difference between estimates at two rows with proper standard erro
 - `α`: Significance level (default 0.05)
 
 # Returns
-`(contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2)`
+`ContrastResult` object with fields: contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
+
+# Statistical Correctness
+The standard error accounts for the covariance between the two estimates. The gradient-based delta method
+automatically handles scale transformations (_e.g._, log-odds → probability for logistic models).
+See `src/inference/delta_method.jl` for detailed mathematical justification of why
+`vcov(model)` is always on the right scale.
 
 # Examples
 ```julia
 # Prediction contrast
-pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]); type=:predictions)
-contrast(pred_result, 1, 2, vcov(model))
+pred_result = profile_margins(model, data, cartesian_grid(x = [0, 1]); type = :predictions)
+cr = contrast(pred_result, 1, 2, vcov(model))
+println(cr) # Formatted output
 
 # Effect contrast
-eff_result = profile_margins(model, data, cartesian_grid(x=[0, 1]); type=:effects, vars=[:z])
-contrast(eff_result, 1, 2, vcov(model))
+eff_result = profile_margins(model, data, cartesian_grid(x = [0, 1]); type = :effects, vars = [:z])
+cr = contrast(eff_result, 1, 2, vcov(model))
+
+# Convert to DataFrame
+df = DataFrame(cr)
 ```
 """
 function contrast(result::MarginsResult, row1::Int, row2::Int,
                  Σ::Matrix{Float64}; α::Float64=0.05)
     n = length(result.estimates)
-    (row1 < 1 || row1 > n) && throw(ArgumentError("row1=$row1 out of bounds (1:$n)"))
-    (row2 < 1 || row2 > n) && throw(ArgumentError("row2=$row2 out of bounds (1:$n)"))
+    (row1 < 1 || row1 > n) && throw(ArgumentError("row1 = $row1 out of bounds (1:$n)"))
+    (row2 < 1 || row2 > n) && throw(ArgumentError("row2 = $row2 out of bounds (1:$n)"))
 
     contrast_val = result.estimates[row1] - result.estimates[row2]
     grad_contrast = result.gradients[row1, :] .- result.gradients[row2, :]
@@ -157,13 +167,24 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
         contrast_val, grad_contrast, Σ, α
     )
 
-    return (contrast=contrast_val, se=se, t_stat=t_stat, p_value=p_value,
-            ci_lower=ci_lower, ci_upper=ci_upper,
-            estimate1=result.estimates[row1], estimate2=result.estimates[row2])
+    return ContrastResult(
+        contrast_val,
+        se,
+        t_stat,
+        p_value,
+        ci_lower,
+        ci_upper,
+        result.estimates[row1],
+        result.estimates[row2],
+        grad_contrast,
+        row1,
+        row2,
+        Dict{Symbol, Any}(:alpha => α, :source => :result_object)
+    )
 end
 
 """
-    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05)
+    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
 
 Compute contrast between two rows in a margins DataFrame using row indices.
 
@@ -177,9 +198,7 @@ produced by `DataFrame(profile_margins(...))` or `DataFrame(population_margins(.
 - `α`: Significance level (default 0.05)
 
 # Returns
-`(contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient)`
-
-Note: Also returns contrast gradient vector (`gradient`) for further analysis.
+`ContrastResult` object with fields: contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
 
 # Examples
 ```julia
@@ -191,13 +210,14 @@ df = DataFrame(pred_result; include_gradients=true)
 println(df)  # View the structure
 
 # Contrast rows 2 and 1 directly
-contrast(df, 2, 1, vcov(model))
+cr = contrast(df, 2, 1, vcov(model))
+println(cr) # Formatted output
 
 # Works with any margins result
 eff_result = profile_margins(model, data, cartesian_grid(education=["HS", "College"]);
                              type=:effects, vars=[:x1])
 df = DataFrame(eff_result; include_gradients=true)
-contrast(df, 2, 1, vcov(model))  # Compare row 2 vs row 1
+cr = contrast(df, 2, 1, vcov(model))  # Compare row 2 vs row 1
 ```
 
 # Error Handling
@@ -241,13 +261,24 @@ function contrast(
         contrast_val, grad_contrast, Σ, α
     )
 
-    return (contrast=contrast_val, se=se, t_stat=t_stat, p_value=p_value,
-            ci_lower=ci_lower, ci_upper=ci_upper,
-            estimate1=est1, estimate2=est2, gradient=grad_contrast)
+    return ContrastResult(
+        contrast_val,
+        se,
+        t_stat,
+        p_value,
+        ci_lower,
+        ci_upper,
+        est1,
+        est2,
+        grad_contrast,
+        row1,
+        row2,
+        Dict{Symbol, Any}(:alpha => α, :source => :dataframe_integer)
+    )
 end
 
 """
-    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; α::Float64=0.05)
+    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
 
 Compute contrast between two rows identified by column values in a margins DataFrame.
 
@@ -270,10 +301,7 @@ The NamedTuple keys must match column names in the DataFrame:
 - **Group columns**: Group variable names for grouped analyses
 
 # Returns
-`(contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2, row1, row2, gradient)`
-
-Note: Also returns the matched row indices (`row1`, `row2`) and contrast gradient vector (`gradient`)
-for transparency and further analysis.
+`ContrastResult` object with fields: contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
 
 # Examples
 ```julia
@@ -285,7 +313,8 @@ pred_result = profile_margins(model, data,
 df = DataFrame(pred_result; include_gradients=true)
 
 # Contrast predictions at age=30 across treatment levels
-contrast(df, (treatment=1, age=30), (treatment=0, age=30), vcov(model))
+cr = contrast(df, (treatment=1, age=30), (treatment=0, age=30), vcov(model))
+println(cr)
 
 # Effect of x1 across modifier levels
 eff_result = profile_margins(model, data,
@@ -294,14 +323,14 @@ eff_result = profile_margins(model, data,
 df = DataFrame(eff_result; include_gradients=true)
 
 # Compare x1 effect between education levels
-contrast(df, (variable="x1", education="College"), (variable="x1", education="HS"), vcov(model))
+cr = contrast(df, (variable="x1", education="College"), (variable="x1", education="HS"), vcov(model))
 
 # Population margins with scenarios
 pop_result = population_margins(model, data; scenarios=(age=[30, 60],), type=:effects)
 df = DataFrame(pop_result; include_gradients=true)
 
 # Contrast using at_ prefix (population scenarios)
-contrast(df, (variable="x1", at_age=60), (variable="x1", at_age=30), vcov(model))
+cr = contrast(df, (variable="x1", at_age=60), (variable="x1", at_age=30), vcov(model))
 ```
 
 # Error Handling
@@ -346,11 +375,20 @@ function contrast(
         contrast_val, grad_contrast, Σ, α
     )
 
-    return (
-        contrast=contrast_val, se=se, t_stat=t_stat, p_value=p_value,
-        ci_lower=ci_lower, ci_upper=ci_upper,
-        estimate1=est1, estimate2=est2,
-        row1=row1_idx, row2=row2_idx, gradient=grad_contrast
+    return ContrastResult(
+        contrast_val,
+        se,
+        t_stat,
+        p_value,
+        ci_lower,
+        ci_upper,
+        est1,
+        est2,
+        grad_contrast,
+        row1_idx,
+        row2_idx,
+        Dict{Symbol, Any}(:alpha => α, :source => :dataframe_namedtuple,
+                          :row1_spec => row1_spec, :row2_spec => row2_spec)
     )
 end
 
@@ -405,13 +443,14 @@ function _find_unique_row(df::DataFrame, spec::NamedTuple)
 end
 
 """
-    DataFrame(contrast_result::NamedTuple; include_gradient::Bool=false)
+    DataFrame(cr::ContrastResult; include_gradient::Bool=false, include_metadata::Bool=false)
 
-Convert contrast result NamedTuple to a single-row DataFrame.
+Convert ContrastResult to a single-row DataFrame.
 
 # Arguments
-- `contrast_result`: NamedTuple returned by `contrast()` functions
+- `cr`: ContrastResult returned by `contrast()` functions
 - `include_gradient`: Whether to include the gradient vector column (default: false)
+- `include_metadata`: Whether to include metadata fields as columns (default: false)
 
 # Returns
 - `DataFrame`: Single-row DataFrame with contrast statistics
@@ -426,9 +465,13 @@ The resulting DataFrame contains:
 - `ci_upper`: Upper confidence interval bound
 - `estimate1`: First estimate value
 - `estimate2`: Second estimate value
-- `row1`: First row index (if available in result)
-- `row2`: Second row index (if available in result)
-- `gradient`: Contrast gradient vector (only if `include_gradient=true` and available)
+- `row1`: First row index (if available)
+- `row2`: Second row index (if available)
+- `gradient`: Contrast gradient vector (only if `include_gradient=true`)
+- `alpha`: Significance level (only if `include_metadata=true`)
+- `source`: Source of contrast computation (only if `include_metadata=true`)
+- `row1_spec`: First row specification as string (only if `include_metadata=true` and available)
+- `row2_spec`: Second row specification as string (only if `include_metadata=true` and available)
 
 # Examples
 ```julia
@@ -439,44 +482,72 @@ pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]))
 df_pred = DataFrame(pred_result; include_gradients=true)
 
 # Compute contrast
-result = contrast(df_pred, 1, 2, vcov(model))
+cr = contrast(df_pred, 1, 2, vcov(model))
 
 # Convert to DataFrame
-df_contrast = DataFrame(result)
+df_contrast = DataFrame(cr)
 # → Single row with: contrast, se, t_stat, p_value, ci_lower, ci_upper, estimate1, estimate2
 
 # Include gradient for further analysis
-df_contrast_full = DataFrame(result; include_gradient=true)
+df_contrast_full = DataFrame(cr; include_gradient=true)
+
+# Include metadata for complete information
+df_contrast_complete = DataFrame(cr; include_gradient=true, include_metadata=true)
+# → Includes alpha, source, and row specifications (if available)
 ```
 
 # See Also
 - `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
 - `contrast(::AbstractDataFrame, ...)`: Compute contrasts from DataFrames
 """
-function DataFrames.DataFrame(contrast_result::NamedTuple; include_gradient::Bool=false)
-    # Extract required fields that all contrast results have
-    required_fields = [:contrast, :se, :t_stat, :p_value, :ci_lower, :ci_upper,
-                       :estimate1, :estimate2]
+function DataFrames.DataFrame(
+    cr::ContrastResult;
+    include_gradient::Bool=false, include_metadata::Bool=false
+)
+    # Build DataFrame with all required fields
+    df_dict = Dict{Symbol, Any}(
+        :contrast => [cr.contrast],
+        :se => [cr.se],
+        :t_stat => [cr.t_stat],
+        :p_value => [cr.p_value],
+        :ci_lower => [cr.ci_lower],
+        :ci_upper => [cr.ci_upper],
+        :estimate1 => [cr.estimate1],
+        :estimate2 => [cr.estimate2]
+    )
 
-    # Start building the DataFrame with required fields
-    df_dict = Dict{Symbol, Any}()
-    for field in required_fields
-        if haskey(contrast_result, field)
-            df_dict[field] = [contrast_result[field]]
+    # Add row indices if available
+    if !isnothing(cr.row1)
+        df_dict[:row1] = [cr.row1]
+    end
+    if !isnothing(cr.row2)
+        df_dict[:row2] = [cr.row2]
+    end
+
+    # Add gradient if requested
+    if include_gradient
+        df_dict[:gradient] = [cr.gradient]
+    end
+
+    # Add metadata fields if requested
+    if include_metadata
+        # Always include alpha if available
+        if haskey(cr.metadata, :alpha)
+            df_dict[:alpha] = [cr.metadata[:alpha]]
         end
-    end
 
-    # Add optional row indices if present
-    if haskey(contrast_result, :row1)
-        df_dict[:row1] = [contrast_result.row1]
-    end
-    if haskey(contrast_result, :row2)
-        df_dict[:row2] = [contrast_result.row2]
-    end
+        # Include source if available
+        if haskey(cr.metadata, :source)
+            df_dict[:source] = [string(cr.metadata[:source])]
+        end
 
-    # Add gradient if requested and present
-    if include_gradient && haskey(contrast_result, :gradient)
-        df_dict[:gradient] = [contrast_result.gradient]
+        # Include row specifications if available (for NamedTuple-based contrasts)
+        if haskey(cr.metadata, :row1_spec)
+            df_dict[:row1_spec] = [string(cr.metadata[:row1_spec])]
+        end
+        if haskey(cr.metadata, :row2_spec)
+            df_dict[:row2_spec] = [string(cr.metadata[:row2_spec])]
+        end
     end
 
     return DataFrame(df_dict)
