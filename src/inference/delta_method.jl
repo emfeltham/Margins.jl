@@ -1,4 +1,86 @@
-# gradients.jl - Parameter Gradient Utilities
+# delta_method.jl - Delta Method Standard Error Computation
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# WHY vcov(model) IS ALWAYS ON THE RIGHT SCALE
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# A common question: "When computing standard errors for marginal effects,
+# how do we know that vcov(model) (which gives Var(β)) is on the right scale?"
+#
+# ANSWER: The gradient ∂θ/∂β automatically handles the scale transformation
+# through the chain rule. This is guaranteed by the mathematics of the delta method.
+#
+# Mathematical Justification
+# ──────────────────────────
+# For any marginal effect θ = f(β) (a function of model parameters):
+#
+#   Var(θ) ≈ [∂θ/∂β]' Σ [∂θ/∂β]
+#
+# where Σ = vcov(model) = Var(β).
+#
+# Dimensional Analysis (proves correctness)
+# ─────────────────────────────────────────
+# Let's trace the units:
+#
+#   [Σ] = [β]²                        (covariance of parameters)
+#   [∂θ/∂β] = [θ]/[β]                 (gradient converts scales)
+#   [Var(θ)] = ([θ]/[β])' × [β]² × ([θ]/[β])
+#            = ([θ]/[β])² × [β]²
+#            = [θ]²                    ✓ Correct!
+#
+# The gradient acts as a conversion factor from parameter scale to effect scale.
+#
+# Concrete Example: Logistic Regression
+# ──────────────────────────────────────
+# Model: μ = expit(Xβ) where expit(z) = 1/(1+exp(-z))
+# Marginal effect: ME = ∂μ/∂x = β_x × μ(1-μ)
+#
+# Gradient w.r.t. all parameters β_j (computed by Margins.jl):
+#   ∂ME/∂β_j = μ(1-μ) × 1[j=x] + β_x × μ(1-μ)(1-2μ) × X_j
+#              ^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#              direct effect      chain rule through link function
+#
+# Then: SE(ME) = sqrt([∂ME/∂β]' vcov(model) [∂ME/∂β])
+#
+# Units:
+#   vcov(model) has units [log-odds]² (parameter space)
+#   ∂ME/∂β has units [probability]/[log-odds] (converts spaces)
+#   Result has units [probability]² ✓
+#
+# Why This Works for ANY Model
+# ─────────────────────────────
+# 1. vcov(model) ALWAYS lives in parameter space (β scale)
+# 2. The gradient ∂θ/∂β ALWAYS converts from β scale to θ scale
+# 3. The quadratic form automatically produces variance in θ scale
+# 4. Different link functions → different gradients → correct scale transformation
+#
+# Implementation in Margins.jl
+# ────────────────────────────
+# See src/inference/marginal_effects.jl for the full chain rule implementation:
+#
+#   For linear predictor (η = Xβ):
+#     ∂(∂η/∂x)/∂β is computed directly (simple!)
+#
+#   For response scale with link g (μ = g⁻¹(η)):
+#     ∂(∂μ/∂x)/∂β = g'(η) × J + (J'β) × g''(η) × X
+#     where J = ∂(∂η/∂x)/∂β
+#
+# The second derivative g''(η) is crucial - it captures how the link function's
+# curvature affects uncertainty propagation.
+#
+# Validation
+# ──────────
+# This is validated in test/statistical_validation/:
+# - analytical_se_validation.jl: Hand-calculated formulas match
+# - bootstrap_se_validation.jl: Bootstrap SEs confirm delta method
+# - backend_consistency.jl: AD and FD backends agree
+#
+# Bottom Line
+# ───────────
+# You never need a "different vcov matrix" for different scales.
+# The gradient does all the transformation work automatically through calculus!
+#
+# ═══════════════════════════════════════════════════════════════════════════
 
 """
     delta_method_se(gβ, Σ)
