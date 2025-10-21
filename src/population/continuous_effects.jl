@@ -122,6 +122,20 @@ function _process_continuous_variables!(
     # Step 2: Compute average response for measure transformations (if needed)
     ȳ, total_weight = _compute_response_mean_if_needed(engine, data_nt, rows, scale, measure, weights)
 
+    # Step 2b: For elasticity measures, compute ∂mean(ŷ)/∂β for quotient rule
+    # This gradient is needed to correctly apply the quotient rule when transforming elasticity gradients
+    # For ε = (x̄/mean(ŷ)) × AME, the full quotient rule requires this term
+    ∂ȳ_∂β = if measure !== :effect && (measure === :elasticity || measure === :semielasticity_eydx)
+        # Allocate buffer for gradient of mean response (reused across all variables)
+        grad_buf = similar(engine.gβ_accumulator)
+        _gradient_of_mean_response(
+            engine.compiled, engine.row_buf, engine.β, engine.link,
+            data_nt, rows, scale, weights, grad_buf
+        )
+    else
+        nothing
+    end
+
     # Step 3: Main computation loop - Apply FormulaCompiler pattern for marginal effects (zero allocations)
     _compute_continuous_marginal_effects!(engine, continuous_requested, rows, scale, weights, total_weight)
 
@@ -138,9 +152,21 @@ function _process_continuous_variables!(
             data_nt, rows, weights, ȳ, total_weight
         )
 
-        # Transform gradient by same factor
+        # Transform gradient by same factor AND apply quotient rule correction
         if transform_factor != 1.0
+            # First term: k × ∂AME/∂β (existing transformation)
             gradient .*= transform_factor
+
+            # Second term: quotient rule correction for measures that divide by mean(ŷ)
+            # For ε = (x̄ / mean(ŷ)) × AME, the full quotient rule is:
+            # ∂ε/∂β = (x̄/ȳ) × ∂AME/∂β - (ε/ȳ) × ∂ȳ/∂β
+            # We need to subtract the second term: (final_val / ȳ) × ∂ȳ/∂β
+            if !isnothing(∂ȳ_∂β)
+                quotient_correction = final_val / ȳ
+                @inbounds for j in eachindex(gradient)
+                    gradient[j] -= quotient_correction * ∂ȳ_∂β[j]
+                end
+            end
         end
 
         # Store result using extracted function
@@ -266,6 +292,134 @@ function _average_response_over_rows(compiled, row_buf, β, link, data_nt, rows,
         end
         return total_weight > 0 ? response_sum / total_weight : 0.0
     end
+end
+
+"""
+    _gradient_of_mean_response(
+        compiled, row_buf, β, link, data_nt, rows, scale, weights,
+        gradient_accumulator::Vector{Float64}
+    ) -> Vector{Float64}
+
+Compute ∂mean(ŷ)/∂β using the chain rule for GLMs (quotient rule component).
+
+# Mathematical Details
+For GLM: mean(ŷ) = (1/n) Σᵢ g⁻¹(Xᵢβ)
+Therefore: ∂mean(ŷ)/∂β = (1/n) Σᵢ g⁻¹'(Xᵢβ) × Xᵢ
+
+For linear model (identity link): ∂mean(ŷ)/∂β = X̄ (mean design matrix row)
+
+This gradient is needed for the quotient rule when computing elasticity standard errors.
+The elasticity transformation ε = (x̄/mean(ŷ)) × AME requires the full quotient rule:
+∂ε/∂β = (x̄/mean(ŷ)) × ∂AME/∂β - (x̄ × AME / mean(ŷ)²) × ∂mean(ŷ)/∂β
+
+# Arguments
+- `compiled`: FormulaCompiler compiled formula
+- `row_buf`: Pre-allocated buffer for model row evaluation
+- `β`: Model parameter vector
+- `link`: Link function
+- `data_nt`: Named tuple containing data
+- `rows`: Row indices to process
+- `scale`: Prediction scale (:response or :linear)
+- `weights`: Optional observation weights
+- `gradient_accumulator`: Pre-allocated buffer for gradient (length = n_params)
+
+# Returns
+- `Vector{Float64}`: Gradient vector ∂mean(ŷ)/∂β (modifies and returns gradient_accumulator)
+
+# Performance
+- Zero allocations (uses pre-allocated gradient_accumulator)
+- Single pass through data
+- O(n × p) complexity where n = observations, p = parameters
+
+# References
+See notes/QUOTIENT_RULE_IMPLEMENTATION_PLAN.md for detailed derivation.
+"""
+function _gradient_of_mean_response(
+    compiled, row_buf, β, link, data_nt, rows, scale, weights,
+    gradient_accumulator::Vector{Float64}
+)
+    n_params = length(β)
+    n_rows = length(rows)
+
+    # Initialize accumulator to zero
+    fill!(gradient_accumulator, 0.0)
+
+    if scale === :linear
+        # Linear scale: mean(η) = mean(Xβ) = X̄β
+        # So ∂mean(η)/∂β = X̄ (mean design matrix row)
+
+        if isnothing(weights)
+            # Unweighted: X̄ = (1/n) Σᵢ Xᵢ
+            @inbounds for row in rows
+                modelrow!(row_buf, compiled, data_nt, row)
+                for j in 1:n_params
+                    gradient_accumulator[j] += row_buf[j]
+                end
+            end
+            gradient_accumulator ./= n_rows
+        else
+            # Weighted: X̄ = Σᵢ wᵢXᵢ / Σᵢ wᵢ
+            total_weight = 0.0
+            @inbounds for row in rows
+                w = weights[row]
+                if w > 0
+                    total_weight += w
+                    modelrow!(row_buf, compiled, data_nt, row)
+                    for j in 1:n_params
+                        gradient_accumulator[j] += w * row_buf[j]
+                    end
+                end
+            end
+            if total_weight > 0
+                gradient_accumulator ./= total_weight
+            end
+        end
+
+    else  # scale === :response
+        # Response scale: mean(μ) = (1/n) Σᵢ g⁻¹(Xᵢβ)
+        # So ∂mean(μ)/∂β = (1/n) Σᵢ g⁻¹'(Xᵢβ) × Xᵢ
+
+        if isnothing(weights)
+            # Unweighted
+            @inbounds for row in rows
+                modelrow!(row_buf, compiled, data_nt, row)
+                η = dot(row_buf, β)
+
+                # Compute dμ/dη = g⁻¹'(η) using GLM.mueta
+                dμ_dη = GLM.mueta(link, η)
+
+                # Accumulate: dμ/dη × X
+                for j in 1:n_params
+                    gradient_accumulator[j] += dμ_dη * row_buf[j]
+                end
+            end
+            gradient_accumulator ./= n_rows
+        else
+            # Weighted
+            total_weight = 0.0
+            @inbounds for row in rows
+                w = weights[row]
+                if w > 0
+                    total_weight += w
+                    modelrow!(row_buf, compiled, data_nt, row)
+                    η = dot(row_buf, β)
+
+                    # Compute dμ/dη = g⁻¹'(η) using GLM.mueta
+                    dμ_dη = GLM.mueta(link, η)
+
+                    # Accumulate: w × dμ/dη × X
+                    for j in 1:n_params
+                        gradient_accumulator[j] += w * dμ_dη * row_buf[j]
+                    end
+                end
+            end
+            if total_weight > 0
+                gradient_accumulator ./= total_weight
+            end
+        end
+    end
+
+    return gradient_accumulator
 end
 
 """
