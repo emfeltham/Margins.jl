@@ -559,10 +559,13 @@ function second_differences_pairwise(
             # Slope: change in AME per unit change in modifier
             second_diff = (est_level2 - est_level1) / modifier_diff
             se_diff = se_raw / modifier_diff
+            # Scale gradient to match scaled second_diff
+            g_diff_scaled = g_diff ./ modifier_diff
         else
             # Categorical/binary: simple difference
             second_diff = est_level2 - est_level1
             se_diff = se_raw
+            g_diff_scaled = g_diff
         end
 
         # Statistical inference
@@ -588,7 +591,7 @@ function second_differences_pairwise(
             ame_at_level1 = est_level1,
             ame_at_level2 = est_level2,
             modifier_type = modifier_type,
-            gradient = g_diff
+            gradient = g_diff_scaled
         ))
     end
 
