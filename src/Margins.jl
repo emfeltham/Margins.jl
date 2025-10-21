@@ -68,7 +68,7 @@ using Dates: now
 const VERSION = v"2.0.0"
 
 # Core API - Clean 2×2 framework
-export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult
+export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult, ContrastResult
 
 # Display configuration
 export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits
