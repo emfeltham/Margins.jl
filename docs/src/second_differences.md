@@ -222,7 +222,7 @@ sd = second_differences_at(model, data, :income, :age, vcov(model))
 # (education is categorical: "hs", "college", "grad")
 sd = second_differences_at(model, data, :education, :income, vcov(model))
 # → Multiple rows: one per education contrast
-# → e.g., "college vs hs", "grad vs hs", "grad vs college"
+# → e.g., "college - hs", "grad - hs", "grad - college"
 # → Shows how each education gap varies with income
 
 # At specific profile with other variables held constant
@@ -424,7 +424,7 @@ sd = second_differences(ames, :education, :region, vcov(model))
 
 **Output dimensions**: If education has 3 levels (→ 3 pairwise contrasts) and region has 3 levels (→ 3 pairwise comparisons), the result contains 3 × 3 = 9 rows representing the full matrix of focal contrasts by modifier comparisons.
 
-**Practical use**: Identify which education gaps (e.g., college vs hs) vary most across geographic regions.
+**Practical use**: Identify which education gaps (e.g., college - hs) vary most across geographic regions.
 
 ### Local Derivatives at Profiles (`second_differences_at()`)
 
@@ -520,9 +520,9 @@ sd.significant_fdr = adjust(sd.p_value, BenjaminiHochberg()) .< α
 For categorical focal variables with many contrasts, focus on specific contrasts of interest:
 
 ```julia
-# Compute only the "college vs hs" contrast across regions
+# Compute only the "college - hs" contrast across regions
 sd = second_differences(ames, :education, :region, vcov(model);
-                       contrast="college vs hs",
+                       contrast="college - hs",
                        all_contrasts=false)
 ```
 

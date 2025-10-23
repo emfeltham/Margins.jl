@@ -61,7 +61,7 @@ The `EffectsResult` type encapsulates computed marginal effects along with assoc
 - `estimates::Vector{Float64}` - Point estimates of marginal effects
 - `standard_errors::Vector{Float64}` - Delta-method standard errors
 - `variables::Vector{String}` - The "x" in dy/dx (which variable each row represents)
-- `terms::Vector{String}` - Contrast descriptions (e.g., "continuous", "treated vs control")
+- `terms::Vector{String}` - Contrast descriptions (e.g., "dy/dx", "treated - control")
 - `profile_values::Union{Nothing, NamedTuple}` - Reference grid values (for profile effects MEM/MER; `nothing` for population effects AME)
 - `group_values::Union{Nothing, NamedTuple}` - Grouping variable values (when using `groups` parameter; `nothing` otherwise)
 - `gradients::Matrix{Float64}` - Parameter gradients (G matrix) for delta-method computation
