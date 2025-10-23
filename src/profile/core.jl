@@ -533,12 +533,12 @@ function _convert_profile_terms_to_strings(df::DataFrame)
         var = df.variable[i]
         contrast = df.contrast[i]
         
-        # Clean up boolean contrasts: convert "value vs false" patterns to "true vs false"
-        if contains(contrast, " vs false") && contrast != "true vs false"
-            # This is a boolean variable with a numeric mean - standardize to "true vs false"
-            cleaned_contrast = "true vs false"
-        elseif contrast == "derivative"
-            # Keep derivative as-is for continuous variables
+        # Clean up boolean contrasts: convert "value - false" patterns to "true - false"
+        if contains(contrast, " - false") && contrast != "true - false"
+            # This is a boolean variable with a numeric mean - standardize to "true - false"
+            cleaned_contrast = "true - false"
+        elseif contrast == "dy/dx"
+            # Keep dy/dx as-is for continuous variables
             cleaned_contrast = contrast
         else
             # Keep other contrasts as-is (for future categorical support)
@@ -876,7 +876,7 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
 
         # Use column indexing for better performance
         results.variable[row_idx] = string(var)
-        results.contrast[row_idx] = "derivative"
+        results.contrast[row_idx] = "dy/dx"
         results.estimate[row_idx] = estimate
         results.se[row_idx] = se
         results.profile_desc[row_idx] = profile_nt

@@ -161,7 +161,7 @@ function _process_variable_contrasts(
 
     for var in vars_vec
         # Identify all contrasts for this variable
-        # Continuous variables have single "derivative" contrast
+        # Continuous variables have single "dy/dx" contrast
         # Categorical variables have multiple contrasts (e.g., "level2 - level1")
         var_str = string(var)
         var_indices = findall(i -> ames.variables[i] == var_str, 1:length(ames.estimates))
@@ -280,7 +280,7 @@ Supports:
 # Returns
 DataFrame with columns:
 - `variable`: Focal variable name
-- `contrast`: Contrast description (for categorical variables, e.g., "Protestant - Catholic"; "derivative" for continuous)
+- `contrast`: Contrast description (for categorical variables, e.g., "Protestant - Catholic"; "dy/dx" for continuous)
 - `modifier`: Modifier variable name
 - `eval_point`: Point where derivative is evaluated (for modifier)
 - `derivative`: ∂AME/∂modifier (per unit change in modifier)
