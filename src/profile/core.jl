@@ -942,7 +942,7 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
 
         se = compute_se_only(engine.gβ_accumulator, engine.Σ)
 
-        term_name = "$(current_level) vs $(baseline_level)"
+        term_name = "$(current_level) - $(baseline_level)"
 
         profile_display_dict = Dict{Symbol,Any}()
         for k in names(reference_grid)
@@ -976,7 +976,7 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
 
         for (level1, level2, effect, gradient) in contrast_results
             se = sqrt(dot(gradient, engine.Σ, gradient))
-            term_name = "$level1 vs $level2"
+            term_name = "$level2 - $level1"
 
             profile_display_dict = Dict{Symbol,Any}()
             for k in names(reference_grid)

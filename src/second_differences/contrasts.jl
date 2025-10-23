@@ -78,7 +78,7 @@ sd = second_differences(ames, :education, :region, vcov(model))
 
 # Single contrast only (disable all_contrasts)
 sd = second_differences(ames, :education, :region, vcov(model);
-                       contrast="college vs hs", all_contrasts=false)
+                       contrast="college - hs", all_contrasts=false)
 # → DataFrame with 3 rows (just college-hs contrast across region pairs)
 ```
 

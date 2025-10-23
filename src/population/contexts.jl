@@ -588,7 +588,7 @@ function _compute_categorical_context_effect(
 
         # Store results
         push!(results.variable, string(var))
-        push!(results.contrast, "$(pair.level2) vs $(pair.level1)")
+        push!(results.contrast, "$(pair.level2) - $(pair.level1)")
         push!(results.estimate, ame)
         push!(results.se, se)
         push!(results.n, length(context_indices))

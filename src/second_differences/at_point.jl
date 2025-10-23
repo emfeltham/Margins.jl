@@ -162,7 +162,7 @@ function _process_variable_contrasts(
     for var in vars_vec
         # Identify all contrasts for this variable
         # Continuous variables have single "derivative" contrast
-        # Categorical variables have multiple contrasts (e.g., "level2 vs level1")
+        # Categorical variables have multiple contrasts (e.g., "level2 - level1")
         var_str = string(var)
         var_indices = findall(i -> ames.variables[i] == var_str, 1:length(ames.estimates))
 
@@ -280,7 +280,7 @@ Supports:
 # Returns
 DataFrame with columns:
 - `variable`: Focal variable name
-- `contrast`: Contrast description (for categorical variables, e.g., "Protestant vs Catholic"; "derivative" for continuous)
+- `contrast`: Contrast description (for categorical variables, e.g., "Protestant - Catholic"; "derivative" for continuous)
 - `modifier`: Modifier variable name
 - `eval_point`: Point where derivative is evaluated (for modifier)
 - `derivative`: ∂AME/∂modifier (per unit change in modifier)
@@ -371,8 +371,8 @@ sd = second_differences_at(model, df, :education, :income, vcov(model);
 # Pairwise contrasts for categorical variable (3 levels)
 sd = second_differences_at(model, df, :religion, :age, vcov(model);
                           contrasts=:pairwise)
-# → 3 rows with baseline contrasts=:baseline (default): Protestant vs Catholic, None vs Catholic
-# → 3 rows with contrasts=:pairwise: Protestant vs Catholic, None vs Catholic, None vs Protestant
+# → 3 rows with baseline contrasts=:baseline (default): Protestant - Catholic, None - Catholic
+# → 3 rows with contrasts=:pairwise: Protestant - Catholic, None - Catholic, None - Protestant
 # → Pairwise provides all K(K-1)/2 comparisons instead of just K-1 baseline comparisons
 
 # Compare baseline vs pairwise contrasts

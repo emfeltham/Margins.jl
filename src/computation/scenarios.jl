@@ -135,8 +135,8 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
         end
     elseif contrasts === :pairwise
         if T <: CategoricalArrays.CategoricalValue
-            # For categorical variables, ensure we use CategoricalValue type
-            # Build level map using pool to preserve type consistency
+            # For categorical variables, use canonical level ordering from levels()
+            # This ensures consistent, predictable ordering (not data-dependent)
             level_map = Dict{String, T}()
             pool = var_col.pool
             for (i, level) in enumerate(levels(var_col))
@@ -144,9 +144,9 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
                 level_map[level_str] = pool[i]  # Direct pool indexing (1-based)
             end
 
-            # Get unique level strings from the subset
-            unique_level_strs = unique(string.(var_col[rows]))
-            unique_levels = [level_map[s] for s in unique_level_strs]
+            # Use canonical level ordering (same as baseline contrasts)
+            all_levels = levels(var_col)  # Returns actual types in canonical order
+            unique_levels = [level_map[string(level)] for level in all_levels]
         else
             # For other types, unique works fine
             unique_levels = unique(var_col[rows])
