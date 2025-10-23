@@ -19,7 +19,7 @@ education = mix("hs" => 0.4, "college" => 0.6)
 
 Represents: "40% high school educated, 60% college educated" — a weighted average population context.
 
-Computing contrasts like "0.6 college-mixture vs 0.4 hs-mixture" is not statistically meaningful. Contrasts require discrete levels: "college - hs" is natural, but mixtures are less clearly so.
+Computing contrasts like "0.6 college-mixture - 0.4 hs-mixture" is clearly meaningful. Contrasts require discrete levels: "college - hs" is natural, but mixtures are less clearly so.
 
 ### Bool Variables with Fractional Values
 
