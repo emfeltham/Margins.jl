@@ -273,7 +273,7 @@ Supports:
   - **Note**: For inverse or transformed modifiers with low variance, specify explicit delta
 - `scale::Symbol`: Scale for predictions (:link or :response)
 - `contrasts::Symbol`: Contrast coding for categorical focal variables
-  - `:baseline`: Each level vs baseline (default) - produces K-1 contrasts for K levels
+  - `:baseline`: Each level minus baseline (default) - produces K-1 contrasts for K levels
   - `:pairwise`: All pairwise comparisons - produces K(K-1)/2 contrasts for K levels
   - Only affects categorical variables; continuous variables unaffected
 

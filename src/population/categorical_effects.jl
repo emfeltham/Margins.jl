@@ -222,7 +222,7 @@ function _process_single_categorical_variable!(
 
     # Estimate max contrasts based on contrast type
     max_contrasts = if contrasts == :baseline
-        max(1, n_levels - 1)  # Baseline contrasts: each level vs reference
+        max(1, n_levels - 1)  # Baseline contrasts: each level minus reference
     elseif contrasts == :pairwise
         max(1, div(n_levels * (n_levels - 1), 2))  # All unique pairs
     else

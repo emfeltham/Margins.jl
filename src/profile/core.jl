@@ -58,7 +58,7 @@ or adjusted predictions at specific profiles (APM/APR).
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
-- Categorical variables use baseline contrasts vs reference levels at each profile
+- Categorical variables use baseline contrasts (each level minus reference level) at each profile
 - Profile approach enables interpretation at specific, meaningful covariate combinations
 - More efficient than population approach when analyzing specific scenarios
 
