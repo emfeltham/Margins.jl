@@ -123,6 +123,63 @@ struct PredictionsResult <: MarginsResult
     metadata::Dict{Symbol, Any}
 end
 
+"""
+    ContrastResult
+
+Container for contrast analysis results with delta-method inference.
+
+Returned by `contrast()` functions when comparing two estimates (predictions or effects).
+Provides complete statistical inference for the difference between two rows.
+
+# Fields
+- `contrast::Float64`: Contrast estimate (difference between estimates)
+- `se::Float64`: Standard error of the contrast
+- `t_stat::Float64`: t-statistic
+- `p_value::Float64`: Two-tailed p-value
+- `ci_lower::Float64`: Lower confidence interval bound
+- `ci_upper::Float64`: Upper confidence interval bound
+- `estimate1::Float64`: First estimate value
+- `estimate2::Float64`: Second estimate value
+- `gradient::Vector{Float64}`: Contrast gradient vector for delta-method
+- `row1::Union{Int, Nothing}`: First row index (if applicable)
+- `row2::Union{Int, Nothing}`: Second row index (if applicable)
+- `metadata::Dict{Symbol, Any}`: Additional information (α, analysis description, etc.)
+
+# Examples
+```julia
+# Profile predictions contrast
+pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]))
+cr = contrast(pred_result, 1, 2, vcov(model))
+println("Contrast: ", cr.contrast, " ± ", cr.se)
+
+# Convert to DataFrame
+df = DataFrame(cr)
+
+# Access fields
+println("p-value: ", cr.p_value)
+println("95% CI: [", cr.ci_lower, ", ", cr.ci_upper, "]")
+```
+
+# See Also
+- `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
+- `contrast(::AbstractDataFrame, ...)`: Compute contrasts from DataFrames
+- `DataFrame(::ContrastResult)`: Convert to DataFrame
+"""
+struct ContrastResult
+    contrast::Float64
+    se::Float64
+    t_stat::Float64
+    p_value::Float64
+    ci_lower::Float64
+    ci_upper::Float64
+    estimate1::Float64
+    estimate2::Float64
+    gradient::Vector{Float64}
+    row1::Union{Int, Nothing}
+    row2::Union{Int, Nothing}
+    metadata::Dict{Symbol, Any}
+end
+
 import DataFrames: DataFrame # explicit import to extend method
 
 # Type-specific DataFrame dispatch for effects
@@ -234,6 +291,49 @@ function Base.show(io::IO, ::MIME"text/plain", mr::PredictionsResult)
     show(io, mr)
     # unpleasant to show this every time?
     # println(io, "\nUse DataFrame(result; format=...) for different table formats")
+end
+
+# Display method for ContrastResult
+function Base.show(io::IO, cr::ContrastResult)
+    # Header
+    println(io, "ContrastResult:")
+
+    # Get alpha from metadata if available
+    alpha = get(cr.metadata, :alpha, 0.05)
+    ci_pct = Int(100 * (1 - alpha))
+
+    # Display width for alignment
+    num_width = 14
+
+    # Top border
+    total_width = 60
+    println(io, "─"^total_width)
+
+    # Main statistics
+    println(io, rpad("  Contrast:", 25), lpad(format_number(cr.contrast), num_width))
+    println(io, rpad("  Std. Error:", 25), lpad(format_number(cr.se), num_width))
+    println(io, rpad("  t-statistic:", 25), lpad(format_number(cr.t_stat), num_width))
+    println(io, rpad("  p-value:", 25), lpad(format_number(cr.p_value), num_width))
+    println(io, rpad("  $(ci_pct)% CI:", 25), "[", format_number(cr.ci_lower), ", ", format_number(cr.ci_upper), "]")
+
+    # Separator
+    println(io, "─"^total_width)
+
+    # Component estimates
+    println(io, rpad("  Estimate 1:", 25), lpad(format_number(cr.estimate1), num_width))
+    println(io, rpad("  Estimate 2:", 25), lpad(format_number(cr.estimate2), num_width))
+
+    # Row indices if available
+    if !isnothing(cr.row1) && !isnothing(cr.row2)
+        println(io, rpad("  Rows compared:", 25), "$(cr.row1) vs $(cr.row2)")
+    end
+
+    # Bottom border
+    println(io, "─"^total_width)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", cr::ContrastResult)
+    show(io, cr)
 end
 
 # Helper function to generate clean display labels for effects show method

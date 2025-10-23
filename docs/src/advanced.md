@@ -9,9 +9,9 @@ Margins.jl provides comprehensive elasticity support through the `measure` param
 ### Types of Elasticity Measures
 
 #### Standard Elasticity
-**Definition**: Percent change in Y per percent change in X
-**Formula**: `(∂Y/∂X) × (X/Y)`
-**Interpretation**: "A 1% increase in X leads to an ε% change in Y"
+Definition: Percent change in Y per percent change in X
+Formula: `(∂Y/∂X) × (X/Y)`
+Interpretation: "A 1% increase in X leads to an ε% change in Y"
 
 ```julia
 # Population average elasticities
@@ -22,9 +22,9 @@ profile_margins(model, data, means_grid(data); type=:effects, measure=:elasticit
 ```
 
 #### Semi-Elasticity with respect to X  
-**Definition**: Percent change in Y per unit change in X
-**Formula**: `(∂Y/∂X) × (1/Y)`
-**Interpretation**: "A 1-unit increase in X leads to a (100×ε)% change in Y"
+Definition: Percent change in Y per unit change in X
+Formula: `(∂Y/∂X) × (1/Y)`
+Interpretation: "A 1-unit increase in X leads to a (100×ε)% change in Y"
 
 ```julia
 # Population average semi-elasticities (X)
@@ -35,9 +35,9 @@ profile_margins(model, data, cartesian_grid(x1=[0,1,2]); measure=:semielasticity
 ```
 
 #### Semi-Elasticity with respect to Y
-**Definition**: Unit change in Y per percent change in X  
-**Formula**: `(∂Y/∂X) × X`
-**Interpretation**: "A 1% increase in X leads to an ε-unit change in Y"
+Definition: Unit change in Y per percent change in X  
+Formula: `(∂Y/∂X) × X`
+Interpretation: "A 1% increase in X leads to an ε-unit change in Y"
 
 ```julia
 # Population average semi-elasticities (Y)
@@ -61,9 +61,9 @@ using Margins, DataFrames, GLM
 
 # Economic data: wages, education, experience
 df = DataFrame(
-    log_wage = randn(1000) .+ 2.5,  # Log wages
-    education = rand(12:20, 1000),   # Years of education  
-    experience = rand(0:30, 1000),   # Years of experience
+    log_wage = randn(1000) .+ 2.5, # Log wages
+    education = rand(12:20, 1000), # Years of education  
+    experience = rand(0:30, 1000), # Years of experience
     age = rand(25:55, 1000)
 )
 
@@ -76,23 +76,27 @@ edu_elasticity = population_margins(model, df;
 println("Population average education elasticity: ", DataFrame(edu_elasticity))
 
 # Education elasticity at different experience levels (profile analysis)  
-exp_scenarios = profile_margins(model, df,
-                               cartesian_grid(experience=[0, 10, 20, 30]);
-                               vars=[:education],
-                               measure=:elasticity)
+exp_scenarios = profile_margins(
+    model, df,
+    cartesian_grid(experience=[0, 10, 20, 30]);
+    vars = [:education],
+    measure = :elasticity
+)
 println("Education elasticity by experience level:")
 println(DataFrame(exp_scenarios))
 
 # Semi-elasticity: percent wage change per year of education
-edu_semielast = population_margins(model, df;
-                                  vars=[:education],
-                                  measure=:semielasticity_dyex)
+edu_semielast = population_margins(
+    model, df;
+    vars = [:education],
+    measure = :semielasticity_dyex
+)
 println("Education semi-elasticity: ", DataFrame(edu_semielast))
 ```
 
 ### When Profile ≠ Population for Elasticities
 
-In **GLMs with non-identity links**, population and profile elasticities can differ substantially:
+In GLMs with non-identity links, population and profile elasticities can differ substantially:
 
 ```julia
 # Logistic model example
@@ -111,13 +115,7 @@ println("Profile elasticity: ", DataFrame(prof_elastic).estimate[1])
 
 ## Robust Standard Errors
 
-Margins.jl integrates seamlessly with Julia's robust standard error ecosystem, particularly [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl).
-
-### Integration Philosophy
-
-- **Responsibility separation**: Margins.jl computes marginal effects; CovarianceMatrices.jl computes robust covariances
-- **Delta-method interface**: Margins only needs a parameter covariance matrix `Σ` for standard error computation
-- **Model ecosystem compatibility**: Uses same covariance sources as GLM.jl/StatsModels.jl
+Margins.jl integrates [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard error computation.
 
 ### Basic Robust Standard Errors
 
@@ -126,7 +124,9 @@ Margins.jl integrates seamlessly with Julia's robust standard error ecosystem, p
 using CovarianceMatrices
 
 # Apply robust covariance via vcov parameter
-robust_effects = population_margins(model, data; vcov=CovarianceMatrices.HC1, type=:effects)
+robust_effects = population_margins(
+    model, data; vcov=CovarianceMatrices.HC1, type=:effects
+)
 ```
 
 #### Available Robust Estimators
@@ -186,19 +186,113 @@ Robust standard errors work seamlessly with all elasticity measures:
 
 ```julia
 # Robust elasticity estimates
-robust_elasticities = population_margins(model, data; 
+robust_elasticities = population_margins(model, data;
     vcov=CovarianceMatrices.HC1,
     measure=:elasticity, type=:effects)
 
-# Profile elasticities with clustered SEs  
+# Profile elasticities with clustered SEs
 profile_elasticities = profile_margins(model, data,
-    means_grid(data); vcov=CovarianceMatrices.Clustered(:cluster_var),
-    measure=:elasticity)
+    means_grid(data); vcov = CovarianceMatrices.Clustered(:cluster_var),
+    measure = :elasticity)
 ```
+
+### Standard Errors for Elasticities: Delta Method vs Bootstrap
+
+!!! warning "Conditional vs Unconditional Inference"
+    Standard errors for elasticity measures computed via the delta method (default) represent conditional inference; they assume the observed data (X, Y) are fixed and only account for uncertainty in parameter estimates β̂. Bootstrap standard errors represent unconditional inference and may be larger because they also account for sampling variation in the data.
+
+#### Understanding the Difference
+
+For elasticity measures like `ε = (x̄/ȳ) × (∂y/∂x)`, the transformation involves sample moments (x̄, ȳ) that are treated differently by different inference methods:
+
+Delta Method (Default):
+- Assumption: Observed data X and Y are fixed constants
+- Uncertainty source: Only parameter estimates β̂
+- Variance: `Var[ε(β̂) | X, Y]`
+- Advantages: Fast, analytically exact (given the conditional assumption)
+- Implementation: Uses the quotient rule to account for mean(ŷ) depending on β
+
+Bootstrap:
+- Assumption: Data are sampled from a population
+- Uncertainty sources: Both β̂ and the sample moments x̄, ȳ
+- Variance: `Var[ε(β̂, x̄, ȳ)]`
+- Advantages: Accounts for full sampling variation
+- Trade-off: Computationally intensive (requires refitting model many times)
+
+#### Why They Differ
+
+The key distinction is that elasticity formulas involve ratios of sample statistics:
+
+```julia
+# For elasticity: ε = (x̄ / mean(ŷ)) × AME
+# Where:
+#   x̄ = sample mean of predictor (varies across bootstrap samples)
+#   mean(ŷ) = sample mean of predictions (varies with both β and resampled data)
+#   AME = average marginal effect (varies with β)
+```
+
+When you bootstrap:
+1. Different observations are sampled → x̄ changes
+2. Model is refit → β̂ changes → AME changes
+3. Predictions are recomputed → mean(ŷ) changes
+
+The delta method only captures variation from (2), treating (1) and parts of (3) as fixed.
+
+!!! note "This is Not a Bug"
+    This behavior matches other statistical software:
+    - R's marginaleffects: Documentation states *"For nonlinear models, the delta method is only an approximation"* and recommends bootstrap for transformations
+    - Stata's margins: Documents that delta method *"assumes that the values at which the covariates are evaluated are fixed"*
+
+#### Example: Comparing Methods
+
+```julia
+using Margins, GLM, DataFrames, Bootstrap
+
+# Fit model
+model = lm(@formula(y ~ x + z), data)
+
+# Delta method SEs (default - fast, conditional)
+delta_result = population_margins(model, data;
+    vars=[:x],
+    measure=:elasticity)
+println("Delta method SE: ", DataFrame(delta_result).se[1])
+
+# Bootstrap SEs (slower, unconditional)
+# Note: Built-in bootstrap support coming soon
+# For now, use manual bootstrap:
+function boot_elasticity(data, indices)
+    boot_data = data[indices, :]
+    boot_model = lm(@formula(y ~ x + z), boot_data)
+    boot_result = population_margins(boot_model, boot_data;
+        vars=[:x], measure=:elasticity)
+    return DataFrame(boot_result).estimate[1]
+end
+
+bs = bootstrap(boot_elasticity, data, BasicSampling(1000))
+boot_se = std(bs.t[1])
+println("Bootstrap SE: ", boot_se)
+
+# Bootstrap SE will typically be larger, especially in small samples
+```
+
+#### Technical Details
+
+Margins.jl implements the full quotient rule for elasticity derivatives:
+
+```math
+\frac{\partial \varepsilon}{\partial \beta} = \frac{\bar{x}}{\bar{y}} \frac{\partial \text{AME}}{\partial \beta} - \frac{\varepsilon}{\bar{y}} \frac{\partial \bar{y}}{\partial \beta}
+```
+
+Here, the second term accounts for mean(ŷ) depending on β.
+
+!!! info "References"
+    - Krinsky, I., & Robb, A. L. (1986). "On Approximating the Statistical Properties of Elasticities." *Review of Economics and Statistics*, 68(4), 715-719.
+    - Arel-Bundock, V. (2023). "marginaleffects: Predictions, Comparisons, Slopes, Marginal Means, and Hypothesis Tests." R package. [Documentation on inference](https://marginaleffects.com/chapters/uncertainty.html)
+    - Greene, W. H. (2018). *Econometric Analysis* (8th ed.), Section 3.6 on the Delta Method.
 
 ## Standardized Predictors
 
-Margins.jl seamlessly integrates with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl) for models fit with standardized (z-scored) variables. **Marginal effects are automatically reported on the original (raw) scale**, requiring no manual back-transformation.
+Margins.jl seamlessly integrates with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl) for models fit with standardized (z-scored) variables. Marginal effects are automatically reported on the original (raw) scale, requiring no manual back-transformation.
 
 ### Why Standardize Predictors?
 
@@ -206,11 +300,6 @@ Standardization transforms variables to have mean 0 and standard deviation 1:
 ```julia
 x_std = (x - mean(x)) / std(x)
 ```
-
-Benefits include:
-- **Numerical stability**: Prevents optimization issues with vastly different scales
-- **Coefficient interpretation**: β represents effect of one standard deviation change
-- **Comparison**: Allows comparing relative importance of different predictors
 
 ### Integration with Margins.jl
 
@@ -239,14 +328,14 @@ DataFrame(result)
 
 When computing marginal effects, Margins.jl uses FormulaCompiler.jl's derivative system, which automatically applies the chain rule through the standardization transformation:
 
-**Mathematical detail**:
+Mathematical detail (with `ZScore`):
 - Model uses: `x_std = (x - μ) / σ`
 - Derivative computation: `∂η/∂x_raw = ∂η/∂x_std × ∂x_std/∂x_raw = β × (1/σ)`
 - Result: Marginal effect per unit of original variable
 
 Both finite differences (FD) and automatic differentiation (AD) backends handle this automatically:
-- **FD**: Perturbs raw values → standardization applied during evaluation → derivative includes 1/σ
-- **AD**: Dual arithmetic propagates through (x - μ)/σ → derivative includes 1/σ
+- FD: Perturbs raw values → standardization applied during evaluation → derivative includes 1/σ
+- AD: Dual arithmetic propagates through (x - μ)/σ → derivative includes 1/σ
 
 ### Comparison: Raw vs Standardized Models
 
@@ -263,18 +352,10 @@ me_std = population_margins(model_std, df; vars=[:income])
 @assert DataFrame(me_raw).estimate ≈ DataFrame(me_std).estimate
 ```
 
-**Why they match**:
+Why they match:
 - Raw model: `∂sales/∂income_dollars = β₁`
 - Standardized model: `∂sales/∂income_dollars = β₁_std / σ_income`
 - The σ in the denominator is automatically included by the chain rule
-
-### Common Misconception
-
-❌ **WRONG**: "Since my model uses standardized predictors, marginal effects are per standard deviation"
-
-✅ **CORRECT**: "Marginal effects are always per unit of the original variable, regardless of model specification"
-
-**Important**: You do NOT need to manually divide by `std(df.income)` to get original-scale effects. This would be incorrect and produce effects that are too small by a factor of σ.
 
 ### Elasticities with Standardized Predictors
 
@@ -311,63 +392,60 @@ result = profile_margins(model, df, grid; type=:effects)
 # Standardization is handled automatically during evaluation
 ```
 
-### Technical Details
+### Technical Notes
 
-For users interested in the implementation:
-
-1. **Model coefficients** (`coef(model)`): These ARE on standardized scale
+1. Model coefficients (`coef(model)`) are on the _standardized_ scale
    - β₁ represents effect per SD change in x
 
-2. **Jacobian from FormulaCompiler**: This is on RAW scale
+2. Jacobian from FormulaCompiler is on the _raw_ scale
    - Includes 1/σ factor from chain rule automatically
 
-3. **Marginal effects**: `g = J' × β`
+3. Marginal effects: `g = J' × β`
    - The 1/σ in J combines with standardized β to give raw-scale effects
 
-This behavior is validated by comprehensive tests comparing raw and standardized models, ensuring both produce identical marginal effects on the original measurement scales.
+This behavior is validated with tests that compare the raw and standardized models, ensuring that both produce identical marginal effects on the original measurement scales.
 
-### For More Information
-
-See the [STANDARDIZATION.md](https://github.com/...) technical note for comprehensive mathematical details, including:
-- Detailed chain rule derivations for FD and AD backends
-- Test validation demonstrating correctness
-- Comparison with R's `margins` package behavior
 
 ## Categorical Mixtures for Policy Analysis
 
-Margins.jl supports **categorical mixtures** for realistic policy scenario analysis, allowing specification of population compositions rather than arbitrary category levels.
+Margins.jl supports **categorical mixtures** for scenario analysis, which enables the specification of population compositions as an alternative to (the observed) category levels.
 
 ### Motivation: Realistic Population Scenarios
 
-Traditional marginal effects often use arbitrary categorical values (e.g., "set all observations to treatment=1"). Categorical mixtures enable **realistic population compositions**:
+Marginal effects often use arbitrary categorical values (e.g., "set all observations to treatment=1"). Categorical mixtures enable the specification of typical values:
 
 ```julia
 using CategoricalArrays, Margins
 
 # Instead of: "All treated" (unrealistic)
-unrealistic = profile_margins(model, data, cartesian_grid(treatment=[1]); type=:predictions)
+unrealistic = profile_margins(
+    model, data, cartesian_grid(treatment = [1]); type = :predictions
+)
 
 # Use: Realistic treatment rate  
-realistic = profile_margins(model, data, 
-                           DataFrame(treatment=[mix(0 => 0.3, 1 => 0.7)]))  # 70% treatment rate
+realistic = profile_margins(
+    model, data, 
+    DataFrame(treatment=[mix(0 => 0.3, 1 => 0.7)])
+) # 70% treatment rate
 ```
 
 ### Frequency-Weighted Categorical Defaults
 
-When categorical variables are unspecified in profiles, Margins.jl uses **actual sample frequencies** rather than arbitrary first levels:
+When categorical variables are unspecified in profiles, Margins.jl uses actual sample frequencies rather than arbitrary first levels:
 
 ```julia
-# Data composition: education = 40% HS, 45% College, 15% Graduate
-#                   region = 60% Urban, 40% Rural
+# Data composition:
+#     education = 40% HS, 45% College, 15% Graduate
+#     region = 60% Urban, 40% Rural
 
 # Effects "at means" uses realistic composition
-result = profile_margins(model, data, means_grid(data); type=:effects)
+result = profile_margins(model, data, means_grid(data); type = :effects)
 # → Continuous vars: sample means
 # → education: mix("HS" => 0.40, "College" => 0.45, "Graduate" => 0.15)  
 # → region: mix("Urban" => 0.60, "Rural" => 0.40)
 ```
 
-### Policy Scenario Analysis
+### Scenario Analysis
 
 #### Demographic Transition Scenarios
 ```julia
@@ -389,13 +467,15 @@ impact = DataFrame(future_scenario).estimate[1] - DataFrame(current_scenario).es
 ```julia
 # Treatment effects across population compositions
 treatment_scenarios = DataFrame([
-    (treatment=0, education=mix("HS" => 0.5, "College" => 0.5)),
-    (treatment=1, education=mix("HS" => 0.5, "College" => 0.5)),
-    (treatment=0, education=mix("HS" => 0.2, "College" => 0.8)),  
-    (treatment=1, education=mix("HS" => 0.2, "College" => 0.8))
+    (treatment = 0, education = mix("HS" => 0.5, "College" => 0.5)),
+    (treatment = 1, education = mix("HS" => 0.5, "College" => 0.5)),
+    (treatment = 0, education = mix("HS" => 0.2, "College" => 0.8)),  
+    (treatment = 1, education = mix("HS" => 0.2, "College" => 0.8))
 ])
 
-results = profile_margins(model, data, treatment_scenarios; type=:predictions)
+results = profile_margins(
+    model, data, treatment_scenarios; type = :predictions
+)
 treatment_effects_df = DataFrame(results)
 ```
 
@@ -408,48 +488,60 @@ Margins.jl provides a comprehensive grouping framework for population-based marg
 #### Basic Grouping Patterns
 ```julia
 # Simple categorical grouping
-demographic_effects = population_margins(model, data;
-                                        type=:effects,
-                                        vars=[:income],
-                                        groups=:education)
+demographic_effects = population_margins(
+    model, data;
+    type = :effects, vars = [:income], groups = :education
+)
 
 # Cross-tabulated grouping
-cross_effects = population_margins(model, data;
-                                 type=:effects,
-                                 vars=[:income], 
-                                 groups=[:education, :region])
+cross_effects = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:income], 
+    groups = [:education, :region]
+)
 ```
 
 #### Nested Hierarchical Grouping
 ```julia
 # Hierarchical nesting: region → education within each region
-nested_effects = population_margins(model, data;
-                                  type=:effects,
-                                  vars=[:income],
-                                  groups=:region => :education)
+nested_effects = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:income],
+    groups = :region => :education
+)
 
 # Deep nesting: region → urban → education
-deep_nested = population_margins(model, data;
-                               type=:effects,
-                               groups=:region => (:urban => :education))
+deep_nested = population_margins(
+    model, data;
+    type = :effects,
+    groups = :region => (:urban => :education)
+)
 ```
 
 #### Continuous Variable Binning
 ```julia
 # Quartile analysis
-income_quartiles = population_margins(model, data;
-                                    type=:effects,
-                                    groups=(:income, 4))  # Q1, Q2, Q3, Q4
+income_quartiles = population_margins(
+    model, data;
+    type = :effects,
+    groups = (:income, 4) # Q1, Q2, Q3, Q4
+)
 
 # Custom policy-relevant thresholds
-policy_thresholds = population_margins(model, data;
-                                     type=:effects,
-                                     groups=(:income, [25000, 50000, 75000]))
+policy_thresholds = population_margins(
+    model, data;
+    type = :effects,
+    groups = (:income, [25000, 50000, 75000])
+)
 
 # Mixed categorical and continuous
-mixed_groups = population_margins(model, data;
-                                type=:effects,
-                                groups=[:education, (:income, 4)])
+mixed_groups = population_margins(
+    model, data;
+    type = :effects,
+    groups = [:education, (:income, 4)]
+)
 ```
 
 ### Counterfactual Scenario Analysis
@@ -457,26 +549,32 @@ mixed_groups = population_margins(model, data;
 #### Policy Scenarios with Population Override
 ```julia
 # Binary policy scenarios
-policy_analysis = population_margins(model, data;
-                                   type=:effects,
-                                   vars=[:outcome],
-                                   scenarios=(:policy => [0, 1]))
+policy_analysis = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:outcome],
+    scenarios = (:policy => [0, 1])
+)
 
 # Multi-variable scenarios
-complex_scenarios = population_margins(model, data;
-                                     type=:effects,
-                                     scenarios=(:treatment => [0, 1], 
-                                                   :policy => ["current", "reform"]))
+complex_scenarios = population_margins(
+    model, data;
+    type = :effects,
+    scenarios = (:treatment => [0, 1], 
+    :policy => ["current", "reform"])
+)
 ```
 
 #### Combined Grouping and Scenarios
 ```julia
 # Comprehensive policy analysis: demographics × policy scenarios
-full_analysis = population_margins(model, data;
-                                 type=:effects,
-                                 vars=[:outcome],
-                                 groups=[:education, :region],
-                                 scenarios=(:treatment => [0, 1]))
+full_analysis = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:outcome],
+    groups = [:education, :region],
+    scenarios = (:treatment => [0, 1])
+)
 ```
 
 ### Complex Nested Patterns
@@ -484,18 +582,21 @@ full_analysis = population_margins(model, data;
 #### Parallel Grouping Within Hierarchy
 ```julia
 # Region → (education levels + income quartiles separately)
-parallel_groups = population_margins(model, data;
-                                   type=:effects,
-                                   groups=:region => [:education, (:income, 4)])
+parallel_groups = population_margins(
+    model, data;
+    type = :effects,
+    groups = :region => [:education, (:income, 4)]
+)
 ```
 
 #### Advanced Policy Applications
 ```julia
 # Healthcare policy analysis
-healthcare_analysis = population_margins(health_model, health_data;
-    type=:effects,
-    groups=:state => (:urban => [:insurance_type, (:income, 3)]),
-    scenarios=(:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
+healthcare_analysis = population_margins(
+    health_model, health_data;
+    type = :effects,
+    groups = :state => (:urban => [:insurance_type, (:income, 3)]),
+    scenarios = (:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
 )
 
 # Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios
@@ -508,7 +609,9 @@ For comprehensive coverage of second differences—interaction effects on the pr
 **Quick reference**:
 ```julia
 # Compute AMEs across modifier levels
-ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
+ames = population_margins(
+    model, data; scenarios = (treated=[0,1],), type = :effects
+)
 
 # Calculate second differences
 sd = second_differences(ames, :age, :treated, vcov(model))
@@ -566,7 +669,3 @@ function diagnose_vcov(model)
     return (eigenvals=eigenvals, condition_number=cond_num)
 end
 ```
-
----
-
-*These advanced features enable sophisticated econometric analysis while maintaining Margins.jl's core principles of statistical correctness and computational efficiency. For conceptual foundation on when to use elasticities vs marginal effects, see [Mathematical Foundation](mathematical_foundation.md). For elasticity performance characteristics, see [Performance Guide](performance.md).*

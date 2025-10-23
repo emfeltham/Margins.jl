@@ -41,7 +41,10 @@ end
     include("features/test_table_profiles.jl")
     include("features/test_prediction_scales.jl")
     include("features/test_hierarchical_grids.jl")
+    include("features/test_string_categorical_conversion.jl")
     include("regression/test_bool_mixture_skip.jl")
+    include("test_second_differences.jl")
+    include("test_second_differences_at.jl")
 end
 
 @testset "Performance" begin
@@ -56,6 +59,7 @@ end
     include("statistical_validation/backend_consistency.jl")
     include("statistical_validation/statistical_validation.jl")
     include("statistical_validation/incompatible_formula_se_validation.jl")
+    include("statistical_validation/elasticity_se_validation.jl")
 end
 
 @testset "Computational Primitives" begin

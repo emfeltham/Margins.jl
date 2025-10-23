@@ -227,6 +227,13 @@ using CategoricalArrays
         )
     end
 
+    @testset "Error Handling - Invalid Contrasts" begin
+        @test_throws ErrorException second_differences_at(
+            model, df, :x1, :age, Σ;
+            contrasts=:invalid
+        )
+    end
+
     @testset "Consistency with second_differences()" begin
         # Compare at-point derivative with discrete contrast slope
         # They should be similar when evaluation points are the same
@@ -413,6 +420,48 @@ using CategoricalArrays
 
         model_cat = lm(@formula(y ~ religion * modifier + other), df_cat)
         Σ_cat = vcov(model_cat)
+
+        @testset "Baseline Contrasts (Default)" begin
+            # Default should use baseline contrasts
+            sd = second_differences_at(model_cat, df_cat, :religion, :modifier, Σ_cat; at=:mean)
+
+            # Should have K-1 contrasts for K=3 levels
+            @test nrow(sd) == 2
+            @test hasproperty(sd, :contrast)
+            @test all(sd.variable .== :religion)
+        end
+
+        @testset "Pairwise Contrasts" begin
+            # Explicit pairwise contrasts
+            sd_pairwise = second_differences_at(model_cat, df_cat, :religion, :modifier, Σ_cat;
+                                                at=:mean, contrasts=:pairwise)
+
+            # Should have K(K-1)/2 = 3 contrasts for K=3 levels
+            @test nrow(sd_pairwise) == 3
+            @test hasproperty(sd_pairwise, :contrast)
+            @test all(sd_pairwise.variable .== :religion)
+
+            # All derivatives should be finite
+            @test all(isfinite.(sd_pairwise.derivative))
+            @test all(sd_pairwise.se .> 0)
+        end
+
+        @testset "Baseline vs Pairwise Comparison" begin
+            sd_baseline = second_differences_at(model_cat, df_cat, :religion, :modifier, Σ_cat;
+                                               at=:mean, contrasts=:baseline)
+            sd_pairwise = second_differences_at(model_cat, df_cat, :religion, :modifier, Σ_cat;
+                                               at=:mean, contrasts=:pairwise)
+
+            # Different number of rows
+            @test nrow(sd_baseline) == 2  # K-1
+            @test nrow(sd_pairwise) == 3  # K(K-1)/2
+
+            # Some contrasts should overlap (baseline contrasts appear in pairwise)
+            baseline_contrasts = Set(sd_baseline.contrast)
+            pairwise_contrasts = Set(sd_pairwise.contrast)
+            # Baseline contrasts should be a subset of pairwise contrasts
+            @test length(intersect(baseline_contrasts, pairwise_contrasts)) >= 1
+        end
 
         @testset "Basic Categorical Focal Variable" begin
             # Should work without error

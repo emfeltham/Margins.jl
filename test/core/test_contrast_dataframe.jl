@@ -22,13 +22,16 @@ using Random
 
         # Test basic DataFrame conversion
         df_contrast = DataFrame(contrast_result)
-        @test size(df_contrast) == (1, 8)
+        @test size(df_contrast) == (1, 10)  # Updated: now includes row1 and row2
         @test all(col in names(df_contrast) for col in ["contrast", "se", "t_stat", "p_value",
-                                                         "ci_lower", "ci_upper", "estimate1", "estimate2"])
+                                                         "ci_lower", "ci_upper", "estimate1", "estimate2",
+                                                         "row1", "row2"])
         @test all(isfinite, df_contrast.contrast)
         @test all(isfinite, df_contrast.se)
         @test df_contrast.contrast[1] ≈ contrast_result.contrast
         @test df_contrast.se[1] ≈ contrast_result.se
+        @test df_contrast.row1[1] == 1
+        @test df_contrast.row2[1] == 2
 
         # Verify no gradient column by default
         @test !("gradient" in names(df_contrast))

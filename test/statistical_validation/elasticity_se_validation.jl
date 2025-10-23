@@ -16,7 +16,12 @@ using Margins
 using Test
 using Printf
 
-# Bootstrap SE validation loaded centrally in runtests.jl
+# Load testing utilities (needed when running standalone)
+if !isdefined(Main, :make_econometric_data)
+    include("testing_utilities.jl")
+    include("bootstrap_se_validation.jl")
+    include("analytical_se_validation.jl")
+end
 
 """
     bootstrap_validate_population_elasticity(model_func, formula, data, measure; vars=nothing, n_bootstrap=200)
