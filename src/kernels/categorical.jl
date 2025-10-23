@@ -234,7 +234,7 @@ Processes all contrast pairs for a single variable with shared infrastructure:
 - **O(n × k)** time where n=length(rows), k=length(contrast_pairs)
 
 # Use Cases
-- **Baseline contrasts**: Each level vs reference (typical for AME)
+- **Baseline contrasts**: Each level minus reference (typical for AME)
 - **Pairwise contrasts**: All unique pairs (comprehensive analysis)
 
 # Example

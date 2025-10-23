@@ -40,7 +40,7 @@ Uses the same categorical kernel as population path:
 ```julia
 profile = Dict(:age => 30.0, :education => "college")
 contrast = _compute_row_specific_baseline_contrast(engine, refgrid_de, profile, :treatment, :response, :ad)
-# Returns effect of treatment vs control for 30-year-old college graduates
+# Returns effect of treatment - control for 30-year-old college graduates
 ```
 """
 function _compute_row_specific_baseline_contrast(
@@ -265,7 +265,7 @@ function _compute_profile_pairwise_contrasts(
         # Compute gradient (0 bytes with proper buffer reuse)
         contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, level1, level2, β, link)
 
-        # Store result with copied gradient (level1 vs level2 for consistency)
+        # Store result with copied gradient (stores level1, level2, with effect = level2 - level1)
         push!(results, (level1, level2, effect, copy(gradient_buf)))
     end
 

@@ -64,7 +64,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
-- Categorical variables use baseline contrasts vs reference levels
+- Categorical variables use baseline contrasts (each level minus reference level)
 - All computations maintain statistical validity with zero tolerance for approximations
 
 # Examples

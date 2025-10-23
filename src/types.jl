@@ -66,7 +66,7 @@ Fields:
 - `estimates::Vector{Float64}`: Point estimates
 - `standard_errors::Vector{Float64}`: Standard errors
 - `variables::Vector{String}`: The "x" in dy/dx - which variable each row represents
-- `terms::Vector{String}`: Contrast descriptions (e.g., "continuous", "treated vs control")
+- `terms::Vector{String}`: Contrast descriptions (e.g., "dy/dx", "treated - control")
 - `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile effects MEM/MER)
 - `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
@@ -325,7 +325,7 @@ function Base.show(io::IO, cr::ContrastResult)
 
     # Row indices if available
     if !isnothing(cr.row1) && !isnothing(cr.row2)
-        println(io, rpad("  Rows compared:", 25), "$(cr.row1) vs $(cr.row2)")
+        println(io, rpad("  Rows compared:", 25), "$(cr.row1) - $(cr.row2)")
     end
 
     # Bottom border

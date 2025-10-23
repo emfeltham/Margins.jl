@@ -235,18 +235,18 @@ result = profile_margins(model, data, grid; type=:effects, vars=[:age, :educatio
 
 # Output structure:
 # Row 1: age at (age=30, education="A,B,C")
-# Row 2: education: B vs A at (age=30, education="A,B,C")  
-# Row 3: education: C vs A at (age=30, education="A,B,C")
+# Row 2: education: B - A at (age=30, education="A,B,C")
+# Row 3: education: C - A at (age=30, education="A,B,C")
 # Row 4: age at (age=40, education="A,B,C")
-# Row 5: education: B vs A at (age=40, education="A,B,C")
-# Row 6: education: C vs A at (age=40, education="A,B,C")
+# Row 5: education: B - A at (age=40, education="A,B,C")
+# Row 6: education: C - A at (age=40, education="A,B,C")
 ```
 
 ### Categorical Baseline Contrasts
 For a categorical variable with K levels, each reference grid row generates:
 - **K-1 contrast rows** comparing each non-baseline level to the baseline
-- Term names follow pattern: `"variable: level vs baseline"`
-- Example: 4-level categorical produces 3 contrasts (B vs A, C vs A, D vs A)
+- Term names follow pattern: `"variable: level - baseline"`
+- Example: 4-level categorical produces 3 contrasts (B - A, C - A, D - A)
 
 This multiplicative pattern means that reference grids with multiple categorical variables can generate substantial numbers of result rows, enabling comprehensive categorical effect analysis at each profile.
 

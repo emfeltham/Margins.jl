@@ -58,7 +58,7 @@ or adjusted predictions at specific profiles (APM/APR).
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
-- Categorical variables use baseline contrasts vs reference levels at each profile
+- Categorical variables use baseline contrasts (each level minus reference level) at each profile
 - Profile approach enables interpretation at specific, meaningful covariate combinations
 - More efficient than population approach when analyzing specific scenarios
 
@@ -533,12 +533,12 @@ function _convert_profile_terms_to_strings(df::DataFrame)
         var = df.variable[i]
         contrast = df.contrast[i]
         
-        # Clean up boolean contrasts: convert "value vs false" patterns to "true vs false"
-        if contains(contrast, " vs false") && contrast != "true vs false"
-            # This is a boolean variable with a numeric mean - standardize to "true vs false"
-            cleaned_contrast = "true vs false"
-        elseif contrast == "derivative"
-            # Keep derivative as-is for continuous variables
+        # Clean up boolean contrasts: convert "value - false" patterns to "true - false"
+        if contains(contrast, " - false") && contrast != "true - false"
+            # This is a boolean variable with a numeric mean - standardize to "true - false"
+            cleaned_contrast = "true - false"
+        elseif contrast == "dy/dx"
+            # Keep dy/dx as-is for continuous variables
             cleaned_contrast = contrast
         else
             # Keep other contrasts as-is (for future categorical support)
@@ -876,7 +876,7 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
 
         # Use column indexing for better performance
         results.variable[row_idx] = string(var)
-        results.contrast[row_idx] = "derivative"
+        results.contrast[row_idx] = "dy/dx"
         results.estimate[row_idx] = estimate
         results.se[row_idx] = se
         results.profile_desc[row_idx] = profile_nt
@@ -942,7 +942,7 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
 
         se = compute_se_only(engine.gβ_accumulator, engine.Σ)
 
-        term_name = "$(current_level) vs $(baseline_level)"
+        term_name = "$(current_level) - $(baseline_level)"
 
         profile_display_dict = Dict{Symbol,Any}()
         for k in names(reference_grid)
@@ -976,7 +976,7 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
 
         for (level1, level2, effect, gradient) in contrast_results
             se = sqrt(dot(gradient, engine.Σ, gradient))
-            term_name = "$level1 vs $level2"
+            term_name = "$level2 - $level1"
 
             profile_display_dict = Dict{Symbol,Any}()
             for k in names(reference_grid)
