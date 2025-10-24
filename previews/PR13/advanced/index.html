@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Advanced Features · Margins.jl</title><meta name="title" content="Advanced Features · Margins.jl"/><meta property="og:title" content="Advanced Features · Margins.jl"/><meta property="twitter:title" content="Advanced Features · Margins.jl"/><meta name="description" content="Documentation for Margins.jl."/><meta property="og:description" content="Documentation for Margins.jl."/><meta property="twitter:description" content="Documentation for Margins.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.svg" alt="Margins.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Margins.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Introduction</a></li><li><a class="tocitem" href="../mathematical_foundation/">Mathematical Foundation</a></li><li><a class="tocitem" href="../computational_architecture/">Computational Architecture</a></li><li><span class="tocitem">User Guide</span><ul><li><a class="tocitem" href="../reference_grids/">Reference Grids</a></li><li><a class="tocitem" href="../profile_margins/">Profile Analysis</a></li><li><a class="tocitem" href="../population_scenarios/">Population Scenarios</a></li><li><a class="tocitem" href="../second_differences/">Second Differences</a></li><li><a class="tocitem" href="../weights/">Weights</a></li><li><a class="tocitem" href="../grouping/">Population Grouping</a></li><li><a class="tocitem" href="../backend_selection/">Backend Selection</a></li><li><a class="tocitem" href="../performance/">Performance Guide</a></li><li class="is-active"><a class="tocitem" href>Advanced Features</a><ul class="internal"><li><a class="tocitem" href="#Elasticities-and-Semi-Elasticities"><span>Elasticities and Semi-Elasticities</span></a></li><li><a class="tocitem" href="#Robust-Standard-Errors"><span>Robust Standard Errors</span></a></li><li><a class="tocitem" href="#Standardized-Predictors"><span>Standardized Predictors</span></a></li><li><a class="tocitem" href="#Categorical-Mixtures-for-Policy-Analysis"><span>Categorical Mixtures for Policy Analysis</span></a></li><li><a class="tocitem" href="#Advanced-Grouping-and-Stratification"><span>Advanced Grouping and Stratification</span></a></li><li><a class="tocitem" href="#Second-Differences-(Interaction-Effects)"><span>Second Differences (Interaction Effects)</span></a></li><li><a class="tocitem" href="#Error-Handling-and-Diagnostics"><span>Error Handling and Diagnostics</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../stata_migration/">Migration Guide</a></li><li><a class="tocitem" href="../comparison/">Package Comparison</a></li><li><a class="tocitem" href="../api/">API Reference</a></li><li><a class="tocitem" href="../examples/">Examples</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">User Guide</a></li><li class="is-active"><a href>Advanced Features</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Advanced Features</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/emfeltham/Margins.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/emfeltham/Margins.jl/" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Advanced-Features"><a class="docs-heading-anchor" href="#Advanced-Features">Advanced Features</a><a id="Advanced-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Features" title="Permalink"></a></h1><p><em>Elasticities, robust standard errors, and specialized analysis techniques</em></p><h2 id="Elasticities-and-Semi-Elasticities"><a class="docs-heading-anchor" href="#Elasticities-and-Semi-Elasticities">Elasticities and Semi-Elasticities</a><a id="Elasticities-and-Semi-Elasticities-1"></a><a class="docs-heading-anchor-permalink" href="#Elasticities-and-Semi-Elasticities" title="Permalink"></a></h2><p>Margins.jl provides comprehensive elasticity support through the <code>measure</code> parameter, following the same <strong>Population vs Profile</strong> framework as standard marginal effects. <em>For conceptual background on the 2×2 framework, see <a href="../mathematical_foundation/">Mathematical Foundation</a>.</em></p><h3 id="Types-of-Elasticity-Measures"><a class="docs-heading-anchor" href="#Types-of-Elasticity-Measures">Types of Elasticity Measures</a><a id="Types-of-Elasticity-Measures-1"></a><a class="docs-heading-anchor-permalink" href="#Types-of-Elasticity-Measures" title="Permalink"></a></h3><h4 id="Standard-Elasticity"><a class="docs-heading-anchor" href="#Standard-Elasticity">Standard Elasticity</a><a id="Standard-Elasticity-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Elasticity" title="Permalink"></a></h4><p>Definition: Percent change in Y per percent change in X Formula: <code>(∂Y/∂X) × (X/Y)</code> Interpretation: &quot;A 1% increase in X leads to an ε% change in Y&quot;</p><pre><code class="language-julia hljs"># Population average elasticities
+population_margins(model, data; type=:effects, measure=:elasticity)
+
+# Elasticities at sample means
+profile_margins(model, data, means_grid(data); type=:effects, measure=:elasticity)</code></pre><h4 id="Semi-Elasticity-with-respect-to-X"><a class="docs-heading-anchor" href="#Semi-Elasticity-with-respect-to-X">Semi-Elasticity with respect to X</a><a id="Semi-Elasticity-with-respect-to-X-1"></a><a class="docs-heading-anchor-permalink" href="#Semi-Elasticity-with-respect-to-X" title="Permalink"></a></h4><p>Definition: Percent change in Y per unit change in X Formula: <code>(∂Y/∂X) × (1/Y)</code> Interpretation: &quot;A 1-unit increase in X leads to a (100×ε)% change in Y&quot;</p><pre><code class="language-julia hljs"># Population average semi-elasticities (X)
+population_margins(model, data; measure=:semielasticity_dyex)
+
+# Semi-elasticities at specific scenarios
+profile_margins(model, data, cartesian_grid(x1=[0,1,2]); measure=:semielasticity_dyex)</code></pre><h4 id="Semi-Elasticity-with-respect-to-Y"><a class="docs-heading-anchor" href="#Semi-Elasticity-with-respect-to-Y">Semi-Elasticity with respect to Y</a><a id="Semi-Elasticity-with-respect-to-Y-1"></a><a class="docs-heading-anchor-permalink" href="#Semi-Elasticity-with-respect-to-Y" title="Permalink"></a></h4><p>Definition: Unit change in Y per percent change in X   Formula: <code>(∂Y/∂X) × X</code> Interpretation: &quot;A 1% increase in X leads to an ε-unit change in Y&quot;</p><pre><code class="language-julia hljs"># Population average semi-elasticities (Y)
+population_margins(model, data; measure=:semielasticity_eydx)</code></pre><h3 id="Elasticity-Framework-Application"><a class="docs-heading-anchor" href="#Elasticity-Framework-Application">Elasticity Framework Application</a><a id="Elasticity-Framework-Application-1"></a><a class="docs-heading-anchor-permalink" href="#Elasticity-Framework-Application" title="Permalink"></a></h3><p>Elasticities follow the same <strong>Population vs Profile</strong> distinction as marginal effects (<em>see <a href="../mathematical_foundation/">Mathematical Foundation</a> for detailed framework explanation</em>):</p><table><tr><th style="text-align: right">Measure</th><th style="text-align: right">Population Approach</th><th style="text-align: right">Profile Approach</th></tr><tr><td style="text-align: right"><strong>Elasticity</strong></td><td style="text-align: right">Average of <code>(∂Y/∂X) × (Xᵢ/Yᵢ)</code> across sample</td><td style="text-align: right"><code>(∂Y/∂X) × (X̄/Ȳ)</code> at representative values</td></tr><tr><td style="text-align: right"><strong>Semi-elasticity (X)</strong></td><td style="text-align: right">Average of <code>(∂Y/∂X) × (1/Yᵢ)</code> across sample</td><td style="text-align: right"><code>(∂Y/∂X) × (1/Ȳ)</code> at representative values</td></tr><tr><td style="text-align: right"><strong>Semi-elasticity (Y)</strong></td><td style="text-align: right">Average of <code>(∂Y/∂X) × Xᵢ</code> across sample</td><td style="text-align: right"><code>(∂Y/∂X) × X̄</code> at representative values</td></tr></table><h3 id="Practical-Example:-Wage-Elasticities"><a class="docs-heading-anchor" href="#Practical-Example:-Wage-Elasticities">Practical Example: Wage Elasticities</a><a id="Practical-Example:-Wage-Elasticities-1"></a><a class="docs-heading-anchor-permalink" href="#Practical-Example:-Wage-Elasticities" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Margins, DataFrames, GLM
+
+# Economic data: wages, education, experience
+df = DataFrame(
+    log_wage = randn(1000) .+ 2.5, # Log wages
+    education = rand(12:20, 1000), # Years of education  
+    experience = rand(0:30, 1000), # Years of experience
+    age = rand(25:55, 1000)
+)
+
+model = lm(@formula(log_wage ~ education + experience + age), df)
+
+# Education elasticity of wages (population average)
+edu_elasticity = population_margins(model, df; 
+                                   vars=[:education], 
+                                   measure=:elasticity)
+println(&quot;Population average education elasticity: &quot;, DataFrame(edu_elasticity))
+
+# Education elasticity at different experience levels (profile analysis)  
+exp_scenarios = profile_margins(
+    model, df,
+    cartesian_grid(experience=[0, 10, 20, 30]);
+    vars = [:education],
+    measure = :elasticity
+)
+println(&quot;Education elasticity by experience level:&quot;)
+println(DataFrame(exp_scenarios))
+
+# Semi-elasticity: percent wage change per year of education
+edu_semielast = population_margins(
+    model, df;
+    vars = [:education],
+    measure = :semielasticity_dyex
+)
+println(&quot;Education semi-elasticity: &quot;, DataFrame(edu_semielast))</code></pre><h3 id="When-Profile-Population-for-Elasticities"><a class="docs-heading-anchor" href="#When-Profile-Population-for-Elasticities">When Profile ≠ Population for Elasticities</a><a id="When-Profile-Population-for-Elasticities-1"></a><a class="docs-heading-anchor-permalink" href="#When-Profile-Population-for-Elasticities" title="Permalink"></a></h3><p>In GLMs with non-identity links, population and profile elasticities can differ substantially:</p><pre><code class="language-julia hljs"># Logistic model example
+logit_model = glm(@formula(employed ~ education + experience), df, Binomial(), LogitLink())
+
+# Population average employment elasticity w.r.t. education
+pop_elastic = population_margins(logit_model, df; vars=[:education], measure=:elasticity)
+
+# Employment elasticity at sample means
+prof_elastic = profile_margins(logit_model, df, means_grid(df); vars=[:education], measure=:elasticity)
+
+# These will differ because logistic function is nonlinear
+println(&quot;Population elasticity: &quot;, DataFrame(pop_elastic).estimate[1])
+println(&quot;Profile elasticity: &quot;, DataFrame(prof_elastic).estimate[1])</code></pre><h2 id="Robust-Standard-Errors"><a class="docs-heading-anchor" href="#Robust-Standard-Errors">Robust Standard Errors</a><a id="Robust-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Standard-Errors" title="Permalink"></a></h2><p>Margins.jl integrates <a href="https://github.com/gragusa/CovarianceMatrices.jl">CovarianceMatrices.jl</a> for robust standard error computation.</p><h3 id="Basic-Robust-Standard-Errors"><a class="docs-heading-anchor" href="#Basic-Robust-Standard-Errors">Basic Robust Standard Errors</a><a id="Basic-Robust-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Robust-Standard-Errors" title="Permalink"></a></h3><h4 id="Heteroskedasticity-Robust-(White/Huber-White)"><a class="docs-heading-anchor" href="#Heteroskedasticity-Robust-(White/Huber-White)">Heteroskedasticity-Robust (White/Huber-White)</a><a id="Heteroskedasticity-Robust-(White/Huber-White)-1"></a><a class="docs-heading-anchor-permalink" href="#Heteroskedasticity-Robust-(White/Huber-White)" title="Permalink"></a></h4><pre><code class="language-julia hljs">using CovarianceMatrices
+
+# Apply robust covariance via vcov parameter
+robust_effects = population_margins(
+    model, data; vcov=CovarianceMatrices.HC1, type=:effects
+)</code></pre><h4 id="Available-Robust-Estimators"><a class="docs-heading-anchor" href="#Available-Robust-Estimators">Available Robust Estimators</a><a id="Available-Robust-Estimators-1"></a><a class="docs-heading-anchor-permalink" href="#Available-Robust-Estimators" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Different heteroskedasticity-robust variants
+HC0()  # Basic White estimator
+HC1()  # Degrees-of-freedom adjusted (most common)
+HC2()  # Leverage-adjusted  
+HC3()  # Jackknife-type
+HC4()  # High-leverage robust
+HC5()  # Outlier-robust
+
+# Example with HC3
+result = population_margins(model, data; vcov=CovarianceMatrices.HC3)</code></pre><h3 id="Clustered-Standard-Errors"><a class="docs-heading-anchor" href="#Clustered-Standard-Errors">Clustered Standard Errors</a><a id="Clustered-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Clustered-Standard-Errors" title="Permalink"></a></h3><h4 id="Single-Level-Clustering"><a class="docs-heading-anchor" href="#Single-Level-Clustering">Single-Level Clustering</a><a id="Single-Level-Clustering-1"></a><a class="docs-heading-anchor-permalink" href="#Single-Level-Clustering" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Cluster by firm ID
+clustered_effects = population_margins(model, data; 
+    vcov=CovarianceMatrices.Clustered(:firm_id), type=:effects)</code></pre><h4 id="Multi-Level-Clustering"><a class="docs-heading-anchor" href="#Multi-Level-Clustering">Multi-Level Clustering</a><a id="Multi-Level-Clustering-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-Level-Clustering" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Two-way clustering (firm and year)
+result = population_margins(model, data; vcov=CovarianceMatrices.Clustered([:firm_id, :year]))</code></pre><h3 id="HAC-(Heteroskedasticity-and-Autocorrelation-Consistent)-Standard-Errors"><a class="docs-heading-anchor" href="#HAC-(Heteroskedasticity-and-Autocorrelation-Consistent)-Standard-Errors">HAC (Heteroskedasticity and Autocorrelation Consistent) Standard Errors</a><a id="HAC-(Heteroskedasticity-and-Autocorrelation-Consistent)-Standard-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#HAC-(Heteroskedasticity-and-Autocorrelation-Consistent)-Standard-Errors" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Newey-West HAC estimator
+effects_hac = population_margins(model, data; 
+    vcov=CovarianceMatrices.HAC(kernel=:bartlett, bandwidth=4), type=:effects)</code></pre><h3 id="Custom-Covariance-Providers"><a class="docs-heading-anchor" href="#Custom-Covariance-Providers">Custom Covariance Providers</a><a id="Custom-Covariance-Providers-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-Covariance-Providers" title="Permalink"></a></h3><h4 id="Function-Based-Covariance"><a class="docs-heading-anchor" href="#Function-Based-Covariance">Function-Based Covariance</a><a id="Function-Based-Covariance-1"></a><a class="docs-heading-anchor-permalink" href="#Function-Based-Covariance" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Custom covariance function (must return an AbstractMatrix)
+function my_robust_vcov(model)
+    # ... compute covariance from model ...
+    return Σ::AbstractMatrix
+end
+
+# Use custom function directly
+result = population_margins(model, data; vcov=my_robust_vcov)</code></pre><h3 id="Robust-Standard-Errors-with-Elasticities"><a class="docs-heading-anchor" href="#Robust-Standard-Errors-with-Elasticities">Robust Standard Errors with Elasticities</a><a id="Robust-Standard-Errors-with-Elasticities-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Standard-Errors-with-Elasticities" title="Permalink"></a></h3><p>Robust standard errors work seamlessly with all elasticity measures:</p><pre><code class="language-julia hljs"># Robust elasticity estimates
+robust_elasticities = population_margins(model, data;
+    vcov=CovarianceMatrices.HC1,
+    measure=:elasticity, type=:effects)
+
+# Profile elasticities with clustered SEs
+profile_elasticities = profile_margins(model, data,
+    means_grid(data); vcov = CovarianceMatrices.Clustered(:cluster_var),
+    measure = :elasticity)</code></pre><h3 id="Standard-Errors-for-Elasticities:-Delta-Method-vs-Bootstrap"><a class="docs-heading-anchor" href="#Standard-Errors-for-Elasticities:-Delta-Method-vs-Bootstrap">Standard Errors for Elasticities: Delta Method vs Bootstrap</a><a id="Standard-Errors-for-Elasticities:-Delta-Method-vs-Bootstrap-1"></a><a class="docs-heading-anchor-permalink" href="#Standard-Errors-for-Elasticities:-Delta-Method-vs-Bootstrap" title="Permalink"></a></h3><div class="admonition is-warning" id="Conditional-vs-Unconditional-Inference-78e94f507edc62f6"><header class="admonition-header">Conditional vs Unconditional Inference<a class="admonition-anchor" href="#Conditional-vs-Unconditional-Inference-78e94f507edc62f6" title="Permalink"></a></header><div class="admonition-body"><p>Standard errors for elasticity measures computed via the delta method (default) represent conditional inference; they assume the observed data (X, Y) are fixed and only account for uncertainty in parameter estimates β̂. Bootstrap standard errors represent unconditional inference and may be larger because they also account for sampling variation in the data.</p></div></div><h4 id="Understanding-the-Difference"><a class="docs-heading-anchor" href="#Understanding-the-Difference">Understanding the Difference</a><a id="Understanding-the-Difference-1"></a><a class="docs-heading-anchor-permalink" href="#Understanding-the-Difference" title="Permalink"></a></h4><p>For elasticity measures like <code>ε = (x̄/ȳ) × (∂y/∂x)</code>, the transformation involves sample moments (x̄, ȳ) that are treated differently by different inference methods:</p><p>Delta Method (Default):</p><ul><li>Assumption: Observed data X and Y are fixed constants</li><li>Uncertainty source: Only parameter estimates β̂</li><li>Variance: <code>Var[ε(β̂) | X, Y]</code></li><li>Advantages: Fast, analytically exact (given the conditional assumption)</li><li>Implementation: Uses the quotient rule to account for mean(ŷ) depending on β</li></ul><p>Bootstrap:</p><ul><li>Assumption: Data are sampled from a population</li><li>Uncertainty sources: Both β̂ and the sample moments x̄, ȳ</li><li>Variance: <code>Var[ε(β̂, x̄, ȳ)]</code></li><li>Advantages: Accounts for full sampling variation</li><li>Trade-off: Computationally intensive (requires refitting model many times)</li></ul><h4 id="Why-They-Differ"><a class="docs-heading-anchor" href="#Why-They-Differ">Why They Differ</a><a id="Why-They-Differ-1"></a><a class="docs-heading-anchor-permalink" href="#Why-They-Differ" title="Permalink"></a></h4><p>The key distinction is that elasticity formulas involve ratios of sample statistics:</p><pre><code class="language-julia hljs"># For elasticity: ε = (x̄ / mean(ŷ)) × AME
+# Where:
+#   x̄ = sample mean of predictor (varies across bootstrap samples)
+#   mean(ŷ) = sample mean of predictions (varies with both β and resampled data)
+#   AME = average marginal effect (varies with β)</code></pre><p>When you bootstrap:</p><ol><li>Different observations are sampled → x̄ changes</li><li>Model is refit → β̂ changes → AME changes</li><li>Predictions are recomputed → mean(ŷ) changes</li></ol><p>The delta method only captures variation from (2), treating (1) and parts of (3) as fixed.</p><div class="admonition is-info" id="This-is-Not-a-Bug-b3caed73d5a0c971"><header class="admonition-header">This is Not a Bug<a class="admonition-anchor" href="#This-is-Not-a-Bug-b3caed73d5a0c971" title="Permalink"></a></header><div class="admonition-body"><p>This behavior matches other statistical software:</p><ul><li>R&#39;s marginaleffects: Documentation states <em>&quot;For nonlinear models, the delta method is only an approximation&quot;</em> and recommends bootstrap for transformations</li><li>Stata&#39;s margins: Documents that delta method <em>&quot;assumes that the values at which the covariates are evaluated are fixed&quot;</em></li></ul></div></div><h4 id="Example:-Comparing-Methods"><a class="docs-heading-anchor" href="#Example:-Comparing-Methods">Example: Comparing Methods</a><a id="Example:-Comparing-Methods-1"></a><a class="docs-heading-anchor-permalink" href="#Example:-Comparing-Methods" title="Permalink"></a></h4><pre><code class="language-julia hljs">using Margins, GLM, DataFrames, Bootstrap
+
+# Fit model
+model = lm(@formula(y ~ x + z), data)
+
+# Delta method SEs (default - fast, conditional)
+delta_result = population_margins(model, data;
+    vars=[:x],
+    measure=:elasticity)
+println(&quot;Delta method SE: &quot;, DataFrame(delta_result).se[1])
+
+# Bootstrap SEs (slower, unconditional)
+# Note: Built-in bootstrap support coming soon
+# For now, use manual bootstrap:
+function boot_elasticity(data, indices)
+    boot_data = data[indices, :]
+    boot_model = lm(@formula(y ~ x + z), boot_data)
+    boot_result = population_margins(boot_model, boot_data;
+        vars=[:x], measure=:elasticity)
+    return DataFrame(boot_result).estimate[1]
+end
+
+bs = bootstrap(boot_elasticity, data, BasicSampling(1000))
+boot_se = std(bs.t[1])
+println(&quot;Bootstrap SE: &quot;, boot_se)
+
+# Bootstrap SE will typically be larger, especially in small samples</code></pre><h4 id="Technical-Details"><a class="docs-heading-anchor" href="#Technical-Details">Technical Details</a><a id="Technical-Details-1"></a><a class="docs-heading-anchor-permalink" href="#Technical-Details" title="Permalink"></a></h4><p>Margins.jl implements the full quotient rule for elasticity derivatives:</p><p class="math-container">\[\frac{\partial \varepsilon}{\partial \beta} = \frac{\bar{x}}{\bar{y}} \frac{\partial \text{AME}}{\partial \beta} - \frac{\varepsilon}{\bar{y}} \frac{\partial \bar{y}}{\partial \beta}\]</p><p>Here, the second term accounts for mean(ŷ) depending on β.</p><div class="admonition is-info" id="References-8e17ef6097bc664d"><header class="admonition-header">References<a class="admonition-anchor" href="#References-8e17ef6097bc664d" title="Permalink"></a></header><div class="admonition-body"><ul><li>Krinsky, I., &amp; Robb, A. L. (1986). &quot;On Approximating the Statistical Properties of Elasticities.&quot; <em>Review of Economics and Statistics</em>, 68(4), 715-719.</li><li>Arel-Bundock, V. (2023). &quot;marginaleffects: Predictions, Comparisons, Slopes, Marginal Means, and Hypothesis Tests.&quot; R package. <a href="https://marginaleffects.com/chapters/uncertainty.html">Documentation on inference</a></li><li>Greene, W. H. (2018). <em>Econometric Analysis</em> (8th ed.), Section 3.6 on the Delta Method.</li></ul></div></div><h2 id="Standardized-Predictors"><a class="docs-heading-anchor" href="#Standardized-Predictors">Standardized Predictors</a><a id="Standardized-Predictors-1"></a><a class="docs-heading-anchor-permalink" href="#Standardized-Predictors" title="Permalink"></a></h2><p>Margins.jl seamlessly integrates with <a href="https://github.com/beacon-biosignals/StandardizedPredictors.jl">StandardizedPredictors.jl</a> for models fit with standardized (z-scored) variables. Marginal effects are automatically reported on the original (raw) scale, requiring no manual back-transformation.</p><h3 id="Why-Standardize-Predictors?"><a class="docs-heading-anchor" href="#Why-Standardize-Predictors?">Why Standardize Predictors?</a><a id="Why-Standardize-Predictors?-1"></a><a class="docs-heading-anchor-permalink" href="#Why-Standardize-Predictors?" title="Permalink"></a></h3><p>Standardization transforms variables to have mean 0 and standard deviation 1:</p><pre><code class="language-julia hljs">x_std = (x - mean(x)) / std(x)</code></pre><h3 id="Integration-with-Margins.jl"><a class="docs-heading-anchor" href="#Integration-with-Margins.jl">Integration with Margins.jl</a><a id="Integration-with-Margins.jl-1"></a><a class="docs-heading-anchor-permalink" href="#Integration-with-Margins.jl" title="Permalink"></a></h3><pre><code class="language-julia hljs">using Margins, GLM, StandardizedPredictors, DataFrames
+
+# Fit model with standardized income
+df = DataFrame(
+    sales = randn(1000) .* 10000 .+ 50000,
+    income = randn(1000) .* 20000 .+ 50000,  # mean ≈ $50k, std ≈ $20k
+    age = randn(1000) .* 10 .+ 40
+)
+
+model = lm(@formula(sales ~ income + age), df,
+           contrasts = Dict(:income =&gt; ZScore(), :age =&gt; ZScore()))
+
+# Marginal effects are automatically on ORIGINAL scale
+result = population_margins(model, df; type=:effects, vars=[:income, :age])
+DataFrame(result)
+
+# income effect: change in sales per $1 increase in income (not per SD!)
+# age effect: change in sales per 1-year increase in age (not per SD!)</code></pre><h3 id="How-Automatic-Back-Transformation-Works"><a class="docs-heading-anchor" href="#How-Automatic-Back-Transformation-Works">How Automatic Back-Transformation Works</a><a id="How-Automatic-Back-Transformation-Works-1"></a><a class="docs-heading-anchor-permalink" href="#How-Automatic-Back-Transformation-Works" title="Permalink"></a></h3><p>When computing marginal effects, Margins.jl uses FormulaCompiler.jl&#39;s derivative system, which automatically applies the chain rule through the standardization transformation:</p><p>Mathematical detail (with <code>ZScore</code>):</p><ul><li>Model uses: <code>x_std = (x - μ) / σ</code></li><li>Derivative computation: <code>∂η/∂x_raw = ∂η/∂x_std × ∂x_std/∂x_raw = β × (1/σ)</code></li><li>Result: Marginal effect per unit of original variable</li></ul><p>Both finite differences (FD) and automatic differentiation (AD) backends handle this automatically:</p><ul><li>FD: Perturbs raw values → standardization applied during evaluation → derivative includes 1/σ</li><li>AD: Dual arithmetic propagates through (x - μ)/σ → derivative includes 1/σ</li></ul><h3 id="Comparison:-Raw-vs-Standardized-Models"><a class="docs-heading-anchor" href="#Comparison:-Raw-vs-Standardized-Models">Comparison: Raw vs Standardized Models</a><a id="Comparison:-Raw-vs-Standardized-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Comparison:-Raw-vs-Standardized-Models" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Fit both raw and standardized models
+model_raw = lm(@formula(sales ~ income), df)
+model_std = lm(@formula(sales ~ income), df, contrasts=Dict(:income =&gt; ZScore()))
+
+# Marginal effects are IDENTICAL (both on original scale)
+me_raw = population_margins(model_raw, df; vars=[:income])
+me_std = population_margins(model_std, df; vars=[:income])
+
+# Both give same result: effect per dollar of income
+@assert DataFrame(me_raw).estimate ≈ DataFrame(me_std).estimate</code></pre><p>Why they match:</p><ul><li>Raw model: <code>∂sales/∂income_dollars = β₁</code></li><li>Standardized model: <code>∂sales/∂income_dollars = β₁_std / σ_income</code></li><li>The σ in the denominator is automatically included by the chain rule</li></ul><h3 id="Elasticities-with-Standardized-Predictors"><a class="docs-heading-anchor" href="#Elasticities-with-Standardized-Predictors">Elasticities with Standardized Predictors</a><a id="Elasticities-with-Standardized-Predictors-1"></a><a class="docs-heading-anchor-permalink" href="#Elasticities-with-Standardized-Predictors" title="Permalink"></a></h3><p>Elasticities are invariant to standardization because they are scale-free:</p><pre><code class="language-julia hljs"># Elasticity with standardized predictors
+model = lm(@formula(sales ~ income + age), df,
+           contrasts = Dict(:income =&gt; ZScore()))
+
+# Elasticity uses raw values of X and Y
+result = population_margins(model, df; vars=[:income], measure=:elasticity)
+
+# Interpretation: % change in sales per % change in income
+# (same whether predictors are standardized or not)</code></pre><h3 id="Profile-Analysis-with-Standardized-Predictors"><a class="docs-heading-anchor" href="#Profile-Analysis-with-Standardized-Predictors">Profile Analysis with Standardized Predictors</a><a id="Profile-Analysis-with-Standardized-Predictors-1"></a><a class="docs-heading-anchor-permalink" href="#Profile-Analysis-with-Standardized-Predictors" title="Permalink"></a></h3><p>Reference grids work directly with raw values:</p><pre><code class="language-julia hljs"># Specify scenarios in original units
+using Margins: cartesian_grid
+
+grid = cartesian_grid(
+    income = [40000, 60000, 80000],  # Raw dollar amounts
+    age = [30, 40, 50]                # Raw years
+)
+
+result = profile_margins(model, df, grid; type=:effects)
+
+# Effects are per dollar of income, per year of age
+# Standardization is handled automatically during evaluation</code></pre><h3 id="Technical-Notes"><a class="docs-heading-anchor" href="#Technical-Notes">Technical Notes</a><a id="Technical-Notes-1"></a><a class="docs-heading-anchor-permalink" href="#Technical-Notes" title="Permalink"></a></h3><ol><li><p>Model coefficients (<code>coef(model)</code>) are on the <em>standardized</em> scale</p><ul><li>β₁ represents effect per SD change in x</li></ul></li><li><p>Jacobian from FormulaCompiler is on the <em>raw</em> scale</p><ul><li>Includes 1/σ factor from chain rule automatically</li></ul></li><li><p>Marginal effects: <code>g = J&#39; × β</code></p><ul><li>The 1/σ in J combines with standardized β to give raw-scale effects</li></ul></li></ol><p>This behavior is validated with tests that compare the raw and standardized models, ensuring that both produce identical marginal effects on the original measurement scales.</p><h2 id="Categorical-Mixtures-for-Policy-Analysis"><a class="docs-heading-anchor" href="#Categorical-Mixtures-for-Policy-Analysis">Categorical Mixtures for Policy Analysis</a><a id="Categorical-Mixtures-for-Policy-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Categorical-Mixtures-for-Policy-Analysis" title="Permalink"></a></h2><p>Margins.jl supports <strong>categorical mixtures</strong> for scenario analysis, which enables the specification of population compositions as an alternative to (the observed) category levels.</p><h3 id="Motivation:-Realistic-Population-Scenarios"><a class="docs-heading-anchor" href="#Motivation:-Realistic-Population-Scenarios">Motivation: Realistic Population Scenarios</a><a id="Motivation:-Realistic-Population-Scenarios-1"></a><a class="docs-heading-anchor-permalink" href="#Motivation:-Realistic-Population-Scenarios" title="Permalink"></a></h3><p>Marginal effects often use arbitrary categorical values (e.g., &quot;set all observations to treatment=1&quot;). Categorical mixtures enable the specification of typical values:</p><pre><code class="language-julia hljs">using CategoricalArrays, Margins
+
+# Instead of: &quot;All treated&quot; (unrealistic)
+unrealistic = profile_margins(
+    model, data, cartesian_grid(treatment = [1]); type = :predictions
+)
+
+# Use: Realistic treatment rate  
+realistic = profile_margins(
+    model, data, 
+    DataFrame(treatment=[mix(0 =&gt; 0.3, 1 =&gt; 0.7)])
+) # 70% treatment rate</code></pre><h3 id="Frequency-Weighted-Categorical-Defaults"><a class="docs-heading-anchor" href="#Frequency-Weighted-Categorical-Defaults">Frequency-Weighted Categorical Defaults</a><a id="Frequency-Weighted-Categorical-Defaults-1"></a><a class="docs-heading-anchor-permalink" href="#Frequency-Weighted-Categorical-Defaults" title="Permalink"></a></h3><p>When categorical variables are unspecified in profiles, Margins.jl uses actual sample frequencies rather than arbitrary first levels:</p><pre><code class="language-julia hljs"># Data composition:
+#     education = 40% HS, 45% College, 15% Graduate
+#     region = 60% Urban, 40% Rural
+
+# Effects &quot;at means&quot; uses realistic composition
+result = profile_margins(model, data, means_grid(data); type = :effects)
+# → Continuous vars: sample means
+# → education: mix(&quot;HS&quot; =&gt; 0.40, &quot;College&quot; =&gt; 0.45, &quot;Graduate&quot; =&gt; 0.15)  
+# → region: mix(&quot;Urban&quot; =&gt; 0.60, &quot;Rural&quot; =&gt; 0.40)</code></pre><h3 id="Scenario-Analysis"><a class="docs-heading-anchor" href="#Scenario-Analysis">Scenario Analysis</a><a id="Scenario-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Scenario-Analysis" title="Permalink"></a></h3><h4 id="Demographic-Transition-Scenarios"><a class="docs-heading-anchor" href="#Demographic-Transition-Scenarios">Demographic Transition Scenarios</a><a id="Demographic-Transition-Scenarios-1"></a><a class="docs-heading-anchor-permalink" href="#Demographic-Transition-Scenarios" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Current population composition
+current_scenario = profile_margins(model, data,
+    DataFrame(education=[mix(&quot;HS&quot; =&gt; 0.40, &quot;College&quot; =&gt; 0.45, &quot;Graduate&quot; =&gt; 0.15)]);
+    type=:predictions)
+
+# Future scenario: increased college graduation
+future_scenario = profile_margins(model, data,
+    DataFrame(education=[mix(&quot;HS&quot; =&gt; 0.25, &quot;College&quot; =&gt; 0.60, &quot;Graduate&quot; =&gt; 0.15)]);
+    type=:predictions)
+
+# Policy impact
+impact = DataFrame(future_scenario).estimate[1] - DataFrame(current_scenario).estimate[1]</code></pre><h4 id="Treatment-Effect-Heterogeneity"><a class="docs-heading-anchor" href="#Treatment-Effect-Heterogeneity">Treatment Effect Heterogeneity</a><a id="Treatment-Effect-Heterogeneity-1"></a><a class="docs-heading-anchor-permalink" href="#Treatment-Effect-Heterogeneity" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Treatment effects across population compositions
+treatment_scenarios = DataFrame([
+    (treatment = 0, education = mix(&quot;HS&quot; =&gt; 0.5, &quot;College&quot; =&gt; 0.5)),
+    (treatment = 1, education = mix(&quot;HS&quot; =&gt; 0.5, &quot;College&quot; =&gt; 0.5)),
+    (treatment = 0, education = mix(&quot;HS&quot; =&gt; 0.2, &quot;College&quot; =&gt; 0.8)),  
+    (treatment = 1, education = mix(&quot;HS&quot; =&gt; 0.2, &quot;College&quot; =&gt; 0.8))
+])
+
+results = profile_margins(
+    model, data, treatment_scenarios; type = :predictions
+)
+treatment_effects_df = DataFrame(results)</code></pre><h2 id="Advanced-Grouping-and-Stratification"><a class="docs-heading-anchor" href="#Advanced-Grouping-and-Stratification">Advanced Grouping and Stratification</a><a id="Advanced-Grouping-and-Stratification-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Grouping-and-Stratification" title="Permalink"></a></h2><p>Margins.jl provides a comprehensive grouping framework for population-based marginal effects analysis, supporting hierarchical stratification patterns that extend far beyond traditional approaches.</p><h3 id="Hierarchical-Grouping-Framework"><a class="docs-heading-anchor" href="#Hierarchical-Grouping-Framework">Hierarchical Grouping Framework</a><a id="Hierarchical-Grouping-Framework-1"></a><a class="docs-heading-anchor-permalink" href="#Hierarchical-Grouping-Framework" title="Permalink"></a></h3><h4 id="Basic-Grouping-Patterns"><a class="docs-heading-anchor" href="#Basic-Grouping-Patterns">Basic Grouping Patterns</a><a id="Basic-Grouping-Patterns-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Grouping-Patterns" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Simple categorical grouping
+demographic_effects = population_margins(
+    model, data;
+    type = :effects, vars = [:income], groups = :education
+)
+
+# Cross-tabulated grouping
+cross_effects = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:income], 
+    groups = [:education, :region]
+)</code></pre><h4 id="Nested-Hierarchical-Grouping"><a class="docs-heading-anchor" href="#Nested-Hierarchical-Grouping">Nested Hierarchical Grouping</a><a id="Nested-Hierarchical-Grouping-1"></a><a class="docs-heading-anchor-permalink" href="#Nested-Hierarchical-Grouping" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Hierarchical nesting: region → education within each region
+nested_effects = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:income],
+    groups = :region =&gt; :education
+)
+
+# Deep nesting: region → urban → education
+deep_nested = population_margins(
+    model, data;
+    type = :effects,
+    groups = :region =&gt; (:urban =&gt; :education)
+)</code></pre><h4 id="Continuous-Variable-Binning"><a class="docs-heading-anchor" href="#Continuous-Variable-Binning">Continuous Variable Binning</a><a id="Continuous-Variable-Binning-1"></a><a class="docs-heading-anchor-permalink" href="#Continuous-Variable-Binning" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Quartile analysis
+income_quartiles = population_margins(
+    model, data;
+    type = :effects,
+    groups = (:income, 4) # Q1, Q2, Q3, Q4
+)
+
+# Custom policy-relevant thresholds
+policy_thresholds = population_margins(
+    model, data;
+    type = :effects,
+    groups = (:income, [25000, 50000, 75000])
+)
+
+# Mixed categorical and continuous
+mixed_groups = population_margins(
+    model, data;
+    type = :effects,
+    groups = [:education, (:income, 4)]
+)</code></pre><h3 id="Counterfactual-Scenario-Analysis"><a class="docs-heading-anchor" href="#Counterfactual-Scenario-Analysis">Counterfactual Scenario Analysis</a><a id="Counterfactual-Scenario-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Counterfactual-Scenario-Analysis" title="Permalink"></a></h3><h4 id="Policy-Scenarios-with-Population-Override"><a class="docs-heading-anchor" href="#Policy-Scenarios-with-Population-Override">Policy Scenarios with Population Override</a><a id="Policy-Scenarios-with-Population-Override-1"></a><a class="docs-heading-anchor-permalink" href="#Policy-Scenarios-with-Population-Override" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Binary policy scenarios
+policy_analysis = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:outcome],
+    scenarios = (:policy =&gt; [0, 1])
+)
+
+# Multi-variable scenarios
+complex_scenarios = population_margins(
+    model, data;
+    type = :effects,
+    scenarios = (:treatment =&gt; [0, 1], 
+    :policy =&gt; [&quot;current&quot;, &quot;reform&quot;])
+)</code></pre><h4 id="Combined-Grouping-and-Scenarios"><a class="docs-heading-anchor" href="#Combined-Grouping-and-Scenarios">Combined Grouping and Scenarios</a><a id="Combined-Grouping-and-Scenarios-1"></a><a class="docs-heading-anchor-permalink" href="#Combined-Grouping-and-Scenarios" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Comprehensive policy analysis: demographics × policy scenarios
+full_analysis = population_margins(
+    model, data;
+    type = :effects,
+    vars = [:outcome],
+    groups = [:education, :region],
+    scenarios = (:treatment =&gt; [0, 1])
+)</code></pre><h3 id="Complex-Nested-Patterns"><a class="docs-heading-anchor" href="#Complex-Nested-Patterns">Complex Nested Patterns</a><a id="Complex-Nested-Patterns-1"></a><a class="docs-heading-anchor-permalink" href="#Complex-Nested-Patterns" title="Permalink"></a></h3><h4 id="Parallel-Grouping-Within-Hierarchy"><a class="docs-heading-anchor" href="#Parallel-Grouping-Within-Hierarchy">Parallel Grouping Within Hierarchy</a><a id="Parallel-Grouping-Within-Hierarchy-1"></a><a class="docs-heading-anchor-permalink" href="#Parallel-Grouping-Within-Hierarchy" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Region → (education levels + income quartiles separately)
+parallel_groups = population_margins(
+    model, data;
+    type = :effects,
+    groups = :region =&gt; [:education, (:income, 4)]
+)</code></pre><h4 id="Advanced-Policy-Applications"><a class="docs-heading-anchor" href="#Advanced-Policy-Applications">Advanced Policy Applications</a><a id="Advanced-Policy-Applications-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Policy-Applications" title="Permalink"></a></h4><pre><code class="language-julia hljs"># Healthcare policy analysis
+healthcare_analysis = population_margins(
+    health_model, health_data;
+    type = :effects,
+    groups = :state =&gt; (:urban =&gt; [:insurance_type, (:income, 3)]),
+    scenarios = (:policy_reform =&gt; [0, 1], :funding_level =&gt; [0.8, 1.2])
+)
+
+# Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios</code></pre><h2 id="Second-Differences-(Interaction-Effects)"><a class="docs-heading-anchor" href="#Second-Differences-(Interaction-Effects)">Second Differences (Interaction Effects)</a><a id="Second-Differences-(Interaction-Effects)-1"></a><a class="docs-heading-anchor-permalink" href="#Second-Differences-(Interaction-Effects)" title="Permalink"></a></h2><p>For comprehensive coverage of second differences—interaction effects on the predicted outcome scale—see the dedicated <a href="../second_differences/">Second Differences</a> guide. Second differences quantify how marginal effects vary across moderator levels, extending the Margins.jl framework to address effect heterogeneity questions.</p><p><strong>Quick reference</strong>:</p><pre><code class="language-julia hljs"># Compute AMEs across modifier levels
+ames = population_margins(
+    model, data; scenarios = (treated=[0,1],), type = :effects
+)
+
+# Calculate second differences
+sd = second_differences(ames, :age, :treated, vcov(model))</code></pre><p>Available functions: <code>second_differences()</code>, <code>second_difference()</code>, <code>second_differences_pairwise()</code>, <code>second_differences_all_contrasts()</code>.</p><h2 id="Error-Handling-and-Diagnostics"><a class="docs-heading-anchor" href="#Error-Handling-and-Diagnostics">Error Handling and Diagnostics</a><a id="Error-Handling-and-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Error-Handling-and-Diagnostics" title="Permalink"></a></h2><h3 id="Robust-Error-Detection"><a class="docs-heading-anchor" href="#Robust-Error-Detection">Robust Error Detection</a><a id="Robust-Error-Detection-1"></a><a class="docs-heading-anchor-permalink" href="#Robust-Error-Detection" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Check for statistical validity issues
+function validate_margins_result(result::MarginsResult)
+    df = DataFrame(result)
+    
+    # Check for excessive standard errors (potential issues)
+    large_se = df[df.se .&gt; 10 * abs.(df.estimate), :]
+    if nrow(large_se) &gt; 0
+        @warn &quot;Large standard errors detected - potential statistical issues&quot;
+        println(large_se)
+    end
+    
+    # Check for missing values
+    missing_results = df[ismissing.(df.estimate) .| ismissing.(df.se), :]
+    if nrow(missing_results) &gt; 0
+        @warn &quot;Missing values in results - check model specification&quot;
+    end
+    
+    return df
+end
+
+# Usage
+result = population_margins(model, data)
+validated_df = validate_margins_result(result)</code></pre><h3 id="Covariance-Matrix-Diagnostics"><a class="docs-heading-anchor" href="#Covariance-Matrix-Diagnostics">Covariance Matrix Diagnostics</a><a id="Covariance-Matrix-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#Covariance-Matrix-Diagnostics" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Check covariance matrix properties
+function diagnose_vcov(model)
+    Σ = vcov(model)
+    
+    # Check positive definiteness
+    eigenvals = eigvals(Σ)
+    if any(eigenvals .&lt; 1e-12)
+        @warn &quot;Covariance matrix near-singular - standard errors may be unreliable&quot;
+    end
+    
+    # Check condition number
+    cond_num = cond(Σ)
+    if cond_num &gt; 1e12
+        @warn &quot;Poorly conditioned covariance matrix - numerical issues possible&quot;
+    end
+    
+    return (eigenvals=eigenvals, condition_number=cond_num)
+end</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../performance/">« Performance Guide</a><a class="docs-footer-nextpage" href="../stata_migration/">Migration Guide »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.15.0 on <span class="colophon-date" title="Friday 24 October 2025 22:14">Friday 24 October 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
