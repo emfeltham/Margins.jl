@@ -213,8 +213,8 @@ grid = cartesian_grid(age=[30, 50], education=["high_school", "college", "gradua
 result = profile_margins(model, data, grid; type=:effects, vars=[:education])
 
 # Computes baseline contrasts at each age:
-# college vs high_school (baseline) at age 30 and 50
-# graduate vs high_school (baseline) at age 30 and 50
+# college - high_school (baseline) at age 30 and 50
+# graduate - high_school (baseline) at age 30 and 50
 ```
 
 ---
