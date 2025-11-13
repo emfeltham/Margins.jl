@@ -43,5 +43,6 @@ deploydocs(;
   repo = "https://github.com/emfeltham/Margins.jl",
   devbranch = "main",
   versions = ["stable" => "v^", "v#.#.#"],
+  forcepush = true,
   push_preview = true
 )
