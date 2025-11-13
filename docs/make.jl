@@ -39,12 +39,12 @@ makedocs(;
   checkdocs = :none    # Skip docstring checking for now
 )
 
-deploydocs(; 
+deploydocs(;
   repo = "https://github.com/emfeltham/Margins.jl",
   devbranch = "main",
   versions = [
-    "stable" => "v^",
-    "dev" => "main",
+    "stable" => "v#.#",
+    "v#.#",
   ],
   push_preview = true
 )

@@ -309,7 +309,7 @@ using Margins, GLM, StandardizedPredictors, DataFrames
 # Fit model with standardized income
 df = DataFrame(
     sales = randn(1000) .* 10000 .+ 50000,
-    income = randn(1000) .* 20000 .+ 50000,  # mean ≈ $50k, std ≈ $20k
+    income = randn(1000) .* 20000 .+ 50000,  # mean ≈ \$50k, std ≈ \$20k
     age = randn(1000) .* 10 .+ 40
 )
 
@@ -320,7 +320,7 @@ model = lm(@formula(sales ~ income + age), df,
 result = population_margins(model, df; type=:effects, vars=[:income, :age])
 DataFrame(result)
 
-# income effect: change in sales per $1 increase in income (not per SD!)
+# income effect: change in sales per \$1 increase in income (not per SD!)
 # age effect: change in sales per 1-year increase in age (not per SD!)
 ```
 
