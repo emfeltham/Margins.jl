@@ -42,9 +42,6 @@ makedocs(;
 deploydocs(;
   repo = "https://github.com/emfeltham/Margins.jl",
   devbranch = "main",
-  versions = [
-    "stable" => "v#.#",
-    "v#.#",
-  ],
+  versions = ["stable" => "v^", "v#.#.#"],
   push_preview = true
 )
