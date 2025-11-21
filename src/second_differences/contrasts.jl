@@ -121,9 +121,15 @@ function second_differences(
             )
         else
             # Use second_differences_pairwise for single contrast
+            # Auto-detect the contrast if it's the default "derivative" and there's only one contrast
+            contrast_to_use = contrast
+            if contrast == "derivative" && length(variable_contrasts) == 1
+                contrast_to_use = variable_contrasts[1]
+            end
+
             df = second_differences_pairwise(
                 ame_result, variable, modifier, vcov;
-                contrast=contrast,
+                contrast=contrast_to_use,
                 modifier_type=modifier_type
             )
         end

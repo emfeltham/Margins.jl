@@ -1448,10 +1448,11 @@ end
 
 """
     cartesian_grid(; vars...) -> DataFrame
+    cartesian_grid(spec::Dict) -> DataFrame
 
 Build Cartesian product reference grid from variable specifications.
 This is a pure grid constructor that creates combinations from provided values
-without needing reference data. When used with `profile_margins()`, missing 
+without needing reference data. When used with `profile_margins()`, missing
 model variables are automatically completed with typical values.
 
 # Arguments
@@ -1459,14 +1460,19 @@ model variables are automatically completed with typical values.
   - Single values: `age=45`
   - Multiple values: `age=[25, 45, 65]`
   - Numlist notation: `age="25(10)65"` (25, 35, 45, 55, 65)
+- `spec::Dict`: Dictionary mapping variable symbols to values
+  - Example: `Dict(:age => [25, 45, 65], :treatment => [true, false])`
 
 # Returns
 - `DataFrame`: Reference grid with Cartesian product of specified values
 
 # Examples
 ```julia
-# Simple cartesian product
+# Simple cartesian product (keyword syntax)
 ref_grid = cartesian_grid(age=[25, 45, 65], treatment=[true, false])
+
+# Dict syntax (equivalent)
+ref_grid = cartesian_grid(Dict(:age => [25, 45, 65], :treatment => [true, false]))
 
 # Using range construction
 ref_grid = cartesian_grid(
@@ -1483,15 +1489,25 @@ result = profile_margins(model, data, ref_grid)
 """
 function cartesian_grid(; vars...)
     at_spec = Dict{Symbol, Any}(vars)
-    
+    return _cartesian_grid_impl(at_spec)
+end
+
+function cartesian_grid(spec::Dict)
+    # Convert keys to Symbols if they aren't already
+    at_spec = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in spec)
+    return _cartesian_grid_impl(at_spec)
+end
+
+# Internal implementation shared by both methods
+function _cartesian_grid_impl(at_spec::Dict{Symbol, Any})
     if isempty(at_spec)
         return DataFrame()
     end
-    
+
     # Extract specified variables and their values
     var_names = collect(keys(at_spec))
     var_values = Vector{Vector{Any}}(undef, length(var_names))
-    
+
     for (i, var) in enumerate(var_names)
         vals = at_spec[var]
         # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
@@ -1500,13 +1516,13 @@ function cartesian_grid(; vars...)
         end
         var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
     end
-    
+
     # Pre-calculate total number of combinations for efficient allocation
     n_combinations = prod(length(vals) for vals in var_values)
-    
+
     # Pre-allocate result vector for better performance
     grid_rows = Vector{Dict{Symbol,Any}}(undef, n_combinations)
-    
+
     # Generate Cartesian product
     combo_idx = 1
     for combo in Iterators.product(var_values...)
@@ -1517,12 +1533,12 @@ function cartesian_grid(; vars...)
         grid_rows[combo_idx] = row
         combo_idx += 1
     end
-    
+
     # Convert to DataFrame
     if isempty(grid_rows)
         return DataFrame()
     end
-    
+
     cols = Dict{Symbol, Vector}()
     for key in keys(first(grid_rows))
         values = [row[key] for row in grid_rows]
@@ -1534,7 +1550,7 @@ function cartesian_grid(; vars...)
             cols[key] = Vector{Any}(values)
         end
     end
-    
+
     return DataFrame(cols)
 end
 

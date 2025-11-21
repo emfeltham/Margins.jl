@@ -135,7 +135,13 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     metadata[:alpha] = ci_alpha
 
     # Store scenarios and groups variable information for Context column
-    scenarios_vars = isnothing(scenarios) ? Symbol[] : (scenarios isa NamedTuple ? collect(keys(scenarios)) : Symbol[])
+    # Use _normalize_scenarios_to_namedtuple to handle both NamedTuple and Pair syntax
+    scenarios_vars = if isnothing(scenarios)
+        Symbol[]
+    else
+        scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
+        collect(keys(scenarios_nt))
+    end
     groups_vars = isnothing(groups) ? Symbol[] : _extract_group_variables(groups)
     metadata[:scenarios_vars] = scenarios_vars
     metadata[:groups_vars] = groups_vars
@@ -742,24 +748,51 @@ Each dictionary represents a single counterfactual context and multi-valued inpu
 produce a full Cartesian expansion across all supplied values.
 
 - Accepts a `NamedTuple` where each field is either a scalar or a collection.
+- Accepts a `Tuple` of `Pair{Symbol, Any}` for alternative syntax.
 - Scalars are promoted to length-1 vectors to unify the expansion logic.
 - The return order matches `Iterators.product`, guaranteeing deterministic ordering.
 """
 function _parse_at_specification(scenarios)
-    if scenarios isa NamedTuple
-        var_names = collect(keys(scenarios))
-        var_values = [
-            begin
-                val = getproperty(scenarios, name)
-                val isa AbstractVector ? collect(val) : [val]
-            end for name in var_names
-        ]
+    # Convert to NamedTuple for uniform processing
+    scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
 
-        contexts = Vector{Dict{Symbol, Any}}()
-        for combo in Iterators.product(var_values...)
-            push!(contexts, Dict(zip(var_names, combo)))
-        end
-        return contexts
+    var_names = collect(keys(scenarios_nt))
+    var_values = [
+        begin
+            val = getproperty(scenarios_nt, name)
+            val isa AbstractVector ? collect(val) : [val]
+        end for name in var_names
+    ]
+
+    contexts = Vector{Dict{Symbol, Any}}()
+    for combo in Iterators.product(var_values...)
+        push!(contexts, Dict(zip(var_names, combo)))
+    end
+    return contexts
+end
+
+"""
+    _normalize_scenarios_to_namedtuple(scenarios) -> NamedTuple
+
+Convert various scenarios specifications to a standardized NamedTuple format.
+
+Accepts:
+- `NamedTuple`: Pass through unchanged
+- `Tuple` of `Pair{Symbol, Any}`: Convert to NamedTuple
+
+Returns:
+- `NamedTuple`: Normalized scenarios specification
+"""
+function _normalize_scenarios_to_namedtuple(scenarios)
+    if scenarios isa NamedTuple
+        return scenarios
+    elseif scenarios isa Tuple && !(scenarios isa NamedTuple)
+        # Convert Tuple of Pairs to NamedTuple
+        # Example: (:x => 1, :y => 2) -> (x=1, y=2)
+        pairs_vec = collect(scenarios)
+        keys_vec = Symbol[p.first for p in pairs_vec]
+        vals_vec = [p.second for p in pairs_vec]
+        return NamedTuple{tuple(keys_vec...)}(vals_vec)
     else
         error("Scenarios specification not yet implemented for type $(typeof(scenarios))")
     end

@@ -304,4 +304,60 @@ using LinearAlgebra
             @test nrow(DataFrame(result)) >= 1
         end
     end
+
+    # Test raw String variable validation
+    @testset "Raw String variable validation" begin
+        @debug "Testing raw String variable rejection"
+
+        @testset "Raw String columns should error" begin
+            # Create data with raw String column
+            df_string = DataFrame(
+                y = randn(50),
+                x = randn(50),
+                str_var = repeat(["A", "B"], 25)  # Raw String, not CategoricalArray
+            )
+            m_string = lm(@formula(y ~ x + str_var), df_string)
+
+            # Should throw MarginsError with helpful message
+            err = nothing
+            try
+                population_margins(m_string, df_string; vars=[:str_var])
+            catch e
+                err = e
+            end
+
+            @test err isa Margins.MarginsError
+            @test occursin("raw String column", err.msg)
+            @test occursin("CategoricalArray", err.msg)
+            @test occursin("categorical(data.str_var)", err.msg)  # Should include fix
+        end
+
+        @testset "CategoricalArray String columns should work" begin
+            # Convert to CategoricalArray - should work fine
+            df_cat = DataFrame(
+                y = randn(50),
+                x = randn(50),
+                str_var = categorical(repeat(["A", "B"], 25))
+            )
+            m_cat = lm(@formula(y ~ x + str_var), df_cat)
+
+            # Should work without error
+            result = population_margins(m_cat, df_cat; vars=[:str_var])
+            @test nrow(DataFrame(result)) >= 1
+        end
+
+        @testset "Multiple variables with String" begin
+            # Test that error is caught even when String is not the first variable
+            df_multi = DataFrame(
+                y = randn(50),
+                x = randn(50),
+                z = randn(50),
+                str_var = repeat(["A", "B"], 25)  # Two levels
+            )
+            m_multi = lm(@formula(y ~ x + z + str_var), df_multi)
+
+            # Should error when trying to analyze str_var
+            @test_throws Margins.MarginsError population_margins(m_multi, df_multi; vars=[:x, :str_var])
+        end
+    end
 end

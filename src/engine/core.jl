@@ -481,6 +481,19 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
         if length(col) == 0
             throw(MarginsError("Variable $var has no observations"))
         end
+
+        # Check for raw String columns (not CategoricalArray)
+        # Raw Strings cause hangs in FormulaCompiler's contrast evaluation system
+        if eltype(col) <: AbstractString && !(col isa CategoricalArray)
+            throw(MarginsError(
+                "Variable :$var is a raw String column. " *
+                "String variables must be converted to CategoricalArray for marginal effects computation.\n\n" *
+                "Fix: Convert to categorical before fitting the model:\n" *
+                "  using CategoricalArrays\n" *
+                "  data.$var = categorical(data.$var)\n" *
+                "  model = lm(@formula(...), data)"
+            ))
+        end
     end
 end
 

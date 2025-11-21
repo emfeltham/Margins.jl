@@ -181,3 +181,81 @@ end
         end
     end
 end
+
+@testset "population_margins: Pair syntax for scenarios" begin
+    # Test that Pair syntax (:var => value) works identically to NamedTuple syntax (var=value)
+    n = 100
+    x = randn(n)
+    z = randn(n)
+    β0, β1, β2 = 0.5, 2.0, -1.0
+    y = β0 .+ β1 .* x .+ β2 .* z .+ 0.01 .* randn(n)
+    df = DataFrame(y=y, x=x, z=z)
+    m = lm(@formula(y ~ x + z), df)
+
+    # Test 1: Single scenario - both syntaxes should produce identical results
+    res_nt = population_margins(m, df; type=:effects, vars=[:x], scenarios=(z=0.7,), scale=:link)
+    res_pair = population_margins(m, df; type=:effects, vars=[:x], scenarios=(:z => 0.7,), scale=:link)
+
+    df_nt = DataFrame(res_nt)
+    df_pair = DataFrame(res_pair)
+
+    @test length(df_nt.estimate) == length(df_pair.estimate)
+    @test df_nt.estimate ≈ df_pair.estimate
+    @test df_nt.se ≈ df_pair.se
+
+    # Check that scenario columns exist and match (if they're created)
+    if "at_z" in names(df_nt)
+        @test df_nt.at_z == df_pair.at_z
+    end
+
+    # Test 2: Multi-valued scenarios with Cartesian expansion (using effects, not predictions)
+    # Create a categorical variable to compute effects on
+    g = categorical(rand(["A","B"], n))
+    y_cat = β0 .+ β1 .* x .+ β2 .* z .+ 0.5 .* (g .== "B") .+ 0.01 .* randn(n)
+    df_cat = DataFrame(y=y_cat, x=x, z=z, g=g)
+    m_cat = lm(@formula(y ~ x + z + g), df_cat)
+
+    scenarios_nt = (x=[-1.0, 1.0], z=[-0.5, 0.5])
+    scenarios_pair = (:x => [-1.0, 1.0], :z => [-0.5, 0.5])
+
+    res_nt = population_margins(m_cat, df_cat; type=:effects, vars=[:g], scenarios=scenarios_nt, scale=:link)
+    res_pair = population_margins(m_cat, df_cat; type=:effects, vars=[:g], scenarios=scenarios_pair, scale=:link)
+
+    df_nt = DataFrame(res_nt)
+    df_pair = DataFrame(res_pair)
+
+    # Both should produce 4 combinations (2 x values × 2 z values) × 1 categorical contrast
+    @test size(df_nt, 1) == 4
+    @test size(df_pair, 1) == 4
+    @test df_nt.estimate ≈ df_pair.estimate
+    @test df_nt.se ≈ df_pair.se
+
+    # Verify Cartesian product was computed correctly (scenario columns should exist for effects with scenarios)
+    expected_pairs = Set([(xv, zv) for xv in [-1.0, 1.0] for zv in [-0.5, 0.5]])
+    observed_nt = Set([(df_nt.at_x[i], df_nt.at_z[i]) for i in 1:size(df_nt, 1)])
+    observed_pair = Set([(df_pair.at_x[i], df_pair.at_z[i]) for i in 1:size(df_pair, 1)])
+
+    @test observed_nt == expected_pairs
+    @test observed_pair == expected_pairs
+
+    # Test 3: Boolean variable with Pair syntax
+    flag = repeat([false, true], inner=div(n, 2))
+    y2 = 0.5 .+ 1.5 .* x .+ 0.3 .* (g .== "B") .+ 0.2 .* flag
+    df2 = DataFrame(y=y2, x=x, g=g, flag=flag)
+    m2 = lm(@formula(y ~ x + g + flag), df2)
+
+    res_nt = population_margins(m2, df2; type=:effects, vars=[:g], scenarios=(flag=true,), scale=:link)
+    res_pair = population_margins(m2, df2; type=:effects, vars=[:g], scenarios=(:flag => true,), scale=:link)
+
+    df_nt = DataFrame(res_nt)
+    df_pair = DataFrame(res_pair)
+
+    @test df_nt.estimate ≈ df_pair.estimate
+    @test df_nt.se ≈ df_pair.se
+
+    # Check scenario columns if they exist
+    if "at_flag" in names(df_nt)
+        @test all(df_nt.at_flag .== true)
+        @test all(df_pair.at_flag .== true)
+    end
+end
