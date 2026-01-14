@@ -243,26 +243,24 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 
 ## Citation
 
-If you use Margins.jl, please cite:
+If you use Margins.jl in your research, please cite:
 
 ```bibtex
-@software{margins_jl,
-  author = {Feltham, Eric M.},
-  title = {Margins.jl: Marginal Effects and Adjusted Predictions for Julia Statistical Models},
-  url = {https://github.com/emfeltham/Margins.jl},
-  version = {2.0.2},
-  year = {2025}
-}
-```
-
-Margins.jl builds upon FormulaCompiler.jl for high-performance statistical computation. Please also cite:
-
-```bibtex
-@software{formulacompiler_jl,
-  author = {Feltham, Eric M.},
-  title = {FormulaCompiler.jl: High-Performance Formula Evaluation and Automatic Differentiation for Julia},
-  url = {https://github.com/emfeltham/FormulaCompiler.jl},
-  version = {1.0.1},
-  year = {2025}
+@misc{feltham_formulacompilerjl_2026,
+  title = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl: {{Efficient Marginal Effects}} in {{Julia}}},
+  shorttitle = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl},
+  author = {Feltham, Eric},
+  year = {2026},
+  month = jan,
+  number = {arXiv:2601.07065},
+  eprint = {2601.07065},
+  primaryclass = {stat},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2601.07065},
+  urldate = {2026-01-13},
+  abstract = {Marginal effects analysis is fundamental to interpreting statistical models, yet existing implementations face computational constraints that limit analysis at scale. We introduce two Julia packages that address this gap. Margins.jl provides a clean two-function API organizing analysis around a 2-by-2 framework: evaluation context (population vs profile) by analytical target (effects vs predictions). The package supports interaction analysis through second differences, elasticity measures, categorical mixtures for representative profiles, and robust standard errors. FormulaCompiler.jl provides the computational foundation, transforming statistical formulas into zero-allocation, type-specialized evaluators that enable O(p) per-row computation independent of dataset size. Together, these packages achieve 622x average speedup and 460x memory reduction compared to R's marginaleffects package, with successful computation of average marginal effects and delta-method standard errors on 500,000 observations where R fails due to memory exhaustion, providing the first comprehensive and efficient marginal effects implementation for Julia's statistical ecosystem.},
+  archiveprefix = {arXiv},
+  keywords = {Statistics - Computation},
+  file = {/Users/emf/Zotero/storage/79XHWQP8/Feltham - 2026 - FormulaCompiler.jl and Margins.jl Efficient Marginal Effects in Julia.pdf;/Users/emf/Zotero/storage/8EHNFC58/2601.html}
 }
 ```
