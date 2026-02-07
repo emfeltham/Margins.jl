@@ -5,7 +5,7 @@
 # Uses r_comparison_data_large.csv (500K observations)
 
 using Margins, GLM, DataFrames, CSV, CategoricalArrays
-using BenchmarkTools
+using BenchmarkTools, Statistics
 
 println("=" ^ 80)
 println("JULIA LARGE-SCALE PERFORMANCE BENCHMARK (500K observations)")
@@ -103,6 +103,7 @@ println()
 results = DataFrame(
     operation = String[],
     time_s = Float64[],
+    time_min_s = Float64[],
     memory_mb = Float64[],
     allocs = Int[]
 )
@@ -127,11 +128,12 @@ println("1. APM (Adjusted Predictions at Profiles)")
 apm_bench = @benchmark profile_margins($model, $df, $cg; type=:predictions) samples=5 seconds=60
 push!(results, (
     "APM",
+    median(apm_bench.times) / 1e9,
     minimum(apm_bench.times) / 1e9,
     apm_bench.memory / 1024^2,
     apm_bench.allocs
 ))
-println("   Time: $(round(minimum(apm_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(apm_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(apm_bench.memory / 1024^2, digits=2)) MB")
 println()
 
@@ -141,11 +143,12 @@ println("2. MEM (Marginal Effects at Profiles)")
 mem_bench = @benchmark profile_margins($model, $df, $cg; type=:effects) samples=5 seconds=60
 push!(results, (
     "MEM",
+    median(mem_bench.times) / 1e9,
     minimum(mem_bench.times) / 1e9,
     mem_bench.memory / 1024^2,
     mem_bench.allocs
 ))
-println("   Time: $(round(minimum(mem_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(mem_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(mem_bench.memory / 1024^2, digits=2)) MB")
 println()
 
@@ -154,11 +157,12 @@ println("3. AAP (Average Adjusted Predictions)")
 aap_bench = @benchmark population_margins($model, $df; type=:predictions) samples=5 seconds=60
 push!(results, (
     "AAP",
+    median(aap_bench.times) / 1e9,
     minimum(aap_bench.times) / 1e9,
     aap_bench.memory / 1024^2,
     aap_bench.allocs
 ))
-println("   Time: $(round(minimum(aap_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(aap_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(aap_bench.memory / 1024^2, digits=2)) MB")
 println()
 
@@ -167,11 +171,12 @@ println("4. AME (Average Marginal Effects - all variables)")
 ame_bench = @benchmark population_margins($model, $df; type=:effects) samples=5 seconds=60
 push!(results, (
     "AME (all)",
+    median(ame_bench.times) / 1e9,
     minimum(ame_bench.times) / 1e9,
     ame_bench.memory / 1024^2,
     ame_bench.allocs
 ))
-println("   Time: $(round(minimum(ame_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(ame_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(ame_bench.memory / 1024^2, digits=2)) MB")
 println()
 
@@ -180,11 +185,12 @@ println("5. AME (single variable: age_h)")
 ame_age_bench = @benchmark population_margins($model, $df; type=:effects, vars=[:age_h]) samples=5 seconds=60
 push!(results, (
     "AME (age_h)",
+    median(ame_age_bench.times) / 1e9,
     minimum(ame_age_bench.times) / 1e9,
     ame_age_bench.memory / 1024^2,
     ame_age_bench.allocs
 ))
-println("   Time: $(round(minimum(ame_age_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(ame_age_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(ame_age_bench.memory / 1024^2, digits=2)) MB")
 println()
 
@@ -197,11 +203,12 @@ ame_scenario_bench = @benchmark population_margins($model, $df;
 ) samples=5 seconds=60
 push!(results, (
     "AME (scenario)",
+    median(ame_scenario_bench.times) / 1e9,
     minimum(ame_scenario_bench.times) / 1e9,
     ame_scenario_bench.memory / 1024^2,
     ame_scenario_bench.allocs
 ))
-println("   Time: $(round(minimum(ame_scenario_bench.times) / 1e9, digits=4))s")
+println("   Time: $(round(median(ame_scenario_bench.times) / 1e9, digits=4))s (median)")
 println("   Memory: $(round(ame_scenario_bench.memory / 1024^2, digits=2)) MB")
 println()
 

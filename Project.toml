@@ -6,7 +6,7 @@ authors = ["Eric Martin Feltham <eric.feltham@aya.yale.edu>"]
 categories = ["Statistics", "Sociology", "Econometrics", "Political Science", "Psychology"]
 description = "Marginal effects and adjusted predictions for statistical models in Julia"
 homepage = "https://github.com/emfeltham/Margins.jl"
-version = "2.0.3"
+version = "2.1.0"
 
 [deps]
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
