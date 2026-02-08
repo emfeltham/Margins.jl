@@ -37,7 +37,7 @@ using Random
         # Verify that only x1 has effects computed (not bool_implicit)
         @test nrow(result_df) == 2  # Only x1 at 2 profile points
         @test all(result_df.variable .== "x1")
-        @test all(result_df.contrast .== "derivative")
+        @test all(result_df.contrast .== "dy/dx")
     end
 
     @testset "Multiple Bool variables with grid completion" begin
