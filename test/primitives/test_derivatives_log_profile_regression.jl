@@ -49,6 +49,7 @@ using Margins: marginal_effects_eta!
     # 3) AD marginal effects on η should match β1/x (now from Margins)
     β = coef(model)
     g_ad = Vector{Float64}(undef, length(de_ad.vars))
-    @test_nowarn marginal_effects_eta!(g_ad, de_ad, β, row)
+    Gβ_ad = Matrix{Float64}(undef, length(de_ad), length(de_ad.vars))
+    @test_nowarn marginal_effects_eta!(g_ad, Gβ_ad, de_ad, β, row)
     @test g_ad[1] ≈ β[2] / xval rtol=1e-8
 end
