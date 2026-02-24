@@ -127,7 +127,7 @@ Run bootstrap validation for a single model configuration.
 """
 function run_single_model_bootstrap_test(model_config; n_bootstrap=150, verbose=true)
     if verbose
-        @debug "Testing: $(model_config.name)"
+        @info "Testing: $(model_config.name)"
     end
     
     # Generate test data
@@ -146,24 +146,24 @@ function run_single_model_bootstrap_test(model_config; n_bootstrap=150, verbose=
         meets_expectation = agreement_rate >= model_config.expected_agreement
         
         if verbose
-            @debug "Overall Agreement Rate: $(round(agreement_rate * 100, digits=1))% (expected: ≥$(round(model_config.expected_agreement * 100, digits=1))%)"
-            @debug "Successful Quadrants: $(results.n_successful_quadrants)/4"
-            
+            @info "Overall Agreement Rate: $(round(agreement_rate * 100, digits=1))% (expected: ≥$(round(model_config.expected_agreement * 100, digits=1))%)"
+            @info "Successful Quadrants: $(results.n_successful_quadrants)/4"
+
             # Detail by quadrant
             for (quadrant_name, quadrant_result) in results.quadrants
                 if haskey(quadrant_result, :success) && quadrant_result.success
                     if haskey(quadrant_result, :validation)
                         quad_agreement = round(quadrant_result.validation.agreement_rate * 100, digits=1)
-                        @debug "$(quadrant_name): $(quad_agreement)% agreement"
+                        @info "$(quadrant_name): $(quad_agreement)% agreement"
                     end
                 else
                     reason = haskey(quadrant_result, :skipped) ? " ($(quadrant_result.reason))" : " (failed)"
-                    @debug "$(quadrant_name): Skipped$reason"
+                    @info "$(quadrant_name): Skipped$reason"
                 end
             end
-            
+
             status = meets_expectation ? " PASSED" : " BELOW EXPECTATION"
-            @debug "Result: $status"
+            @info "Result: $status"
         end
         
         return (
@@ -204,9 +204,9 @@ Run bootstrap validation across all model types in the test suite.
 """
 function run_comprehensive_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
     if verbose
-        @debug "Starting Comprehensive Bootstrap SE Validation Suite"
-        @debug "Bootstrap samples per model: $n_bootstrap"
-        @debug "="^60
+        @info "Starting Comprehensive Bootstrap SE Validation Suite"
+        @info "Bootstrap samples per model: $n_bootstrap"
+        @info "="^60
     end
     
     test_models = multi_model_bootstrap_test_suite()
@@ -217,7 +217,7 @@ function run_comprehensive_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
         push!(individual_results, result)
         
         if verbose
-            @debug ""  # Spacing between models
+            @info ""  # Spacing between models
         end
     end
     
@@ -230,13 +230,13 @@ function run_comprehensive_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
     mean_agreement_rate = mean([r.agreement_rate for r in successful_models])
     
     if verbose
-        @debug "="^60
-        @debug "COMPREHENSIVE BOOTSTRAP VALIDATION SUMMARY"
-        @debug "="^60
-        @debug "Total Models Tested: $(length(individual_results))"
-        @debug "Successful Models: $(length(successful_models))/$(length(individual_results)) ($(round(overall_success_rate * 100, digits=1))%)"
-        @debug "Models Meeting Expectations: $(length(models_meeting_expectation))/$(length(individual_results)) ($(round(expectation_success_rate * 100, digits=1))%)"
-        @debug "Mean Agreement Rate: $(round(mean_agreement_rate * 100, digits=1))%"
+        @info "="^60
+        @info "COMPREHENSIVE BOOTSTRAP VALIDATION SUMMARY"
+        @info "="^60
+        @info "Total Models Tested: $(length(individual_results))"
+        @info "Successful Models: $(length(successful_models))/$(length(individual_results)) ($(round(overall_success_rate * 100, digits=1))%)"
+        @info "Models Meeting Expectations: $(length(models_meeting_expectation))/$(length(individual_results)) ($(round(expectation_success_rate * 100, digits=1))%)"
+        @info "Mean Agreement Rate: $(round(mean_agreement_rate * 100, digits=1))%"
         
         if expectation_success_rate >= 0.80
             @info " BOOTSTRAP VALIDATION SUITE: PASSED"
@@ -265,7 +265,7 @@ Quick bootstrap validation check for development/CI purposes.
 Tests a subset of models with fewer bootstrap samples.
 """
 function quick_bootstrap_validation_check(; n_bootstrap=100)
-    @debug "Quick Bootstrap Validation Check (n_bootstrap=$n_bootstrap)"
+    @info "Quick Bootstrap Validation Check (n_bootstrap=$n_bootstrap)"
     
     # Test subset of models for speed
     quick_models = [
@@ -295,12 +295,7 @@ function quick_bootstrap_validation_check(; n_bootstrap=100)
     
     success_rate = mean([r.meets_expectation for r in results])
     
-    @debug "Quick validation success rate: $(round(success_rate * 100, digits=1))%"
+    @info "Quick validation success rate: $(round(success_rate * 100, digits=1))%"
     
     return success_rate >= 0.75  # 75% threshold for quick check
 end
-
-# Export multi-model bootstrap testing functions
-export multi_model_bootstrap_test_suite, run_single_model_bootstrap_test
-export run_comprehensive_bootstrap_test_suite, quick_bootstrap_validation_check
-export create_glm_model_func

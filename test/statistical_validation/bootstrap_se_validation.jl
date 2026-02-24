@@ -402,7 +402,7 @@ function bootstrap_validate_2x2_framework(model_func, formula, data; vars=nothin
     successful_quadrants = [r for r in values(results) if haskey(r, :success) && r.success]
     overall_agreement_rates = [r.validation.agreement_rate for r in successful_quadrants if haskey(r, :validation)]
     
-    overall_success = length(successful_quadrants) >= 2  # At least half successful
+    overall_success = length(successful_quadrants) >= 3  # At least 3 of 4 quadrants should succeed
     overall_agreement = length(overall_agreement_rates) > 0 ? mean(overall_agreement_rates) : 0.0
     
     return (
@@ -414,9 +414,3 @@ function bootstrap_validate_2x2_framework(model_func, formula, data; vars=nothin
         variables_tested = vars
     )
 end
-
-# Export bootstrap validation functions
-export bootstrap_margins_computation, validate_bootstrap_se_agreement
-export bootstrap_validate_population_effects, bootstrap_validate_population_predictions
-export bootstrap_validate_profile_effects, bootstrap_validate_profile_predictions  
-export bootstrap_validate_2x2_framework

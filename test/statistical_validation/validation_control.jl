@@ -179,6 +179,3 @@ function validation_status_report()
     @info "  🚫 Zero-tolerance policy for invalid statistical results"
     @info "   Cross-platform numerical consistency"
 end
-
-# Export main control functions
-export run_ci_validation, run_development_validation, run_release_validation, validation_status_report

@@ -24,12 +24,6 @@ Manual calculation of robust standard errors for marginal effects using the delt
 This function implements both the robust covariance matrix for coefficients AND the
 delta method to get robust SEs for marginal effects.
 
-**IMPORTANT BUG DISCOVERED**: There is an indexing bug in Margins.jl robust SE calculation
-where the SE indices are shifted. For a model y ~ x + z:
-- Margins.jl returns intercept SE when asked for x SE
-- Margins.jl returns x SE when asked for z SE
-This function documents and tests around this bug.
-
 # Mathematical Foundation
 1. Compute robust covariance matrix for coefficients:
    V_robust = (X'X)⁻¹ X' Ω X (X'X)⁻¹
@@ -124,25 +118,15 @@ function manual_marginal_effect_robust_se_calculation(model, data, estimator_typ
     # Extract coefficient robust SEs for comparison
     manual_x_coef_robust_se = manual_robust_ses[x_coef_idx]
     cov_matrices_x_coef_robust_se = cov_matrices_ses[x_coef_idx]
-    margins_x_marginal_effect_robust_se = margins_robust_ses[1]  # Margins returns SE (but has indexing bug)
+    margins_x_marginal_effect_robust_se = margins_robust_ses[1]
 
-    # BUG DETECTION: Check if Margins.jl has the indexing bug
-    # For x variable, Margins should return x coefficient SE, but actually returns intercept SE
+    # Regression check: verify Margins returns the correct coefficient SE (not intercept SE)
     intercept_se = cov_matrices_ses[1]  # Index 1 = intercept
     margins_bug_detected = isapprox(margins_x_marginal_effect_robust_se, intercept_se, rtol=1e-10)
 
     # Compute relative differences
     manual_vs_cov_coef_diff = abs(manual_x_coef_robust_se - cov_matrices_x_coef_robust_se) / manual_x_coef_robust_se
-
-    if margins_bug_detected
-        # Compare against what Margins SHOULD return (the correct coefficient SE)
-        manual_vs_margins_correct_diff = abs(manual_marginal_effect_robust_se - cov_matrices_x_coef_robust_se) / manual_marginal_effect_robust_se
-        # Compare against what Margins ACTUALLY returns (the wrong intercept SE)
-        manual_vs_margins_actual_diff = abs(manual_marginal_effect_robust_se - margins_x_marginal_effect_robust_se) / manual_marginal_effect_robust_se
-    else
-        manual_vs_margins_correct_diff = abs(manual_marginal_effect_robust_se - margins_x_marginal_effect_robust_se) / manual_marginal_effect_robust_se
-        manual_vs_margins_actual_diff = manual_vs_margins_correct_diff
-    end
+    manual_vs_margins_diff = abs(manual_marginal_effect_robust_se - margins_x_marginal_effect_robust_se) / manual_marginal_effect_robust_se
 
     return (
         estimator_type = estimator_type,
@@ -152,15 +136,13 @@ function manual_marginal_effect_robust_se_calculation(model, data, estimator_typ
         # Marginal effect robust SEs
         manual_marginal_effect_robust_se = manual_marginal_effect_robust_se,
         margins_marginal_effect_robust_se = margins_x_marginal_effect_robust_se,
-        # Bug detection
+        # Regression check
         margins_bug_detected = margins_bug_detected,
-        expected_se_if_correct = cov_matrices_x_coef_robust_se,
         # Comparisons
         coefficient_calculation_agreement = manual_vs_cov_coef_diff < 1e-10,
-        marginal_effect_calculation_agreement_if_margins_correct = manual_vs_margins_actual_diff < 1e-10,
+        marginal_effect_calculation_agreement = manual_vs_margins_diff < 1e-10,
         manual_vs_cov_coef_relative_diff = manual_vs_cov_coef_diff,
-        manual_vs_margins_correct_relative_diff = manual_vs_margins_correct_diff,
-        manual_vs_margins_actual_relative_diff = manual_vs_margins_actual_diff,
+        manual_vs_margins_relative_diff = manual_vs_margins_diff,
         # Additional info
         gradient_vector = gradient,
         manual_full_coefficient_ses = manual_robust_ses,
@@ -278,7 +260,7 @@ function test_sandwich_estimators_comprehensive(model, data)
     
     # Overall assessment
     successful_estimators = [r for r in values(results) if haskey(r, :success) && r.success]
-    overall_success = length(successful_estimators) >= 2  # At least half should work
+    overall_success = length(successful_estimators) >= 3  # Most estimators should work
     
     return (
         estimator_results = results,
@@ -381,11 +363,10 @@ function test_manual_robust_se_validation(model, data; verbose=false)
                 println("  CovMatrices Coef SE:   $(round(result.cov_matrices_coefficient_robust_se, digits=6))")
                 println("  Manual MargEff SE:     $(round(result.manual_marginal_effect_robust_se, digits=6))")
                 println("  Margins MargEff SE:    $(round(result.margins_marginal_effect_robust_se, digits=6))")
-                println("  Expected if correct:   $(round(result.expected_se_if_correct, digits=6))")
                 println("  Margins bug detected:  $(result.margins_bug_detected)")
                 println("  Coef calc agreement:   $(result.coefficient_calculation_agreement)")
-                println("  MargEff agreement:     $(result.marginal_effect_calculation_agreement_if_margins_correct)")
-                println("  Manual vs Expected:    $(round(result.manual_vs_margins_correct_relative_diff * 100, digits=8))%")
+                println("  MargEff agreement:     $(result.marginal_effect_calculation_agreement)")
+                println("  Manual vs Margins:     $(round(result.manual_vs_margins_relative_diff * 100, digits=8))%")
                 println()
             end
 
@@ -397,8 +378,8 @@ function test_manual_robust_se_validation(model, data; verbose=false)
                 margins_marginal_effect_se = result.margins_marginal_effect_robust_se,
                 margins_bug_detected = result.margins_bug_detected,
                 coefficient_calculation_agreement = result.coefficient_calculation_agreement,
-                marginal_effect_calculation_agreement = result.marginal_effect_calculation_agreement_if_margins_correct,
-                manual_vs_margins_correct_diff = result.manual_vs_margins_correct_relative_diff
+                marginal_effect_calculation_agreement = result.marginal_effect_calculation_agreement,
+                manual_vs_margins_diff = result.manual_vs_margins_relative_diff
             )
 
         catch e
@@ -415,7 +396,7 @@ function test_manual_robust_se_validation(model, data; verbose=false)
     all_coef_calcs_agree = all(r -> haskey(r, :coefficient_calculation_agreement) && r.coefficient_calculation_agreement, successful_estimators)
     all_marginal_effect_calcs_agree = all(r -> haskey(r, :marginal_effect_calculation_agreement) && r.marginal_effect_calculation_agreement, successful_estimators)
     margins_bug_detected = any(r -> haskey(r, :margins_bug_detected) && r.margins_bug_detected, successful_estimators)
-    max_marginal_effect_rel_diff = maximum([r.manual_vs_margins_correct_diff for r in successful_estimators if haskey(r, :manual_vs_margins_correct_diff)])
+    max_marginal_effect_rel_diff = maximum([r.manual_vs_margins_diff for r in successful_estimators if haskey(r, :manual_vs_margins_diff)])
 
     if verbose
         println("SUMMARY:")
@@ -425,7 +406,7 @@ function test_manual_robust_se_validation(model, data; verbose=false)
         println("Margins.jl bug detected: $margins_bug_detected")
         println("Max marginal effect rel diff: $(round(max_marginal_effect_rel_diff * 100, digits=8))%")
         if margins_bug_detected
-            println("NOTE: Margins.jl has indexing bug - returns wrong SE")
+            println("WARNING: Margins.jl may have indexing bug - returns intercept SE instead of variable SE")
         end
         println("="^65)
     end
@@ -454,15 +435,15 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
         true
     catch e
         if verbose
-            @debug "CovarianceMatrices.jl not available: $e"
+            @info "CovarianceMatrices.jl not available: $e"
         end
         false
     end
     
     if verbose
-        @debug "Starting Comprehensive Robust SE Validation Suite"
-        @debug "CovarianceMatrices.jl available: $covariance_matrices_available"
-        @debug "="^60
+        @info "Starting Comprehensive Robust SE Validation Suite"
+        @info "CovarianceMatrices.jl available: $covariance_matrices_available"
+        @info "="^60
     end
     
     test_results = []
@@ -470,7 +451,7 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
     # Test 1: Linear model with heteroskedasticity
     @testset "Linear Model with Heteroskedasticity" begin
         if verbose
-            @debug "Testing linear model robust SEs with manual validation"
+            @info "Testing linear model robust SEs with manual validation"
         end
 
         data = make_heteroskedastic_data(n=400, heteroskedasticity_type=:linear)
@@ -481,13 +462,14 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
         @test manual_validation.overall_success
         @test manual_validation.all_coefficient_calculations_agree
         @test manual_validation.all_marginal_effect_calculations_agree
+        @test !manual_validation.margins_bug_detected  # Confirm no indexing bug in robust SE computation
         @test manual_validation.max_marginal_effect_relative_difference < 1e-10  # Marginal effect calculations should match to machine precision
 
         if verbose
-            @debug "  Manual validation: $(manual_validation.n_successful)/4 estimators successful"
-            @debug "  Coefficient calculation agreement: $(manual_validation.all_coefficient_calculations_agree)"
-            @debug "  Marginal effect calculation agreement: $(manual_validation.all_marginal_effect_calculations_agree)"
-            @debug "  Maximum marginal effect rel diff: $(manual_validation.max_marginal_effect_relative_difference)"
+            @info "  Manual validation: $(manual_validation.n_successful)/4 estimators successful"
+            @info "  Coefficient calculation agreement: $(manual_validation.all_coefficient_calculations_agree)"
+            @info "  Marginal effect calculation agreement: $(manual_validation.all_marginal_effect_calculations_agree)"
+            @info "  Maximum marginal effect rel diff: $(manual_validation.max_marginal_effect_relative_difference)"
         end
 
         # Then test comprehensive sandwich estimators
@@ -522,14 +504,14 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
         ))
         
         if verbose
-            @debug "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
+            @info "  Sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
         end
     end
     
     # Test 2: GLM with robust SEs
     @testset "GLM Logistic with Robust SEs" begin
         if verbose
-            @debug "Testing GLM logistic robust SEs"
+            @info "Testing GLM logistic robust SEs"
         end
         
         data = make_heteroskedastic_data(n=500, heteroskedasticity_type=:quadratic)
@@ -546,14 +528,14 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
         ))
         
         if verbose
-            @debug "  GLM sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
+            @info "  GLM sandwich estimators: $(sandwich_results.n_successful)/$(sandwich_results.n_tested) successful"
         end
     end
     
     # Test 3: Clustered standard errors with known clustering structure
     @testset "Clustered Standard Errors" begin
         if verbose
-            @debug "Testing clustered standard errors with Grunfeld-style data"
+            @info "Testing clustered standard errors with Grunfeld-style data"
         end
         
         # Use Grunfeld-style data with known clustering properties
@@ -579,7 +561,7 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
             ))
             
             if verbose
-                @debug "  Clustered SEs: Framework valid, max SE ratio = $(round(cluster_results.max_se_ratio, digits=2))"
+                @info "  Clustered SEs: Framework valid, max SE ratio = $(round(cluster_results.max_se_ratio, digits=2))"
             end
         else
             push!(test_results, (
@@ -595,18 +577,18 @@ function run_comprehensive_robust_se_test_suite(; verbose=false)
     overall_success_rate = length(successful_tests) / length(test_results)
     
     if verbose
-        @debug "="^60
-        @debug "COMPREHENSIVE ROBUST SE VALIDATION SUMMARY"
-        @debug "="^60
-        @debug "Total Tests: $(length(test_results))"
-        @debug "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
-        
+        @info "="^60
+        @info "COMPREHENSIVE ROBUST SE VALIDATION SUMMARY"
+        @info "="^60
+        @info "Total Tests: $(length(test_results))"
+        @info "Successful Tests: $(length(successful_tests))/$(length(test_results)) ($(round(overall_success_rate * 100, digits=1))%)"
+
         if overall_success_rate >= 0.75
-            @debug "ROBUST SE VALIDATION: PASSED"
-            @debug "Robust standard errors integration working correctly!"
+            @info "ROBUST SE VALIDATION: PASSED"
+            @info "Robust standard errors integration working correctly!"
         else
-            @debug "ROBUST SE VALIDATION: MIXED RESULTS"
-            @debug "Some robust SE tests failed - detailed investigation recommended"
+            @info "ROBUST SE VALIDATION: MIXED RESULTS"
+            @info "Some robust SE tests failed - detailed investigation recommended"
         end
     end
     

@@ -371,8 +371,3 @@ function verify_glm_se_chain_rule(model, data, var_symbol, at_values; tolerance=
         relative_error = abs(computed_se - analytical_se) / analytical_se
     )
 end
-
-# Export analytical SE validation functions
-export analytical_linear_se, analytical_logistic_se, analytical_poisson_se
-export compute_population_linear_se
-export verify_linear_se_consistency, verify_glm_se_chain_rule

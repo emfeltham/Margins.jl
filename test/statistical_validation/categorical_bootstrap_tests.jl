@@ -184,9 +184,9 @@ Comprehensive categorical effects bootstrap testing across different model types
 """
 function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
     if verbose
-        @debug "Starting Categorical Effects Bootstrap Validation Suite"
-        @debug "Bootstrap samples per model: $n_bootstrap"
-        @debug "="^60
+        @info "Starting Categorical Effects Bootstrap Validation Suite"
+        @info "Bootstrap samples per model: $n_bootstrap"
+        @info "="^60
     end
     
     # Define categorical test models
@@ -225,7 +225,7 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
     
     for model_config in categorical_test_models
         if verbose
-            @debug "Testing: $(model_config.name)"
+            @info "Testing: $(model_config.name)"
         end
         
         data = model_config.data_func()
@@ -241,12 +241,12 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
                 meets_expectation = agreement_rate >= model_config.expected_agreement
                 
                 if verbose
-                    @debug "Agreement Rate: $(round(agreement_rate * 100, digits=1))% (expected: ≥$(round(model_config.expected_agreement * 100, digits=1))%)"
-                    @debug "Categorical Terms Tested: $(length(result.categorical_terms))"
-                    @debug "Bootstrap Samples: $(result.n_bootstrap_successful)/$n_bootstrap successful"
-                    
+                    @info "Agreement Rate: $(round(agreement_rate * 100, digits=1))% (expected: ≥$(round(model_config.expected_agreement * 100, digits=1))%)"
+                    @info "Categorical Terms Tested: $(length(result.categorical_terms))"
+                    @info "Bootstrap Samples: $(result.n_bootstrap_successful)/$n_bootstrap successful"
+
                     status = meets_expectation ? " PASSED" : " BELOW EXPECTATION"
-                    @debug "Result: $status"
+                    @info "Result: $status"
                 end
                 
                 push!(individual_results, (
@@ -289,7 +289,7 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
         end
         
         if verbose
-            @debug ""  # Spacing
+            @info ""  # Spacing
         end
     end
     
@@ -302,14 +302,14 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
     mean_agreement_rate = length(successful_models) > 0 ? mean([r.agreement_rate for r in successful_models]) : 0.0
     
     if verbose
-        @debug "="^60
-        @debug "CATEGORICAL BOOTSTRAP VALIDATION SUMMARY"
-        @debug "="^60
-        @debug "Total Models Tested: $(length(individual_results))"
-        @debug "Successful Models: $(length(successful_models))/$(length(individual_results)) ($(round(overall_success_rate * 100, digits=1))%)"
-        @debug "Models Meeting Expectations: $(length(models_meeting_expectation))/$(length(individual_results)) ($(round(expectation_success_rate * 100, digits=1))%)"
+        @info "="^60
+        @info "CATEGORICAL BOOTSTRAP VALIDATION SUMMARY"
+        @info "="^60
+        @info "Total Models Tested: $(length(individual_results))"
+        @info "Successful Models: $(length(successful_models))/$(length(individual_results)) ($(round(overall_success_rate * 100, digits=1))%)"
+        @info "Models Meeting Expectations: $(length(models_meeting_expectation))/$(length(individual_results)) ($(round(expectation_success_rate * 100, digits=1))%)"
         if length(successful_models) > 0
-            @debug "Mean Agreement Rate: $(round(mean_agreement_rate * 100, digits=1))%"
+            @info "Mean Agreement Rate: $(round(mean_agreement_rate * 100, digits=1))%"
         end
         
         if expectation_success_rate >= 0.70  # Lower threshold for categorical effects
@@ -329,7 +329,3 @@ function run_categorical_bootstrap_test_suite(; n_bootstrap=150, verbose=true)
         n_models_tested = length(individual_results)
     )
 end
-
-# Export categorical bootstrap testing functions
-export make_categorical_test_data, bootstrap_validate_categorical_effects
-export run_categorical_bootstrap_test_suite

@@ -72,11 +72,10 @@ include("categorical_bootstrap_tests.jl")
             end
         end
         
-        # Check that we have reasonable success rates
-        @test results.overall_success_rate >= 0.60  # At least 60% of models should work
-        
-        @debug  " Multi-model bootstrap validation: $(results.n_successful)/$(results.n_models_tested) models successful"
-        @debug "  Mean agreement rate: $(round(results.mean_agreement_rate * 100, digits=1))%"
+        # All models should run without error
+        @test results.overall_success_rate >= 1.0
+        # Mean agreement rate should be reasonable (accounts for stochastic noise at n_bootstrap=50)
+        @test results.mean_agreement_rate >= 0.50
         
         # Individual model type tests
         @testset "Linear Model Bootstrap Validation" begin
@@ -84,10 +83,9 @@ include("categorical_bootstrap_tests.jl")
             @test length(linear_results) >= 2  # Should have multiple linear model tests
             
             # Linear models should generally have reasonable agreement rates
-            successful_linear = [r for r in linear_results if r.success && r.agreement_rate >= 0.60]
-            @test length(successful_linear) >= 1  # At least one linear model should perform reasonably
-            
-            @debug " Linear model bootstrap validation: $(length(successful_linear))/$(length(linear_results)) with good agreement"
+            # All linear models should run successfully
+            successful_linear = [r for r in linear_results if r.success]
+            @test length(successful_linear) == length(linear_results)
         end
         
         @testset "GLM Bootstrap Validation" begin  
@@ -95,10 +93,9 @@ include("categorical_bootstrap_tests.jl")
             @test length(glm_results) >= 2  # Should have GLM tests
             
             # GLM models may have lower agreement rates due to nonlinearity
+            # All GLM models should run successfully
             successful_glm = [r for r in glm_results if r.success]
-            @test length(successful_glm) >= 1  # At least some GLM models should work
-            
-            @debug " GLM bootstrap validation: $(length(successful_glm))/$(length(glm_results)) successful"
+            @test length(successful_glm) == length(glm_results)
         end
     end
     
@@ -112,13 +109,10 @@ include("categorical_bootstrap_tests.jl")
         @test haskey(categorical_results, :individual_results)
         @test categorical_results.n_models_tested >= 3  # Should test multiple categorical scenarios
         
-        # Check categorical bootstrap structure (categorical effects can be challenging to bootstrap validate)
-        # Note: Categorical bootstrap validation has known limitations - this tests the framework not the success rate
-        @test categorical_results.overall_success_rate >= 0.0  # Framework should run (success rate may be low for categorical edge cases)
-        
-        @debug " Categorical bootstrap validation: $(round(categorical_results.overall_success_rate * 100, digits=1))% models successful"
+        # All categorical models should run successfully
+        @test categorical_results.overall_success_rate >= 1.0
+        # Categorical bootstrap should achieve good agreement
         if categorical_results.mean_agreement_rate > 0
-            @debug "  Mean agreement rate: $(round(categorical_results.mean_agreement_rate * 100, digits=1))%"
         end
         
         # Test individual categorical model types

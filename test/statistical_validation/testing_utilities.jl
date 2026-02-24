@@ -238,7 +238,7 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
         end
     else
         # Skip effects testing for categorical-only models
-        results[:population_effects] = (success = true, skipped = true, reason = "No continuous variables for effects testing")
+        results[:population_effects] = (success = false, skipped = true, reason = "No continuous variables for effects testing")
     end
     
     try
@@ -275,7 +275,7 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
         end
     else
         # Skip effects testing for categorical-only models
-        results[:profile_effects] = (success = true, skipped = true, reason = "No continuous variables for effects testing")
+        results[:profile_effects] = (success = false, skipped = true, reason = "No continuous variables for effects testing")
     end
     
     # 4. Profile Predictions (APM) 
@@ -297,14 +297,14 @@ function test_2x2_framework_quadrants(model, data; test_name = "Unknown", vars =
         # This is a known limitation - we'll mark as skipped rather than failed
         if isempty(vars) && (contains(string(e), "Cannot extract level code") || 
                            contains(string(e), "Could not determine baseline level"))
-            results[:profile_predictions] = (success = true, skipped = true, reason = "Profile predictions at :means not supported for categorical-only models")
+            results[:profile_predictions] = (success = false, skipped = true, reason = "Profile predictions at :means not supported for categorical-only models")
         else
             results[:profile_predictions] = (success = false, error = e)
         end
     end
     
     # Overall validation
-    all_successful = all(haskey(r, :success) && r.success for r in values(results))
+    all_successful = all(r -> (haskey(r, :success) && r.success) || (haskey(r, :skipped) && r.skipped), values(results))
     all_finite = all_successful && all(
         haskey(r, :skipped) && r.skipped || (r.finite_estimates && r.finite_ses && r.positive_ses)
         for r in values(results) if haskey(r, :success) && r.success

@@ -391,6 +391,3 @@ end
         end
     end
 end
-
-# Export test utilities for potential use in other test files
-export make_function_composition_data, analytical_nested_derivative

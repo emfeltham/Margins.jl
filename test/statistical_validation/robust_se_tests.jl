@@ -63,7 +63,7 @@ using CovarianceMatrices
             sandwich_results = test_sandwich_estimators_comprehensive(model, data)
             
             @test sandwich_results.overall_success
-            @test sandwich_results.n_successful >= 2  # At least half should work
+            @test sandwich_results.n_successful >= 3  # Most estimators should work
             
             # Test that HC1 works across 2×2 framework
             if haskey(sandwich_results.estimator_results, :HC1)
@@ -197,8 +197,8 @@ using CovarianceMatrices
         @test haskey(results, :test_results)
         @test haskey(results, :covariance_matrices_available)
         
-        @test results.overall_success_rate >= 0.60  # At least 60% success rate
-        @test results.n_successful >= 1  # At least one test should succeed
+        @test results.overall_success_rate >= 1.0  # All model types should succeed
+        @test results.n_successful >= 3  # All three test types should succeed
         
         # Test individual result structure
         for result in results.test_results
@@ -206,7 +206,7 @@ using CovarianceMatrices
             @test haskey(result, :success) || haskey(result, :reason)
             
             if haskey(result, :success) && result.success && haskey(result, :n_successful)
-                @test result.n_successful >= 0
+                @test result.n_successful >= 2
             end
         end
     end
