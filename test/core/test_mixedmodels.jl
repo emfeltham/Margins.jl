@@ -89,9 +89,8 @@ df2   = DataFrame(x=x, group=categorical(string.(group)), y=y_s)
         se_closed = sqrt(vc[idx, idx] * mean_inv^2)
 
         days_row = filter(r -> r.variable == "Days", df_result)[1, :]
-        # less precision here 1.5e6
-        @test isapprox(days_row.estimate, ame_closed; atol=1.5e6)
-        @test isapprox(days_row.se, se_closed; atol=1.5e6)
+        @test isapprox(days_row.estimate, ame_closed; rtol=0.1)
+        @test isapprox(days_row.se, se_closed; rtol=0.1)
     end
 
     @testset "Scenario 14: GLMM logistic random intercept on cbpp" begin
