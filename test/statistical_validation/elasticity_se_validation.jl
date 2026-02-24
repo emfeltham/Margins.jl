@@ -259,68 +259,68 @@ end
 # Test integration with main test suite
 @testset "Elasticity SE Validation" begin
     # Generate consistent test data
+    # n=500 needed for delta-method elasticity SEs to converge with bootstrap
+    # (elasticity involves nonlinear transformation ∂y/∂x * x̄/ȳ, amplifying small-sample bias)
     Random.seed!(06515)
-    data = make_econometric_data(n=200, seed=42)
-    
+    data = make_econometric_data(n=500, seed=42)
+
+    # Test all variables (not just one) so agreement_rate is a proportion rather
+    # than binary 0/1, which makes the tests robust to RNG stream differences
+    # across Julia versions.  B=500 gives bootstrap SE precision of ~4.5%.
+
     @testset "Population Elasticity SE Bootstrap Validation" begin
         model = lm(@formula(wage ~ int_education + int_experience), data)
-        
-        # Test basic elasticity measure
+
         result = bootstrap_validate_population_elasticity(
             lm, @formula(wage ~ int_education + int_experience), data, :elasticity;
-            vars=[:int_education], n_bootstrap=50  # Smaller for faster tests
+            n_bootstrap=500
         )
-        
-        # Validation criteria
-        @test result.validation.agreement_rate > 0.8  # 80% of SEs should match within 15%
-        @test result.validation.max_relative_error < 0.3  # No SE should be off by more than 30%
-        @test result.n_successful_bootstrap >= 40  # At least 80% bootstrap success rate
-        @test all(result.computed_ses .> 0)  # All SEs should be positive
-        @test all(result.bootstrap_ses .> 0)  # All bootstrap SEs should be positive
-    end
-    
-    @testset "Profile Elasticity SE Bootstrap Validation" begin
-        # Test at means
-        means_ref_grid = means_grid(data)
-        result = bootstrap_validate_profile_elasticity(
-            lm, @formula(wage ~ int_education + int_experience), data, means_ref_grid, :elasticity;
-            vars=[:int_education], n_bootstrap=50
-        )
-        
-        # Validation criteria
+
         @test result.validation.agreement_rate > 0.8
         @test result.validation.max_relative_error < 0.3
-        @test result.n_successful_bootstrap >= 40
+        @test result.n_successful_bootstrap >= 400
         @test all(result.computed_ses .> 0)
         @test all(result.bootstrap_ses .> 0)
     end
-    
+
+    @testset "Profile Elasticity SE Bootstrap Validation" begin
+        means_ref_grid = means_grid(data)
+        result = bootstrap_validate_profile_elasticity(
+            lm, @formula(wage ~ int_education + int_experience), data, means_ref_grid, :elasticity;
+            n_bootstrap=500
+        )
+
+        @test result.validation.agreement_rate > 0.8
+        @test result.validation.max_relative_error < 0.3
+        @test result.n_successful_bootstrap >= 400
+        @test all(result.computed_ses .> 0)
+        @test all(result.bootstrap_ses .> 0)
+    end
+
     @testset "Semielasticity SE Validation" begin
-        # Test both semielasticity measures
         for measure in [:semielasticity_dyex, :semielasticity_eydx]
             result = bootstrap_validate_population_elasticity(
                 lm, @formula(wage ~ int_education + int_experience), data, measure;
-                vars=[:int_education], n_bootstrap=30  # Even smaller for speed
+                n_bootstrap=500
             )
-            
-            @test result.validation.agreement_rate > 0.7  # Slightly more relaxed for complex measures
+
+            @test result.validation.agreement_rate > 0.7
             @test result.validation.max_relative_error < 0.4
-            @test result.n_successful_bootstrap >= 24
+            @test result.n_successful_bootstrap >= 400
             @test all(result.computed_ses .> 0)
         end
     end
-    
+
     @testset "GLM Elasticity SE Validation" begin
-        # Test with binary outcome model
         result = bootstrap_validate_population_elasticity(
-            (f, d) -> glm(f, d, Binomial(), LogitLink()), 
-            @formula(union_member ~ int_education + int_experience), 
+            (f, d) -> glm(f, d, Binomial(), LogitLink()),
+            @formula(union_member ~ int_education + int_experience),
             data, :elasticity;
-            vars=[:int_education], n_bootstrap=30
+            n_bootstrap=500
         )
-        
+
         @test result.validation.agreement_rate > 0.7
-        @test result.validation.max_relative_error < 0.5  # GLM can have slightly higher variance
+        @test result.validation.max_relative_error < 0.5
         @test all(result.computed_ses .> 0)
         @test all(result.bootstrap_ses .> 0)
     end
