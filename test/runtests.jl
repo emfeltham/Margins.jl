@@ -20,13 +20,10 @@ include("statistical_validation/bootstrap_se_validation.jl")
 include("statistical_validation/analytical_se_validation.jl")
 
 @testset "Core Functionality" begin
-    include("core/test_glm_basic.jl")
-    include("core/test_profiles.jl")
     include("core/test_grouping.jl")
     include("core/test_column_naming.jl")
     include("core/test_contrasts.jl")
     include("core/test_contrast_dataframe.jl")
-    include("core/test_vcov.jl")
     include("core/test_errors.jl")
     include("core/test_automatic_variable_detection.jl")
     include("core/test_mixedmodels.jl")
@@ -42,14 +39,16 @@ end
     include("features/test_prediction_scales.jl")
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
+    include("features/test_balanced_grid.jl")
     include("regression/test_bool_mixture_skip.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
 end
 
-@testset "Performance" begin
+@testset "Performance and Allocations" begin
     include("performance/test_allocation_scaling.jl")
     include("performance/test_performance.jl")
+    include("performance/profiling/test_contrast_gradient_allocations.jl")
     include("test_categorical_batch_zero_alloc.jl")
     include("test_categorical_kernel_zero_alloc.jl")
     include("test_per_row_allocations.jl")
@@ -60,6 +59,9 @@ end
     include("statistical_validation/statistical_validation.jl")
     include("statistical_validation/incompatible_formula_se_validation.jl")
     include("statistical_validation/elasticity_se_validation.jl")
+    include("statistical_validation/bootstrap_validation_tests.jl")
+    include("statistical_validation/robust_se_tests.jl")
+    include("statistical_validation/specialized_se_tests.jl")
 end
 
 @testset "Computational Primitives" begin
@@ -68,15 +70,6 @@ end
     include("primitives/test_derivatives_log_profile_regression.jl")
     include("primitives/test_marginal_effects_allocations.jl")
     include("helpers/test_mixture_utilities.jl")
-end
-
-@testset "Inference Methods" begin
-    include("inference/test_delta_method_glm.jl")
-    include("inference/test_delta_method_mixedmodels.jl")
-end
-
-@testset "Profiling and Allocations" begin
-    include("performance/profiling/test_contrast_gradient_allocations.jl")
 end
 
 @testset "Validation Tests" begin

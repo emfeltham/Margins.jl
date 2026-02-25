@@ -12,8 +12,7 @@
 using Test, GLM, MixedModels, DataFrames, Statistics, LinearAlgebra, Random, CategoricalArrays
 using Margins
 
-# Load analytical SE validation utilities
-include("analytical_se_validation.jl")
+# analytical_se_validation.jl is loaded centrally in runtests.jl
 
 # =====================================================================
 # COEFFICIENT PARSING UTILITIES FOR COMPLEX INTERACTIONS

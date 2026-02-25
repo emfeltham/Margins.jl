@@ -714,30 +714,4 @@ using Margins
         end
     end
     
-    # === TIER 7: Bootstrap SE Validation (Phase 2, Tier 2) ===
-    @testset "Tier 7: Bootstrap SE Validation - Empirical Verification" begin
-        
-        
-        
-        # Include the comprehensive bootstrap validation tests
-        include("bootstrap_validation_tests.jl")
-    end
-    
-    # === TIER 8: Robust SE Integration (Phase 3, Tier 4) ===
-    @testset "Tier 8: Robust SE Integration - Econometric Functionality" begin
-        
-        
-        
-        # Include the comprehensive robust SE validation tests
-        include("robust_se_tests.jl")
-    end
-    
-    # === TIER 9: Specialized SE Cases (Phase 4, Tier 5) ===
-    @testset "Tier 9: Specialized SE Cases - Advanced Edge Cases" begin
-        
-        
-        
-        # Include the specialized SE validation tests
-        include("specialized_se_tests.jl")
-    end
 end
