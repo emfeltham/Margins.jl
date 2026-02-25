@@ -97,26 +97,8 @@ using CovarianceMatrices
     
     @testset "Clustered Standard Errors Testing" begin
 
-        # Detect whether CR0 + vcov works with current CovarianceMatrices/GroupedArrays versions.
-        # GroupedArrays v0.3.4 introduced a stricter check in GroupedArray() that causes
-        # CR0-based vcov calls to fail with "tuple must be non-empty" (the CR0 type
-        # parameter is CR0{Tuple} regardless of content, and the downstream code path
-        # in GroupedArrays misinterprets this). This is an upstream bug — not a Margins issue.
-        # Track: https://github.com/FixedEffects/CovarianceMatrices.jl
-        _cr0_works = try
-            _test_data = DataFrame(y=randn(20), x=randn(20), g=repeat(1:4, inner=5))
-            _test_model = lm(@formula(y ~ x), _test_data)
-            vcov(CR0(_test_data.g), _test_model)
-            true
-        catch
-            false
-        end
-
         # Test clustered SEs with proper validation of clustering mechanism
         @testset "Linear Model Clustered SEs" begin
-            if !_cr0_works
-                @test_broken false  # upstream CovarianceMatrices/GroupedArrays incompatibility
-            else
             # Create data with known dual clustering structure
             n_total = 240
             region_id = repeat(1:6, inner=n_total÷6)  # 6 regions, 40 obs each
@@ -161,14 +143,10 @@ using CovarianceMatrices
             @test all(DataFrame(pop_predictions).se .> 0)
             @test all(DataFrame(prof_effects).se .> 0)
             @test all(DataFrame(prof_predictions).se .> 0)
-            end
         end
 
         # Test clustered SEs with different cluster sizes
         @testset "Variable Cluster Sizes" begin
-            if !_cr0_works
-                @test_broken false  # upstream CovarianceMatrices/GroupedArrays incompatibility
-            else
             # Create data with very unbalanced clusters
             n = 300
             cluster_data = DataFrame(
@@ -183,7 +161,6 @@ using CovarianceMatrices
 
             @test cluster_results.success
             @test cluster_results.framework_valid
-            end
         end
     end
     
@@ -197,8 +174,8 @@ using CovarianceMatrices
         @test haskey(results, :test_results)
         @test haskey(results, :covariance_matrices_available)
         
-        @test results.overall_success_rate >= 1.0  # All model types should succeed
-        @test results.n_successful >= 3  # All three test types should succeed
+        # The comprehensive suite runs 3 tests: (1) linear HC, (2) GLM HC, (3) clustered CR.
+        @test results.n_successful >= 3
         
         # Test individual result structure
         for result in results.test_results
