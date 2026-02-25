@@ -1399,7 +1399,13 @@ function balanced_grid(data; typical=mean, vars...)
         
         if spec === :all
             # Balance all levels of this categorical variable
-            typical_values[var] = create_balanced_mixture(col)
+            lvls = if col isa CategoricalArray
+                string.(CategoricalArrays.levels(col))
+            else
+                string.(unique(col))
+            end
+            equal_weights = fill(1.0/length(lvls), length(lvls))
+            typical_values[var] = CategoricalMixture(lvls, equal_weights)
         elseif spec isa Vector
             # Balance only specified levels
             if eltype(col) <: Bool && spec isa Vector{String}
