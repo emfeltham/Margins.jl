@@ -252,8 +252,3 @@ using Margins: marginal_effects_eta!, marginal_effects_mu!, delta_method_se
         println("\nConclusion: Warm-up phase complete, steady-state achieves 0 allocations")
     end
 end
-
-println("\n" * "="^60)
-println("SUMMARY: All per-row operations achieve zero allocations")
-println("after warm-up, validating production-ready performance.")
-println("="^60)

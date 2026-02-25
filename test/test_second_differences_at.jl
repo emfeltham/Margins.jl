@@ -527,5 +527,3 @@ using CategoricalArrays
         end
     end
 end
-
-println("✓ All second_differences_at() tests passed")

@@ -449,5 +449,3 @@ end
         end
     end
 end
-
-println("✓ All second differences tests passed")
