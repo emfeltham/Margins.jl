@@ -73,7 +73,7 @@ The computational implementation achieves constant-time complexity for profile a
 
 ### Statistical Inference Framework
 
-Standard erros are calculated via the delta-method with full integration of the model's covariance matrix structure. Statistical computations have been validated with tests.
+Standard errors are calculated via the delta-method with full integration of the model's covariance matrix structure. Statistical computations have been validated with tests.
 
 ### Extended Analytical Capabilities
 
@@ -120,9 +120,9 @@ profile_margins(
 
 # Semi-elasticities:
 # change Y per % change X
-population_margins(model, data; measure = :semielasticity_dyex) 
+population_margins(model, data; type = :effects, measure = :semielasticity_dyex)
 # % change Y per unit X
-population_margins(model, data; measure = :semielasticity_eydx)  
+population_margins(model, data; type = :effects, measure = :semielasticity_eydx)  
 ```
 
 ### Subgroup Analysis
@@ -179,11 +179,11 @@ Data handling utilizes the Tables.jl interface to ensure compatibility with dive
 using CovarianceMatrices
 
 # Robust standard errors (HC1)
-population_margins(model, data; vcov = CovarianceMatrices.HC1)
+population_margins(model, data; vcov = HC1())
 
 # Clustered standard errors
 population_margins(
-  model, data; vcov = CovarianceMatrices.Clustered(:firm_id)
+  model, data; vcov = Clustered(:firm_id)
 )
 ```
 
@@ -245,7 +245,7 @@ Technical support and bug reports should be directed to the [GitHub Issues](http
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/emfeltham/Margins.jl")
+Pkg.add("Margins")
 ```
 
 **Requirements**: Julia ≥ 1.10
@@ -260,8 +260,8 @@ If you use Margins.jl in your research, please cite:
 
 ```bibtex
 @misc{feltham_formulacompilerjl_2026,
-  title = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl: {{Efficient Marginal Effects}} in {{Julia}}},
-  shorttitle = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl},
+  title = {{FormulaCompiler}.Jl and {Margins}.Jl: {Efficient Marginal Effects} in {Julia}},
+  shorttitle = {{FormulaCompiler}.Jl and {Margins}.Jl},
   author = {Feltham, Eric},
   year = {2026},
   month = jan,

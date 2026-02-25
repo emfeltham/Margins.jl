@@ -227,9 +227,9 @@ Link functions are handled transparently:
 # ∂μ/∂x = (∂μ/∂η) × (∂η/∂x)
 # Where μ = linkinv(η) and ∂μ/∂η computed by FormulaCompiler.jl
 
-# Both link scale (:eta) and response scale (:mu) supported
-margin_eta = compute_margin(compiled, :eta)  # Direct derivative  
-margin_mu = compute_margin(compiled, :mu)    # Chain rule applied
+# Both link scale (:link) and response scale (:response) supported
+margin_link = compute_margin(compiled, :link)      # Direct derivative
+margin_response = compute_margin(compiled, :response)  # Chain rule applied
 ```
 
 ### MixedModels.jl Integration

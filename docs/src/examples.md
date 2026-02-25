@@ -342,7 +342,7 @@ complex_policy = population_margins(wage_model, data;
 using CovarianceMatrices
 
 # Heteroskedasticity-robust standard errors (HC1)
-robust_effects = population_margins(wage_model, data; vcov=CovarianceMatrices.HC1, type=:effects)
+robust_effects = population_margins(wage_model, data; vcov=HC1(), type=:effects)
 println("Robust standard errors:")
 println(DataFrame(robust_effects))
 ```

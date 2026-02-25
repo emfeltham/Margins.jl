@@ -184,8 +184,8 @@ intervention = profile_margins(model, data, intervention_grid; type=:predictions
 - `type=:effects` → "How much does the outcome change?" (most common)  
 - `type=:predictions` → "What outcome value should I expect?"
 - `measure=:elasticity` → "What's the percentage effect?" (useful for proportional changes)
-- `backend=:ad` → Use default (most accurate, zero allocation)
-- `backend=:fd` → Alternative backend (legacy compatibility)
+- `backend=:ad` → Default backend (highest accuracy, zero allocation)
+- `backend=:fd` → Alternative backend (zero allocation, numerical approximation)
 
 All main functions support these core parameters:
 
@@ -215,13 +215,10 @@ All main functions support these core parameters:
 
 ### Profile-Specific Parameters
 
-#### Profile Specification (`at`)
-- `:means` - Effects/predictions at sample means
-- `Dict(:var => [val1, val2])` - Cartesian product specification
-- `[Dict(:var => val1), Dict(:var => val2)]` - Explicit profile list
-- `DataFrame` - Pre-built reference grid (maximum control)
+#### Reference Grid (positional argument)
 
-**Examples:**
+Profile margins take a reference grid as the third positional argument. Use the built-in grid builders or pass a DataFrame directly:
+
 ```julia
 # At sample means (most common)
 profile_margins(model, data, means_grid(data))
@@ -229,22 +226,19 @@ profile_margins(model, data, means_grid(data))
 # Cartesian product: 6 scenarios (3×2)
 profile_margins(model, data, cartesian_grid(x=[0,1,2], group=["A","B"]))
 
-# Hierarchical grid construction using group grammar
-reference_spec = :region => [(:income, :quartiles), (:age, :mean)]
-profile_margins(model, data, hierarchical_grid(data, reference_spec))
-
-# Deep hierarchical nesting for complex policy analysis
-policy_spec = :country => (:region => (:education => [(:income, :quintiles), (:age, :mean)]))
-profile_margins(model, data, hierarchical_grid(data, policy_spec; max_depth=4))
+# Balanced grid (sample frequencies for categoricals, means for continuous)
+profile_margins(model, data, balanced_grid(data))
 
 # DataFrame grid (full control)
 grid = DataFrame(x=[0,1,2], group=["A","A","B"])
 profile_margins(model, data, grid)
 ```
 
+See [Reference Grids](reference_grids.md) for full documentation of grid builders.
+
 ### Population-Specific Parameters
 
-#### Grouping (`over`)
+#### Grouping (`groups`)
 - `Symbol` - Single grouping variable
 - `Vector{Symbol}` - Multiple grouping variables  
 - `NamedTuple` - Advanced grouping with value specifications
@@ -264,7 +258,7 @@ population_margins(model, data; groups=(:income, [20000, 50000, 80000]))
 #### Counterfactual Analysis (`scenarios`)
 ```julia
 # Effects when treatment is set to 1 vs 0 for entire population
-population_margins(model, data; scenarios=(treatment=[0, 1]), type=:effects)
+population_margins(model, data; scenarios=(treatment=[0, 1],), type=:effects)
 ```
 
 ## Usage Patterns
@@ -275,12 +269,12 @@ population_margins(model, data; scenarios=(treatment=[0, 1]), type=:effects)
 model = lm(@formula(y ~ x1 + x2 + group), data)
 
 # 2. Population analysis (most common starting point)
-ame = population_margins(model, data)
+ame = population_margins(model, data; type=:effects)
 aap = population_margins(model, data; type=:predictions)
 
 # 3. Profile analysis for specific scenarios
-mem = profile_margins(model, data, means_grid(data))
-scenarios = profile_margins(model, data, cartesian_grid(x1=[0,1,2]))
+mem = profile_margins(model, data, means_grid(data); type=:effects)
+scenario_results = profile_margins(model, data, cartesian_grid(x1=[0,1,2]); type=:effects)
 
 # 4. Convert to DataFrame for analysis
 DataFrame(ame)
@@ -292,9 +286,8 @@ DataFrame(ame)
 fast_result = population_margins(model, data; backend=:fd, scale=:link)
 
 # Profile analysis is O(1) - efficient regardless of data size
-scenarios = (var1=[-2,-1,0,1,2], var2=["A","B","C"])  # 15 scenarios
-scenarios = cartesian_grid(x1=[0,1,2])
-profile_result = profile_margins(model, huge_data, scenarios)  # ~300μs regardless of data size
+grid = cartesian_grid(x1=[0,1,2])
+profile_result = profile_margins(model, huge_data, grid; type=:effects)  # ~300μs regardless of data size
 ```
 
 ### Advanced Analysis Patterns
@@ -306,7 +299,7 @@ elasticities = profile_margins(model, data, scenarios;
 
 # Robust standard errors (with CovarianceMatrices.jl)
 using CovarianceMatrices
-robust_effects = population_margins(model, data; vcov=CovarianceMatrices.HC1)
+robust_effects = population_margins(model, data; vcov=HC1(), type=:effects)
 
 # Complex categorical scenarios via reference grid
 policy_grid = DataFrame(
@@ -389,10 +382,10 @@ logodds_effects = population_margins(model, data; scale=:link, type=:effects)
 using CovarianceMatrices
 
 # Apply different estimators via vcov parameter
-ame_hc1 = population_margins(model, data; vcov=CovarianceMatrices.HC1)
-ame_hc3 = population_margins(model, data; vcov=CovarianceMatrices.HC3)
-ame_clustered = population_margins(model, data; vcov=CovarianceMatrices.Clustered(:cluster_var))
-ame_hac = population_margins(model, data; vcov=CovarianceMatrices.HAC(kernel=:bartlett))
+ame_hc1 = population_margins(model, data; vcov=HC1())
+ame_hc3 = population_margins(model, data; vcov=HC3())
+ame_clustered = population_margins(model, data; vcov=Clustered(:cluster_var))
+ame_hac = population_margins(model, data; vcov=HAC(Bartlett()))
 ```
 
 ### With DataFrames Ecosystem

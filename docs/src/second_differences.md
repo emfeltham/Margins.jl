@@ -593,9 +593,10 @@ Current second differences use **population-averaged** marginal effects:
 - Second differences reflect population-level interaction effects
 - Appropriate for policy analysis requiring external validity
 
-**Future extension** (`second_differences_at()`): Profile-based local derivatives
+For **profile-based local derivatives**, use `second_differences_at()`:
 - Evaluate interaction effects at specific covariate combinations
 - Useful for scenario-specific analysis or representative case interpretation
+- See the [Local Derivatives at Profiles](#local-derivatives-at-profiles-second_differences_at) section above for full documentation
 
 ### Significance Testing
 

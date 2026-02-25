@@ -28,10 +28,10 @@ Interpretation: "A 1-unit increase in X leads to a (100×ε)% change in Y"
 
 ```julia
 # Population average semi-elasticities (X)
-population_margins(model, data; measure=:semielasticity_dyex)
+population_margins(model, data; type=:effects, measure=:semielasticity_dyex)
 
 # Semi-elasticities at specific scenarios
-profile_margins(model, data, cartesian_grid(x1=[0,1,2]); measure=:semielasticity_dyex)
+profile_margins(model, data, cartesian_grid(x1=[0,1,2]); type=:effects, measure=:semielasticity_dyex)
 ```
 
 #### Semi-Elasticity with respect to Y
@@ -41,7 +41,7 @@ Interpretation: "A 1% increase in X leads to an ε-unit change in Y"
 
 ```julia
 # Population average semi-elasticities (Y)
-population_margins(model, data; measure=:semielasticity_eydx)
+population_margins(model, data; type=:effects, measure=:semielasticity_eydx)
 ```
 
 ### Elasticity Framework Application
@@ -125,7 +125,7 @@ using CovarianceMatrices
 
 # Apply robust covariance via vcov parameter
 robust_effects = population_margins(
-    model, data; vcov=CovarianceMatrices.HC1, type=:effects
+    model, data; vcov=HC1(), type=:effects
 )
 ```
 
@@ -140,7 +140,7 @@ HC4()  # High-leverage robust
 HC5()  # Outlier-robust
 
 # Example with HC3
-result = population_margins(model, data; vcov=CovarianceMatrices.HC3)
+result = population_margins(model, data; vcov=HC3())
 ```
 
 ### Clustered Standard Errors
@@ -148,22 +148,22 @@ result = population_margins(model, data; vcov=CovarianceMatrices.HC3)
 #### Single-Level Clustering
 ```julia
 # Cluster by firm ID
-clustered_effects = population_margins(model, data; 
-    vcov=CovarianceMatrices.Clustered(:firm_id), type=:effects)
+clustered_effects = population_margins(model, data;
+    vcov=Clustered(:firm_id), type=:effects)
 ```
 
 #### Multi-Level Clustering  
 ```julia
 # Two-way clustering (firm and year)
-result = population_margins(model, data; vcov=CovarianceMatrices.Clustered([:firm_id, :year]))
+result = population_margins(model, data; vcov=Clustered([:firm_id, :year]))
 ```
 
 ### HAC (Heteroskedasticity and Autocorrelation Consistent) Standard Errors
 
 ```julia
 # Newey-West HAC estimator
-effects_hac = population_margins(model, data; 
-    vcov=CovarianceMatrices.HAC(kernel=:bartlett, bandwidth=4), type=:effects)
+effects_hac = population_margins(model, data;
+    vcov=HAC(Bartlett()), type=:effects)
 ```
 
 ### Custom Covariance Providers
@@ -187,12 +187,12 @@ Robust standard errors work seamlessly with all elasticity measures:
 ```julia
 # Robust elasticity estimates
 robust_elasticities = population_margins(model, data;
-    vcov=CovarianceMatrices.HC1,
+    vcov=HC1(),
     measure=:elasticity, type=:effects)
 
 # Profile elasticities with clustered SEs
 profile_elasticities = profile_margins(model, data,
-    means_grid(data); vcov = CovarianceMatrices.Clustered(:cluster_var),
+    means_grid(data); vcov = Clustered(:cluster_var),
     measure = :elasticity)
 ```
 

@@ -76,18 +76,18 @@ Population margins scale linearly with optimized per-row costs:
 For detailed backend selection guidance including domain-sensitive functions and reliability considerations, see **[Backend Selection Guide](backend_selection.md)**.
 
 **Quick summary:**
-- **`:ad`** - Required for log(), sqrt(), 1/x functions; higher reliability
-- **`:fd`** - Zero allocation, optimal for production and large datasets
+- **`:ad`** - Recommended default; machine-precision accuracy, zero allocation, handles all functions
+- **`:fd`** - Alternative; zero allocation, numerical approximation, good for simple formulas
 
 ```julia
-# Production configuration (memory-optimized)
-population_margins(model, data; backend=:fd, scale=:link)
+# Recommended configuration
+population_margins(model, data; backend=:ad, scale=:response)
 
-# Development/high-reliability configuration  
+# Profile analysis (also uses :ad by default)
 profile_margins(model, data, means_grid(data); backend=:ad, scale=:response)
 
-# Domain-sensitive functions (log, sqrt) - AD required
-population_margins(model, data; backend=:ad)  # Required for log(x), sqrt(x)
+# Domain-sensitive functions (log, sqrt) - AD recommended
+population_margins(model, data; backend=:ad)  # Recommended for log(x), sqrt(x)
 ```
 
 ## Optimization Principles
@@ -432,8 +432,8 @@ results = profile_margins(model, data, scenarios; type=:effects)  # Efficient
 # High-performance production settings
 result = population_margins(
     model, data;
-    backend = :fd,           # Zero allocation (explicitly requested)
-    scale = :link,           # Link scale
+    backend = :ad,           # Recommended: zero allocation, exact derivatives
+    scale = :response,       # Response scale
     type = :effects          # Core functionality
 )
 ```
@@ -445,7 +445,7 @@ function production_margins(model, data; kwargs...)
     # Allocation monitoring
     alloc_before = Base.gc_num().poolalloc
     
-    result = population_margins(model, data; backend=:fd, kwargs...)
+    result = population_margins(model, data; backend=:ad, kwargs...)
     
     alloc_after = Base.gc_num().poolalloc
     alloc_diff = alloc_after - alloc_before

@@ -90,12 +90,12 @@ Complex patterns combining hierarchical and cross-tabulated structures:
 # Region first, then education×gender cross-tab within each region
 parallel_nested = population_margins(model, data;
                                    type=:effects,
-                                   groups=:region = [:education, :gender])
+                                   groups=(:region => [:education, :gender]))
 
 # Region first, then separate analyses for education levels AND income quartiles
 mixed_parallel = population_margins(model, data;
                                   type=:effects,
-                                  groups=:region = [:education, (:income, 4)])
+                                  groups=(:region => [:education, (:income, 4)]))
 ```
 
 ## Continuous Variable Binning
@@ -224,7 +224,7 @@ full_analysis = population_margins(model, data;
 # Healthcare policy evaluation
 healthcare_comprehensive = population_margins(health_model, health_data;
     type=:effects,
-    groups=:state = (:urban_rural = [:insurance_type, (:income, 3)]),
+    groups=(:state => (:urban_rural => [:insurance_type, (:income, 3)])),
     scenarios=(:aca_expansion = [0, 1], :medicaid_funding = [0.8, 1.2])
 )
 
@@ -352,7 +352,7 @@ using BenchmarkTools
 @btime population_margins($model, $data; groups=:education)
 
 # Complex hierarchical grouping: O(n/k) per final subgroup
-@btime population_margins($model, $data; groups=:region = (:education = :gender))
+@btime population_margins($model, $data; groups=(:region => (:education => :gender)))
 
 # With scenarios: same O(n/k) complexity repeated for each scenario
 @btime population_margins($model, $data; groups=:education, scenarios=(:treatment = [0, 1]))
@@ -379,7 +379,7 @@ key_analysis = population_margins(model, large_data;
 # Complex patterns still feasible for large n
 complex_large = population_margins(model, large_data;
                                  type=:effects,
-                                 groups=:region = [:education, (:income, 4)])
+                                 groups=(:region => [:education, (:income, 4)]))
 ```
 
 ## Best Practices
@@ -436,7 +436,7 @@ presentation_analysis = population_margins(model, data;
 
 # For comprehensive analysis, use full complexity:
 research_analysis = population_margins(model, data;
-                                     groups=:region = [:education, (:income, 4)],
+                                     groups=(:region => [:education, (:income, 4)]),
                                      scenarios=(:policy = [0, 1], :funding = [0.8, 1.2]))
 ```
 
