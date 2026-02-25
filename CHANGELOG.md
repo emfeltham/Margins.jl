@@ -6,73 +6,76 @@ The format is inspired by Keep a Changelog. Version bump is deferred; entries ar
 
 ## Unreleased
 
-### FormulaCompiler Integration - Phase 4 Complete (2025-10-01)
+### Documentation
+- Comprehensive review and correction of all `docs/src/` files:
+  - Fixed CovarianceMatrices.jl API across all docs to use instantiated form (`HC1()`, `Clustered(...)`, `HAC(Bartlett())`) instead of bare types
+  - Added missing `type = :effects` to semielasticity examples in index.md and advanced.md
+  - Fixed `groups=:region = [...]` syntax errors in grouping.md (5 instances) — these were invalid Julia inside keyword arguments; changed to `groups=(:region => [...])`
+  - Removed "Future extension" framing for `second_differences_at()` in second_differences.md — function is already implemented and exported
+  - Replaced deprecated `at` parameter section in api.md with reference grid documentation
+  - Fixed `Grouping (over)` header to `Grouping (groups)` in api.md
+  - Added trailing comma for single-element NamedTuple scenario in api.md
+  - Added explicit `type=:effects` to Basic Workflow examples in api.md
+  - Fixed confusing variable reuse in api.md Performance Optimization section
+  - Changed `:eta`/`:mu` to `:link`/`:response` in computational_architecture.md to match user-facing API
+  - Updated performance.md backend recommendations to consistently recommend `:ad` as default
+  - Changed production config examples from `backend=:fd` to `backend=:ad`
+  - Fixed typo "Standard erros" → "Standard errors" in index.md
+  - Changed installation from `Pkg.add(url=...)` to `Pkg.add("Margins")` in index.md
+  - Fixed BibTeX triple braces to single braces in index.md
+- README review and corrections (prior commit)
 
-**Categorical Effects Migration - Zero Allocations Achieved:**
+## v2.1.1 — 2026-02
 
-Phase 4 completes the FormulaCompiler migration with full categorical effects support using ContrastEvaluator primitives.
+### Bug Fixes
+- Fixed `balanced_grid` for reference grids
+- Test tolerance and CI fixes
 
-**Architecture Changes:**
-- **New kernel layer**: Created `src/kernels/categorical.jl` for zero-allocation categorical AME computation
-  - `categorical_contrast_ame!()` - single contrast with pre-allocated buffers
-  - `categorical_contrast_ame_batch!()` - batch processing (0 bytes allocated)
-- **Engine enhancements**: Added categorical support to `MarginsEngine`
-  - `contrast::Union{ContrastEvaluator, Nothing}` field
-  - `categorical_vars::Vector{Symbol}` tracking
-  - Phase 4 buffers: `contrast_buf`, `contrast_grad_buf`, `contrast_grad_accum`
-- **Population path**: Migrated `population/categorical_effects.jl` to use kernel (0 allocations)
-- **Profile path**: Implemented categorical contrasts in `profile/core.jl` using ContrastEvaluator (lines 585-624)
-- **Context effects**: Rewrote `population/contexts.jl` using FC primitives (16 tests pass)
-  - Replaced manual Jacobian computation with `marginal_effects_eta!/mu!`
-  - Categorical contexts using `categorical_contrast_ame!` kernel
-  - All DataScenario dependencies removed
+### Other
+- Updated and cleaned tests
+- Updated Project.toml
 
-**Performance Achievements:**
-- **Categorical AME**: 0 bytes allocated (all categorical types: Boolean, String, multi-level)
-- **Context effects**: Zero allocations in hot path for both continuous and categorical
-- **Profile effects**: Zero allocations using ContrastEvaluator primitives
-- **Setup cost**: O(n_variables) acceptable overhead, not in hot path
+## v2.1.0 — 2026-01
 
-**Code Cleanup (547 lines removed):**
-- Deleted obsolete DataScenario functions: `create_scenario_cache`, `compute_categorical_contrast_effect!`
-- Deleted obsolete types: `CategoricalBuffers`
-- Deleted obsolete file: `profile/contrasts.jl` (270 lines, replaced by functionality in profile/core.jl)
-- Stub functions remain: `_predict_with_scenario`, `_gradient_with_scenario!` (error-throwing only, not called)
-- Total cleanup: 277 lines (Phase 3) + 270 lines (Phase 4) = 547 lines removed
+### Features
+- Added Pair syntax support for scenarios (e.g., `scenarios=(:treatment => [0, 1])`)
 
-**Bug Fixes:**
-- Fixed boolean categorical allocations: Added `BoolCounterfactualVector` type check in FormulaCompiler `typed_overrides.jl:404`
-- Fixed `generate_contrast_pairs()`: Now uses full categorical levels via `CategoricalArrays.levels()`
-- Fixed variable shadowing in contrast generation
+### Documentation
+- Updated citation, removed file reference
 
-**Verification:**
-- Population categorical: 18/21 tests pass, 0 allocations achieved
-- Population contexts: 16/16 tests pass
-- Profile categorical: Implemented using ContrastEvaluator
-- Cross-validated with manual counterfactual calculations (rtol=1e-6)
+## v2.0.3 — 2025-11
 
-**Status:**
-- Population effects (continuous + categorical): ✅ Complete, zero allocations
-- Profile effects (continuous + categorical): ✅ Complete, zero allocations
-- Context effects (scenarios + groups): ✅ Complete, zero allocations
-- All paths using FormulaCompiler primitives exclusively
+### Features
+- **Second differences**: Full implementation of `second_differences()`, `second_differences_pairwise()`, `second_differences_all_contrasts()`, and `second_differences_at()` for interaction effects on the predicted outcome scale
+- Improved contrast functions with `ContrastResult` type
+- Updated elasticity calculation
+- Added pairwise contrasts for second differences with proper gradient scaling
 
-### FormulaCompiler Integration - Phase 3 Cleanup (2025-09-30)
+### Bug Fixes
+- Fixed mixture contrast bug
+- Use `levels` order for categoricals, consistent contrast printing
+- Docstring corrections
 
-**Code Quality and API Alignment:**
-- Fixed incorrect FormulaCompiler API signatures in `profile/continuous_effects.jl`
-  - Corrected `marginal_effects_eta!` and `marginal_effects_mu!` calls to use proper positional parameters
-  - Removed incorrect `backend` parameter (backend is encoded in evaluator type)
-- Verified Phase 1 migration complete in `population/continuous_effects.jl`
-  - Confirmed proper use of FormulaCompiler primitives (`marginal_effects_eta!`/`marginal_effects_mu!`)
-  - Zero-allocation performance maintained
-- Audited codebase for unused imports and commented code
-  - All imports in use, no TODO/FIXME markers found
+### Documentation
+- Added mixture contrast documentation
+- Added logo
+- Updated examples guide and miscellaneous docs
 
-**Status (Phase 3):**
-- Continuous effects workflow: Fully migrated to FormulaCompiler primitives
-- Categorical effects workflow: Addressed in Phase 4 (see above)
-- Zero-allocation guarantees: Maintained for continuous paths
+### Other
+- Moved BenchmarkTools from deps to extras
+- Docs CI: enabled versioned docs with Documenter
+
+## v2.0.2 — 2025-10
+
+### Internal
+- FormulaCompiler integration Phase 3 and Phase 4 complete
+  - Full categorical effects migration to ContrastEvaluator primitives (zero allocations)
+  - New kernel layer: `src/kernels/categorical.jl` for zero-allocation categorical AME
+  - Population, profile, and context effects all using FormulaCompiler primitives exclusively
+  - 547 lines of obsolete code removed
+- Fixed boolean categorical allocations, `generate_contrast_pairs()`, variable shadowing
+- Initial registration to Julia General registry
+- All dependencies given proper compat bounds
 
 ## v2.0.1 — 2025-09-13
 
