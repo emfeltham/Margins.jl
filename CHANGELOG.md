@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog. Version bump is deferred; entries are under "Unreleased" until a tag is cut.
 
-## Unreleased
+## v2.2.0 — 2026-02
 
 ### Documentation
 - Comprehensive review and correction of all `docs/src/` files:
