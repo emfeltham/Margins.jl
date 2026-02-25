@@ -1,5 +1,5 @@
      Testing Margins
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_YTfgIV/Project.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_tsCoLV/Project.toml`
   [6e4b80f9] BenchmarkTools v1.6.3
   [336ed68f] CSV v0.10.16
 ⌅ [324d7699] CategoricalArrays v0.10.9
@@ -20,7 +20,7 @@
   [de0858da] Printf v1.11.0
   [9a3f8284] Random v1.11.0
   [8dfed614] Test v1.11.0
-      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_YTfgIV/Manifest.toml`
+      Status `/private/var/folders/td/5b_qj7x16jlfbrt5dgq_y34m0000gp/T/jl_tsCoLV/Manifest.toml`
   [79e6a3ab] Adapt v4.4.0
   [66dad0bd] AliasTables v1.1.3
   [4fba245c] ArrayInterface v7.22.0
@@ -181,8 +181,14 @@
   [8e850ede] nghttp2_jll v1.64.0+1
   [3f19e933] p7zip_jll v17.7.0+0
         Info Packages marked with ⌃ and ⌅ have new versions available. Those with ⌃ may be upgradable, but those with ⌅ are restricted by compatibility constraints from upgrading.
+Precompiling for configuration --code-coverage=none --color=auto --check-bounds=yes --warn-overwrite=yes --depwarn=yes --inline=yes --startup-file=no --track-allocation=none
+   3768.3 ms  ✓ Margins
+  1 dependency successfully precompiled in 4 seconds. 181 already precompiled.
      Testing Running tests...
 [ Info: Skipping contrasts for variable z: specified as mixture in reference grid (use discrete levels if contrasts desired)
+Minimizing 4    Time: 0:00:00 (25.00 ms/it)[K
+   objective: 1794.5937061331388[K[A
+[K[AMinimizing 14    Time: 0:00:00 ( 8.38 ms/it)[K
 ┌ Warning: `wts` keyword argument is deprecated, use `weights` instead
 │   caller = glm(::Matrix{Float64}, ::Vector{Float64}, ::Binomial{Float64}, ::Vararg{Any}; kwargs::Base.Pairs{Symbol, Any, Nothing, @NamedTuple{wts::Vector{Float64}, dofit::Bool, offset::Vector{Float64}}}) at glmfit.jl:618
 └ @ Core ~/.julia/packages/GLM/brCVV/src/glmfit.jl:618
@@ -204,21 +210,10 @@
 [ Info: Skipping contrasts for variable bool_implicit: specified as mixture in reference grid (use discrete levels if contrasts desired)
 [ Info: Skipping contrasts for variable other_bool: specified as mixture in reference grid (use discrete levels if contrasts desired)
 [ Info: Skipping contrasts for variable bool_var: specified as mixture in reference grid (use discrete levels if contrasts desired)
-┌ Warning: Profile margins scaling ratio 23.4× exceeds 6× threshold — likely CI timing noise
-│   largest = 0.001090209
-│   mid = 4.6666e-5
+┌ Warning: Profile margins scaling ratio 23.1× exceeds 6× threshold — likely CI timing noise
+│   largest = 0.001118292
+│   mid = 4.85e-5
 └ @ Main ~/.julia/dev/Margins/test/performance/test_performance.jl:92
-[ Info: Quick Bootstrap Validation Check (n_bootstrap=30)
-[ Info: Quick validation success rate: 50.0%
-WARNING: Method definition analytical_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:37 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition analytical_logistic_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:87 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition _construct_eval_vector(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:142 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition analytical_poisson_se(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:224 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition compute_population_linear_se(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:279 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition verify_linear_se_consistency(Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:299 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_linear_se_consistency), Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:299 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition verify_glm_se_chain_rule(Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:347 overwritten on the same line (check for duplicate calls to `include`).
-WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where names, typeof(Main.verify_glm_se_chain_rule), Any, Any, Any, Any) in module Main at /Users/emf/.julia/dev/Margins/test/statistical_validation/analytical_se_validation.jl:347 overwritten on the same line (check for duplicate calls to `include`).
 ┌ Info: Two-way interaction (Control level)
 │   analytical_se = 0.01919193875781165
 │   computed_se = 0.01919193875781165
@@ -298,13 +293,12 @@ WARNING: Method definition kwcall(NamedTuple{names, T} where T<:Tuple where name
 │   mixed_models = "Fixed effects vcov"
 └   functions = "Backend consistency"
 [ Info: Elasticity SE validation framework loaded successfully
-┌ Warning: `wts` keyword argument is deprecated, use `weights` instead
-│   caller = glm(::Matrix{Float64}, ::Vector{Float64}, ::Poisson{Float64}, ::Vararg{Any}; kwargs::Base.Pairs{Symbol, Any, Nothing, @NamedTuple{wts::Vector{Float64}, dofit::Bool, offset::Vector{Float64}}}) at glmfit.jl:618
-└ @ Core ~/.julia/packages/GLM/brCVV/src/glmfit.jl:618
+[ Info: Quick Bootstrap Validation Check (n_bootstrap=30)
+[ Info: Quick validation success rate: 50.0%
 Test Summary:      | Pass  Total     Time
-Core Functionality |  328    328  1m41.4s
+Core Functionality |  290    290  1m43.9s
 Test Summary:     | Pass  Total     Time
-Advanced Features |  760    760  1m25.8s
+Advanced Features |  778    778  1m35.3s
 
 === Row Scaling (ad) ===
   n=100: 0.0 total, 0.0 per row
@@ -345,31 +339,35 @@ Advanced Features |  760    760  1m25.8s
 
 === Fixed Overhead (fd) ===
   Total allocations: 0.0
+  1.221 μs (12 allocations: 800 bytes)
+  1.221 μs (12 allocations: 800 bytes)
+  1.233 μs (12 allocations: 800 bytes)
+  19.893 ns (0 allocations: 0 bytes)
 
 Multi-level categorical batch:
-  Time (median): 9.680666666666665 μs
+  Time (median): 9.791666666666666 μs
   Allocations:   0
   Memory:        0 bytes
 
 Weighted computation:
-  Time (median): 9.722333333333333 μs
+  Time (median): 9.930666666666665 μs
   Allocations:   0
   Memory:        0 bytes
 
 Boolean categorical batch:
-  Time (median): 2.426 μs
+  Time (median): 2.6689444444444446 μs
   Allocations:   0
   Memory:        0 bytes
 
 Performance Results:
-  Time (median): 10.667 μs
-  Time (min):    9.416 μs
+  Time (median): 10.666 μs
+  Time (min):    9.333 μs
   Allocations:   0
   Memory:        0 bytes
 
 === Continuous Derivatives ===
 1. Warmup call (may allocate for compilation):
-  129.980 ns (0 allocations: 0 bytes)
+  134.641 ns (0 allocations: 0 bytes)
 
 2. Steady-state call (should be 0 bytes):
    Allocations: 0
@@ -379,14 +377,14 @@ Performance Results:
 
 === Continuous Derivatives (Response Scale) ===
 1. Warmup call:
-  87.205 ns (0 allocations: 0 bytes)
+  86.210 ns (0 allocations: 0 bytes)
 
 2. Steady-state call (should be 0 bytes):
    Allocations: 0
 
 === Categorical Contrasts ===
 1. Warmup call:
-  60.888 ns (0 allocations: 0 bytes)
+  61.842 ns (0 allocations: 0 bytes)
 
 2. Steady-state call (should be 0 bytes):
    Allocations: 0
@@ -399,20 +397,20 @@ Performance Results:
 
 === Categorical Contrast Gradients ===
 1. Linear scale gradient (warmup):
-  56.996 ns (0 allocations: 0 bytes)
+  56.742 ns (0 allocations: 0 bytes)
 
 2. Linear scale gradient (should be 0 bytes):
    Allocations: 0
 
 3. Response scale gradient with link (warmup):
-  40.994 ns (0 allocations: 0 bytes)
+  40.321 ns (0 allocations: 0 bytes)
 
 4. Response scale gradient with link (should be 0 bytes):
    Allocations: 0
 
 === Interaction Terms ===
 1. Continuous ME with interaction (warmup):
-  59.766 ns (0 allocations: 0 bytes)
+  59.487 ns (0 allocations: 0 bytes)
 
 2. Continuous ME with interaction (should be 0 bytes):
    Allocations: 0
@@ -422,7 +420,7 @@ Performance Results:
 
 === Delta Method SE ===
 1. Delta method SE (warmup):
-  79.667 ns (0 allocations: 0 bytes)
+  79.240 ns (0 allocations: 0 bytes)
 
 2. Delta method SE (should be 0 bytes):
    Allocations: 0
@@ -442,20 +440,12 @@ Performance Results:
    Allocations: 0
 
 Conclusion: Warm-up phase complete, steady-state achieves 0 allocations
-Test Summary: | Pass  Total     Time
-Performance   |  110    110  1m43.7s
+Test Summary:               | Pass  Total     Time
+Performance and Allocations |  125    125  1m57.2s
 Test Summary:           | Pass  Total     Time
-Statistical Correctness |  778    778  2m40.0s
+Statistical Correctness |  778    778  2m49.6s
 Test Summary:            | Pass  Total     Time
-Computational Primitives |  140    140  1m28.3s
-Test Summary:     | Pass  Total  Time
-Inference Methods |   28     28  4.0s
-  1.212 μs (12 allocations: 800 bytes)
-  1.221 μs (12 allocations: 800 bytes)
-  1.233 μs (12 allocations: 800 bytes)
-  19.893 ns (0 allocations: 0 bytes)
-Test Summary:             | Pass  Total   Time
-Profiling and Allocations |   15     15  14.1s
+Computational Primitives |  140    140  1m30.6s
 Test Summary:    | Pass  Total   Time
-Validation Tests |  202    202  30.6s
+Validation Tests |  202    202  33.8s
      Testing Margins tests passed 
