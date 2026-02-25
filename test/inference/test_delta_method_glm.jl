@@ -119,9 +119,6 @@ Random.seed!(123)
                 se = Margins.delta_method_se(∇β, vcov_matrix)
                 @test se > 0.0
                 @test isfinite(se)
-
-                println("✓ Negative Binomial models supported and working")
-
             catch e
                 if e isa MethodError
                     println("⚠ Negative Binomial models not supported in this GLM.jl version - skipping")

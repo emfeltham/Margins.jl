@@ -51,8 +51,6 @@ Random.seed!(42)
                 se = Margins.delta_method_se(∇β, vcov_matrix)
                 @test se > 0.0
                 @test isfinite(se)
-
-                println("✓ GLMM gradient computation and standard errors working")
             end
 
         catch e
@@ -90,8 +88,6 @@ Random.seed!(42)
                 @test se > 0.0
                 @test isfinite(se)
             end
-
-            println("✓ Poisson GLMM successfully tested")
 
         catch e
             if isa(e, ArgumentError) || isa(e, MethodError)
