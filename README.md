@@ -115,7 +115,7 @@ population_margins(
     model, data; type = :effects, vars = [:g], groups = :region => :gender
 )
 
-# N.B., profile_margins uses explicit reference grids and does not accept scenarios
+# N.B., profile_margins uses explicit reference grids instead of scenarios and groups
 ref = cartesian_grid(x=[-2.0, 0.0, 2.0])
 profile_margins(model, data, ref; type = :effects)
 ```
@@ -127,29 +127,32 @@ population_margins(model, data; type = :effects, measure = :effect)
 
 # Elasticity measures
 population_margins(model, data; type = :effects, measure = :elasticity)
-population_margins(model, data; measure = :semielasticity_dyex) # d(y)/d(ln x)
-population_margins(model, data; measure = :semielasticity_eydx) # d(ln y)/dx
+population_margins(model, data; type = :effects, measure = :semielasticity_dyex) # d(y)/d(ln x)
+population_margins(model, data; type = :effects, measure = :semielasticity_eydx) # d(ln y)/dx
 ```
 
-### Profile Specifications
+### Reference Grids
 ```julia
-# Representative points
-profile_margins(model, data, means_grid(data); type = :effects)
-profile_margins(
-    model, data, cartesian_grid(x1 = [0, 1, 2], x2 = [1.5]); type = :effects
-)
+# Sample means (single-row grid)
+means_grid(data)
 
-# Categorical compositions via explicit reference grids (profile analysis only)
-reference_grid = DataFrame(group = ["A", "B"])
-profile_margins(model, data, reference_grid; type = :effects)
+# Cartesian product of specified values
+cartesian_grid(x1 = [0, 1, 2], x2 = [1.5])
 
-# Population scenarios (Stata `at()` analogue)
-population_margins(
-    model, data; type = :effects, scenarios = (x1 = 0.0, treatment = true)
-)
-population_margins(
-    model, data; type = :predictions, scenarios = (x1 = [-2.0, 0.0, 2.0],)
-)
+# Balanced grid: typical values for unspecified variables, all levels for categoricals
+balanced_grid(data; education = :all, income = [30000, 50000])
+
+# Quantile grid: evaluate at quantiles of continuous variables
+quantile_grid(data; income = [0.25, 0.5, 0.75])
+```
+
+### Computation Backend
+```julia
+# Automatic differentiation (default) — exact derivatives
+population_margins(model, data; type = :effects, backend = :ad)
+
+# Finite differences — zero allocations in hot path
+population_margins(model, data; type = :effects, backend = :fd)
 ```
 
 ### Stratified Analysis
@@ -206,7 +209,7 @@ DataFrame(treatment_by_edu)
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/emfeltham/Margins.jl")
+Pkg.add("Margins")
 ```
 
 **Requirements**: Julia ≥ 1.10
@@ -237,7 +240,8 @@ Pkg.add(url="https://github.com/emfeltham/Margins.jl")
 |---------------|----------------------|
 | `margins, dydx(*)` | `population_margins(model, data; type = :effects)` |
 | `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type = :effects)` |
-| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type = :effects)` |
+| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type = :predictions)` |
+| `margins, at(x=0 1 2) dydx(*)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type = :effects)` |
 | `margins` | `population_margins(model, data; type = :predictions)` |
 | `margins, at(means)` | `profile_margins(model, data, means_grid(data); type = :predictions)` |
 
@@ -247,8 +251,8 @@ If you use Margins.jl in your research, please cite:
 
 ```bibtex
 @misc{feltham_formulacompilerjl_2026,
-  title = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl: {{Efficient Marginal Effects}} in {{Julia}}},
-  shorttitle = {{{FormulaCompiler}}.Jl and {{Margins}}.Jl},
+  title = {{FormulaCompiler}.jl and {Margins}.jl: {Efficient} Marginal Effects in {Julia}},
+  shorttitle = {{FormulaCompiler}.jl and {Margins}.jl},
   author = {Feltham, Eric},
   year = {2026},
   month = jan,
