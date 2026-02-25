@@ -186,7 +186,7 @@ df6 = DataFrame(
     wts = abs.(randn(n)) .+ 0.1
 )
 
-model6 = lm(@formula(y ~ x1 + x2), df6, wts=df6.wts)
+model6 = lm(@formula(y ~ x1 + x2), df6, weights=df6.wts)
 
 result6 = population_margins(model6, df6; type=:effects, vars=[:x1, :x2], scale=:link)
 
