@@ -292,13 +292,20 @@ Here, the second term accounts for mean(ŷ) depending on β.
 
 ## Standardized Predictors
 
-Margins.jl seamlessly integrates with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl) for models fit with standardized (z-scored) variables. Marginal effects are automatically reported on the original (raw) scale, requiring no manual back-transformation.
+Margins.jl seamlessly integrates with [StandardizedPredictors.jl](https://github.com/beacon-biosignals/StandardizedPredictors.jl) for models fit with standardized, centered, or scaled variables. All three transformations are supported: `ZScore()`, `Center()`, and `Scale()`. Marginal effects are automatically reported on the original (raw) scale, requiring no manual back-transformation.
 
-### Why Standardize Predictors?
+### Why Standardize, Center, or Scale Predictors?
 
-Standardization transforms variables to have mean 0 and standard deviation 1:
+StandardizedPredictors.jl provides three transformations:
 ```julia
-x_std = (x - mean(x)) / std(x)
+# ZScore: mean=0, std=1 — full standardization
+x_zscore = (x - mean(x)) / std(x)
+
+# Center: mean=0, preserves original scale — useful for interpretable intercepts
+x_centered = x - mean(x)
+
+# Scale: std=1, preserves original location — useful for comparable coefficient magnitudes
+x_scaled = x / std(x)
 ```
 
 ### Integration with Margins.jl
@@ -306,56 +313,77 @@ x_std = (x - mean(x)) / std(x)
 ```julia
 using Margins, GLM, StandardizedPredictors, DataFrames
 
-# Fit model with standardized income
+# Fit model with mixed transformations
 df = DataFrame(
     sales = randn(1000) .* 10000 .+ 50000,
     income = randn(1000) .* 20000 .+ 50000,  # mean ≈ \$50k, std ≈ \$20k
-    age = randn(1000) .* 10 .+ 40
+    age = randn(1000) .* 10 .+ 40,
+    experience = rand(0:30, 1000)
 )
 
-model = lm(@formula(sales ~ income + age), df,
-           contrasts = Dict(:income => ZScore(), :age => ZScore()))
+model = lm(@formula(sales ~ income + age + experience), df,
+           contrasts = Dict(
+               :income => ZScore(),      # Full standardization
+               :age => Center(),         # Center only
+               :experience => Scale()    # Scale only
+           ))
 
-# Marginal effects are automatically on ORIGINAL scale
-result = population_margins(model, df; type=:effects, vars=[:income, :age])
+# Marginal effects are automatically on ORIGINAL scale regardless of transformation
+result = population_margins(model, df; type=:effects, vars=[:income, :age, :experience])
 DataFrame(result)
 
 # income effect: change in sales per \$1 increase in income (not per SD!)
 # age effect: change in sales per 1-year increase in age (not per SD!)
+# experience effect: change in sales per 1-year increase in experience
 ```
 
 ### How Automatic Back-Transformation Works
 
 When computing marginal effects, Margins.jl uses FormulaCompiler.jl's derivative system, which automatically applies the chain rule through the standardization transformation:
 
-Mathematical detail (with `ZScore`):
-- Model uses: `x_std = (x - μ) / σ`
-- Derivative computation: `∂η/∂x_raw = ∂η/∂x_std × ∂x_std/∂x_raw = β × (1/σ)`
-- Result: Marginal effect per unit of original variable
+Mathematical detail for each transformation:
 
-Both finite differences (FD) and automatic differentiation (AD) backends handle this automatically:
-- FD: Perturbs raw values → standardization applied during evaluation → derivative includes 1/σ
-- AD: Dual arithmetic propagates through (x - μ)/σ → derivative includes 1/σ
+**ZScore** (`x_std = (x - μ) / σ`):
+- Derivative: `∂η/∂x_raw = β × (1/σ)` — the `1/σ` factor converts from standardized to raw scale
 
-### Comparison: Raw vs Standardized Models
+**Center** (`x_ctr = x - μ`, i.e., σ = 1):
+- Derivative: `∂η/∂x_raw = β × (1/1) = β` — centering does not change the derivative
+
+**Scale** (`x_scl = x / σ`, i.e., μ = 0):
+- Derivative: `∂η/∂x_raw = β × (1/σ)` — same scaling factor as ZScore
+
+Both finite differences (FD) and automatic differentiation (AD) backends handle all transformations automatically:
+- FD: Perturbs raw values → transformation applied during evaluation → chain rule automatic
+- AD: Dual arithmetic propagates through the transformation → chain rule automatic
+
+### Comparison: Raw vs Transformed Models
 
 ```julia
-# Fit both raw and standardized models
+# Fit raw, standardized, centered, and scaled models
 model_raw = lm(@formula(sales ~ income), df)
 model_std = lm(@formula(sales ~ income), df, contrasts=Dict(:income => ZScore()))
+model_ctr = lm(@formula(sales ~ income), df, contrasts=Dict(:income => Center()))
+model_scl = lm(@formula(sales ~ income), df, contrasts=Dict(:income => Scale()))
 
-# Marginal effects are IDENTICAL (both on original scale)
+# Marginal effects are IDENTICAL across all four (all on original scale)
 me_raw = population_margins(model_raw, df; vars=[:income])
 me_std = population_margins(model_std, df; vars=[:income])
+me_ctr = population_margins(model_ctr, df; vars=[:income])
+me_scl = population_margins(model_scl, df; vars=[:income])
 
-# Both give same result: effect per dollar of income
+# All give same result: effect per dollar of income
 @assert DataFrame(me_raw).estimate ≈ DataFrame(me_std).estimate
+@assert DataFrame(me_raw).estimate ≈ DataFrame(me_ctr).estimate
+@assert DataFrame(me_raw).estimate ≈ DataFrame(me_scl).estimate
 ```
 
 Why they match:
-- Raw model: `∂sales/∂income_dollars = β₁`
-- Standardized model: `∂sales/∂income_dollars = β₁_std / σ_income`
-- The σ in the denominator is automatically included by the chain rule
+- Raw model: `∂sales/∂income = β₁`
+- ZScore model: `∂sales/∂income = β₁_std / σ_income` (chain rule provides 1/σ)
+- Center model: `∂sales/∂income = β₁_ctr` (coefficients identical to raw model)
+- Scale model: `∂sales/∂income = β₁_scl / σ_income` (chain rule provides 1/σ)
+
+Note: For linear models, centered models have **identical coefficients** to raw models (centering only shifts the intercept). ZScore and Scale models have coefficients on the transformed scale, but the chain rule corrects this automatically.
 
 ### Elasticities with Standardized Predictors
 
