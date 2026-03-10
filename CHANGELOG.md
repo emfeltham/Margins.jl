@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog. Version bump is deferred; entries are under "Unreleased" until a tag is cut.
 
+## v2.1.3 — 2026-03
+
+### Features
+- **FixedEffectModels.jl support** via package extension (`ext/FixedEffectModelsExt.jl`):
+  - Average marginal effects (AME) and marginal effects at means (MEM) for models with absorbed fixed effects
+  - Predictions (AAP/APM) with FE offset support — requires `save=:fe` at model fit time
+  - Profile predictions with FE-level lookup: FE variables in grid use specific level estimates; FE variables not in grid use population-average FE
+  - Instrumental variable (IV) models supported with one-time `@info` note about structural coefficients
+  - Counterfactual scenarios on non-FE variables work as expected
+  - Both `:ad` and `:fd` backends supported
+  - Absorbed FE variables blocked from `vars` and `scenarios` with informative errors
+
+### Documentation
+- Added Fixed Effects Models guide (`docs/src/fixed_effects.md`)
+- Added Stata migration section for `reghdfe`, `ivregress`, and FE predictions
+- Added FixedEffectModels.jl to ecosystem integration mentions in index
+- Fixed `$` LaTeX interpolation warnings in `second_differences.md` (converted to Documenter `math` blocks and Unicode)
+
 ## v2.1.2 — 2026-02
 
 ### Documentation

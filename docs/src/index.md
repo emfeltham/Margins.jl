@@ -6,7 +6,7 @@
 
 Margins.jl provides a general and high-performance framework for marginal effects analysis in julia. The package is organized around both population- and profile-based approaches. The computational architecture achieves constant-time performance for profile analysis with correct uncertainty handling.
 
-The package integrates seamlessly with the established JuliaStats ecosystem, providing compatibility with [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification, [GLM.jl](https://github.com/JuliaStats/GLM.jl) for generalized linear models, and [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard errors. The implementation builds upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) to achieve efficient and accurate results.
+The package integrates seamlessly with the established JuliaStats ecosystem, providing compatibility with [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification, [GLM.jl](https://github.com/JuliaStats/GLM.jl) for generalized linear models, [FixedEffectModels.jl](https://github.com/FixedEffects/FixedEffectModels.jl) for high-dimensional fixed effects, and [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard errors. The implementation builds upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) to achieve efficient and accurate results.
 
 ## Implementation Overview
 

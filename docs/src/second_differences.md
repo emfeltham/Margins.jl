@@ -8,20 +8,20 @@
 
 Second differences measure whether the marginal effect of one variable differs across levels of another variable. In generalized linear models, where effects are inherently nonlinear, second differences provide the natural way to quantify interaction effects on the predicted outcome scale.
 
-**Definition**: For two variables $X$ (focal variable) and $Z$ (moderator), the second difference is defined as:
+**Definition**: For two variables X (focal variable) and Z (moderator), the second difference is defined as:
 
-$$
+```math
 \Delta^2 = [E(Y|X=1,Z=1) - E(Y|X=0,Z=1)] - [E(Y|X=1,Z=0) - E(Y|X=0,Z=0)]
-$$
+```
 
-This represents the difference in marginal effects, a "difference of differences", capturing how the effect of $X$ changes when $Z$ changes.
+This represents the difference in marginal effects, a "difference of differences", capturing how the effect of X changes when Z changes.
 
 ### Relationship to Interaction Terms
 
 | Model Type | Linear Model | Nonlinear Model (GLM) |
 |------------|--------------|----------------------|
-| **Simple effect** | Coefficient on $X$ | Marginal effect of $X$ |
-| **Interaction** | Coefficient on $X \times Z$ | Second difference |
+| **Simple effect** | Coefficient on X | Marginal effect of X |
+| **Interaction** | Coefficient on X × Z | Second difference |
 | **Scale** | Coefficient scale = outcome scale | Must compute from predicted probabilities/means |
 
 In linear models, the interaction coefficient directly represents the second difference. In nonlinear models (logit, probit, Poisson), the interaction coefficient does not directly represent the interaction on the predicted scale, necessitating explicit computation of second differences from marginal effects.
@@ -61,13 +61,13 @@ The **local derivative approach** uses `second_differences_at()` to compute deri
 
 ### Statistical Inference
 
-Standard errors for second differences employ rigorous delta-method computation. For a second difference comparing two AMEs ($\text{AME}_1$ and $\text{AME}_2$) with parameter gradients $g_1$ and $g_2$:
+Standard errors for second differences employ rigorous delta-method computation. For a second difference comparing two AMEs (AME₁ and AME₂) with parameter gradients g₁ and g₂:
 
-$$
+```math
 \text{SE}(\Delta^2) = \sqrt{(g_2 - g_1)' \Sigma (g_2 - g_1)}
-$$
+```
 
-where $\Sigma$ is the model's parameter covariance matrix. This approach properly accounts for:
+where Σ is the model's parameter covariance matrix. This approach properly accounts for:
 - Covariance between the two AME estimates
 - Full uncertainty propagation from model parameters
 - Appropriate test statistics and confidence intervals
@@ -227,7 +227,7 @@ sd = second_differences_at(model, data, :education, :income, vcov(model))
 
 # At specific profile with other variables held constant
 sd = second_differences_at(model, data, :education, :income, vcov(model);
-                          at=50000,           # Income = $50k
+                          at=50000,           # Income = 50k
                           profile=(age=40,    # Hold age constant
                                   region="north"))  # Hold region constant
 
@@ -461,7 +461,7 @@ sd = second_differences_at(model, data, :income, :age, vcov(model);
 | Approach | Use When | Modifier Type | Example |
 |----------|----------|---------------|---------|
 | **`second_differences()`**<br>(Discrete) | Comparing effects across distinct groups | Binary or Categorical | "Does age effect differ for treated vs control?" |
-| **`second_differences_at()`**<br>(Local) | Understanding continuous variation at specific profiles | **Continuous only** | "At age=40, how does education effect change per $1k income?" |
+| **`second_differences_at()`**<br>(Local) | Understanding continuous variation at specific profiles | **Continuous only** | "At age=40, how does education effect change per 1k income?" |
 
 **Variable Type Compatibility**:
 

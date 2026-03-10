@@ -147,6 +147,40 @@ res = population_margins(m, df;
 DataFrame(res)  # Shows dydx(x) by Q1..Q4
 ```
 
+## Fixed Effects Models (reghdfe / ivregress)
+
+### Basic Fixed Effects
+
+| Stata Command | Margins.jl Equivalent | Notes |
+|---|---|---|
+| `reghdfe y x1 x2, absorb(state year)` | `reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)))` | Uses FixedEffectModels.jl |
+| `margins, dydx(*)` (after reghdfe) | `population_margins(model, df; type=:effects)` | AME with absorbed FEs |
+| `margins, dydx(x1)` (after reghdfe) | `population_margins(model, df; type=:effects, vars=[:x1])` | Single variable |
+| `margins, at(means) dydx(*)` | `profile_margins(model, df, means_grid(df); type=:effects)` | MEM with absorbed FEs |
+
+### Predictions with Fixed Effects
+
+Predictions require `save=:fe` when fitting the model:
+
+```julia
+model = reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)); save=:fe)
+```
+
+| Stata Command | Margins.jl Equivalent | Notes |
+|---|---|---|
+| `margins` (after reghdfe) | `population_margins(model, df; type=:predictions)` | Requires `save=:fe` |
+| `margins, at(x1=(0 1 2))` | `profile_margins(model, df, cartesian_grid(x1=[0,1,2]); type=:predictions)` | FEs averaged |
+| (predict at specific FE level) | `profile_margins(model, df, DataFrame(x1=[0.0], state=["CA"]); type=:predictions)` | FE level specified in grid |
+
+### Instrumental Variables
+
+| Stata Command | Margins.jl Equivalent | Notes |
+|---|---|---|
+| `ivregress 2sls y x2 (x1=z)` | `reg(df, @formula(y ~ x2 + (x1 ~ z)))` | IV estimation |
+| `margins, dydx(*)` (after ivregress) | `population_margins(model, df; type=:effects)` | Structural coefficients |
+
+See [Fixed Effects Models](fixed_effects.md) for full documentation.
+
 ## Combined Grouping and Scenarios
 
 ### Complex Analysis Patterns

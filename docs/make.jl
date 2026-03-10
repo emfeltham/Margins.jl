@@ -28,6 +28,7 @@ makedocs(;
       "Population Grouping" => "grouping.md",
       "Backend Selection" => "backend_selection.md",
       "Performance Guide" => "performance.md",
+      "Fixed Effects Models" => "fixed_effects.md",
       "Advanced Features" => "advanced.md"
     ],
     "Migration Guide" => "stata_migration.md",

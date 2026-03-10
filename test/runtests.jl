@@ -8,6 +8,7 @@ using StatsModels
 using Statistics
 using Margins
 using MixedModels
+using FixedEffectModels
 using RDatasets
 using Distributions
 
@@ -40,6 +41,7 @@ end
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
     include("features/test_balanced_grid.jl")
+    include("features/test_fixed_effect_models.jl")
     include("regression/test_bool_mixture_skip.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
