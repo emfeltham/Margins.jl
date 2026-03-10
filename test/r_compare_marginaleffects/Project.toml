@@ -1,0 +1,13 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+FormulaCompiler = "72341345-62c2-4039-9674-a84f8dcc444c"
+GLM = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
+Margins = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+RData = "df47a6cb-8c03-5eed-afd8-b6050d6c41da"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
