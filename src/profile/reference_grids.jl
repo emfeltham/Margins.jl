@@ -1600,7 +1600,12 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     
     # Create complete reference grid
     n_rows = nrow(reference_grid)
-    complete_cols = Dict{Symbol, Vector}()
+    # NOTE: must be AbstractVector, not Vector. A CategoricalVector is not a `Vector`
+    # subtype, so assigning one into a `Dict{Symbol,Vector}` forces convert(Vector, ::CategoricalVector).
+    # Under CategoricalArrays >= 1.0 that conversion returns a plain Array of unwrapped values
+    # (PR #420), silently stripping the categorical pool/levels and collapsing non-baseline
+    # levels to the baseline downstream. Using AbstractVector preserves the categorical column.
+    complete_cols = Dict{Symbol, AbstractVector}()
 
     # First, add only MODEL columns from the original reference grid
     # This prevents non-model variables from leaking through

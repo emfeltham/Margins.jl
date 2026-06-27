@@ -282,8 +282,8 @@ end
             # Test with numeric boolean value (70% treatment probability)
             ref_grid_numeric = DataFrame(
                 employed=[0.7],  # Simple numeric value instead of complex mixture
-                education=categorical([first(levels(df.education))], levels=levels(df.education)),
-                region=categorical([first(levels(df.region))], levels=levels(df.region)),
+                education=categorical([unwrap(first(levels(df.education)))], levels=levels(df.education)),
+                region=categorical([unwrap(first(levels(df.region)))], levels=levels(df.region)),
                 age=[mean(df.age)],
                 income=[mean(df.income)]
             )
@@ -292,8 +292,8 @@ end
             @test isfinite(DataFrame(bool_result).estimate[1])
             
             # Test discrete boolean scenarios (true/false work directly)
-            ref_grid_true = DataFrame(employed=[true], education=categorical([first(levels(df.education))], levels=levels(df.education)), region=categorical([first(levels(df.region))], levels=levels(df.region)), age=[mean(df.age)], income=[mean(df.income)])
-            ref_grid_false = DataFrame(employed=[false], education=categorical([first(levels(df.education))], levels=levels(df.education)), region=categorical([first(levels(df.region))], levels=levels(df.region)), age=[mean(df.age)], income=[mean(df.income)])
+            ref_grid_true = DataFrame(employed=[true], education=categorical([unwrap(first(levels(df.education)))], levels=levels(df.education)), region=categorical([unwrap(first(levels(df.region)))], levels=levels(df.region)), age=[mean(df.age)], income=[mean(df.income)])
+            ref_grid_false = DataFrame(employed=[false], education=categorical([unwrap(first(levels(df.education)))], levels=levels(df.education)), region=categorical([unwrap(first(levels(df.region)))], levels=levels(df.region)), age=[mean(df.age)], income=[mean(df.income)])
             emp_true = DataFrame(profile_margins(interaction_model, df, ref_grid_true; type=:predictions)).estimate[1]
             emp_false = DataFrame(profile_margins(interaction_model, df, ref_grid_false; type=:predictions)).estimate[1]
             
@@ -326,7 +326,7 @@ end
             # Test with mixture + continuous overrides
             ref_grid_mixed = DataFrame(
                 education=[edu_mix],
-                region=categorical([first(levels(df.region))]),
+                region=categorical([unwrap(first(levels(df.region)))]),
                 employed=[true],
                 age=[40],
                 income=[60000]
@@ -341,7 +341,7 @@ end
             
             ref_grid_eff = DataFrame(
                 education=[edu_mix],
-                region=categorical([first(levels(df.region))]),
+                region=categorical([unwrap(first(levels(df.region)))]),
                 employed=[true],
                 age=[mean(df.age)],
                 income=[mean(df.income)]

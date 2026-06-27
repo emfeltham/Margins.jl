@@ -2,7 +2,7 @@ name = "Margins"
 uuid = "883ce5cb-1d42-4db9-84e7-eea888f0a17e"
 keywords = ["marginal-effects", "econometrics", "statistics", "regression", "glm", "predictions", "linear-models", "average-marginal-effects", "contrasts", "statistical-modeling"]
 license = "MIT"
-version = "2.1.3"
+version = "2.1.4"
 authors = ["Eric Martin Feltham <eric.feltham@aya.yale.edu>"]
 categories = ["Statistics", "Sociology", "Econometrics", "Political Science", "Psychology"]
 description = "Marginal effects and adjusted predictions for statistical models in Julia"
@@ -30,7 +30,7 @@ FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
 FixedEffectModelsExt = "FixedEffectModels"
 
 [compat]
-CategoricalArrays = "0.10"
+CategoricalArrays = "0.10, 1"
 CovarianceMatrices = "0.30"
 DataFrames = "1.7"
 Dates = "1"

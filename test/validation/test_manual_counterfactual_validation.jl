@@ -98,7 +98,7 @@ using Statistics: mean
                 # Test each non-baseline level
                 for level in setdiff(unique(df.region), [levels(df.region)[1]])  # Skip baseline
                     df_baseline = copy(df)
-                    df_baseline.region .= categorical(repeat([levels(df.region)[1]], n))
+                    df_baseline.region .= categorical(repeat([String(levels(df.region)[1])], n))
 
                     df_level = copy(df)
                     df_level.region .= categorical(repeat([String(level)], n))
@@ -132,7 +132,7 @@ using Statistics: mean
             baseline = levels(df_logistic.region)[1]
             for level in setdiff(unique(df_logistic.region), [baseline])
                 df_baseline = copy(df_logistic)
-                df_baseline.region .= categorical(repeat([baseline], n))
+                df_baseline.region .= categorical(repeat([String(baseline)], n))
 
                 df_level = copy(df_logistic)
                 df_level.region .= categorical(repeat([String(level)], n))
