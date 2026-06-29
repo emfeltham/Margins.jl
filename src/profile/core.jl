@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -202,7 +202,7 @@ end
 Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64, contrasts::Symbol)
+function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64, contrasts::Symbol; interval::Symbol=:confidence)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars = _process_vars_parameter(model, vars, data_nt)
@@ -272,27 +272,35 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
         
-        # Add analysis_type for format auto-detection  
+        # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(completed_reference_grid)
-        
+
         # Store confidence interval parameters in metadata
         metadata[:alpha] = ci_alpha
-        
+
+        # Interval kind: :confidence (default) or :prediction. For prediction
+        # intervals, store the residual variance σ̂² that widens the interval
+        # bounds (eligibility to Gaussian/identity is enforced here).
+        metadata[:interval] = interval
+        if interval === :prediction
+            metadata[:resid_var] = _prediction_residual_variance(model)
+        end
+
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
-        
+
         # Extract profile values from reference grid - expand to match result length
         # Filter to show only original reference grid variables (hide automatic typical values)
         profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
-        
+
         return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
     end
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -322,6 +330,12 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables (:baseline or :pairwise)
 - `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
+- `interval::Symbol=:confidence`: Interval kind for `type=:predictions`
+  - `:confidence` - interval for the mean prediction (default): `ŷ ± z·√(SE²)`
+  - `:prediction` - interval for a single new observation, adding residual variance:
+    `ŷ ± z·√(SE² + σ̂²)`. Only supported for Gaussian/identity-link (linear) models;
+    errors for GLMs (no additive response-scale residual variance) and for
+    `type=:effects`. Matches R's `predict(lm, interval="prediction")`.
 
 # Examples
 ```julia
@@ -360,7 +374,19 @@ function profile_margins(
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     ci_alpha::Float64=0.05, vcov=GLM.vcov,
+    interval::Symbol=:confidence,
 )
+    # Validate interval kind. Prediction intervals add observation-level residual
+    # variance and are only meaningful for predictions (a derivative of a mean has
+    # no "new observation" analogue), so they are rejected for type=:effects.
+    if !(interval in (:confidence, :prediction))
+        throw(ArgumentError("interval must be :confidence or :prediction, got $(repr(interval))"))
+    end
+    if interval === :prediction && type === :effects
+        throw(ArgumentError("interval=:prediction is only valid with type=:predictions; " *
+                            "marginal effects do not have prediction intervals."))
+    end
+
     # Convert data to NamedTuple for consistency
     data_nt_raw = Tables.columntable(data)
 
@@ -430,7 +456,7 @@ function profile_margins(
     end
     
     # Route to single implementation with processed reference grid
-    return _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts)
+    return _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts; interval=interval)
 end
 
 

@@ -38,6 +38,7 @@ end
     include("features/test_bool_profiles.jl")
     include("features/test_table_profiles.jl")
     include("features/test_prediction_scales.jl")
+    include("features/test_prediction_intervals.jl")
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
     include("features/test_balanced_grid.jl")

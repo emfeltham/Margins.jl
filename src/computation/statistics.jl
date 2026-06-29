@@ -117,6 +117,65 @@ Identical to compute_delta_method_se but with clearer naming for single-purpose 
 end
 
 """
+    _is_gaussian_identity(model) -> Bool
+
+Return `true` only when `model` is a Gaussian-family model with an identity link
+(i.e. an ordinary linear model). This is the sole model family for which a
+symmetric prediction interval `ŷ ± z·√(SE² + σ²)` is well-defined: GLMs have no
+additive residual variance on the response scale (the outcome is Bernoulli/count
+and bounded), so a symmetric band there would be statistically meaningless and
+could escape the valid range. Handles both bare and `TableRegressionModel`-wrapped
+models. Mixed models are excluded (their predictive variance involves the random
+effects, which is out of scope here).
+"""
+function _is_gaussian_identity(model)::Bool
+    (_auto_link(model) isa GLM.IdentityLink) || return false
+    inner = hasfield(typeof(model), :model) ? getfield(model, :model) : model
+    hasfield(typeof(inner), :rr) || return false
+    rr = getfield(inner, :rr)
+    rr isa GLM.LmResp && return true
+    if rr isa GLM.GlmResp && hasfield(typeof(rr), :d)
+        return getfield(rr, :d) isa Normal
+    end
+    return false
+end
+
+"""
+    _prediction_residual_variance(model) -> Float64
+
+Residual variance σ̂² used to widen a confidence interval into a prediction
+interval. For an ordinary linear model this is `RSS / (n − p)` via
+`deviance(model) / dof_residual(model)`, matching R's
+`predict(lm, interval = "prediction")`.
+
+Throws an `ArgumentError` for any model that is not Gaussian with an identity
+link, rather than emitting a misleading symmetric interval. See
+`notes/PREDICTION_INTERVALS_PLAN.md` for the statistical rationale.
+
+Note: this is the homoskedastic residual variance. The resulting prediction
+interval assumes constant error variance; if a heteroskedasticity-robust `vcov`
+is supplied to widen the coefficient SEs, the residual term here is still the
+single pooled σ̂², so the two pieces rest on different variance assumptions.
+"""
+function _prediction_residual_variance(model)::Float64
+    if !_is_gaussian_identity(model)
+        throw(ArgumentError(
+            "Prediction intervals (interval=:prediction) are only supported for " *
+            "Gaussian models with an identity link (ordinary linear models). " *
+            "Model of type $(typeof(model)) is not eligible — use " *
+            "interval=:confidence instead. See notes/PREDICTION_INTERVALS_PLAN.md."))
+    end
+    dof_resid = GLM.dof_residual(model)
+    if dof_resid <= 0
+        throw(ArgumentError(
+            "Cannot compute a prediction interval: the model has " *
+            "dof_residual = $dof_resid (no residual degrees of freedom to " *
+            "estimate σ²). A saturated model has no residual variance to add."))
+    end
+    return GLM.deviance(model) / dof_resid
+end
+
+"""
     contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
 
 Compute contrast between two result rows with delta-method inference.
