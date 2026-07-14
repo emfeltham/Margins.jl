@@ -44,6 +44,7 @@ end
     include("features/test_balanced_grid.jl")
     include("features/test_fixed_effect_models.jl")
     include("regression/test_bool_mixture_skip.jl")
+    include("regression/test_unused_categorical_levels.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
 end
