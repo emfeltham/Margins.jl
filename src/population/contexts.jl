@@ -353,7 +353,7 @@ Uses FormulaCompiler primitives for efficient zero-allocation computation.
 - `context_data::NamedTuple`: Data with scenario overrides applied
 - `context_indices::Vector{Int}`: Row indices for this context
 - `var::Symbol`: Variable to analyze
-- `scale::Symbol`: Either `:eta` or `:response`
+- `scale::Symbol`: Either `:link` or `:response`
 - `backend::Symbol`: Either `:fd` or `:ad`
 - `full_weights::Union{Vector{Float64}, Nothing}`: Full weights vector (for categorical kernel)
 - `context_weights::Union{Vector{Float64}, Nothing}`: Subset weights (for continuous effects)
@@ -408,7 +408,7 @@ marginal_effects_eta!/mu! functions.
 - `context_data::NamedTuple`: Modified data with scenario overrides applied
 - `context_indices::Vector{Int}`: Row indices within this context
 - `var::Symbol`: Variable to compute marginal effect for
-- `scale::Symbol`: Either `:eta` (linear predictor) or `:response` (mean scale)
+- `scale::Symbol`: Either `:link` (linear predictor) or `:response` (mean scale)
 - `weights::Union{Vector{Float64}, Nothing}`: Optional observation weights
 - `context_de`: Pre-built derivative evaluator for this context
 
@@ -529,7 +529,7 @@ Uses pre-built ContrastEvaluator to avoid rebuilding per variable.
 - `context_data::NamedTuple`: Data with scenario overrides applied
 - `context_indices::Vector{Int}`: Row indices for this context
 - `var::Symbol`: Categorical variable to analyze
-- `scale::Symbol`: Either `:eta` or `:response`
+- `scale::Symbol`: Either `:link` or `:response`
 - `weights::Union{Vector{Float64}, Nothing}`: Optional weights
 - `contrasts::Symbol`: Contrast type (`:baseline` or `:pairwise`)
 - `context_ce`: Pre-built contrast evaluator for all categorical variables in this context
@@ -575,22 +575,25 @@ function _compute_categorical_context_effect(
     gradients_matrix = Matrix{Float64}(undef, length(contrast_pairs), length(engine.β))
 
     # Compute each contrast
+    # The kernel selects the computation scale from its link argument: `nothing` ⇒ link
+    # scale (Δη), a link object ⇒ response scale (Δμ). Resolve it once, concretely.
     for (i, pair) in enumerate(contrast_pairs)
         # Use the zero-allocation categorical kernel
-        ame, se = categorical_contrast_ame!(
-            contrast_buf,
-            gradient_buf,
-            gradient_accum,
-            context_evaluator,
-            var,
-            pair.level1,
-            pair.level2,
-            engine.β,
-            engine.Σ,
-            engine.link,
-            context_indices,
-            weights
-        )
+        ame, se = if scale === :link
+            categorical_contrast_ame!(
+                contrast_buf, gradient_buf, gradient_accum,
+                context_evaluator, var, pair.level1, pair.level2,
+                engine.β, engine.Σ, nothing,
+                context_indices, weights
+            )
+        else
+            categorical_contrast_ame!(
+                contrast_buf, gradient_buf, gradient_accum,
+                context_evaluator, var, pair.level1, pair.level2,
+                engine.β, engine.Σ, engine.link,
+                context_indices, weights
+            )
+        end
 
         # Store results
         push!(results.variable, string(var))
@@ -619,7 +622,7 @@ formula evaluation and link functions.
 - `engine::MarginsEngine`: Pre-built margins engine
 - `context_data::NamedTuple`: Data with scenario overrides applied
 - `context_indices::Vector{Int}`: Row indices for this context
-- `scale::Symbol`: Either `:eta` (linear predictor) or `:response` (mean scale)
+- `scale::Symbol`: Either `:link` (linear predictor) or `:response` (mean scale)
 - `weights::Union{Vector{Float64}, Nothing}`: Optional observation weights
 
 # Returns

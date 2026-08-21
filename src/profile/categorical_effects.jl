@@ -12,7 +12,7 @@ Uses ContrastEvaluator with FormulaCompiler primitives for zero-allocation compu
 - `refgrid_de`: Derivative evaluator for the reference grid (may be nothing)
 - `profile`: Profile specification dictionary
 - `var`: Categorical variable name for contrast computation
-- `scale`: Prediction scale (:response or :linear)
+- `scale`: Prediction scale (:response or :link)
 - `backend`: Computation backend (:ad or :fd)
 
 # Returns
@@ -103,7 +103,7 @@ Uses ContrastEvaluator with FormulaCompiler primitives for zero-allocation compu
 - `refgrid_de`: Derivative evaluator for the reference grid
 - `profile`: Profile specification dictionary
 - `var`: Categorical variable name for contrast computation
-- `scale`: Prediction scale (:response or :linear)
+- `scale`: Prediction scale (:response or :link)
 
 # Returns
 - `nothing` (results stored in gβ_buffer)
@@ -161,8 +161,14 @@ function _row_specific_contrast_grad_beta!(
     # Buffer now passed as argument (0 bytes allocation)
 
     # Compute gradient at profile row (0 bytes with proper buffer reuse)
-    # contrast_gradient! handles both link and response scale internally
-    contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, from_level, to_level, β, link)
+    # contrast_gradient! selects the scale from its link argument: `nothing` ⇒ link scale
+    # (∇β = ΔX), a link object ⇒ response scale (∇β = g'(η₁)X₁ - g'(η₀)X₀). Must match the
+    # scale used for the estimate in _compute_row_specific_baseline_contrast.
+    if scale === :link
+        contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, from_level, to_level, β, nothing)
+    else
+        contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, from_level, to_level, β, link)
+    end
 
     # Copy to output buffer
     copyto!(gβ_buffer, gradient_buf)
@@ -180,7 +186,7 @@ Uses ContrastEvaluator with FormulaCompiler primitives for zero-allocation compu
 - `engine`: MarginsEngine with ContrastEvaluator
 - `profile_dict`: Profile specification dictionary
 - `var`: Categorical variable name
-- `scale`: Prediction scale (:response or :linear)
+- `scale`: Prediction scale (:response or :link)
 - `backend`: Computation backend (:ad or :fd)
 
 # Returns
@@ -263,7 +269,12 @@ function _compute_profile_pairwise_contrasts(
         end
 
         # Compute gradient (0 bytes with proper buffer reuse)
-        contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, level1, level2, β, link)
+        # `nothing` link ⇒ link-scale gradient, matching the effect computed above
+        if scale === :link
+            contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, level1, level2, β, nothing)
+        else
+            contrast_gradient!(gradient_buf, refgrid_contrast, profile_row, var, level1, level2, β, link)
+        end
 
         # Store result with copied gradient (stores level1, level2, with effect = level2 - level1)
         push!(results, (level1, level2, effect, copy(gradient_buf)))

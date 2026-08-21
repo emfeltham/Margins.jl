@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog. Version bump is deferred; entries are under "Unreleased" until a tag is cut.
 
+## Unreleased
+
+### Bug Fixes
+- **`scale=:link` was silently ignored for categorical contrasts.** `population_margins(...; vars=[<categorical>], scale=:link)` returned response-scale contrasts (both estimate and standard error) under a link-scale label. The discrete-contrast kernels select their scale from the `link` argument (`nothing` ⇒ link scale), but the callers passed `engine.link` unconditionally. Fixed on the plain path (`src/population/categorical_effects.jl`) and the `scenarios`/`groups` path (`src/population/contexts.jl`); affects `contrasts=:baseline` and `:pairwise`, weighted and unweighted. Link-scale baseline contrasts now equal the corresponding coefficients exactly, as they must.
+- **Elasticity standard errors were wrong on the link scale.** `_gradient_of_mean_response` branched on `scale === :linear`, a value the API never produces, so `scale=:link` fell through to the response branch and weighted ∂ȳ/∂β by `mueta(link, η)` instead of using X̄. Point estimates were unaffected; SEs for `measure=:elasticity` and `:semielasticity_eydx` were off (e.g. 0.279631 reported vs 0.269922 correct on a logit test case). Fixed in `src/population/continuous_effects.jl`.
+- **Profile categorical contrast gradients ignored `scale`.** The estimate honored `scale=:link` but the gradient was always computed on the response scale, pairing a link-scale estimate with a response-scale SE (`src/profile/categorical_effects.jl`). Note this path is currently unreachable — see `ISSUES.md`.
+
+All three were invisible to the test suite because every existing test pairing `scale=:link` with a categorical `vars=` used an identity-link linear model, where the two scales coincide. New regression tests in `test/validation/test_link_scale.jl` use logit and probit models.
+
+### Documentation
+- Normalized `scale` docstrings that named non-existent values (`:linear`, `:eta`) to the actual API values `:link` and `:response`.
+- Added `ISSUES.md` recording three confirmed, unfixed bugs: `measure` silently ignored under `scenarios`/`groups`; profile categorical contrasts unreachable (dead code, with `test/test_profile_pairwise.jl` excluded from `runtests.jl` because it would fail); and a crash when grouping by the variable being contrasted.
+
 ## v2.1.3 — 2026-03
 
 ### Features

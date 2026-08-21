@@ -73,7 +73,7 @@ Uses type-stable buffer management and focused computation kernels.
 - `continuous_requested`: Vector of continuous variable names to process
 - `data_nt`: Named tuple containing data
 - `rows`: Row indices to process
-- `scale`: Scale for marginal effects (:response or :linear)
+- `scale`: Scale for marginal effects (:response or :link)
 - `measure`: Econometric measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
 - `weights`: Optional observation weights
 
@@ -187,7 +187,7 @@ Optimizes by computing only when required (measure !== :effect).
 - `engine`: MarginsEngine with compiled formula and parameters
 - `data_nt`: Named tuple containing data
 - `rows`: Row indices to process
-- `scale`: Scale for predictions (:response or :linear)
+- `scale`: Scale for predictions (:response or :link)
 - `measure`: Econometric measure type
 - `weights`: Optional observation weights
 
@@ -246,14 +246,14 @@ Zero allocations through buffer reuse and single-pass computation.
 - `link`: Link function for scale transformation
 - `data_nt`: Named tuple containing data
 - `rows`: Row indices to process
-- `scale`: Prediction scale (:response or :linear)
+- `scale`: Prediction scale (:response or :link)
 - `weights`: Optional observation weights
 
 # Returns
 - `Float64`: Average predicted response across specified rows
 
 # Mathematical Details
-- Linear scale: η = Xβ (linear predictor)
+- Link scale: η = Xβ (linear predictor)
 - Response scale: μ = g⁻¹(η) where g is the link function
 - Weighted average: Σᵢ wᵢ × yᵢ / Σᵢ wᵢ
 - Unweighted average: (1/n) × Σᵢ yᵢ
@@ -319,7 +319,7 @@ The elasticity transformation ε = (x̄/mean(ŷ)) × AME requires the full quoti
 - `link`: Link function
 - `data_nt`: Named tuple containing data
 - `rows`: Row indices to process
-- `scale`: Prediction scale (:response or :linear)
+- `scale`: Prediction scale (:response or :link)
 - `weights`: Optional observation weights
 - `gradient_accumulator`: Pre-allocated buffer for gradient (length = n_params)
 
@@ -344,8 +344,8 @@ function _gradient_of_mean_response(
     # Initialize accumulator to zero
     fill!(gradient_accumulator, 0.0)
 
-    if scale === :linear
-        # Linear scale: mean(η) = mean(Xβ) = X̄β
+    if scale !== :response
+        # Link scale: mean(η) = mean(Xβ) = X̄β
         # So ∂mean(η)/∂β = X̄ (mean design matrix row)
 
         if isnothing(weights)
@@ -432,7 +432,7 @@ Zero allocations through direct use of FormulaCompiler's marginal_effects functi
 - `engine`: MarginsEngine with derivatives, compiled formula, and all needed buffers
 - `continuous_requested`: Vector of continuous variable names
 - `rows`: Row indices to process
-- `scale`: Scale for marginal effects (:response or :linear)
+- `scale`: Scale for marginal effects (:response or :link)
 - `weights`: Observation weight vector (or `nothing` for unweighted)
 - `total_weight`: Sum of all weights (for normalization)
 
@@ -494,7 +494,7 @@ end
     _compute_me_loop_linear!(g_all, Gβ_all, de, β, batch_ame_values, batch_gradients,
                             fc_var_indices, rows, weights, total_weight)
 
-Type-stable function barrier for linear scale marginal effects computation.
+Type-stable function barrier for link-scale marginal effects computation.
 Ensures compiler can optimize the hot loop without runtime dispatch.
 All engine fields passed as explicit parameters to avoid struct field access allocations.
 """
@@ -528,7 +528,7 @@ function _compute_me_loop_linear!(
             w / total_weight
         end
 
-        # Linear scale: FormulaCompiler computes ∂η/∂x
+        # Link scale: FormulaCompiler computes ∂η/∂x
         marginal_effects_eta!(g_all, Gβ_all, de, β, row)
 
         # Extract requested subset and accumulate
@@ -625,7 +625,7 @@ effects for ALL requested variables in a single pass through the data rows.
 - `de::AbstractDerivativeEvaluator`: Derivative evaluator (built on appropriate data)
 - `β::AbstractVector{Float64}`: Model coefficients
 - `link::GLM.Link`: Link function for response-scale computation
-- `scale::Symbol`: Either `:response` or `:link`/:linear`
+- `scale::Symbol`: Either `:response` or `:link`
 - `fc_var_indices::AbstractVector{Int}`: Indices mapping requested vars to de.vars
 - `rows::Union{AbstractVector{Int}, UnitRange{Int}}`: Row indices to process
 - `weights::Union{Nothing, AbstractVector{<:Real}}`: Optional observation weights
@@ -666,7 +666,7 @@ function _batch_compute_continuous_effects!(
         _compute_me_loop_response!(g_all, Gβ_all, de, β, link,
                                    batch_ame_values, batch_gradients,
                                    fc_var_indices, rows, weights, total_weight)
-    else  # :link or :linear
+    else  # :link
         _compute_me_loop_linear!(g_all, Gβ_all, de, β,
                                 batch_ame_values, batch_gradients,
                                 fc_var_indices, rows, weights, total_weight)

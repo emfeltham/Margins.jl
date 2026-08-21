@@ -82,4 +82,5 @@ end
     include("validation/test_ci_and_n_logic.jl")
     include("validation/test_population_scenarios_groups.jl")
     include("validation/test_gradient_correctness.jl")
+    include("validation/test_link_scale.jl")
 end
