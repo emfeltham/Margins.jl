@@ -23,7 +23,7 @@ Compute categorical contrasts using FormulaCompiler primitives with zero allocat
 - `engine::MarginsEngine`: Engine with pre-built ContrastEvaluator
 - `var::Symbol`: Categorical variable to contrast
 - `rows::AbstractVector{Int}`: Rows to average over
-- `scale::Symbol`: Scale for effects (:response or :linear)
+- `scale::Symbol`: Scale for effects (:response or :link)
 - `backend::Symbol`: Backend selection (:ad or :fd) - currently unused for categorical
 - `contrasts::Symbol`: Contrast type (:baseline or :pairwise)
 - `weights::Union{Nothing, Vector{Float64}}`: Optional observation weights
@@ -38,6 +38,17 @@ Zero-allocation architecture (Phase 4 complete):
 3. Use pre-allocated arrays passed from caller (no allocation)
 4. Call categorical_contrast_ame_batch! with pre-allocated buffers (0 bytes)
 5. Return count and pairs (no intermediate allocations)
+
+# Scale Handling
+The kernel selects the computation scale from its `link` argument, not from a symbol:
+- `scale === :link` ⇒ pass `nothing`: AME = mean(Δη) = mean(ΔX'β), ∇β = mean(ΔX)
+- `scale === :response` ⇒ pass `engine.link`: AME = mean(g⁻¹(η₁) - g⁻¹(η₀)),
+  ∇β = mean(g'(η₁)X₁ - g'(η₀)X₀)
+
+Both the estimate and the delta-method gradient must come from the same scale, so the
+branch below covers them together. On the link scale a baseline contrast for a categorical
+that does not interact with anything equals its coefficient exactly, which is what the
+regression tests assert.
 
 # Zero-Allocation Guarantee
 - **0 bytes allocated** when arrays are pre-sized correctly
@@ -90,15 +101,30 @@ function _compute_categorical_contrasts!(
     end
 
     # Zero-allocation computation using views (Phase 4 optimization)
-    categorical_contrast_ame_batch!(
-        view(results_ame, 1:n_contrasts),
-        view(results_se, 1:n_contrasts),
-        view(gradient_matrix, 1:n_contrasts, :),
-        engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
-        engine.contrast, var, contrast_pairs,
-        engine.β, engine.Σ, engine.link,
-        rows, weights
-    )
+    # The kernel selects the computation scale from its link argument: `nothing` ⇒ link
+    # scale, a link object ⇒ response scale. Branch here (rather than passing a
+    # Union{Nothing,L}) so the batch call is a concrete, fully-specialized dispatch.
+    if scale === :link
+        categorical_contrast_ame_batch!(
+            view(results_ame, 1:n_contrasts),
+            view(results_se, 1:n_contrasts),
+            view(gradient_matrix, 1:n_contrasts, :),
+            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+            engine.contrast, var, contrast_pairs,
+            engine.β, engine.Σ, nothing,
+            rows, weights
+        )
+    else
+        categorical_contrast_ame_batch!(
+            view(results_ame, 1:n_contrasts),
+            view(results_se, 1:n_contrasts),
+            view(gradient_matrix, 1:n_contrasts, :),
+            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+            engine.contrast, var, contrast_pairs,
+            engine.β, engine.Σ, engine.link,
+            rows, weights
+        )
+    end
 
     return n_contrasts, contrast_pairs
 end

@@ -113,7 +113,7 @@ Zero allocations, type-stable mathematical operations for marginal effects at sp
 - `context`: ProfileContext with compiled reference grid and derivative evaluator
 - `engine`: MarginsEngine with model parameters and link function
 - `var`: Variable name for which to compute marginal effect
-- `scale`: Scale for marginal effects (:response or :linear)
+- `scale`: Scale for marginal effects (:response or :link)
 - `backend`: Computation backend (:ad for automatic differentiation)
 - `continuous_vars`: Vector of continuous variable names
 
@@ -204,7 +204,7 @@ Transforms raw marginal effects into interpretable econometric measures at speci
 - `profile`: Profile specification dictionary
 - `context`: ProfileContext with compiled reference grid
 - `engine`: MarginsEngine with model parameters and link function
-- `scale`: Scale for predictions (:response or :linear)
+- `scale`: Scale for predictions (:response or :link)
 - `measure`: Econometric measure type
 - `continuous_vars`: Vector of continuous variable names
 
