@@ -36,6 +36,9 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
   - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
+  - Measures other than `:effect` apply to continuous variables only: naming a
+    discrete variable in `vars` is an error, and auto-detected discrete variables
+    are skipped with an informational message
 - `scenarios=nothing`: Counterfactual scenarios (NamedTuple mapping variables to values)
   - Example: `(x1=0, x2=[1, 2])` creates scenarios for all combinations
 - `groups=nothing`: Grouping specification for stratified analysis
@@ -145,7 +148,11 @@ function population_margins(
     
     # Handle vars parameter with improved validation
     if type === :effects
+        vars_explicit = !isnothing(vars)
         vars = _process_vars_parameter(model, vars, data_nt, weight_col)
+        # Elasticity measures are only defined for continuous variables; filter or error
+        # BEFORE the engine is built so the discrete variables never reach computation
+        vars = _filter_vars_for_measure(vars, data_nt, measure, vars_explicit)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end

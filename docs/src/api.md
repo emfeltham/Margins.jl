@@ -213,6 +213,12 @@ All main functions support these core parameters:
 - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in Y per % change in X)
 - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (% change in Y per unit change in X)
 
+Measures other than `:effect` are defined for continuous variables only — they scale a
+derivative ∂y/∂x by x̄ and/or ȳ, which a discrete level contrast does not have. Naming a
+categorical or boolean variable in `vars` together with an elasticity measure raises an
+`ArgumentError`; when `vars` is auto-detected, discrete variables are skipped with an
+informational message. Request them separately with `measure=:effect`.
+
 ### Profile-Specific Parameters
 
 #### Reference Grid (positional argument)
