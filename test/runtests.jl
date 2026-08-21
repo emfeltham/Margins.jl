@@ -83,4 +83,6 @@ end
     include("validation/test_population_scenarios_groups.jl")
     include("validation/test_gradient_correctness.jl")
     include("validation/test_link_scale.jl")
+    include("validation/test_measure_contexts.jl")
+    include("validation/test_engine_cache.jl")
 end

@@ -205,7 +205,10 @@ This eliminates code duplication between the convenience method and DataFrame me
 function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64, contrasts::Symbol; interval::Symbol=:confidence)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
+        vars_explicit = !isnothing(vars)
         vars = _process_vars_parameter(model, vars, data_nt)
+        # Same measure/variable-type rule as population_margins (see _filter_vars_for_measure)
+        vars = _filter_vars_for_measure(vars, data_nt, measure, vars_explicit)
     else # type === :predictions
         vars = nothing  # Not needed for predictions
     end
@@ -327,6 +330,9 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 - `scale::Symbol=:response`: Target scale (:response or :link)
 - `backend::Symbol=:ad`: Computational backend (:ad or :fd)
 - `measure::Symbol=:effect`: Effect measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
+  - Measures other than `:effect` apply to continuous variables only: naming a
+    discrete variable in `vars` is an error, and auto-detected discrete variables
+    are skipped with an informational message
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables (:baseline or :pairwise)
 - `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors

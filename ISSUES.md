@@ -8,41 +8,6 @@ Confirmed bugs that are not yet fixed. Each entry records a reproducer and the c
 responsible, so the next person does not have to rediscover it. Fixed issues move out of
 this file (into `CHANGELOG.md`).
 
-## `measure` is silently ignored under `scenarios` / `groups`
-
-- [ ] Apply measure transformations in the context path
-
-`population_margins(...; measure=:elasticity)` works on the plain path but is a no-op as
-soon as `scenarios` or `groups` is supplied. `src/population/contexts.jl` references
-`measure` only to stamp result metadata (`_build_metadata` call, ~line 131); no
-transformation is ever applied. The result is raw AMEs carrying an elasticity label, which
-is worse than an error because the output looks right.
-
-Reproducer (logit, `y ~ x + g`):
-
-```julia
-population_margins(m, df; type=:effects, vars=[:x], measure=:elasticity)
-# -> estimate -0.010311   type "AME (elasticity)"   (correctly transformed)
-
-population_margins(m, df; type=:effects, vars=[:x], measure=:elasticity, groups=:g)
-# -> estimate  0.161477   type "AME (elasticity)"   (raw AME, mislabeled)
-```
-
-Affects `:elasticity`, `:semielasticity_dyex` and `:semielasticity_eydx`, with and without
-`scenarios`.
-
-Fix sketch: `_compute_all_continuous_context_effects_batch`
-(`src/population/contexts.jl`) needs the same two pieces the plain path already has in
-`_process_continuous_variables!` (`src/population/continuous_effects.jl`):
-- `apply_measure_transformations` for the point estimate and the gradient scale factor
-- `_gradient_of_mean_response` for the quotient-rule correction term, computed over the
-  context's rows and weights rather than the full sample (the context's own x̄ and ȳ are
-  the right normalizers, so this is not a straight copy)
-
-Until it is fixed, the safer behaviour would be to error on
-`measure !== :effect` combined with `scenarios`/`groups` rather than return mislabeled
-numbers.
-
 ## Profile categorical contrasts are unreachable
 
 - [ ] Make row-specific categorical contrasts requestable from `profile_margins`

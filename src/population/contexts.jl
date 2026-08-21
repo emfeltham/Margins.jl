@@ -33,7 +33,10 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     end
 
     for scenario_spec in scenario_specs, group_spec in group_specs
-        context_data, context_indices, context_weights = _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
+        # NOTE: the third return value (weights subset) is deliberately discarded. Every
+        # context compute function below takes the FULL weights vector and indexes it by
+        # absolute row index, matching `context_indices`.
+        context_data, context_indices, _ = _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
 
         if type === :effects
             # PERFORMANCE OPTIMIZATION Phase 1: Build evaluators ONCE per context
@@ -62,7 +65,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
             if !isempty(continuous_vars_to_compute)
                 cont_results, cont_gradients = _compute_all_continuous_context_effects_batch(
                     engine, context_data, context_indices, continuous_vars_to_compute,
-                    scale, context_weights, context_de
+                    scale, weights, context_de, measure
                 )
 
                 # Add context identifiers to continuous results
@@ -106,7 +109,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
         else # :predictions
             # Compute prediction in this context using FormulaCompiler primitives
             pred_result, pred_gradients = _compute_population_prediction_in_context(
-                engine, context_data, context_indices, scale, context_weights
+                engine, context_data, context_indices, scale, weights
             )
 
             # Add context identifiers
@@ -238,7 +241,7 @@ end
 """
     _compute_all_continuous_context_effects_batch(
         engine, context_data, context_indices, continuous_vars_to_compute,
-        scale, context_weights, context_de
+        scale, weights, context_de, measure
     )
 
 PHASE 2 OPTIMIZATION: Batch compute ALL continuous variables in ONE pass through rows.
@@ -253,11 +256,23 @@ once per row and extract all requested variables.
 - `context_indices::Vector{Int}`: Row indices for this context
 - `continuous_vars_to_compute::Vector{Symbol}`: All continuous variables to process
 - `scale::Symbol`: Either `:link` or `:response`
-- `context_weights::Union{Vector{Float64}, Nothing}`: Observation weights for this context
+- `weights::Union{Vector{Float64}, Nothing}`: FULL-length observation weights vector,
+  indexed by absolute row index (i.e. the same indices as `context_indices`). Do **not**
+  pass a per-context subset — the accumulation loops and every measure helper index it
+  as `weights[row]`.
 - `context_de`: Pre-built derivative evaluator for all continuous variables
+- `measure::Symbol`: Econometric measure (`:effect`, `:elasticity`,
+  `:semielasticity_dyex`, `:semielasticity_eydx`)
 
 # Returns
 - `(results_df, gradients_matrix)`: Combined results and gradients for ALL continuous variables
+
+# Measure Handling
+Measure transformations use the CONTEXT's own normalizers: x̄, ȳ and ∂ȳ/∂β are computed
+over `context_indices` with scenario overrides applied (`context_data`). A group's
+elasticity therefore uses that group's means, and a scenario's elasticity uses the
+overridden x. The gradient gets both the scale factor and the quotient-rule correction,
+identically to the no-context path in `_process_continuous_variables!`.
 
 # Performance
 - OLD: n_vars loops × N rows × compute_all_derivs = O(N × n_vars²)
@@ -270,8 +285,9 @@ function _compute_all_continuous_context_effects_batch(
     context_indices::AbstractVector{Int},
     continuous_vars_to_compute::Vector{Symbol},
     scale::Symbol,
-    context_weights::Union{Vector{Float64}, Nothing},
-    context_de
+    weights::Union{Vector{Float64}, Nothing},
+    context_de,
+    measure::Symbol=:effect
 ) where L
 
     n_vars = length(continuous_vars_to_compute)
@@ -293,11 +309,22 @@ function _compute_all_continuous_context_effects_batch(
         var_indices[i] = idx
     end
 
-    # Compute total weight for normalization
-    total_weight = if isnothing(context_weights)
-        Float64(n_obs)
+    # Compute the context's mean response and total weight in one pass.
+    # For measure === :effect this returns (1.0, Σw) without touching the data.
+    (ȳ, total_weight) = _compute_response_mean_if_needed(
+        engine, context_data, context_indices, scale, measure, weights
+    )
+
+    # For measures that divide by the mean response, the delta-method gradient needs the
+    # quotient-rule term ∂ȳ/∂β, evaluated over THIS context's rows.
+    ∂ȳ_∂β = if measure === :elasticity || measure === :semielasticity_eydx
+        _gradient_of_mean_response(
+            engine.compiled, engine.row_buf, engine.β, engine.link,
+            context_data, context_indices, scale, weights,
+            Vector{Float64}(undef, n_params)
+        )
     else
-        sum(context_weights[context_indices])
+        nothing
     end
 
     # Call SHARED batch computation function (same code as non-scenarios path)
@@ -305,7 +332,7 @@ function _compute_all_continuous_context_effects_batch(
     _batch_compute_continuous_effects!(
         batch_ame_values, batch_gradients,
         context_de, engine.β, engine.link, scale,
-        var_indices, context_indices, context_weights, total_weight
+        var_indices, context_indices, weights, total_weight
     )
 
     # Build results DataFrame and gradients matrix
@@ -322,12 +349,34 @@ function _compute_all_continuous_context_effects_batch(
     for (i, var) in enumerate(continuous_vars_to_compute)
         ame_val = batch_ame_values[i]
         gβ_avg = view(batch_gradients, i, :)
+
+        # Apply measure transformation (no-op for :effect) using this context's rows,
+        # weights and overridden data
+        (final_val, transform_factor) = apply_measure_transformations(
+            ame_val, measure, var,
+            context_data, context_indices, weights, ȳ, total_weight
+        )
+
+        if transform_factor != 1.0
+            # First term: k × ∂AME/∂β
+            gβ_avg .*= transform_factor
+
+            # Second term: quotient-rule correction for measures that divide by ȳ
+            # ∂ε/∂β = (x̄/ȳ) × ∂AME/∂β - (ε/ȳ) × ∂ȳ/∂β
+            if !isnothing(∂ȳ_∂β)
+                quotient_correction = final_val / ȳ
+                @inbounds for j in eachindex(gβ_avg)
+                    gβ_avg[j] -= quotient_correction * ∂ȳ_∂β[j]
+                end
+            end
+        end
+
         se = compute_se_only(gβ_avg, engine.Σ)
 
         push!(results, (
             variable = string(var),
             contrast = "derivative",
-            estimate = ame_val,
+            estimate = final_val,
             se = se,
             n = n_obs
         ))
@@ -338,182 +387,6 @@ function _compute_all_continuous_context_effects_batch(
     gradients_matrix = vcat(gradients_list...)
 
     return (results, gradients_matrix)
-end
-
-"""
-    _compute_population_effect_in_context_clean(engine, context_data, context_indices, var, scale, backend, full_weights, context_weights, scenario_spec, contrasts, context_de, context_ce)
-
-Compute population marginal effect for a single variable within a context.
-
-Routes to either continuous or categorical computation based on variable type.
-Uses FormulaCompiler primitives for efficient zero-allocation computation.
-
-# Arguments
-- `engine::MarginsEngine`: Pre-built margins engine
-- `context_data::NamedTuple`: Data with scenario overrides applied
-- `context_indices::Vector{Int}`: Row indices for this context
-- `var::Symbol`: Variable to analyze
-- `scale::Symbol`: Either `:link` or `:response`
-- `backend::Symbol`: Either `:fd` or `:ad`
-- `full_weights::Union{Vector{Float64}, Nothing}`: Full weights vector (for categorical kernel)
-- `context_weights::Union{Vector{Float64}, Nothing}`: Subset weights (for continuous effects)
-- `scenario_spec`: Scenario specification (for metadata)
-- `contrasts::Symbol`: Contrast type for categorical variables (`:baseline` or `:pairwise`)
-- `context_de`: Pre-built derivative evaluator (for continuous variables)
-- `context_ce`: Pre-built contrast evaluator (for categorical variables, or nothing)
-
-# Returns
-- `(result_df, gradients)`: Results DataFrame and parameter gradient matrix
-"""
-function _compute_population_effect_in_context_clean(
-    engine::MarginsEngine{L},
-    context_data::NamedTuple,
-    context_indices::AbstractVector{Int},
-    var::Symbol,
-    scale::Symbol,
-    backend::Symbol,
-    full_weights::Union{Vector{Float64}, Nothing},
-    context_weights::Union{Vector{Float64}, Nothing},
-    scenario_spec,
-    contrasts::Symbol,
-    context_de,  # Pre-built derivative evaluator
-    context_ce   # Pre-built contrast evaluator (or nothing)
-) where L
-
-    # Check if variable is continuous or categorical
-    if _is_continuous_variable(context_data[var])
-        # Continuous variable: compute derivative-based marginal effect (uses context_weights)
-        return _compute_continuous_context_effect_batch(
-            engine, context_data, context_indices, var, scale, context_weights, context_de
-        )
-    else
-        # Categorical variable: compute contrast-based effect (uses full_weights)
-        return _compute_categorical_context_effect(
-            engine, context_data, context_indices, var, scale, full_weights, contrasts, context_ce
-        )
-    end
-end
-
-"""
-    _compute_continuous_context_effect_batch(engine, context_data, context_indices, var, scale, weights, context_de)
-
-Clean batch implementation for continuous context effects using FormulaCompiler primitives.
-
-Computes average marginal effects for a continuous variable within a specific context
-(defined by scenario overrides and/or group filters). Uses FormulaCompiler's zero-allocation
-marginal_effects_eta!/mu! functions.
-
-# Arguments
-- `engine::MarginsEngine`: Pre-built margins engine (from original data)
-- `context_data::NamedTuple`: Modified data with scenario overrides applied
-- `context_indices::Vector{Int}`: Row indices within this context
-- `var::Symbol`: Variable to compute marginal effect for
-- `scale::Symbol`: Either `:link` (linear predictor) or `:response` (mean scale)
-- `weights::Union{Vector{Float64}, Nothing}`: Optional observation weights
-- `context_de`: Pre-built derivative evaluator for this context
-
-# Returns
-- `(result_df, gradients)`: DataFrame with results and parameter gradients matrix
-"""
-function _compute_continuous_context_effect_batch(
-    engine::MarginsEngine{L},
-    context_data::NamedTuple,
-    context_indices::AbstractVector{Int},
-    var::Symbol,
-    scale::Symbol,
-    weights::Union{Vector{Float64}, Nothing},
-    context_de  # Pre-built derivative evaluator
-) where L
-
-    # Use pre-built derivative evaluator (no longer rebuilding per variable - PERFORMANCE FIX)
-    # context_de was built once per context in _population_margins_with_contexts
-
-    # Find variable index
-    var_idx = findfirst(==(var), context_de.vars)
-    isnothing(var_idx) && throw(ArgumentError("Variable $var not found in continuous variables"))
-
-    # Pre-allocate buffers for marginal effects and parameter gradients
-    g_buf = Vector{Float64}(undef, length(context_de.vars))
-    Gβ_buf = Matrix{Float64}(undef, length(engine.β), length(context_de.vars))
-
-    if isnothing(weights)
-        # Unweighted case: simple averaging
-        ame_sum = 0.0
-        grad_sum = zeros(Float64, length(engine.β))
-
-        for row in context_indices
-            # Compute marginal effects and parameter gradients using FC primitives
-            if scale === :response
-                marginal_effects_mu!(g_buf, Gβ_buf, context_de, engine.β, engine.link, row)
-            else
-                marginal_effects_eta!(g_buf, Gβ_buf, context_de, engine.β, row)
-            end
-
-            # Accumulate marginal effect for this variable
-            ame_sum += g_buf[var_idx]
-
-            # Accumulate parameter gradient for this variable (column var_idx of Gβ_buf)
-            @inbounds for p in 1:length(engine.β)
-                grad_sum[p] += Gβ_buf[p, var_idx]
-            end
-        end
-
-        # Average over rows
-        n = length(context_indices)
-        ame_val = ame_sum / n
-        gβ_avg = grad_sum ./ n
-
-    else
-        # Weighted case
-        context_weights = weights[context_indices]
-        ame_sum = 0.0
-        grad_sum = zeros(Float64, length(engine.β))
-        total_weight = 0.0
-
-        for (i, row) in enumerate(context_indices)
-            w = context_weights[i]
-            if w > 0
-                # Compute marginal effects and parameter gradients using FC primitives
-                if scale === :response
-                    marginal_effects_mu!(g_buf, Gβ_buf, context_de, engine.β, engine.link, row)
-                else
-                    marginal_effects_eta!(g_buf, Gβ_buf, context_de, engine.β, row)
-                end
-
-                # Accumulate weighted marginal effect
-                ame_sum += w * g_buf[var_idx]
-
-                # Accumulate weighted parameter gradient
-                @inbounds for p in 1:length(engine.β)
-                    grad_sum[p] += w * Gβ_buf[p, var_idx]
-                end
-
-                total_weight += w
-            end
-        end
-
-        if total_weight <= 0
-            error("All weights are zero in this context")
-        end
-
-        # Weighted average
-        ame_val = ame_sum / total_weight
-        gβ_avg = grad_sum ./ total_weight
-    end
-
-    # Compute standard error
-    se = compute_se_only(gβ_avg, engine.Σ)
-
-    # Build result DataFrame
-    result_df = DataFrame(
-        variable = [string(var)],
-        contrast = ["derivative"],
-        estimate = [ame_val],
-        se = [se],
-        n = [length(context_indices)]
-    )
-
-    return (result_df, reshape(gβ_avg, 1, :))
 end
 
 """
@@ -623,7 +496,9 @@ formula evaluation and link functions.
 - `context_data::NamedTuple`: Data with scenario overrides applied
 - `context_indices::Vector{Int}`: Row indices for this context
 - `scale::Symbol`: Either `:link` (linear predictor) or `:response` (mean scale)
-- `weights::Union{Vector{Float64}, Nothing}`: Optional observation weights
+- `weights::Union{Vector{Float64}, Nothing}`: Optional FULL-length observation weights
+  vector, indexed by absolute row index (the loops below read `weights[row]` for
+  `row in context_indices`). Passing a per-context subset is a bounds error.
 
 # Returns
 - `(result_df, gradients)`: Results DataFrame and parameter gradient matrix
