@@ -47,6 +47,7 @@ end
     include("regression/test_unused_categorical_levels.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
+    include("test_profile_pairwise.jl")
 end
 
 @testset "Performance and Allocations" begin
@@ -85,4 +86,5 @@ end
     include("validation/test_link_scale.jl")
     include("validation/test_measure_contexts.jl")
     include("validation/test_engine_cache.jl")
+    include("validation/test_profile_categorical_contrasts.jl")
 end

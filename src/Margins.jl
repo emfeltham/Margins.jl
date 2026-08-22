@@ -121,7 +121,6 @@ include("population/categorical_effects.jl")
 include("population/effects.jl")
 include("profile/core.jl")
 include("profile/reference_grids.jl")
-include("profile/categorical_effects.jl")  # Phase 4 migration: ContrastEvaluator-based categorical effects
 # profile/contrasts.jl DELETED (2025-10-01): Obsolete DataScenario code replaced by ContrastEvaluator in profile/core.jl
 
 # Second differences module

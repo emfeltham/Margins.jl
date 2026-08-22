@@ -176,6 +176,20 @@ originally specified by the user (hiding automatically added typical values).
 Each profile can generate multiple results (one per variable), so we need to repeat
 each profile row for each variable it generates.
 """
+function _extract_and_filter_profile_values(reference_grid, profile_rows::AbstractVector{Int}, original_vars::Set{Symbol})
+    # Exact mapping: each result row names the grid row it was evaluated at. Needed because
+    # a categorical variable can contribute a different number of contrast rows per grid row
+    # (a row pinned to the baseline level contributes none), so the uniform
+    # result_length ÷ n_profiles expansion below does not apply.
+    profile_dict = Dict{Symbol, Vector}()
+    for col_name in names(reference_grid)
+        if Symbol(col_name) in original_vars
+            profile_dict[Symbol(col_name)] = reference_grid[!, col_name][profile_rows]
+        end
+    end
+    return NamedTuple(profile_dict)
+end
+
 function _extract_and_filter_profile_values(reference_grid, result_length::Int, original_vars::Set{Symbol})
     n_profiles = nrow(reference_grid)
     vars_per_profile = result_length ÷ n_profiles
@@ -243,7 +257,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     if type === :effects
         # Use the actual working function that already exists from the original utilities.jl
         # Pass original_grid_vars so we know which variables are scenario-defining
-        df, G = _mem_continuous_and_categorical(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts)
+        df, G, profile_of_row = _mem_continuous_and_categorical(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, vars_explicit)
         
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -264,9 +278,9 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         variables = string.(df.variable)  # The "x" in dy/dx
         terms = string.(df.contrast)  # Convert Symbol to String
         
-        # Extract profile values from reference grid - expand to match result length
+        # Extract profile values from reference grid, one entry per result row
         # Filter to show only original reference grid variables (hide automatic typical values)
-        profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
+        profile_values = _extract_and_filter_profile_values(completed_reference_grid, profile_of_row, original_grid_vars)
         
         return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
     else # :predictions  
@@ -597,7 +611,7 @@ end
 Profile Effects (MEM) properly decomposed from the original working implementation.
 This is the correct decomposition that should have been completed during BREAKUP.md.
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_grid, original_grid_vars::Set{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol=:baseline) where L
+function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_grid, original_grid_vars::Set{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol=:baseline, vars_explicit::Bool=false) where L
     # Use the decomposed modular approach - break down the original 200-line function
 
     # Step 1: Calculate dimensions (extracted from original lines 1262-1286)
@@ -612,35 +626,76 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     # Variables added by completion with typical values/mixtures ARE analysis targets
     refgrid_vars = original_grid_vars
 
-    # Filter out mixture variables AND reference grid variables from categorical contrasts
-    # Mixtures in reference grid are context/backdrop, not variables to contrast
-    # Non-mixture reference grid variables are scenario-defining, not analysis targets
+    # Decide which categorical variables are analysis targets, and how each is contrasted.
+    #
+    # A categorical is contrasted only when the caller NAMED it in `vars`. When `vars` is
+    # auto-detected, categoricals in the grid stay scenario-defining and categoricals absent
+    # from the grid stay backdrop mixtures — the historical behaviour, which
+    # test/regression/test_bool_mixture_skip.jl pins down.
+    #
+    # An explicitly requested categorical is contrasted in one of two modes:
+    #   :row_specific — the grid pins it to a discrete level, so each grid row contributes
+    #                   exactly one contrast, that row's level against the baseline (the
+    #                   row-specific baseline contrast described in CLAUDE.md). Rows already
+    #                   at the baseline contribute nothing.
+    #   :enumerated   — the grid does not pin it (completion filled a mixture), so each grid
+    #                   row contributes the full set of contrasts from the original data's
+    #                   levels, holding the row's other variables fixed. This is the usual
+    #                   "marginal effect of a factor at this profile".
+    # `contrasts=:pairwise` always enumerates: both endpoints of a pair are set explicitly,
+    # so a pinned level carries no additional information.
     refgrid_col_table = Tables.columntable(reference_grid)
     categorical_requested = Symbol[]
+    categorical_modes = Dict{Symbol, Symbol}()
     for var in categorical_requested_raw
         refgrid_col = getproperty(refgrid_col_table, var)
-
-        # Skip if it's a mixture
-        if refgrid_col isa AbstractVector{<:CategoricalMixture}
-            @info "Skipping contrasts for variable $var: specified as mixture in reference grid (use discrete levels if contrasts desired)"
-            continue
-        end
-
-        # Skip if Bool variable has non-Bool values (indicates mixture specification)
-        # Check original data type to detect Bool variables with Float64 mixture values
         orig_col = getproperty(engine.data_nt, var)
-        if eltype(orig_col) <: Bool && !(eltype(refgrid_col) <: Bool)
-            @info "Skipping contrasts for variable $var: specified as mixture in reference grid (use discrete levels if contrasts desired)"
-            continue
-        end
 
-        # Skip if it's explicitly in the reference grid (scenario-defining variable)
-        if var ∈ refgrid_vars
-            @debug "Skipping contrasts for variable $var: specified in reference grid (scenario-defining variable)"
+        # A mixture column (explicit CategoricalMixture, or a Bool filled with a frequency)
+        # does not pin the variable to a level. A Bool written as exact 0.0/1.0 does pin it.
+        is_mixture = refgrid_col isa AbstractVector{<:CategoricalMixture} ||
+                     (eltype(orig_col) <: Bool && !(eltype(refgrid_col) <: Bool) &&
+                      !all(v -> v == 0 || v == 1, refgrid_col))
+        pinned = !is_mixture && var ∈ refgrid_vars
+
+        if !vars_explicit
+            if is_mixture
+                @info "Skipping contrasts for variable $var: specified as mixture in reference grid (use discrete levels if contrasts desired)"
+            else
+                @debug "Skipping contrasts for variable $var: specified in reference grid (scenario-defining variable)"
+            end
             continue
         end
 
         push!(categorical_requested, var)
+        categorical_modes[var] = (pinned && contrasts === :baseline) ? :row_specific : :enumerated
+    end
+
+    # Contrast pairs per enumerated variable, taken from the ORIGINAL data so that every
+    # level the model knows about is represented (the grid may hold only one). This is the
+    # same enumeration the population path uses, so contrast labels agree across the 2x2.
+    n_orig = length(first(engine.data_nt))
+    categorical_pairs = Dict{Symbol, Vector}()
+    for var in categorical_requested
+        categorical_pairs[var] = generate_contrast_pairs(
+            getproperty(engine.data_nt, var), 1:n_orig, contrasts, engine.model, var, engine.data_nt
+        )
+    end
+
+    # Rows contributed per grid row, per variable
+    categorical_row_counts = Dict{Symbol, Vector{Int}}()
+    for var in categorical_requested
+        if categorical_modes[var] === :row_specific
+            # Resolve levels the same way the handler does, so the count matches exactly
+            # (a grid may write a Bool as 0.0/1.0, or a level as a bare String)
+            baseline = _profile_baseline_level(engine, var)
+            categorical_row_counts[var] = [
+                _match_pool_level(engine, var, reference_grid[i, var]) == baseline ? 0 : 1
+                for i in 1:n_profiles
+            ]
+        else
+            categorical_row_counts[var] = fill(length(categorical_pairs[var]), n_profiles)
+        end
     end
 
     # NOTE: DO NOT filter continuous variables from reference grid
@@ -648,9 +703,12 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     # We still want to compute marginal effects for them at those points
     # Only categorical variables are filtered (to avoid contrasts for scenario-defining categories)
 
-    # Calculate total terms based on ACTUAL variables to be processed (continuous + filtered categorical)
-    actual_vars = vcat(continuous_requested, categorical_requested)
-    total_terms = _calculate_total_profile_terms(actual_vars, categorical_requested, contrasts, engine, reference_grid, n_profiles)
+    # Calculate total terms: one row per continuous variable per profile, plus the exact
+    # number of contrast rows each categorical variable contributes (see above)
+    total_terms = n_profiles * length(continuous_requested)
+    for var in categorical_requested
+        total_terms += sum(categorical_row_counts[var])
+    end
 
     # Step 2: Pre-allocate using decomposed function (extracted from original lines 1288-1296)
     results, G = _build_profile_results_structure(total_terms, length(engine.β))
@@ -660,27 +718,32 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     refgrid_compiled = get_or_compile_formula(engine.model, refgrid_data)
     refgrid_de = _build_refgrid_derivative_evaluator(refgrid_compiled, refgrid_data, continuous_requested, engine, backend)
 
-    # Step 3.5: Build ContrastEvaluator for refgrid (Phase 4 migration)
-    # Only build if there are categorical variables to process (after filtering mixtures)
-    refgrid_contrast = if !isempty(categorical_requested)
-        # IMPORTANT: For baseline contrasts, we need ContrastEvaluator to know about ALL
-        # categorical levels from original data, not just levels in the reference grid.
-        # Create hybrid data: categorical vars from original data, continuous from refgrid
+    # Step 3.5: Build the ContrastEvaluator used for categorical contrasts at grid rows.
+    #
+    # The evaluator needs each contrasted column to carry the model's FULL level pool (the
+    # grid may pin one level, or hold a mixture that is not a level at all), while every
+    # other column keeps its grid value — the contrast is evaluated at the grid row's
+    # covariates. So each contrasted column is replaced by a grid-length column drawn from
+    # the original data's pool. Its stored values are irrelevant: `contrast_modelrow!` sets
+    # both endpoints of the contrast explicitly.
+    #
+    # Building it grid-length matters: splicing in the original column (length n_obs) breaks
+    # as soon as the grid has more rows than the data.
+    refgrid_contrast, contrast_compiled, contrast_data = if !isempty(categorical_requested)
         hybrid_data_dict = Dict{Symbol, Any}()
         for (k, v) in pairs(refgrid_data)
-            if k in categorical_requested
-                # Use original data's categorical structure (has all levels)
-                hybrid_data_dict[k] = getproperty(engine.data_nt, k)
-            else
-                # Use refgrid values for continuous/other variables
-                hybrid_data_dict[k] = v
-            end
+            hybrid_data_dict[k] = k in categorical_requested ?
+                _pooled_column_for_grid(getproperty(engine.data_nt, k), n_profiles) : v
         end
         hybrid_data = NamedTuple(hybrid_data_dict)
 
-        contrastevaluator(refgrid_compiled, hybrid_data, categorical_requested)
+        # Recompile against the hybrid schema: replacing a mixture column with a discrete
+        # pooled column changes the column's semantic type, so refgrid_compiled (built for
+        # the mixture) does not apply.
+        hybrid_compiled = get_or_compile_formula(engine.model, hybrid_data)
+        (contrastevaluator(hybrid_compiled, hybrid_data, categorical_requested), hybrid_compiled, hybrid_data)
     else
-        nothing  # No categorical contrasts needed
+        (nothing, refgrid_compiled, refgrid_data)  # No categorical contrasts needed
     end
 
     # Step 4: Pre-allocate profile computation buffers (PHASE 3 FIX)
@@ -700,8 +763,12 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
 
     # Step 5: Process each profile (extracted from original lines 1305-1446)
     # Process only variables that should be computed (continuous + non-mixture categorical)
+    # profile_of_row records which grid row each result row was evaluated at; categorical
+    # contrasts can contribute a variable number of rows per grid row.
+    profile_of_row = Vector{Int}(undef, total_terms)
     row_idx = 1
     for profile_idx in 1:n_profiles
+        first_row_of_profile = row_idx
         # Process continuous variables
         for var in continuous_requested
             row_idx = _process_profile_continuous_variable!(results, G, row_idx, engine, var,
@@ -711,13 +778,17 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
                                                           Gβ_continuous, output_buf)
         end
 
-        # Process categorical variables (only non-mixtures)
+        # Process requested categorical variables
         for var in categorical_requested
             row_idx = _process_profile_categorical_variable!(results, G, row_idx, engine, var,
-                                                           refgrid_contrast, refgrid_compiled, refgrid_data,
-                                                           reference_grid, profile_idx,
-                                                           scale, backend, contrasts,
+                                                           refgrid_contrast, reference_grid, profile_idx,
+                                                           scale, categorical_modes[var],
+                                                           categorical_pairs[var],
                                                            contrast_buf, η_baseline_buf, gradient_buf)
+        end
+
+        if row_idx > first_row_of_profile
+            profile_of_row[first_row_of_profile:(row_idx - 1)] .= profile_idx
         end
     end
 
@@ -730,48 +801,16 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
         # Trim to actual size to avoid UndefRefError
         results = results[1:actual_rows_filled, :]
         G = G[1:actual_rows_filled, :]
+        profile_of_row = profile_of_row[1:actual_rows_filled]
     end
 
-    return (results, G)
+    return (results, G, profile_of_row)
 end
 
 # ==============================================================================
 # DECOMPOSED HELPER FUNCTIONS (extracted from original _mem_continuous_and_categorical)
 # ==============================================================================
 
-"""
-    _calculate_total_profile_terms(requested_vars, categorical_requested, contrasts, engine, reference_grid, n_profiles) -> Int
-
-Calculate total number of terms needed for profile margins results.
-The requested_vars should already be filtered (continuous + non-mixture categorical).
-For categorical pairwise contrasts, uses levels in REFERENCE GRID, not original data.
-Extracted from original lines 1270-1286.
-"""
-function _calculate_total_profile_terms(requested_vars, categorical_requested, contrasts, engine, reference_grid, n_profiles)
-    total_terms = 0
-    refgrid_data = Tables.columntable(reference_grid)
-
-    for var in requested_vars
-        if var ∈ categorical_requested && contrasts === :pairwise
-            # Pairwise contrasts: n_choose_2 comparisons per profile
-            # IMPORTANT: Use levels in reference grid, not original data
-            # Variables added by completion may have only 1 level (all same value)
-            refgrid_col = getproperty(refgrid_data, var)
-            n_levels = length(unique(refgrid_col))
-
-            # Only count pairs if there are actually multiple levels
-            if n_levels >= 2
-                n_pairs = (n_levels * (n_levels - 1)) ÷ 2
-                total_terms += n_profiles * n_pairs
-            end
-            # else: skip this variable (0 pairs to compute with only 1 level)
-        else
-            # Continuous variable OR categorical baseline contrasts: 1 term per profile
-            total_terms += n_profiles
-        end
-    end
-    return total_terms
-end
 
 """
     _build_profile_results_structure(total_terms, n_params) -> (DataFrame, Matrix)
@@ -929,111 +968,126 @@ Process a single categorical variable at a single profile point.
 Phase 4 Migration: Uses ContrastEvaluator kernel (same as population path).
 Extracted from original lines 1377-1444.
 """
-function _process_profile_categorical_variable!(results, G, row_idx, engine, var, refgrid_contrast,
-                                              refgrid_compiled, refgrid_data, reference_grid, profile_idx,
-                                              scale, backend, contrasts,
-                                              contrast_buf::Vector{Float64}, η_baseline_buf::Vector{Float64}, gradient_buf::Vector{Float64})
-    profile_dict = Dict(Symbol(k) => reference_grid[profile_idx, k] for k in names(reference_grid))
+function _process_profile_categorical_variable!(results, G, row_idx, engine, var,
+                                              refgrid_contrast, reference_grid, profile_idx,
+                                              scale::Symbol, mode::Symbol, contrast_pairs,
+                                              contrast_buf::Vector{Float64}, η_baseline_buf::Vector{Float64},
+                                              gradient_buf::Vector{Float64})
+    # Which contrasts does this grid row contribute?
+    #   :row_specific — the row pins a level, so the only contrast is that level against the
+    #                   baseline; a row already at the baseline contributes nothing.
+    #   :enumerated   — every pair from the original data's levels, evaluated at this row.
+    pairs_for_row = if mode === :row_specific
+        baseline = _profile_baseline_level(engine, var)
+        current = _match_pool_level(engine, var, reference_grid[profile_idx, var])
+        current == baseline ? () : ((baseline, current),)
+    else
+        ((p.level1, p.level2) for p in contrast_pairs)
+    end
 
-    if contrasts === :baseline
-        # Baseline contrast using ContrastEvaluator kernel
-        current_level = profile_dict[var]
-        baseline_level_str = _get_baseline_level(engine.model, var, engine.data_nt)
+    profile_nt = _profile_display_row(reference_grid, profile_idx)
 
-        # Convert to same type as current_level for ContrastEvaluator
-        # Both levels must be from the categorical pool, not specific row values
-        baseline_level = if current_level isa CategoricalValue
-            # Get baseline CategoricalValue from the original data categorical pool
-            orig_col = getproperty(engine.data_nt, var)
-            idx_orig = findfirst(x -> string(x) == baseline_level_str, orig_col)
-            if idx_orig !== nothing
-                orig_col[idx_orig]
-            else
-                # Fallback: create from refgrid if baseline not in original data
-                refgrid_col = getproperty(refgrid_data, var)
-                idx = findfirst(x -> string(x) == baseline_level_str, refgrid_col)
-                idx !== nothing ? refgrid_col[idx] : baseline_level_str
-            end
+    for (from_level, to_level) in pairs_for_row
+        # Reuse the population categorical kernel over the single grid row. It selects the
+        # computation scale from its link argument (`nothing` ⇒ link scale) and leaves the
+        # parameter gradient in engine.gβ_accumulator, so estimate and SE always come from
+        # the same scale.
+        (effect, se) = if scale === :link
+            categorical_contrast_ame!(
+                contrast_buf, gradient_buf, engine.gβ_accumulator,
+                refgrid_contrast, var, from_level, to_level,
+                engine.β, engine.Σ, nothing, profile_idx:profile_idx, nothing
+            )
         else
-            baseline_level_str
+            categorical_contrast_ame!(
+                contrast_buf, gradient_buf, engine.gβ_accumulator,
+                refgrid_contrast, var, from_level, to_level,
+                engine.β, engine.Σ, engine.link, profile_idx:profile_idx, nothing
+            )
         end
 
-        # Use refgrid ContrastEvaluator with profile_idx as the row
-        # Pass pre-allocated buffers (0 bytes allocation - PHASE 3 FIX)
-        marginal_effect = _compute_row_specific_baseline_contrast(
-            refgrid_contrast, refgrid_compiled, refgrid_data, profile_idx,
-            var, baseline_level, current_level, engine.β, engine.link, scale,
-            contrast_buf, η_baseline_buf
-        )
-
-        _row_specific_contrast_grad_beta!(
-            engine.gβ_accumulator, refgrid_contrast, profile_idx,
-            var, baseline_level, current_level, engine.β, engine.link, scale,
-            gradient_buf
-        )
-
-        se = compute_se_only(engine.gβ_accumulator, engine.Σ)
-
-        term_name = "$(current_level) - $(baseline_level)"
-
-        profile_display_dict = Dict{Symbol,Any}()
-        for k in names(reference_grid)
-            val = reference_grid[profile_idx, k]
-            if val isa CategoricalMixture
-                profile_display_dict[Symbol(k)] = string(val)
-            else
-                profile_display_dict[Symbol(k)] = val
-            end
-        end
-        profile_nt = NamedTuple(profile_display_dict)
-
-        # Use column indexing for better performance
         results.variable[row_idx] = string(var)
-        results.contrast[row_idx] = term_name
-        results.estimate[row_idx] = marginal_effect
+        results.contrast[row_idx] = "$(to_level) - $(from_level)"
+        results.estimate[row_idx] = effect
         results.se[row_idx] = se
         results.profile_desc[row_idx] = profile_nt
         G[row_idx, :] = engine.gβ_accumulator
 
-        return row_idx + 1
+        row_idx += 1
+    end
 
-    elseif contrasts === :pairwise
-        # Pairwise contrasts using ContrastEvaluator kernel
-        # Pass pre-allocated buffers (0 bytes allocation - PHASE 3 FIX)
-        contrast_results = _compute_profile_pairwise_contrasts(
-            refgrid_contrast, refgrid_compiled, refgrid_data, profile_idx,
-            var, engine.β, engine.link, scale,
-            contrast_buf, gradient_buf, η_baseline_buf
+    return row_idx
+end
+
+"""
+    _profile_display_row(reference_grid, profile_idx) -> NamedTuple
+
+Grid row rendered for display, with mixtures stringified.
+"""
+function _profile_display_row(reference_grid, profile_idx)
+    d = Dict{Symbol,Any}()
+    for k in names(reference_grid)
+        val = reference_grid[profile_idx, k]
+        d[Symbol(k)] = val isa CategoricalMixture ? string(val) : val
+    end
+    return NamedTuple(d)
+end
+
+"""
+    _profile_baseline_level(engine, var)
+
+The model's baseline level for `var`, as a value the ContrastEvaluator accepts (a
+`CategoricalValue` from the original pool, or a `Bool`).
+"""
+function _profile_baseline_level(engine, var::Symbol)
+    orig_col = getproperty(engine.data_nt, var)
+    baseline_str = string(_get_baseline_level(engine.model, var, engine.data_nt))
+    return _match_pool_level(engine, var, baseline_str)
+end
+
+"""
+    _match_pool_level(engine, var, value)
+
+Resolve `value` (a level, a string, or a Bool) to the corresponding entry of `var`'s pool in
+the original data, which is what `contrast_modelrow!` expects.
+"""
+function _match_pool_level(engine, var::Symbol, value)
+    orig_col = getproperty(engine.data_nt, var)
+    if eltype(orig_col) <: Bool
+        # Grid completion may store a Bool as 0.0/1.0, and a user grid may hold "true"
+        value isa Bool && return value
+        value isa Real && return !iszero(value)
+        lowered = lowercase(string(value))
+        lowered in ("true", "t", "1", "1.0") && return true
+        lowered in ("false", "f", "0", "0.0") && return false
+        throw(ArgumentError("Cannot interpret \"$value\" as a level of the boolean variable :$var."))
+    end
+    target = string(value)
+    lvls = levels(orig_col)
+    idx = findfirst(l -> string(l) == target, lvls)
+    isnothing(idx) && throw(ArgumentError(
+        "Level \"$target\" of :$var is not among the levels of the fitted data ($(lvls))."
+    ))
+    return orig_col.pool[idx]
+end
+
+"""
+    _pooled_column_for_grid(orig_col, n_rows) -> AbstractVector
+
+A length-`n_rows` column carrying `orig_col`'s full level pool, for building a
+ContrastEvaluator over a reference grid. The values are placeholders — every contrast sets
+both of its endpoints explicitly — but the pool must be complete so that any level of the
+model can be requested.
+"""
+function _pooled_column_for_grid(orig_col, n_rows::Int)
+    if eltype(orig_col) <: Bool
+        return fill(false, n_rows)
+    elseif eltype(orig_col) <: CategoricalArrays.CategoricalValue
+        return CategoricalArrays.categorical(
+            fill(first(levels(orig_col)), n_rows);
+            levels=levels(orig_col), ordered=CategoricalArrays.isordered(orig_col)
         )
-
-        for (level1, level2, effect, gradient) in contrast_results
-            se = sqrt(dot(gradient, engine.Σ, gradient))
-            term_name = "$level2 - $level1"
-
-            profile_display_dict = Dict{Symbol,Any}()
-            for k in names(reference_grid)
-                val = reference_grid[profile_idx, k]
-                if val isa CategoricalMixture
-                    profile_display_dict[Symbol(k)] = string(val)
-                else
-                    profile_display_dict[Symbol(k)] = val
-                end
-            end
-            profile_nt = NamedTuple(profile_display_dict)
-
-            # Use column indexing for better performance
-            results.variable[row_idx] = string(var)
-            results.contrast[row_idx] = term_name
-            results.estimate[row_idx] = effect
-            results.se[row_idx] = se
-            results.profile_desc[row_idx] = profile_nt
-            G[row_idx, :] = gradient
-
-            row_idx += 1
-        end
-
-        return row_idx
     else
-        throw(ArgumentError("Unsupported contrasts type: $contrasts. Use :baseline or :pairwise"))
+        return fill(first(orig_col), n_rows)
     end
 end
