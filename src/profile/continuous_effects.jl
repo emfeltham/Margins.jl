@@ -20,12 +20,11 @@ Profile contexts encapsulate all information needed to compute marginal effects
 at specific points (profiles) rather than averaging over the population. This
 enables "marginal effects at the mean" (MEM) and other reference point analyses.
 
-# Example
-```julia
-profile = Dict(:age => 30.0, :education => "college")
-context = create_profile_context(profile, engine, continuous_vars)
-effect = compute_profile_marginal_effect!(gradient_buf, context, engine, :age, :response, :ad, continuous_vars)
-```
+!!! note
+    This type and `apply_profile_measure_transformations` below are not on any live code
+    path: `profile_margins` computes marginal effects in `_mem_continuous_and_categorical`
+    (`src/profile/core.jl`) and applies measures with `apply_measure_transformation`. They
+    are retained pending removal — see `ISSUES.md`.
 """
 struct ProfileContext{T}
     profile::Dict{Symbol, T}
@@ -100,93 +99,6 @@ function create_profile_context(profile::Dict, engine::MarginsEngine, continuous
     return ProfileContext(profile, refgrid_data, refgrid_compiled, refgrid_de)
 end
 
-"""
-    compute_profile_marginal_effect!(gradient_buffer::AbstractVector, context::ProfileContext,
-                                    engine::MarginsEngine, var::Symbol, scale::Symbol,
-                                    backend::Symbol, continuous_vars::Vector{Symbol}) -> Float64
-
-Pure computation kernel for profile marginal effects at reference points.
-Zero allocations, type-stable mathematical operations for marginal effects at specific profiles.
-
-# Arguments
-- `gradient_buffer`: Pre-allocated buffer for parameter gradients (modified in-place)
-- `context`: ProfileContext with compiled reference grid and derivative evaluator
-- `engine`: MarginsEngine with model parameters and link function
-- `var`: Variable name for which to compute marginal effect
-- `scale`: Scale for marginal effects (:response or :link)
-- `backend`: Computation backend (:ad for automatic differentiation)
-- `continuous_vars`: Vector of continuous variable names
-
-# Returns
-- `Float64`: Marginal effect of `var` at the profile point
-
-# Mathematical Details
-**For continuous variables:**
-- Linear scale: ∂η/∂x = Σ β[p] × J[p,j] where J is the Jacobian
-- Response scale: ∂μ/∂x = (dμ/dη) × (∂η/∂x) using chain rule
-
-**For categorical variables:**
-- Uses discrete contrasts between baseline and non-baseline levels
-- Computed via scenario-based prediction differences
-
-# Backend Requirements
-- Continuous variables require `:ad` backend with derivative evaluator
-- Categorical variables use baseline contrast computation
-- Profile context must have appropriate derivative evaluator for continuous variables
-
-# Performance
-- Zero allocations through pre-allocated buffers
-- Single derivative evaluation per variable
-- Optimized computation kernels with @fastmath optimizations
-- Type-stable operations throughout
-
-# Error Handling
-- Validates backend requirements for continuous variables
-- Ensures derivative evaluator exists for continuous variable processing
-- Provides informative error messages for invalid configurations
-
-# Example
-```julia
-gradient_buf = Vector{Float64}(undef, length(engine.β))
-effect = compute_profile_marginal_effect!(gradient_buf, context, engine, :age, :response, :ad, [:age, :income])
-# Returns marginal effect of age at the specific profile point
-```
-"""
-function compute_profile_marginal_effect!(gradient_buffer::AbstractVector, context::ProfileContext,
-                                        engine::MarginsEngine, var::Symbol, scale::Symbol,
-                                        backend::Symbol, continuous_vars::Vector{Symbol})
-    if var ∈ continuous_vars
-        # Continuous variable: use FormulaCompiler primitives at profile point
-        if !isnothing(context.refgrid_de)
-            # Allocate buffers for all continuous variables
-            n_vars = length(continuous_vars)
-            g_all = Vector{Float64}(undef, n_vars)
-            Gβ_all = Matrix{Float64}(undef, length(engine.β), n_vars)
-
-            # Use FC primitives to compute marginal effects at profile point
-            if scale === :response
-                marginal_effects_mu!(g_all, Gβ_all, context.refgrid_de, engine.β, engine.link, 1)
-            else
-                marginal_effects_eta!(g_all, Gβ_all, context.refgrid_de, engine.β, 1)
-            end
-
-            # Extract requested variable
-            var_idx = findfirst(==(var), continuous_vars)
-            if !isnothing(var_idx)
-                # Copy parameter gradient to output buffer
-                gradient_buffer[:] = view(Gβ_all, :, var_idx)
-                return g_all[var_idx]
-            end
-        else
-            throw(MarginsError("Profile marginal effects for continuous variables require derivative evaluator"))
-        end
-    else
-        # Categorical variable: use discrete contrast at profile point
-        return _compute_row_specific_baseline_contrast(engine, context.refgrid_de, context.profile, var, scale, backend)
-    end
-
-    return 0.0
-end
 
 """
     apply_profile_measure_transformations(effect_val::Float64, gradient::AbstractVector,
@@ -239,14 +151,8 @@ through the delta method.
 - Type-stable operations throughout
 - Optimized for profile-specific calculations
 
-# Example
-```julia
-profile = Dict(:age => 30.0, :education => "college")
-context = create_profile_context(profile, engine, [:age])
-effect_val = compute_profile_marginal_effect!(grad_buf, context, engine, :age, :response, :ad, [:age])
-(elasticity, factor) = apply_profile_measure_transformations(effect_val, grad_buf, :age, profile, context, engine, :response, :elasticity, [:age])
-# Returns elasticity of age at 30 years old with college education
-```
+!!! note
+    Not on a live code path (see `ProfileContext` above).
 """
 function apply_profile_measure_transformations(effect_val::Float64, gradient::AbstractVector,
                                              var::Symbol, profile::Dict, context::ProfileContext,
