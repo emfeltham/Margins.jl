@@ -128,6 +128,13 @@ function population_margins(
     end
     if !isnothing(groups)
         _validate_groups_parameter(groups)
+        # Teaching validation: check for vars/groups overlap (mirrors the scenarios check
+        # in _validate_scenarios_specific). Only fires for explicit vars; auto-detected
+        # vars are still skipped silently, and the empty-result guard in
+        # _population_margins_with_contexts catches the case where nothing survives.
+        if !isnothing(vars) && type === :effects
+            _validate_vars_groups_overlap(vars, groups)
+        end
     end
     if !isnothing(weights)
         _validate_weights_parameter(weights, data)
@@ -395,6 +402,65 @@ function _validate_vars_scenarios_overlap(vars, scenarios::NamedTuple)
         Learn more about marginal effects vs predictions in the documentation.
         """
         
+        throw(ArgumentError(error_msg))
+    end
+end
+
+"""
+    _validate_vars_groups_overlap(vars, groups)
+
+    Teaching validation that provides helpful error messages when users
+request the marginal effect of a variable that is also used to define the subgroups.
+
+Mirrors `_validate_vars_scenarios_overlap`. Stratifying by a variable pins it within each
+subgroup, so the effect of that variable inside strata of itself is not the quantity the
+call appears to request; the variable is dropped from the computation, which for
+`vars=[:x], groups=:x` leaves nothing to return at all.
+"""
+function _validate_vars_groups_overlap(vars, groups)
+    # Convert vars to vector for consistent handling
+    vars_vec = vars isa Symbol ? [vars] : (vars === :all_continuous ? Symbol[] : vars)
+
+    # Grouping variables, flattened across every supported `groups` syntax
+    # (Symbol, Vector, (Symbol, spec) binning, and nested outer => inner)
+    group_vars = Set(_extract_group_variables(groups))
+    overlapping_vars = intersect(Set(vars_vec), group_vars)
+
+    if !isempty(overlapping_vars)
+        overlapping_list = join(overlapping_vars, ", ")
+        vars_list = join((":" * string(v) for v in vars_vec), ", ")
+        v = first(overlapping_vars)
+
+        # Create teaching error message
+        error_msg = """
+        Invalid parameter combination: Variables $(overlapping_list) appear in both 'vars' and 'groups'.
+
+        What you're asking:
+           vars = [$(vars_list)]        -> "What's the marginal effect of these variables?"
+           groups = ...   -> "Split the sample into subgroups defined by these variables"
+
+        This is contradictory! Inside a subgroup the grouping variable is held at that subgroup's
+        own value, so there is no variation left to take an effect with respect to.
+
+        What you probably want:
+
+        1. Effect of OTHER variables within strata of $(overlapping_list):
+           population_margins(model, data; vars=[:other_var], groups=:$(v))
+
+        2. Effect of $(overlapping_list) at specific values of $(overlapping_list) (Stata's dydx($(v)) over($(v))):
+           profile_margins(model, data, cartesian_grid($(v)=[value1, value2]); type=:effects, vars=[:$(v)])
+
+        3. If $(v) is continuous and you want its effect within bins of $(v), group by a derived
+           bin column - the bins are a different variable, so the rule does not apply:
+           data.$(v)_bin = cut(data.$(v), 4)   # CategoricalArrays.cut
+           population_margins(model, data; vars=[:$(v)], groups=:$(v)_bin)
+
+        4. Just the effect of $(overlapping_list) (no groups):
+           population_margins(model, data; vars=[$(vars_list)])
+
+        Learn more about the vars/groups conflict rule in the documentation.
+        """
+
         throw(ArgumentError(error_msg))
     end
 end

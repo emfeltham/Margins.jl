@@ -17,6 +17,8 @@ Handle population margins with scenarios/groups contexts - clean FormulaCompiler
 function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, ci_alpha, measure, contrasts=:baseline)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
+    # Variables dropped by the skip rule below, for the empty-result diagnostic
+    skipped_vars = Set{Symbol}()
 
     # Parse specifications
     scenario_specs = isnothing(scenarios) ? [Dict()] : _parse_at_specification(scenarios)
@@ -50,6 +52,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
             for var in vars
                 # Skip if this var appears in scenarios/groups
                 if haskey(scenario_spec, var) || haskey(group_spec, var)
+                    push!(skipped_vars, var)
                     continue
                 end
 
@@ -151,6 +154,34 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
 
     # Add analysis_type for format auto-detection
     metadata[:analysis_type] = :population
+
+    # Guard the empty frame: without this, `results.estimate` below throws an opaque
+    # `ArgumentError: column name "estimate" not found ...` from DataFrames internals.
+    # Explicit `vars` overlapping `scenarios`/`groups` is rejected up front in
+    # `population_margins`; this catches what is left, chiefly auto-detected `vars` that
+    # the skip rule consumes entirely (e.g. a model whose only continuous variable is `x`,
+    # called with `groups=(:x, 4)`).
+    if nrow(results) == 0
+        context_vars = union(Set(scenarios_vars), Set(groups_vars))
+        if !isempty(skipped_vars)
+            skipped_list = join(sort!(collect(skipped_vars)), ", ")
+            context_list = join(sort!(collect(context_vars)), ", ")
+            throw(MarginsError(
+                "No effects could be computed: every requested variable ($(skipped_list)) is " *
+                "also used by 'scenarios'/'groups' ($(context_list)), so each was skipped in " *
+                "every context. Computing the effect of a variable while holding it fixed, or " *
+                "within subgroups defined by it, is contradictory. Request the effect of a " *
+                "different variable, use profile_margins() for effects at specific values of " *
+                "$(skipped_list), or group by a derived bin column instead."
+            ))
+        else
+            throw(MarginsError(
+                "No results could be computed: the 'scenarios'/'groups' specification produced " *
+                "no contexts with data. Check that the grouping variables have observed values " *
+                "and that any scenario values are attainable."
+            ))
+        end
+    end
 
     # Extract raw components from DataFrame
     estimates = results.estimate
