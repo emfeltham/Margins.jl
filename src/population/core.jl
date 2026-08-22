@@ -135,6 +135,11 @@ function population_margins(
         if !isnothing(vars) && type === :effects
             _validate_vars_groups_overlap(vars, groups)
         end
+        # A variable cannot be binned by groups and overridden by scenarios at once: the
+        # bins come from its observed values, the override then discards them.
+        if !isnothing(scenarios)
+            _validate_scenarios_groups_conflict(scenarios, groups)
+        end
     end
     if !isnothing(weights)
         _validate_weights_parameter(weights, data)
@@ -421,10 +426,10 @@ function _validate_vars_groups_overlap(vars, groups)
     # Convert vars to vector for consistent handling
     vars_vec = vars isa Symbol ? [vars] : (vars === :all_continuous ? Symbol[] : vars)
 
-    # Grouping variables, flattened across every supported `groups` syntax
-    # (Symbol, Vector, (Symbol, spec) binning, and nested outer => inner)
-    group_vars = Set(_extract_group_variables(groups))
-    overlapping_vars = intersect(Set(vars_vec), group_vars)
+    # Only a grouping that PINS a variable to a single value conflicts with asking for that
+    # variable's effect. A grouping that BINS it leaves it varying within each subgroup.
+    (pinned_vars, _) = _classify_group_variables(groups)
+    overlapping_vars = intersect(Set(vars_vec), Set(pinned_vars))
 
     if !isempty(overlapping_vars)
         overlapping_list = join(overlapping_vars, ", ")
@@ -439,29 +444,60 @@ function _validate_vars_groups_overlap(vars, groups)
            vars = [$(vars_list)]        -> "What's the marginal effect of these variables?"
            groups = ...   -> "Split the sample into subgroups defined by these variables"
 
-        This is contradictory! Inside a subgroup the grouping variable is held at that subgroup's
-        own value, so there is no variation left to take an effect with respect to.
+        Grouping by $(overlapping_list) holds it at one level inside each subgroup, so there is no
+        variation left to take an effect with respect to.
+
+        Note this applies to grouping that PINS a variable to a level. Grouping that BINS a
+        numeric variable into ranges is fine, because the variable still varies inside each bin:
+
+           population_margins(model, data; vars=[:income], groups=(:income, 4))   # allowed
 
         What you probably want:
 
         1. Effect of OTHER variables within strata of $(overlapping_list):
            population_margins(model, data; vars=[:other_var], groups=:$(v))
 
-        2. Effect of $(overlapping_list) at specific values of $(overlapping_list) (Stata's dydx($(v)) over($(v))):
+        2. Effect of $(overlapping_list) at specific values of $(overlapping_list):
            profile_margins(model, data, cartesian_grid($(v)=[value1, value2]); type=:effects, vars=[:$(v)])
 
-        3. If $(v) is continuous and you want its effect within bins of $(v), group by a derived
-           bin column - the bins are a different variable, so the rule does not apply:
-           data.$(v)_bin = cut(data.$(v), 4)   # CategoricalArrays.cut
-           population_margins(model, data; vars=[:$(v)], groups=:$(v)_bin)
-
-        4. Just the effect of $(overlapping_list) (no groups):
+        3. Just the effect of $(overlapping_list) (no groups):
            population_margins(model, data; vars=[$(vars_list)])
 
         Learn more about the vars/groups conflict rule in the documentation.
         """
 
         throw(ArgumentError(error_msg))
+    end
+end
+
+"""
+    _validate_scenarios_groups_conflict(scenarios, groups)
+
+Reject a variable that is simultaneously overridden by `scenarios` and binned by `groups`.
+
+Such a request is silently misleading: `_create_context_data_with_weights` selects each bin's
+rows using the variable's REAL values, then the scenario override replaces those values for
+every row, while the result still carries the bin label. The reported subgroup is defined by
+data that no longer exists in the context it labels.
+"""
+function _validate_scenarios_groups_conflict(scenarios, groups)
+    scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
+    (_, binned_vars) = _classify_group_variables(groups)
+    conflicting = intersect(Set(keys(scenarios_nt)), Set(binned_vars))
+
+    if !isempty(conflicting)
+        conflicting_list = join(conflicting, ", ")
+        v = first(conflicting)
+        throw(ArgumentError("""
+        Invalid parameter combination: Variables $(conflicting_list) are binned by 'groups' and also overridden by 'scenarios'.
+
+        The bins are formed from the observed values of $(conflicting_list), but the scenario then
+        replaces those values for every row. Each subgroup would be labelled by a range its rows
+        no longer occupy.
+
+        Bin by one variable and set a scenario on another:
+           population_margins(model, data; vars=[:x], groups=($(v), 4), scenarios=(other_var=[0, 1],))
+        """))
     end
 end
 

@@ -45,6 +45,7 @@ end
     include("features/test_fixed_effect_models.jl")
     include("regression/test_bool_mixture_skip.jl")
     include("regression/test_unused_categorical_levels.jl")
+    include("regression/test_group_binning.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
     include("test_profile_pairwise.jl")
