@@ -256,7 +256,7 @@ There are **no silent fallbacks** — if the requested backend fails, the error 
 - "What is the effect within each region?"
 - Supports categorical variables, continuous binning (quartiles/custom thresholds), and hierarchical nesting
 
-**Skip rule**: When a variable appears in both `vars` and `scenarios`/`groups`, that variable's own effect is skipped (computing ∂y/∂x while holding x fixed is contradictory).
+**Conflict rule**: When an explicitly named `vars` entry also appears in `scenarios`/`groups`, the call is rejected with an `ArgumentError` naming the alternatives (computing ∂y/∂x while holding x fixed is contradictory). Auto-detected `vars` are skipped silently instead; if that leaves nothing to compute, a `MarginsError` is raised rather than an empty result.
 
 **Combined usage**: Groups and scenarios combine multiplicatively — each subgroup × each scenario.
 
@@ -363,7 +363,7 @@ test/
 ### Error-First Philosophy
 - Statistical correctness errors propagate — no silent fallbacks
 - If `:ad` is requested and fails, the error surfaces (no silent switch to `:fd`)
-- Invalid statistical requests (e.g., effect of x while holding x fixed) are handled by the skip rule, not silently
+- Invalid statistical requests (e.g., effect of x while holding x fixed) raise an error, never a silently emptied result
 
 ### Aggressive Caching
 - FormulaCompiler compilation is expensive (milliseconds)

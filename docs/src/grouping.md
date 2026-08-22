@@ -232,24 +232,28 @@ healthcare_comprehensive = population_margins(health_model, health_data;
 # Total combinations: 4 states × 2 urban/rural × 12 insurance×income × 4 policy scenarios = 384 results
 ```
 
-## Important: Skip Rule for Statistical Validity
+## Important: Conflict Rule for Statistical Validity
 
 **Critical Constraint:** For population analysis, computing the effect of a variable while simultaneously holding it fixed (via `scenarios`) or using it to define subgroups (via `groups`) is contradictory and statistically meaningless.
 
-### The Skip Rule
+### The Conflict Rule
 
-To preserve statistical correctness and interpretability, `population_margins()` **automatically skips** variables that appear in `vars` if they also appear in `groups` or `scenarios`.
+To preserve statistical correctness and interpretability, `population_margins()` **rejects** an explicit `vars` entry that also appears in `groups` or `scenarios`, with an error explaining what to request instead.
 
 ```julia
 # Example: x appears in both vars and scenarios
-result = population_margins(model, data;
+population_margins(model, data;
     type=:effects,
-    vars=[:x, :z],           # Request effects for x and z
-    scenarios=(:x = [0, 1])  # But fix x at specific values
+    vars=[:x, :z],            # Request effects for x and z
+    scenarios=(x = [0, 1],)   # But fix x at specific values
 )
-# Result: Only z effect is computed. x is skipped because it's in scenarios.
-# The package silently handles this to avoid statistical errors.
+# ERROR: ArgumentError: Invalid parameter combination: Variables x appear in
+#        both 'vars' and 'scenarios'. ... (the message lists what to do instead)
 ```
+
+The rule fires on **any** overlap, not only when it would leave nothing to compute: asking
+for `vars=[:x, :z]` alongside `scenarios=(x = [0, 1],)` errors rather than quietly returning
+only `z`. The same holds for `groups`.
 
 ### Why This Rule Exists
 
@@ -262,17 +266,17 @@ result = population_margins(model, data;
 ```julia
 # INVALID: "What's the effect of income while holding income fixed?"
 population_margins(model, data;
-    vars=[:income],            # Effect of income changing
-    scenarios=(:income = [30000, 50000])  # But income is fixed
+    vars=[:income],                        # Effect of income changing
+    scenarios=(income = [30000, 50000],)   # But income is fixed
 )
-# → income is skipped from vars
+# → ArgumentError
 
 # INVALID: "What's the effect of education within education groups?"
 population_margins(model, data;
     vars=[:education],         # Effect of education changing
     groups=:education          # But stratified by education levels
 )
-# → education is skipped from vars
+# → ArgumentError
 ```
 
 ### Practical Alternatives
@@ -325,18 +329,27 @@ result = population_margins(model, data;
 # Shows predicted outcomes at each value of x
 ```
 
-### User Notification
+### Auto-Detected `vars`
 
-**Current Behavior:** The skip rule operates **silently** - variables are removed from computation without warning.
+The conflict rule applies to variables you name explicitly. When `vars` is omitted,
+`population_margins()` detects them from the model, and a detected variable that a
+`scenarios`/`groups` specification consumes is **skipped silently** — erroring there would
+make a perfectly reasonable call fail because of a variable the user never asked about:
 
-**How to Check:** Compare requested `vars` against result:
 ```julia
-result = population_margins(model, data;
-    vars=[:x, :z],
-    scenarios=(:x = [0, 1])
-)
-df = DataFrame(result)
-unique(df.variable)  # Will only show "z" (x was skipped)
+# x is auto-detected, then consumed by the grouping; g is still reported
+result = population_margins(model, data; type=:effects, groups=(:x, 4))
+unique(DataFrame(result).variable)   # ["g"] - x was skipped
+```
+
+If the specification consumes *every* auto-detected variable there is nothing left to
+report, and the call raises a `MarginsError` saying so rather than returning an empty result:
+
+```julia
+# A model whose only variable is x, grouped by bins of x
+population_margins(model, data; type=:effects, groups=(:x, 4))
+# ERROR: MarginsError: No effects could be computed: every requested variable (x) is
+#        also used by 'scenarios'/'groups' (x) ...
 ```
 
 ## Performance
@@ -423,9 +436,9 @@ groups=:var1 => [:var2, (:var4, 4)]
 # to maintain statistical validity
 ```
 
-#### Skip Rule Reference
+#### Conflict Rule Reference
 
-See the dedicated section **"Important: Skip Rule for Statistical Validity"** above for complete documentation on how `population_margins()` handles variables that appear in both `vars` and `groups`/`scenarios`.
+See the dedicated section **"Important: Conflict Rule for Statistical Validity"** above for complete documentation on how `population_margins()` handles variables that appear in both `vars` and `groups`/`scenarios`.
 
 #### Interpretation Complexity
 ```julia

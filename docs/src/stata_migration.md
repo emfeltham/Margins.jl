@@ -77,9 +77,9 @@ population_results = population_margins(model, data;
     type=:effects)
 ```
 
-### Skip Rule: `dydx(x)` with `over(x)` (and scenarios)
+### Conflict Rule: `dydx(x)` with `over(x)` (and scenarios)
 
-Unlike Stata, `population_margins` intentionally skips computing the effect of a variable when that same variable appears in `groups` (Stata `over()`) or in `scenarios` (Stata `at()`). This avoids the contradiction of “compute the effect of x while holding x fixed” or “using x both as an effect variable and a grouping key.”
+Unlike Stata, `population_margins` rejects a request for the effect of a variable that also appears in `groups` (Stata `over()`) or in `scenarios` (Stata `at()`), with an `ArgumentError` naming the alternatives. This avoids the contradiction of “compute the effect of x while holding x fixed” or “using x both as an effect variable and a grouping key.”
 
 Recommended translations:
 
@@ -93,7 +93,7 @@ mem_like = profile_margins(model, data,
 
 # 2) Population stratification by x without contradiction:
 #    Create a derived bin variable and group by it, not by :x directly
-df.x_bin = cut(df.x, 4)  # quartiles via user code; or use groups=(:x, 4)
+df.x_bin = cut(df.x, 4)  # quartiles via user code; groups=(:x, 4) would be rejected
 by_xbins = population_margins(model, df;
     type=:effects,
     vars=[:x],
@@ -111,7 +111,7 @@ preds_under_x = population_margins(model, data;
     scenarios=(x=[-2.0, 0.0, 2.0]))
 ```
 
-See also: “Skip Rule” note in the Population Grouping docs for rationale and guidance.
+See also: the “Conflict Rule” section in the Population Grouping docs for rationale and guidance.
 
 #### Short example: grouping by `x_bin` to compute `dydx(x)` across strata
 

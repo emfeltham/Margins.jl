@@ -8,24 +8,31 @@ Confirmed bugs that are not yet fixed. Each entry records a reproducer and the c
 responsible, so the next person does not have to rediscover it. Fixed issues move out of
 this file (into `CHANGELOG.md`).
 
-## Grouping by the variable being contrasted crashes
+## Effects within bins of the variable being differentiated are rejected
 
-- [ ] Return an empty result or a clear error instead of an `ArgumentError` from DataFrames
+- [ ] Let `groups=(:x, 4)` coexist with `vars=[:x]` by distinguishing binning from pinning
 
-`groups=:g` combined with `vars=[:g]` produces zero contrast pairs per group (each group
-holds a single level), and the empty per-context DataFrame then fails column lookup:
+`population_margins(m, df; type=:effects, vars=[:x], groups=(:x, 4))` raises the vars/groups
+conflict error, but the quantity it asks for is well defined: quantile grouping partitions
+the sample by `x` without pinning it, so `x` still varies inside every bin and `∂y/∂x`
+averaged within a quartile is exactly Stata's `margins, dydx(x) over(xbin)`.
+
+The skip test at `src/population/contexts.jl:52` asks only `haskey(group_spec, var)`, which
+cannot tell a group that *pins* a variable (a categorical level, an explicit value list) from
+one that merely *bins* it. Supporting the binned case means threading that distinction from
+`_create_quantile_groups` / `_create_threshold_groups` (`src/population/contexts.jl`) through
+to the skip test, and relaxing `_validate_vars_groups_overlap` (`src/population/core.jl`)
+to match. Correctness tests would need to confirm the within-bin average matches a manual
+computation over the bin's rows.
+
+Workaround, documented in `docs/src/stata_migration.md` and `docs/src/examples.md`: bin `x`
+into a derived column and group by that, which the conflict rule allows because the grouping
+variable is no longer `x`.
 
 ```julia
-population_margins(m, df; type=:effects, vars=[:g], groups=:g)
-# ERROR: ArgumentError: column name "estimate" not found in the data frame
-#        since it has no columns
-# at src/population/contexts.jl:153
+df.x_bin = cut(df.x, 4)
+population_margins(m, df; type=:effects, vars=[:x], groups=:x_bin)
 ```
-
-Reproduces on both `scale=:response` and `scale=:link`, and on `lm` as well as `glm`, so it
-is independent of the scale handling. The 2×2 framework docs say a variable appearing in
-both `vars` and `groups` should have the specification ignored for its own effect — the
-implementation instead produces an empty frame and then trips over it.
 
 ## Orphaned profile helper family
 

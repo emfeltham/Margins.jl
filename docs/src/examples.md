@@ -297,7 +297,7 @@ complex_groups = population_margins(wage_model, data;
 
 ### Counterfactual Scenario Analysis
 
-#### Skip Rule Example: dydx(x) across x strata using a derived bin variable
+#### Conflict Rule Example: dydx(x) across x strata using a derived bin variable
 
 ```julia
 using Statistics

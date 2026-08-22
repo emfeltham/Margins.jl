@@ -232,7 +232,7 @@ To compute differences between scenarios, use predictions:
 ```julia
 # Wrong: Don't try to compute "effect of treatment" using effects + scenarios
 # population_margins(model, data; type=:effects, vars=[:treatment], scenarios=(...))
-# → treatment will be skipped (see skip rule in grouping.md)
+# → ArgumentError (see the conflict rule in grouping.md)
 
 # Right: Use predictions with treatment scenarios
 predictions = population_margins(model, data;
@@ -336,11 +336,11 @@ population_margins(model, data; type=:effects, vars=[:z], scenarios=(x=[10]))
 profile_margins(model, data, cartesian_grid(x=[10]); type=:effects, vars=[:z])
 ```
 
-#### Mistake 2: Skip Rule Violation
+#### Mistake 2: Conflict Rule Violation
 
 ```julia
 # Wrong: x appears in both vars and scenarios
-# Result: x will be skipped, only other variables computed
+# Result: ArgumentError - the whole call is rejected, not just x
 population_margins(model, data; type=:effects, vars=[:x, :z], scenarios=(x=[1, 2]))
 
 # Right: Use predictions to see how outcomes change as x varies
