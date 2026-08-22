@@ -111,7 +111,8 @@ include("engine/measures.jl")  # Measure transformation utilities
 include("engine/core.jl")  # Defines MarginsEngine
 include("core/engine_validation.jl")  # Uses MarginsEngine, must come after engine/core.jl
 include("core/variable_detection.jl")  # Uses MarginsEngine, must come after engine/core.jl
-include("core/buffer_management.jl")  # Buffer extraction utilities
+# core/buffer_management.jl DELETED (2026-08): ComputationBuffers/ProfileBuffers and their
+# accessors were never adopted; all computation uses the engine's own pre-allocated buffers.
 include("engine/caching.jl")  # Unified caching system
 include("kernels/categorical.jl")  # Phase 4: Categorical kernel using FC primitives
 include("population/core.jl")

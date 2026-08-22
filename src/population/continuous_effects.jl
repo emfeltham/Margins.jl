@@ -82,7 +82,7 @@ Uses type-stable buffer management and focused computation kernels.
 
 # Processing Pipeline
 1. Engine validation: Uses Fix 4 function barriers for type stability
-2. Buffer allocation: Type-stable ComputationBuffers from engine
+2. Buffer access: Reuses the engine's pre-allocated batch buffers
 3. Response computation: Compute average response if needed for measure transformations
 4. Row processing: Unweighted or weighted processing using extracted kernels
 5. Result storage: Apply measure transformations and store with standard errors
