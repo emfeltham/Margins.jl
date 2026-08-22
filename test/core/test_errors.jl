@@ -391,14 +391,42 @@ using LinearAlgebra
 
         @testset "Overlap through every groups syntax" begin
             @debug "Testing vars/groups overlap across groups syntaxes" expected_error=ArgumentError
-            # Vector form
+            # Vector form. A bare Symbol always pins, numeric or not, so :x still conflicts.
             @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=[:g, :x])
-            # Continuous binning: (Symbol, Int) and (Symbol, Vector)
-            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:x, 4))
-            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:x, [-0.5, 0.5]))
             # Nested outer => inner, on either side
             @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:g => :x))
             @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g], groups=(:g => :h))
+            # A categorical pins through the vector form too
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g], groups=[:h, :g])
+        end
+
+        @testset "Binning the variable being differentiated is allowed" begin
+            # Binning does not pin: x still varies inside each bin, so its effect there is
+            # well defined. Contrast with the categorical cases above.
+            for gspec in ((:x, 4), (:x, [-0.5, 0.5]))
+                res = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=gspec))
+                @test all(res.variable .== "x")
+                @test sum(res.n) == nrow(df_ov)
+                @test all(isfinite, res.estimate)
+                @test all(res.se .> 0)
+            end
+            # Nested and vector forms where the binned variable is the one differentiated
+            res_nested = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:g => (:x, 4))))
+            @test sum(res_nested.n) == nrow(df_ov)
+            res_vec = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=[:g, (:x, 4)]))
+            @test sum(res_vec.n) == nrow(df_ov)
+        end
+
+        @testset "Binned by groups and overridden by scenarios is rejected" begin
+            @debug "Testing scenarios/groups bin conflict" expected_error=ArgumentError
+            @test_throws ArgumentError population_margins(
+                m_lm, df_ov; type=:effects, vars=[:z], groups=(:x, 4), scenarios=(x=[0.0],)
+            )
+            # Binning one variable while setting a scenario on another is fine
+            res = DataFrame(population_margins(
+                m_lm, df_ov; type=:effects, vars=[:z], groups=(:x, 4), scenarios=(g=["A"],)
+            ))
+            @test nrow(res) == 4
         end
 
         @testset "vars/scenarios overlap (parity)" begin
@@ -427,20 +455,26 @@ using LinearAlgebra
             # empty; that must be a clear MarginsError, not a DataFrames column lookup error.
             df_sole = DataFrame(y = Float64.(randn(200)), x = Float64.(randn(200)))
             m_sole = lm(@formula(y ~ x), df_sole)
-            @debug "Testing empty-result guard" test_input=(groups=(:x, 4),) expected_error=Margins.MarginsError
-            @test_throws Margins.MarginsError population_margins(m_sole, df_sole; type=:effects, groups=(:x, 4))
+            @debug "Testing empty-result guard" test_input=(scenarios=(x=[-1.0, 1.0],),) expected_error=Margins.MarginsError
+            # A scenario pins x, so the only auto-detected variable is consumed and nothing
+            # can be computed -- that must be a clear MarginsError, not a DataFrames error.
             @test_throws Margins.MarginsError population_margins(m_sole, df_sole; type=:effects, scenarios=(x=[-1.0, 1.0],))
+            # Binning x does NOT consume it: the same model now returns one row per bin
+            res_sole = DataFrame(population_margins(m_sole, df_sole; type=:effects, groups=(:x, 4)))
+            @test nrow(res_sole) == 4
+            @test all(res_sole.variable .== "x")
+            @test sum(res_sole.n) == 200
 
-            # A categorical alongside it survives auto-detection, so the call still returns
+            # With a categorical alongside, both variables are reported in every bin
             df_mixed = DataFrame(
                 y = Float64.(randn(200)),
                 x = Float64.(randn(200)),
                 g = categorical(rand(["A", "B"], 200))
             )
             m_mixed = lm(@formula(y ~ x + g), df_mixed)
-            res_mixed = population_margins(m_mixed, df_mixed; type=:effects, groups=(:x, 4))
-            @test nrow(DataFrame(res_mixed)) == 4
-            @test unique(DataFrame(res_mixed).variable) == ["g"]
+            res_mixed = DataFrame(population_margins(m_mixed, df_mixed; type=:effects, groups=(:x, 4)))
+            @test nrow(res_mixed) == 8                       # 4 bins x {x derivative, g contrast}
+            @test Set(unique(res_mixed.variable)) == Set(["x", "g"])
         end
     end
 end

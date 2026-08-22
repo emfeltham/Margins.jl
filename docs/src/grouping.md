@@ -141,6 +141,55 @@ poverty_analysis = population_margins(model, data;
 # Results: ["< 12880", ">= 12880"] (using 2023 federal poverty guideline)
 ```
 
+### Bin Membership
+
+Every bin is half-open — `[lower, upper)` — except the last, which is closed so the maximum
+is included. Read the labels literally: a row whose income is exactly `25000` falls in
+`"[25000, 50000)"`, not in `"< 25000"`. The bins therefore **partition the sample exactly**:
+the reported `n` values always sum to the number of rows, and no observation is counted twice
+or dropped.
+
+### A Numeric Grouping Variable Needs Explicit Binning
+
+`groups` accepts a bare `Symbol` only for a categorical variable, where the levels are the
+groups. A numeric column does not say how it should be grouped, so it must be binned
+explicitly:
+
+```julia
+# ERROR: MarginsError - :income is numeric, so this does not specify grouping
+population_margins(model, data; type=:effects, vars=[:x], groups=:income)
+
+# Say which binning you want
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, [25000, 50000]))
+
+# Or group by levels, by making the variable categorical
+data.income_band = categorical(data.income_band)
+population_margins(model, data; type=:effects, vars=[:x], groups=:income_band)
+```
+
+This matters most for integer-valued columns such as counts: `groups=:nkids` on a 0–3 child
+count is ambiguous between "four groups, one per level" and "quartiles of nkids", and the two
+give different answers. Stata's `over()` and R marginaleffects' `by()` require a discrete
+grouping variable for the same reason.
+
+### Ties and Empty Subgroups
+
+Quantile binning fails when a variable has enough tied values that two quantile boundaries
+coincide, because the bin between them would contain no rows:
+
+```julia
+# income has a mass of zeros, so the 0th and 1st quartile boundaries are both 0.0
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+# ERROR: MarginsError: Cannot form 4 quantile bins for 'income' ...
+#        Use fewer bins, give explicit thresholds, or group by a categorical column.
+```
+
+Subgroups with no observations are **omitted from the results** rather than reported as
+`0.0 ± 0.0`. This is routine for cross-tabulations, where not every level combination is
+observed — `groups=[:region, :education]` returns a row only for the combinations that exist,
+so `nrow` may be fewer than the product of the level counts.
+
 ### Mixed Categorical and Continuous Grouping
 
 Combine categorical variables with binned continuous variables:
@@ -234,11 +283,41 @@ healthcare_comprehensive = population_margins(health_model, health_data;
 
 ## Important: Conflict Rule for Statistical Validity
 
-**Critical Constraint:** For population analysis, computing the effect of a variable while simultaneously holding it fixed (via `scenarios`) or using it to define subgroups (via `groups`) is contradictory and statistically meaningless.
+**Critical Constraint:** For population analysis, computing the effect of a variable while simultaneously holding it fixed is contradictory and statistically meaningless.
 
 ### The Conflict Rule
 
-To preserve statistical correctness and interpretability, `population_margins()` **rejects** an explicit `vars` entry that also appears in `groups` or `scenarios`, with an error explaining what to request instead.
+The rule is about what a specification *does*, not about which names appear twice:
+
+> A specification that **pins** a variable to a single value blocks that variable's own
+> effect. A specification that **bins** it into ranges does not.
+
+`scenarios` always pins — it overrides the variable's value for every row, leaving no
+variation. Grouping by a categorical also pins: inside each subgroup the variable holds one
+level. But grouping a numeric variable into quantiles or thresholds only *selects rows*; the
+variable still varies inside each bin, so its average derivative there is well defined.
+
+```julia
+# REJECTED: g is pinned to one level inside each subgroup
+population_margins(model, data; type=:effects, vars=[:g], groups=:g)
+
+# REJECTED: scenarios override x for every row
+population_margins(model, data; type=:effects, vars=[:x], scenarios=(x = [0, 1],))
+
+# ALLOWED: x still varies within each quartile of x
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+population_margins(model, data; type=:effects, vars=[:income], groups=(:income, 4))
+```
+
+The last line is the direct translation of Stata's `margins, dydx(income) over(incomebin)`:
+the average marginal effect of income, computed within each quartile of income.
+
+A variable cannot be binned by `groups` and overridden by `scenarios` at the same time — the
+bins are built from the observed values that the override then discards — so that combination
+is rejected as well.
+
+`population_margins()` **rejects** an explicit `vars` entry that is pinned by `groups` or
+`scenarios`, with an error explaining what to request instead.
 
 ```julia
 # Example: x appears in both vars and scenarios
@@ -276,7 +355,14 @@ population_margins(model, data;
     vars=[:education],         # Effect of education changing
     groups=:education          # But stratified by education levels
 )
-# → ArgumentError
+# → ArgumentError  (education is categorical: each subgroup holds one level)
+
+# VALID: "What's the effect of income within income quartiles?"
+population_margins(model, data;
+    vars=[:income],            # Effect of income changing
+    groups=(:income, 4)        # Within quartiles of income - income still varies inside each
+)
+# → one row per quartile
 ```
 
 ### Practical Alternatives

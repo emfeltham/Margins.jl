@@ -253,7 +253,7 @@ There are **no silent fallbacks** — if the requested backend fails, the error 
 - "What is the effect within each region?"
 - Supports categorical variables, continuous binning (quartiles/custom thresholds), and hierarchical nesting
 
-**Conflict rule**: When an explicitly named `vars` entry also appears in `scenarios`/`groups`, the call is rejected with an `ArgumentError` naming the alternatives (computing ∂y/∂x while holding x fixed is contradictory). Auto-detected `vars` are skipped silently instead; if that leaves nothing to compute, a `MarginsError` is raised rather than an empty result.
+**Conflict rule**: A specification that *pins* a variable to one value blocks that variable's own effect; one that *bins* it into ranges does not. `scenarios` always pins, and grouping by a categorical pins; quantile/threshold grouping only selects rows, so `vars=[:x], groups=(:x, 4)` is valid and computes ∂y/∂x within each bin. An explicitly named `vars` entry that is pinned raises an `ArgumentError`; auto-detected `vars` are skipped silently, and if that leaves nothing to compute a `MarginsError` is raised rather than an empty result.
 
 **Combined usage**: Groups and scenarios combine multiplicatively — each subgroup × each scenario.
 

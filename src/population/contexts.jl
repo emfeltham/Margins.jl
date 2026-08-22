@@ -40,6 +40,15 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
         # absolute row index, matching `context_indices`.
         context_data, context_indices, _ = _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
 
+        # A context with no rows has nothing to average over. Emitting a row for it would
+        # report 0.0 +/- 0.0, which reads as a precisely estimated null rather than "no
+        # data" -- and empty cells are routine in categorical cross-tabulations, where not
+        # every level combination is observed. Skip the context instead; if every context
+        # is empty the guard after the loop reports that.
+        if isempty(context_indices)
+            continue
+        end
+
         if type === :effects
             # PERFORMANCE OPTIMIZATION Phase 1: Build evaluators ONCE per context
             # This prevents rebuilding evaluators n_vars times (was causing 300× overhead)
@@ -50,8 +59,12 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
             continuous_vars_to_compute = Symbol[]
             categorical_vars_to_compute = Symbol[]
             for var in vars
-                # Skip if this var appears in scenarios/groups
-                if haskey(scenario_spec, var) || haskey(group_spec, var)
+                # Skip a variable only when the context holds it at a single value: any
+                # scenario override (which fills the whole column), or a group that pins it
+                # to one level. A group that BINS it leaves it varying within the subgroup,
+                # so its effect there is well defined and is computed as usual.
+                if haskey(scenario_spec, var) ||
+                   (haskey(group_spec, var) && _group_spec_pins(group_spec[var]))
                     push!(skipped_vars, var)
                     continue
                 end
@@ -211,6 +224,60 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     else # :predictions
         return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
     end
+end
+
+"""
+    _group_spec_pins(spec) -> Bool
+
+Does this group specification hold its variable at a single value?
+
+A categorical level pins: every row in the subgroup carries that one level, so the variable
+has no variation left and its own marginal effect is undefined there. A quantile or threshold
+bin does not pin: `groups` only ever selects rows (`_create_context_data_with_weights`), never
+overwrites them, so within a bin the variable still varies across its range and the average
+derivative over those rows is well defined -- Stata's `margins, dydx(x) over(xbin)`.
+
+Bins are marked with `kind=:bin` by `_create_quantile_groups` and `_create_threshold_groups`;
+anything else is a pinned level.
+"""
+_group_spec_pins(spec) = !(spec isa NamedTuple && get(spec, :kind, nothing) === :bin)
+
+"""
+    _classify_group_variables(groups) -> (pinned::Vector{Symbol}, binned::Vector{Symbol})
+
+Split the grouping variables into those a spec PINS to a single value and those it BINS into
+ranges, walking the raw `groups` syntax.
+
+This is purely syntactic, which is possible because a bare `Symbol` is accepted only for a
+categorical variable (`_parse_over_specification` rejects a numeric one), so a bare `Symbol`
+always pins and only the `(Symbol, spec)` tuple forms bin. It therefore agrees with
+`_group_spec_pins` on the parsed specs by construction.
+
+Only the grammar `_validate_groups_parameter` accepts is handled; it runs first, so anything
+else has already been rejected. A variable reachable both ways -- `groups=[(:x, 4), :x]` --
+appears in both vectors, and callers should treat pinned as the stronger claim.
+"""
+function _classify_group_variables(groups)
+    pinned = Symbol[]
+    binned = Symbol[]
+
+    function walk(g)
+        if g isa Symbol
+            push!(pinned, g)
+        elseif g isa AbstractVector
+            foreach(walk, g)
+        elseif g isa Tuple && length(g) == 2 && g[1] isa Symbol
+            # (:x, 4) quantiles or (:x, [cut1, cut2]) thresholds -- both bin
+            push!(binned, g[1])
+        elseif g isa Pair
+            walk(g.first)
+            walk(g.second)
+        end
+        return nothing
+    end
+    walk(groups)
+
+    return (unique(pinned), unique(binned))
 end
 
 """
@@ -801,13 +868,19 @@ function _parse_over_specification(over, data_nt)
         contexts = [Dict()]
         for var in over
             if _is_continuous_variable(data_nt[var])
-                # For continuous variables in vector syntax, use automatic quartile binning
-                quantile_groups = _create_quantile_groups(data_nt[var], var, 4)  # Default to quartiles
-                new_contexts = []
-                for ctx in contexts, qg in quantile_groups
-                    push!(new_contexts, merge(ctx, qg))
-                end
-                contexts = new_contexts
+                # A bare Symbol does not say how to group a numeric column. This used to
+                # bin into quartiles silently, which meant `groups=:nkids` on an integer
+                # count returned quartiles of it rather than its levels -- an analysis the
+                # caller never asked for, with cutpoints invisible at the call site. Stata's
+                # over() and R marginaleffects' by() both require a discrete grouping
+                # variable for the same reason.
+                throw(MarginsError(
+                    "Grouping variable '$(var)' is numeric, and `groups=$(repr(var))` does not " *
+                    "say how to group it. Specify the binning explicitly -- " *
+                    "groups=($(repr(var)), 4) for quartiles, or groups=($(repr(var)), [cut1, cut2]) " *
+                    "for custom thresholds -- or convert '$(var)' to a categorical column if its " *
+                    "distinct values are the groups you want."
+                ))
             else
                 # For categorical variables, use all unique levels
                 new_contexts = []
@@ -865,6 +938,22 @@ end
 
 function _create_quantile_groups(col, var, n_quantiles)
     quantiles = [quantile(col, i/n_quantiles) for i in 0:n_quantiles]
+
+    # Tied values can make consecutive quantile boundaries identical, which leaves the bin
+    # between them with no rows. Reporting such a bin as 0.0 +/- 0.0 reads as a precisely
+    # estimated null, so refuse the request instead and say what to do about it.
+    for i in 1:n_quantiles
+        if quantiles[i] == quantiles[i+1]
+            throw(MarginsError(
+                "Cannot form $(n_quantiles) quantile bins for '$(var)': quantile boundaries " *
+                "$(i-1) and $(i) are both $(quantiles[i]), so bin $(i) would contain no rows. " *
+                "'$(var)' has too many tied values at that point. Use fewer bins " *
+                "(e.g. groups=($(repr(var)), 2)), give explicit thresholds " *
+                "(groups=($(repr(var)), [cut1, cut2])), or group by a categorical column."
+            ))
+        end
+    end
+
     groups = []
     for i in 1:(n_quantiles)
         lower, upper = quantiles[i], quantiles[i+1]
@@ -881,10 +970,7 @@ function _create_quantile_groups(col, var, n_quantiles)
         end
 
         # Create group with range information for filtering
-        group = Dict(
-            var => (lower=lower, upper=upper, label=label, bin=i),
-            Symbol("$(var)_bin") => i
-        )
+        group = Dict(var => (kind=:bin, lower=lower, upper=upper, label=label, bin=i, nbins=n_quantiles))
         push!(groups, group)
     end
     return groups
@@ -912,10 +998,7 @@ function _create_threshold_groups(col, var, thresholds)
             label = "[$(lower), $(upper))"
         end
 
-        group = Dict(
-            var => (lower=lower, upper=upper, label=label, bin=i),
-            Symbol("$(var)_bin") => i
-        )
+        group = Dict(var => (kind=:bin, lower=lower, upper=upper, label=label, bin=i, nbins=n_groups))
         push!(groups, group)
     end
 
@@ -1014,17 +1097,20 @@ function _create_context_data_with_weights(data_nt, scenario_spec, group_spec, w
         for (var, spec) in group_spec
             if haskey(data_nt, var)
                 if spec isa NamedTuple && haskey(spec, :lower) && haskey(spec, :upper)
-                    # Range-based continuous filtering
+                    # Range-based continuous filtering.
+                    #
+                    # One convention for every bin: half-open [lower, upper), with the last
+                    # bin closed at the top so the maximum is included. This makes the bins
+                    # partition the column exactly -- the previous mix of [lo, hi) for bin 1
+                    # and (lo, hi] for the rest dropped every row sitting exactly on an
+                    # interior boundary, and it contradicted the labels that
+                    # _create_threshold_groups assigns ("[25000, 50000)").
                     col = data_nt[var]
-                    if haskey(spec, :bin) && spec.bin == 1
-                        # First bin: include lower boundary
-                        range_indices = findall(x -> spec.lower <= x < spec.upper, col)
-                    elseif haskey(spec, :bin) && spec.bin > 1
-                        # Other bins: exclude lower boundary to avoid overlap
-                        range_indices = findall(x -> spec.lower < x <= spec.upper, col)
+                    is_last_bin = !haskey(spec, :nbins) || spec.bin == spec.nbins
+                    range_indices = if is_last_bin
+                        findall(x -> spec.lower <= x <= spec.upper, col)
                     else
-                        # Fallback: include both boundaries
-                        range_indices = findall(x -> spec.lower <= x <= spec.upper, col)
+                        findall(x -> spec.lower <= x < spec.upper, col)
                     end
                     context_indices = intersect(context_indices, range_indices)
                 elseif spec isa NamedTuple && haskey(spec, :indices)
@@ -1035,9 +1121,6 @@ function _create_context_data_with_weights(data_nt, scenario_spec, group_spec, w
                     var_indices = findall(==(spec), data_nt[var])
                     context_indices = intersect(context_indices, var_indices)
                 end
-            elseif occursin("_bin", String(var)) && haskey(group_spec, var)
-                # Skip bin columns - they're handled by their parent variable
-                continue
             end
         end
     end
