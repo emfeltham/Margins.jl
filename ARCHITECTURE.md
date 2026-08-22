@@ -62,8 +62,6 @@ src/
 │   └── effects_buffers.jl             # Buffer management
 ├── profile/                           # Profile margins implementation
 │   ├── core.jl                        # Main profile_margins() entry point
-│   ├── continuous_effects.jl          # MEM computation
-│   ├── categorical_effects.jl         # Profile categorical effects
 │   └── reference_grids.jl            # Reference grid builders (means_grid, cartesian_grid, etc.)
 ├── computation/                       # Shared computation utilities
 │   ├── statistics.jl                  # Statistical computations
@@ -84,7 +82,6 @@ src/
 │   ├── validation.jl                  # Input validation
 │   ├── margins_validation.jl          # Margins-specific validation
 │   ├── engine_validation.jl           # Engine validation
-│   ├── buffer_management.jl           # Buffer allocation
 │   ├── data_conversion.jl            # Data type conversions
 │   └── typical_values.jl             # Representative value computation
 ├── second_differences/               # Second differences (interaction effects)
