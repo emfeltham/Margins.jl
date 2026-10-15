@@ -95,12 +95,21 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
             end
             baseline_level = level_map[baseline_level_str]
 
+            # Determine which pool levels are actually observed. Unused levels (present in the
+            # CategoricalArray pool but with zero observations) are dropped by StatsModels when
+            # it builds the model's contrasts, so generating a contrast for them would be
+            # meaningless (a spurious zero effect) and would also over-count relative to
+            # `count_categorical_rows` (which sizes the results DataFrame from `unique(var_col)`),
+            # truncating a real contrast. Filter on the full data column, not `rows`, so that
+            # levels present in the full data but absent from a subgroup are still included.
+            observed_strs = Set{String}(string(var_col[i]) for i in eachindex(var_col))
+
             # Create contrast pairs using CategoricalValue type
             all_levels = levels(var_col)  # Returns actual types (Bool, String, Int, etc.)
             contrast_pairs = ContrastPair{T}[]
             for level in all_levels
                 level_str = string(level)  # Convert to string for map lookup
-                if level_str != baseline_level_str
+                if level_str != baseline_level_str && level_str in observed_strs
                     push!(contrast_pairs, ContrastPair(baseline_level, level_map[level_str]))
                 end
             end
@@ -144,9 +153,11 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
                 level_map[level_str] = pool[i]  # Direct pool indexing (1-based)
             end
 
-            # Use canonical level ordering (same as baseline contrasts)
+            # Use canonical level ordering (same as baseline contrasts), but exclude unused
+            # (zero-observation) pool levels — see the baseline branch for rationale.
+            observed_strs = Set{String}(string(var_col[i]) for i in eachindex(var_col))
             all_levels = levels(var_col)  # Returns actual types in canonical order
-            unique_levels = [level_map[string(level)] for level in all_levels]
+            unique_levels = [level_map[string(level)] for level in all_levels if string(level) in observed_strs]
         else
             # For other types, unique works fine
             unique_levels = unique(var_col[rows])

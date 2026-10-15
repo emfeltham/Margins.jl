@@ -141,6 +141,55 @@ poverty_analysis = population_margins(model, data;
 # Results: ["< 12880", ">= 12880"] (using 2023 federal poverty guideline)
 ```
 
+### Bin Membership
+
+Every bin is half-open — `[lower, upper)` — except the last, which is closed so the maximum
+is included. Read the labels literally: a row whose income is exactly `25000` falls in
+`"[25000, 50000)"`, not in `"< 25000"`. The bins therefore **partition the sample exactly**:
+the reported `n` values always sum to the number of rows, and no observation is counted twice
+or dropped.
+
+### A Numeric Grouping Variable Needs Explicit Binning
+
+`groups` accepts a bare `Symbol` only for a categorical variable, where the levels are the
+groups. A numeric column does not say how it should be grouped, so it must be binned
+explicitly:
+
+```julia
+# ERROR: MarginsError - :income is numeric, so this does not specify grouping
+population_margins(model, data; type=:effects, vars=[:x], groups=:income)
+
+# Say which binning you want
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, [25000, 50000]))
+
+# Or group by levels, by making the variable categorical
+data.income_band = categorical(data.income_band)
+population_margins(model, data; type=:effects, vars=[:x], groups=:income_band)
+```
+
+This matters most for integer-valued columns such as counts: `groups=:nkids` on a 0–3 child
+count is ambiguous between "four groups, one per level" and "quartiles of nkids", and the two
+give different answers. Stata's `over()` and R marginaleffects' `by()` require a discrete
+grouping variable for the same reason.
+
+### Ties and Empty Subgroups
+
+Quantile binning fails when a variable has enough tied values that two quantile boundaries
+coincide, because the bin between them would contain no rows:
+
+```julia
+# income has a mass of zeros, so the 0th and 1st quartile boundaries are both 0.0
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+# ERROR: MarginsError: Cannot form 4 quantile bins for 'income' ...
+#        Use fewer bins, give explicit thresholds, or group by a categorical column.
+```
+
+Subgroups with no observations are **omitted from the results** rather than reported as
+`0.0 ± 0.0`. This is routine for cross-tabulations, where not every level combination is
+observed — `groups=[:region, :education]` returns a row only for the combinations that exist,
+so `nrow` may be fewer than the product of the level counts.
+
 ### Mixed Categorical and Continuous Grouping
 
 Combine categorical variables with binned continuous variables:
@@ -232,24 +281,58 @@ healthcare_comprehensive = population_margins(health_model, health_data;
 # Total combinations: 4 states × 2 urban/rural × 12 insurance×income × 4 policy scenarios = 384 results
 ```
 
-## Important: Skip Rule for Statistical Validity
+## Important: Conflict Rule for Statistical Validity
 
-**Critical Constraint:** For population analysis, computing the effect of a variable while simultaneously holding it fixed (via `scenarios`) or using it to define subgroups (via `groups`) is contradictory and statistically meaningless.
+**Critical Constraint:** For population analysis, computing the effect of a variable while simultaneously holding it fixed is contradictory and statistically meaningless.
 
-### The Skip Rule
+### The Conflict Rule
 
-To preserve statistical correctness and interpretability, `population_margins()` **automatically skips** variables that appear in `vars` if they also appear in `groups` or `scenarios`.
+The rule is about what a specification *does*, not about which names appear twice:
+
+> A specification that **pins** a variable to a single value blocks that variable's own
+> effect. A specification that **bins** it into ranges does not.
+
+`scenarios` always pins — it overrides the variable's value for every row, leaving no
+variation. Grouping by a categorical also pins: inside each subgroup the variable holds one
+level. But grouping a numeric variable into quantiles or thresholds only *selects rows*; the
+variable still varies inside each bin, so its average derivative there is well defined.
+
+```julia
+# REJECTED: g is pinned to one level inside each subgroup
+population_margins(model, data; type=:effects, vars=[:g], groups=:g)
+
+# REJECTED: scenarios override x for every row
+population_margins(model, data; type=:effects, vars=[:x], scenarios=(x = [0, 1],))
+
+# ALLOWED: x still varies within each quartile of x
+population_margins(model, data; type=:effects, vars=[:x], groups=(:income, 4))
+population_margins(model, data; type=:effects, vars=[:income], groups=(:income, 4))
+```
+
+The last line is the direct translation of Stata's `margins, dydx(income) over(incomebin)`:
+the average marginal effect of income, computed within each quartile of income.
+
+A variable cannot be binned by `groups` and overridden by `scenarios` at the same time — the
+bins are built from the observed values that the override then discards — so that combination
+is rejected as well.
+
+`population_margins()` **rejects** an explicit `vars` entry that is pinned by `groups` or
+`scenarios`, with an error explaining what to request instead.
 
 ```julia
 # Example: x appears in both vars and scenarios
-result = population_margins(model, data;
+population_margins(model, data;
     type=:effects,
-    vars=[:x, :z],           # Request effects for x and z
-    scenarios=(:x = [0, 1])  # But fix x at specific values
+    vars=[:x, :z],            # Request effects for x and z
+    scenarios=(x = [0, 1],)   # But fix x at specific values
 )
-# Result: Only z effect is computed. x is skipped because it's in scenarios.
-# The package silently handles this to avoid statistical errors.
+# ERROR: ArgumentError: Invalid parameter combination: Variables x appear in
+#        both 'vars' and 'scenarios'. ... (the message lists what to do instead)
 ```
+
+The rule fires on **any** overlap, not only when it would leave nothing to compute: asking
+for `vars=[:x, :z]` alongside `scenarios=(x = [0, 1],)` errors rather than quietly returning
+only `z`. The same holds for `groups`.
 
 ### Why This Rule Exists
 
@@ -262,17 +345,24 @@ result = population_margins(model, data;
 ```julia
 # INVALID: "What's the effect of income while holding income fixed?"
 population_margins(model, data;
-    vars=[:income],            # Effect of income changing
-    scenarios=(:income = [30000, 50000])  # But income is fixed
+    vars=[:income],                        # Effect of income changing
+    scenarios=(income = [30000, 50000],)   # But income is fixed
 )
-# → income is skipped from vars
+# → ArgumentError
 
 # INVALID: "What's the effect of education within education groups?"
 population_margins(model, data;
     vars=[:education],         # Effect of education changing
     groups=:education          # But stratified by education levels
 )
-# → education is skipped from vars
+# → ArgumentError  (education is categorical: each subgroup holds one level)
+
+# VALID: "What's the effect of income within income quartiles?"
+population_margins(model, data;
+    vars=[:income],            # Effect of income changing
+    groups=(:income, 4)        # Within quartiles of income - income still varies inside each
+)
+# → one row per quartile
 ```
 
 ### Practical Alternatives
@@ -325,18 +415,27 @@ result = population_margins(model, data;
 # Shows predicted outcomes at each value of x
 ```
 
-### User Notification
+### Auto-Detected `vars`
 
-**Current Behavior:** The skip rule operates **silently** - variables are removed from computation without warning.
+The conflict rule applies to variables you name explicitly. When `vars` is omitted,
+`population_margins()` detects them from the model, and a detected variable that a
+`scenarios`/`groups` specification consumes is **skipped silently** — erroring there would
+make a perfectly reasonable call fail because of a variable the user never asked about:
 
-**How to Check:** Compare requested `vars` against result:
 ```julia
-result = population_margins(model, data;
-    vars=[:x, :z],
-    scenarios=(:x = [0, 1])
-)
-df = DataFrame(result)
-unique(df.variable)  # Will only show "z" (x was skipped)
+# x is auto-detected, then consumed by the grouping; g is still reported
+result = population_margins(model, data; type=:effects, groups=(:x, 4))
+unique(DataFrame(result).variable)   # ["g"] - x was skipped
+```
+
+If the specification consumes *every* auto-detected variable there is nothing left to
+report, and the call raises a `MarginsError` saying so rather than returning an empty result:
+
+```julia
+# A model whose only variable is x, grouped by bins of x
+population_margins(model, data; type=:effects, groups=(:x, 4))
+# ERROR: MarginsError: No effects could be computed: every requested variable (x) is
+#        also used by 'scenarios'/'groups' (x) ...
 ```
 
 ## Performance
@@ -423,9 +522,9 @@ groups=:var1 => [:var2, (:var4, 4)]
 # to maintain statistical validity
 ```
 
-#### Skip Rule Reference
+#### Conflict Rule Reference
 
-See the dedicated section **"Important: Skip Rule for Statistical Validity"** above for complete documentation on how `population_margins()` handles variables that appear in both `vars` and `groups`/`scenarios`.
+See the dedicated section **"Important: Conflict Rule for Statistical Validity"** above for complete documentation on how `population_margins()` handles variables that appear in both `vars` and `groups`/`scenarios`.
 
 #### Interpretation Complexity
 ```julia

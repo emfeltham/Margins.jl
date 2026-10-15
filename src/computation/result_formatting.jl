@@ -204,7 +204,7 @@ Provides standardized metadata structure for both population and profile margins
 # Keyword Arguments
 - `type::Symbol=:unknown`: Result type (:population, :profile, :custom)
 - `vars::Vector{Symbol}=Symbol[]`: Variables included in analysis
-- `scale::Symbol=:response`: Prediction scale (:response or :linear)
+- `scale::Symbol=:response`: Prediction scale (:response or :link)
 - `backend::Symbol=:ad`: Computation backend (:ad or :fd)
 - `measure::Symbol=:effect`: Econometric measure (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
 - `n_obs::Int=0`: Number of observations in dataset

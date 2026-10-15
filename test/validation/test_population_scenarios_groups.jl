@@ -1,6 +1,9 @@
 using Test
 using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
 using Margins
+using Random
+using Statistics: mean, quantile
+using LinearAlgebra: dot
 
 @testset "population_margins: scenario-aware continuous effects" begin
     # Simple linear model: y = β0 + β1 x + β2 z + ε, Identity link
@@ -257,5 +260,112 @@ end
     if "at_flag" in names(df_nt)
         @test all(df_nt.at_flag .== true)
         @test all(df_pair.at_flag .== true)
+    end
+end
+
+@testset "population_margins: effects within bins of the differentiated variable" begin
+    # Binning a variable does not pin it: x still varies inside every bin, so the average
+    # of dy/dx over the bin's rows is well defined. Validated against a manual computation
+    # over exactly those rows, on a logit so the bins genuinely differ.
+    Random.seed!(20260822)
+    n = 600
+    x = randn(n)
+    z = randn(n)
+    η_true = -0.3 .+ 1.2 .* x .- 0.7 .* z
+    y = rand(n) .< (1 ./ (1 .+ exp.(-η_true)))
+    df = DataFrame(y = y, x = x, z = z)
+    m = glm(@formula(y ~ x + z), df, Binomial(), LogitLink())
+
+    X = modelmatrix(m)
+    β = coef(m)
+    ix = findfirst(==("x"), coefnames(m))
+    η = X * β
+
+    # Bin membership, mirroring the documented convention: [lo, hi) except the last, closed.
+    q = [quantile(df.x, i/4) for i in 0:4]
+    bin_rows(i) = i < 4 ? findall(v -> q[i] <= v < q[i+1], df.x) :
+                          findall(v -> q[4] <= v <= q[5], df.x)
+
+    @testset "response scale matches a manual within-bin average" begin
+        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=(:x, 4)))
+        @test nrow(res) == 4
+        @test sum(res.n) == n                     # the bins partition the sample
+
+        for i in 1:4
+            rows = bin_rows(i)
+            @test res.n[i] == length(rows)
+            # AME on the response scale: mean over the bin of dmu/deta * beta_x
+            manual = mean(GLM.mueta(LogitLink(), η[r]) * β[ix] for r in rows)
+            @test res.estimate[i] ≈ manual atol=1e-10
+        end
+        # A logit's within-bin AMEs genuinely differ, so this is not a degenerate check
+        @test length(unique(round.(res.estimate; digits=8))) > 1
+    end
+
+    @testset "link scale equals the coefficient in every bin" begin
+        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=(:x, 4), scale=:link))
+        @test sum(res.n) == n
+        @test all(isapprox.(res.estimate, β[ix]; atol=1e-10))
+    end
+
+    @testset "standard errors match central differences of the estimate" begin
+        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=(:x, 4)))
+        Σ = GLM.vcov(m)
+        for i in 1:4
+            rows = bin_rows(i)
+            est(b) = mean(GLM.mueta(LogitLink(), dot(view(X, r, :), b)) * b[ix] for r in rows)
+            g = similar(β)
+            for j in eachindex(β)
+                h = 1e-6 * max(abs(β[j]), 1.0)
+                bp = copy(β); bp[j] += h
+                bm = copy(β); bm[j] -= h
+                g[j] = (est(bp) - est(bm)) / (2h)
+            end
+            @test res.se[i] ≈ sqrt(dot(g, Σ * g)) rtol=1e-5
+        end
+    end
+
+    @testset "threshold bins agree with a manual computation" begin
+        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=(:x, [-0.5, 0.5])))
+        @test nrow(res) == 3
+        @test sum(res.n) == n
+        edges = [(minimum(df.x), -0.5), (-0.5, 0.5), (0.5, maximum(df.x))]
+        for (i, (lo, hi)) in enumerate(edges)
+            rows = i < 3 ? findall(v -> lo <= v < hi, df.x) : findall(v -> lo <= v <= hi, df.x)
+            @test res.n[i] == length(rows)
+            manual = mean(GLM.mueta(LogitLink(), η[r]) * β[ix] for r in rows)
+            @test res.estimate[i] ≈ manual atol=1e-10
+        end
+    end
+
+    @testset "weighted within-bin averages" begin
+        Random.seed!(77)
+        dfw = copy(df)
+        dfw.w = rand(n) .+ 0.1
+        res = DataFrame(population_margins(m, dfw; type=:effects, vars=[:x], groups=(:x, 4), weights=:w))
+        @test sum(res.n) == n
+        for i in 1:4
+            rows = bin_rows(i)
+            num = sum(dfw.w[r] * GLM.mueta(LogitLink(), η[r]) * β[ix] for r in rows)
+            manual = num / sum(dfw.w[r] for r in rows)
+            @test res.estimate[i] ≈ manual atol=1e-10
+        end
+    end
+
+    @testset "agrees with the derived bin column spelling" begin
+        # Grouping by a pre-cut categorical column was the documented workaround; binning
+        # directly must give the same numbers.
+        dfb = copy(df)
+        dfb.xq = categorical([q[1] <= v < q[2] ? "Q1" :
+                              q[2] <= v < q[3] ? "Q2" :
+                              q[3] <= v < q[4] ? "Q3" : "Q4" for v in dfb.x])
+        m2 = glm(@formula(y ~ x + z), dfb, Binomial(), LogitLink())
+
+        direct = DataFrame(population_margins(m2, dfb; type=:effects, vars=[:x], groups=(:x, 4)))
+        derived = DataFrame(population_margins(m2, dfb; type=:effects, vars=[:x], groups=:xq))
+        sort!(direct, :x); sort!(derived, :xq)
+        @test direct.n == derived.n
+        @test direct.estimate ≈ derived.estimate
+        @test direct.se ≈ derived.se
     end
 end

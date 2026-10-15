@@ -300,7 +300,7 @@ function Base.show(io::IO, cr::ContrastResult)
 
     # Get alpha from metadata if available
     alpha = get(cr.metadata, :alpha, 0.05)
-    ci_pct = Int(100 * (1 - alpha))
+    ci_pct = _format_level_pct(alpha)
 
     # Display width for alignment
     num_width = 14
@@ -638,7 +638,7 @@ function _show_stata_table(io::IO, mr::EffectsResult)
     
     print(io, lpad(header_text, num_width))
     print(io, lpad("Std. Err.", num_width))
-    print(io, lpad("[$(Int(100*(1-alpha)))% Conf.", num_width))
+    print(io, lpad("[$(_format_level_pct(alpha))% Conf.", num_width))
     print(io, lpad("Interval]", num_width))
     println(io)
     
@@ -696,9 +696,10 @@ function _show_stata_table(io::IO, mr::EffectsResult)
 end
 
 function _show_stata_table(io::IO, mr::PredictionsResult)
-    # Calculate confidence intervals
+    # Calculate confidence (or prediction) intervals
     alpha = get(mr.metadata, :alpha, 0.05)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    is_prediction_interval = get(mr.metadata, :interval, :confidence) === :prediction
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
     
     # Check if this is profile margins (has profile_values)
     has_profile = !isnothing(mr.profile_values)
@@ -738,7 +739,7 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
     
     # Column headers - always "Prediction" for predictions
     header_text = "Prediction"
-    
+
     # Profile column headers
     if has_profile
         for (name, width) in zip(profile_names, profile_widths)
@@ -746,10 +747,11 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
             print(io, " ")
         end
     end
-    
+
     print(io, lpad(header_text, num_width))
     print(io, lpad("Std. Err.", num_width))
-    print(io, lpad("[$(Int(100*(1-alpha)))% Conf.", num_width))
+    interval_label = is_prediction_interval ? "% Pred." : "% Conf."
+    print(io, lpad("[$(_format_level_pct(alpha))$(interval_label)", num_width))
     print(io, lpad("Interval]", num_width))
     println(io)
     
@@ -886,11 +888,34 @@ end
  
 
 # Utility function for confidence interval calculation
-function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64)
+#
+# `var_inflation` adds an observation-level (residual) variance term to the
+# interval half-width, turning a confidence interval into a prediction interval:
+#   CI:  est ± z·√(SE²)
+#   PI:  est ± z·√(SE² + var_inflation)
+# It defaults to 0.0, so all existing confidence-interval callers are unaffected.
+function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64; var_inflation::Float64=0.0)
     z = quantile(Normal(), 1 - alpha/2)
-    lower = estimates .- z .* standard_errors
-    upper = estimates .+ z .* standard_errors
+    half = z .* sqrt.(standard_errors .^ 2 .+ var_inflation)
+    lower = estimates .- half
+    upper = estimates .+ half
     return lower, upper
+end
+
+# Format a confidence/prediction level as a percentage string for display.
+# e.g. alpha=0.05 -> "95", alpha=0.025 -> "97.5". Uses %g rather than Int() so
+# fractional confidence levels do not raise InexactError.
+_format_level_pct(alpha::Real) = @sprintf("%g", 100 * (1 - alpha))
+
+# Residual variance to add when a result requests prediction intervals.
+# Returns the stored residual variance when `interval=:prediction`, else 0.0
+# (the confidence-interval case). Population results never set `:interval`, so
+# they transparently get 0.0 and behave exactly as before.
+function _interval_var_inflation(mr)::Float64
+    if get(mr.metadata, :interval, :confidence) === :prediction
+        return Float64(get(mr.metadata, :resid_var, 0.0))
+    end
+    return 0.0
 end
 
 # Helper function to create self-describing type column
@@ -959,10 +984,12 @@ function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     df[!, :t_stat] = t_stats
     df[!, :p_value] = p_values
 
-    # Add confidence intervals if alpha is specified in metadata
+    # Add confidence (or prediction) intervals if alpha is specified in metadata.
+    # The reported `se`/`t_stat`/`p_value` always describe the mean estimate;
+    # only the interval bounds widen when `interval=:prediction` (see metadata).
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end
@@ -1102,10 +1129,12 @@ function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false
     df[!, :t_stat] = t_stats
     df[!, :p_value] = p_values
 
-    # Add confidence intervals if alpha is specified in metadata
+    # Add confidence (or prediction) intervals if alpha is specified in metadata.
+    # The reported `se`/`t_stat`/`p_value` always describe the mean estimate;
+    # only the interval bounds widen when `interval=:prediction` (see metadata).
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end

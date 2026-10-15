@@ -62,8 +62,6 @@ src/
 │   └── effects_buffers.jl             # Buffer management
 ├── profile/                           # Profile margins implementation
 │   ├── core.jl                        # Main profile_margins() entry point
-│   ├── continuous_effects.jl          # MEM computation
-│   ├── categorical_effects.jl         # Profile categorical effects
 │   └── reference_grids.jl            # Reference grid builders (means_grid, cartesian_grid, etc.)
 ├── computation/                       # Shared computation utilities
 │   ├── statistics.jl                  # Statistical computations
@@ -84,7 +82,6 @@ src/
 │   ├── validation.jl                  # Input validation
 │   ├── margins_validation.jl          # Margins-specific validation
 │   ├── engine_validation.jl           # Engine validation
-│   ├── buffer_management.jl           # Buffer allocation
 │   ├── data_conversion.jl            # Data type conversions
 │   └── typical_values.jl             # Representative value computation
 ├── second_differences/               # Second differences (interaction effects)
@@ -256,7 +253,7 @@ There are **no silent fallbacks** — if the requested backend fails, the error 
 - "What is the effect within each region?"
 - Supports categorical variables, continuous binning (quartiles/custom thresholds), and hierarchical nesting
 
-**Skip rule**: When a variable appears in both `vars` and `scenarios`/`groups`, that variable's own effect is skipped (computing ∂y/∂x while holding x fixed is contradictory).
+**Conflict rule**: A specification that *pins* a variable to one value blocks that variable's own effect; one that *bins* it into ranges does not. `scenarios` always pins, and grouping by a categorical pins; quantile/threshold grouping only selects rows, so `vars=[:x], groups=(:x, 4)` is valid and computes ∂y/∂x within each bin. An explicitly named `vars` entry that is pinned raises an `ArgumentError`; auto-detected `vars` are skipped silently, and if that leaves nothing to compute a `MarginsError` is raised rather than an empty result.
 
 **Combined usage**: Groups and scenarios combine multiplicatively — each subgroup × each scenario.
 
@@ -363,7 +360,7 @@ test/
 ### Error-First Philosophy
 - Statistical correctness errors propagate — no silent fallbacks
 - If `:ad` is requested and fails, the error surfaces (no silent switch to `:fd`)
-- Invalid statistical requests (e.g., effect of x while holding x fixed) are handled by the skip rule, not silently
+- Invalid statistical requests (e.g., effect of x while holding x fixed) raise an error, never a silently emptied result
 
 ### Aggressive Caching
 - FormulaCompiler compilation is expensive (milliseconds)

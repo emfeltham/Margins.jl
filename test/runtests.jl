@@ -38,13 +38,17 @@ end
     include("features/test_bool_profiles.jl")
     include("features/test_table_profiles.jl")
     include("features/test_prediction_scales.jl")
+    include("features/test_prediction_intervals.jl")
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
     include("features/test_balanced_grid.jl")
     include("features/test_fixed_effect_models.jl")
     include("regression/test_bool_mixture_skip.jl")
+    include("regression/test_unused_categorical_levels.jl")
+    include("regression/test_group_binning.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
+    include("test_profile_pairwise.jl")
 end
 
 @testset "Performance and Allocations" begin
@@ -80,4 +84,8 @@ end
     include("validation/test_ci_and_n_logic.jl")
     include("validation/test_population_scenarios_groups.jl")
     include("validation/test_gradient_correctness.jl")
+    include("validation/test_link_scale.jl")
+    include("validation/test_measure_contexts.jl")
+    include("validation/test_engine_cache.jl")
+    include("validation/test_profile_categorical_contrasts.jl")
 end

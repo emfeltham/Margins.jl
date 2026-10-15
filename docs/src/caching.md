@@ -54,23 +54,32 @@ cache_key = hash((
 ))
 ```
 
-This comprehensive key ensures that distinct computational contexts maintain separate cache entries, preventing inadvertent reuse of incompatible compiled structures.
+This key identifies the data only by its column *names* — not by which arrays those names refer to. Because an engine's derivative and contrast evaluators store the data columns and dereference them at call time, the key alone is not sufficient to establish that a cached engine computes on the caller's rows. Retrieval therefore adds an explicit revalidation step.
 
 ### Retrieval Mechanism
 
-The cache employs a standard memoization pattern through Julia's `get!` function:
+A cache hit is accepted only when the cached engine is bound to the same column objects the caller passed; otherwise the engine is rebuilt and the entry replaced:
 
 ```julia
-function get_or_build_engine(usage, deriv, model, data_nt, vars, vcov)
+function get_or_build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
     cache_key = hash(...)
 
-    return get!(ENGINE_CACHE, cache_key) do
-        build_engine(usage, deriv, model, data_nt, vars, vcov)
+    cached = get(ENGINE_CACHE, cache_key, nothing)
+    if !isnothing(cached) && _engine_data_matches(cached, data_nt)
+        return cached
     end
+
+    engine = build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
+    ENGINE_CACHE[cache_key] = engine
+    return engine
 end
 ```
 
-When a configuration is encountered for the first time, the system constructs a new engine instance. Subsequent requests with identical configurations retrieve the existing instance without recompilation.
+`_engine_data_matches` compares columns by identity (`===`) rather than by value: the same array object is precisely the condition under which the cached evaluators read the caller's data. Identity comparison is also collision-free, since the cache holds the engine, which holds the arrays.
+
+The tradeoff is deliberate. Alternating between two datasets that share a schema rebuilds the engine on each call — measured at 0.03–0.13 ms, or 1–3% of a single margins call on a 16-parameter logit with interactions at n = 20,000. That is the correct price for never returning results computed on the wrong rows. Note also that `_convert_numeric_to_float64` returns the original array for `Float64`, `Bool` and categorical columns, so ordinary data continues to hit the cache; only `Int` and `Float32` columns are re-converted per call and therefore force a rebuild.
+
+When a configuration is encountered for the first time, the system constructs a new engine instance. Subsequent requests with an identical configuration *and* the same data retrieve the existing instance without recompilation.
 
 ## Computational Implications
 
@@ -158,6 +167,8 @@ The caching system creates distinct entries for configurations that differ in an
 
 4. **Usage patterns**: Population and profile analyses employ different buffer sizing strategies and thus maintain separate cache entries.
 
+5. **The data itself**: a cached engine is reused only when it is bound to the same column objects supplied by the caller, and is rebuilt otherwise. One fitted model may therefore be applied to different data — subgroup slices, train/test splits, resampled frames — within a single session without manual cache management.
+
 ### Memory Management
 
 The memory footprint of cached engines scales with the number of unique configurations encountered during a session. For a model with p predictors, each engine requires approximately O(p²) memory, dominated by the variance-covariance matrix storage.
@@ -206,7 +217,9 @@ The current implementation does not provide thread-safe cache access. Concurrent
 
 ### Cache Invalidation
 
-The cache does not automatically detect changes to model coefficients that occur outside the standard fitting procedures. Manual coefficient modification requires explicit cache clearing:
+Passing different data requires no action: retrieval revalidates the cached engine's data binding and rebuilds when it does not match (see "Retrieval Mechanism").
+
+The cache does not, however, detect changes to model coefficients that occur outside the standard fitting procedures. Manual coefficient modification requires explicit cache clearing:
 
 ```julia
 # Fit model and compute margins
