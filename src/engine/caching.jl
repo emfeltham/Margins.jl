@@ -43,6 +43,11 @@ Creates comprehensive cache key including:
 - Model type for dispatch
 - Covariance specification
 
+The key identifies the data only by its column *names*, so a hit is additionally
+revalidated with `_engine_data_matches` — a cached engine is reused only when it is bound to
+the same column objects the caller passed, and rebuilt otherwise. This is what makes it safe
+to reuse one fitted model across data slices (subgroups, train/test splits).
+
 # Examples
 ```julia
 # Get cached population margins engine with derivatives
@@ -69,9 +74,48 @@ function get_or_build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::Nam
         vcov # Covariance matrix specification (critical for caching!)
     ))
 
-    return get!(ENGINE_CACHE, cache_key) do
-        build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
+    # The key above does NOT identify the data — only its column names. A MarginsEngine is
+    # bound to the columns it was built from (its derivative and contrast evaluators hold
+    # those arrays), so a cache hit must be revalidated against the caller's data before it
+    # can be reused. Without this, two datasets sharing a schema and a fitted model collide
+    # on one entry and the second caller silently gets the first caller's rows.
+    cached = get(ENGINE_CACHE, cache_key, nothing)
+    if !isnothing(cached) && _engine_data_matches(cached, data_nt)
+        return cached
     end
+
+    engine::MarginsEngine = build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
+    ENGINE_CACHE[cache_key] = engine
+    return engine
+end
+
+"""
+    _engine_data_matches(engine::MarginsEngine, data_nt::NamedTuple) -> Bool
+
+Whether a cached engine is bound to exactly the data the caller passed.
+
+Identity (`===`) is the correct test rather than value equality: the engine's derivative
+evaluator (`build_engine`, `src/engine/core.jl`) stores the data columns and dereferences
+them at call time, so *the same array object* is precisely the condition under which the
+cached engine computes on the caller's rows. It is also collision-free — the cache holds
+the engine, which holds the arrays, so a cached column's address cannot be recycled by a
+later allocation.
+
+Consequence by design: alternating between two same-schema datasets rebuilds the engine on
+each call. `build_engine` costs ~0.03-0.13 ms (1-3% of a single margins call, measured on a
+16-parameter logit with interactions at n=20,000), which is the right price for not
+returning results computed on the wrong data. Note that `_convert_numeric_to_float64`
+returns the original array for `Float64`, `Bool` and categorical columns, so ordinary data
+still hits the cache; only `Int`/`Float32` columns are re-converted per call and therefore
+force a rebuild.
+"""
+function _engine_data_matches(engine::MarginsEngine, data_nt::NamedTuple)
+    cached_nt = engine.data_nt
+    keys(cached_nt) == keys(data_nt) || return false
+    for k in keys(data_nt)
+        getfield(cached_nt, k) === getfield(data_nt, k) || return false
+    end
+    return true
 end
 
 

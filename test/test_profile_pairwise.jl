@@ -22,7 +22,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Margins
     
     # Test result structure
     @test "contrast" in names(df_result)
-    @test all(contains.(df_result.contrast, " vs "))  # Should have "X vs Y" format
+    @test all(contains.(df_result.contrast, " - "))  # "level2 - level1", as in population_margins
     
     # Test that we get the expected number of pairwise contrasts
     n_levels = length(levels(df.cat_var))

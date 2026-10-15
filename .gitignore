@@ -38,3 +38,6 @@ notes/
 package_manuals/
 *.csv
 *.rds
+# development, internal
+CLAUDE.md
+graphics/

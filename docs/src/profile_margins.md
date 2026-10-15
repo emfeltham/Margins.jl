@@ -216,39 +216,69 @@ profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)
 
 ## Output Structure and Result Multiplicity
 
-### Result Row Generation Pattern
-The number of output rows depends on variable types and categorical levels:
+### Requesting categorical contrasts
 
-- **Continuous variables**: 1 reference grid row → 1 output row (derivative)
-- **Categorical variables**: 1 reference grid row → Multiple output rows (baseline contrasts)
+A categorical variable is contrasted only when you name it in `vars`. With `vars` omitted,
+categorical variables in the reference grid define the scenario (they are held at the level
+you gave), and categorical variables absent from the grid are filled with a frequency-weighted
+mixture that serves as backdrop — neither is contrasted.
 
-### Example Output Multiplicity
 ```julia
-# Reference grid with 2 profiles
-grid = DataFrame(
-    age = [30, 40],                    # Continuous variable
-    education = ["A", "B", "C"]        # Categorical with 3 levels
-)
+# Contrasts for education at the sample means of everything else
+profile_margins(model, data, means_grid(data); type=:effects, vars=[:education])
 
-# Results: 2 profiles × (1 continuous + 2 categorical contrasts) = 6 total rows:
-result = profile_margins(model, data, grid; type=:effects, vars=[:age, :education])
-
-# Output structure:
-# Row 1: age at (age=30, education="A,B,C")
-# Row 2: education: B - A at (age=30, education="A,B,C")
-# Row 3: education: C - A at (age=30, education="A,B,C")
-# Row 4: age at (age=40, education="A,B,C")
-# Row 5: education: B - A at (age=40, education="A,B,C")
-# Row 6: education: C - A at (age=40, education="A,B,C")
+# No vars: derivatives for continuous variables only
+profile_margins(model, data, means_grid(data); type=:effects)
 ```
 
-### Categorical Baseline Contrasts
-For a categorical variable with K levels, each reference grid row generates:
-- **K-1 contrast rows** comparing each non-baseline level to the baseline
-- Term names follow pattern: `"variable: level - baseline"`
-- Example: 4-level categorical produces 3 contrasts (B - A, C - A, D - A)
+### Result Row Generation Pattern
 
-This multiplicative pattern means that reference grids with multiple categorical variables can generate substantial numbers of result rows, enabling comprehensive categorical effect analysis at each profile.
+- **Continuous variables**: 1 reference grid row → 1 output row (the derivative at that row)
+- **Categorical variables**: depends on whether the grid pins the variable to a level:
+  - **Not pinned** (absent from your grid, so completion filled a mixture): each grid row
+    yields the full enumeration — `K-1` baseline contrasts, or `K(K-1)/2` with
+    `contrasts=:pairwise`. Both endpoints of each contrast are set explicitly, so the
+    mixture only acts as backdrop for the *other* variables.
+  - **Pinned** (you gave a discrete level): each grid row yields exactly one contrast, that
+    row's level against the baseline — the row-specific baseline contrast. A row already at
+    the baseline level yields no row. `contrasts=:pairwise` always enumerates, since a pinned
+    level adds nothing when both endpoints are named.
+
+### Example Output Multiplicity
+
+```julia
+# Not pinned: education is filled with a mixture, so it is fully enumerated
+grid = cartesian_grid(age=[30, 40])
+result = profile_margins(model, data, grid; type=:effects, vars=[:age, :education])
+
+# 2 profiles × (1 derivative + 2 contrasts) = 6 rows:
+# Row 1: age            dy/dx    at age=30
+# Row 2: education      B - A    at age=30
+# Row 3: education      C - A    at age=30
+# Row 4: age            dy/dx    at age=40
+# Row 5: education      B - A    at age=40
+# Row 6: education      C - A    at age=40
+```
+
+```julia
+# Pinned: each row contrasts its own level against the baseline
+grid = cartesian_grid(age=[30, 40], education=["A", "B", "C"])
+result = profile_margins(model, data, grid; type=:effects, vars=[:education])
+
+# 6 grid rows, but the two rows at the baseline level contribute nothing → 4 rows:
+# Row 1: education      B - A    at (age=30, education="B")
+# Row 2: education      C - A    at (age=30, education="C")
+# Row 3: education      B - A    at (age=40, education="B")
+# Row 4: education      C - A    at (age=40, education="C")
+```
+
+Contrast labels follow `"level - baseline"`, matching `population_margins`. On the link
+scale a contrast for a categorical that does not interact equals the difference of the
+corresponding coefficients, at every profile; on the response scale it is `Δμ` evaluated at
+that row's covariates, and therefore varies across profiles.
+
+Reference grids combining several categorical variables can generate substantial numbers of
+rows, so name only the variables you want contrasted.
 
 ## Examples
 

@@ -360,4 +360,121 @@ using LinearAlgebra
             @test_throws Margins.MarginsError population_margins(m_multi, df_multi; vars=[:x, :str_var])
         end
     end
+    # Regression: vars/groups overlap used to crash with an opaque DataFrames error
+    # (`column name "estimate" not found in the data frame since it has no columns`)
+    # because the skip rule emptied the result frame. It now mirrors vars/scenarios.
+    @testset "vars/groups and vars/scenarios overlap" begin
+        Random.seed!(202020)
+        n_ov = 300
+        df_ov = DataFrame(
+            y = Float64.(randn(n_ov)),
+            y_bin = rand(Bool, n_ov),
+            x = Float64.(randn(n_ov)),
+            z = Float64.(randn(n_ov)),
+            g = categorical(rand(["A", "B", "C"], n_ov)),
+            h = categorical(rand(["P", "Q"], n_ov))
+        )
+        m_lm = lm(@formula(y ~ x + z + g + h), df_ov)
+        m_glm = glm(@formula(y_bin ~ x + z + g + h), df_ov, Binomial(), LogitLink())
+
+        @testset "Grouping by the variable being contrasted" begin
+            @debug "Testing vars/groups overlap" test_input=(vars=[:g], groups=:g) expected_error=ArgumentError
+            # Reproducer from ISSUES.md: independent of model family and of scale
+            for m_ov in (m_lm, m_glm), sc in (:response, :link)
+                @test_throws ArgumentError population_margins(m_ov, df_ov; type=:effects, vars=[:g], groups=:g, scale=sc)
+            end
+            # Symbol form of vars
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=:g, groups=:g)
+            # Partial overlap errors too, matching the scenarios path
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g, :x], groups=:g)
+        end
+
+        @testset "Overlap through every groups syntax" begin
+            @debug "Testing vars/groups overlap across groups syntaxes" expected_error=ArgumentError
+            # Vector form. A bare Symbol always pins, numeric or not, so :x still conflicts.
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=[:g, :x])
+            # Nested outer => inner, on either side
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:g => :x))
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g], groups=(:g => :h))
+            # A categorical pins through the vector form too
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g], groups=[:h, :g])
+        end
+
+        @testset "Binning the variable being differentiated is allowed" begin
+            # Binning does not pin: x still varies inside each bin, so its effect there is
+            # well defined. Contrast with the categorical cases above.
+            for gspec in ((:x, 4), (:x, [-0.5, 0.5]))
+                res = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=gspec))
+                @test all(res.variable .== "x")
+                @test sum(res.n) == nrow(df_ov)
+                @test all(isfinite, res.estimate)
+                @test all(res.se .> 0)
+            end
+            # Nested and vector forms where the binned variable is the one differentiated
+            res_nested = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:g => (:x, 4))))
+            @test sum(res_nested.n) == nrow(df_ov)
+            res_vec = DataFrame(population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=[:g, (:x, 4)]))
+            @test sum(res_vec.n) == nrow(df_ov)
+        end
+
+        @testset "Binned by groups and overridden by scenarios is rejected" begin
+            @debug "Testing scenarios/groups bin conflict" expected_error=ArgumentError
+            @test_throws ArgumentError population_margins(
+                m_lm, df_ov; type=:effects, vars=[:z], groups=(:x, 4), scenarios=(x=[0.0],)
+            )
+            # Binning one variable while setting a scenario on another is fine
+            res = DataFrame(population_margins(
+                m_lm, df_ov; type=:effects, vars=[:z], groups=(:x, 4), scenarios=(g=["A"],)
+            ))
+            @test nrow(res) == 4
+        end
+
+        @testset "vars/scenarios overlap (parity)" begin
+            @debug "Testing vars/scenarios overlap" test_input=(vars=[:g],) expected_error=ArgumentError
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:g], scenarios=(g=["A", "B"],))
+            @test_throws ArgumentError population_margins(m_lm, df_ov; type=:effects, vars=[:x], scenarios=(x=[-1.0, 1.0],))
+        end
+
+        @testset "Disjoint vars/groups still work" begin
+            res_cat = population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=:g)
+            @test nrow(DataFrame(res_cat)) == 3
+            @test all(isfinite, DataFrame(res_cat).estimate)
+
+            res_bin = population_margins(m_lm, df_ov; type=:effects, vars=[:x], groups=(:z, 4))
+            @test nrow(DataFrame(res_bin)) == 4
+            @test all(isfinite, DataFrame(res_bin).estimate)
+
+            # Predictions never consult vars, so grouping by anything is fine
+            res_pred = population_margins(m_lm, df_ov; type=:predictions, groups=:g)
+            @test nrow(DataFrame(res_pred)) == 3
+        end
+
+        @testset "Auto-detected vars consumed by groups" begin
+            # Auto-detected vars are still skipped silently, so the up-front validator does
+            # not fire. When the skip rule consumes every one of them the result frame is
+            # empty; that must be a clear MarginsError, not a DataFrames column lookup error.
+            df_sole = DataFrame(y = Float64.(randn(200)), x = Float64.(randn(200)))
+            m_sole = lm(@formula(y ~ x), df_sole)
+            @debug "Testing empty-result guard" test_input=(scenarios=(x=[-1.0, 1.0],),) expected_error=Margins.MarginsError
+            # A scenario pins x, so the only auto-detected variable is consumed and nothing
+            # can be computed -- that must be a clear MarginsError, not a DataFrames error.
+            @test_throws Margins.MarginsError population_margins(m_sole, df_sole; type=:effects, scenarios=(x=[-1.0, 1.0],))
+            # Binning x does NOT consume it: the same model now returns one row per bin
+            res_sole = DataFrame(population_margins(m_sole, df_sole; type=:effects, groups=(:x, 4)))
+            @test nrow(res_sole) == 4
+            @test all(res_sole.variable .== "x")
+            @test sum(res_sole.n) == 200
+
+            # With a categorical alongside, both variables are reported in every bin
+            df_mixed = DataFrame(
+                y = Float64.(randn(200)),
+                x = Float64.(randn(200)),
+                g = categorical(rand(["A", "B"], 200))
+            )
+            m_mixed = lm(@formula(y ~ x + g), df_mixed)
+            res_mixed = DataFrame(population_margins(m_mixed, df_mixed; type=:effects, groups=(:x, 4)))
+            @test nrow(res_mixed) == 8                       # 4 bins x {x derivative, g contrast}
+            @test Set(unique(res_mixed.variable)) == Set(["x", "g"])
+        end
+    end
 end

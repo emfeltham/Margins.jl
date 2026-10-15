@@ -77,27 +77,34 @@ population_results = population_margins(model, data;
     type=:effects)
 ```
 
-### Skip Rule: `dydx(x)` with `over(x)` (and scenarios)
+### Conflict Rule: `dydx(x)` with `over(x)` (and scenarios)
 
-Unlike Stata, `population_margins` intentionally skips computing the effect of a variable when that same variable appears in `groups` (Stata `over()`) or in `scenarios` (Stata `at()`). This avoids the contradiction of “compute the effect of x while holding x fixed” or “using x both as an effect variable and a grouping key.”
+`margins, dydx(x) over(xbin)` translates directly: `population_margins` computes the effect of a variable within bins of that same variable, because binning only selects rows and leaves x varying inside each bin. What it rejects is a specification that *pins* x — grouping by a categorical (each subgroup holds one level) or a `scenarios` override (Stata `at()`, which replaces x for every row) — since there is then no variation to differentiate.
 
 Recommended translations:
 
 ```julia
-# 1) Stata: margins, dydx(x) over(x)
-# → Profile-style alternative: evaluate derivatives at specific x values
+# 1) Stata: margins, dydx(x) over(xbin)
+# → Direct translation: bin x and differentiate x within each bin
+by_xbins = population_margins(model, data;
+    type=:effects,
+    vars=[:x],
+    groups=(:x, 4))          # quartiles of x; x still varies inside each
+
+# Or evaluate the derivative at specific x values instead of averaging over bins
 mem_like = profile_margins(model, data,
     cartesian_grid(x=[-2.0, 0.0, 2.0]);
     type=:effects,
     vars=[:x])
 
-# 2) Population stratification by x without contradiction:
-#    Create a derived bin variable and group by it, not by :x directly
-df.x_bin = cut(df.x, 4)  # quartiles via user code; or use groups=(:x, 4)
-by_xbins = population_margins(model, df;
+# 2) Custom bin definitions: cut x yourself and group by the resulting column.
+#    Equivalent to groups=(:x, 4) when the cuts match; use it when you need
+#    bin edges that quantiles and thresholds cannot express.
+df.x_bin = cut(df.x, 4)
+by_custom_bins = population_margins(model, df;
     type=:effects,
     vars=[:x],
-    groups=:x_bin)  # allowed since groups variable ≠ :x
+    groups=:x_bin)
 
 # 3) Effects of other variables within x strata (population approach)
 effects_in_xbins = population_margins(model, data;
@@ -111,7 +118,7 @@ preds_under_x = population_margins(model, data;
     scenarios=(x=[-2.0, 0.0, 2.0]))
 ```
 
-See also: “Skip Rule” note in the Population Grouping docs for rationale and guidance.
+See also: the “Conflict Rule” section in the Population Grouping docs for rationale and guidance.
 
 #### Short example: grouping by `x_bin` to compute `dydx(x)` across strata
 

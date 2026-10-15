@@ -240,4 +240,62 @@ function validate_vcov_parameter(vcov, model)
     return nothing
 end
 
+"""
+    _filter_vars_for_measure(vars, data_nt, measure, vars_explicit) -> Vector{Symbol}
+
+Enforce that econometric measures other than `:effect` are only requested for continuous
+variables, and return the variable list to actually compute.
+
+Elasticities and semi-elasticities are defined through a derivative ∂y/∂x scaled by x̄ and/or
+ȳ. A discrete level contrast has no such derivative and no meaningful x̄, so applying an
+elasticity factor to it is not defined. Stata rejects factor variables in
+`eyex()`/`dyex()`/`eydx()`; R's marginaleffects applies slope transformations to numeric
+predictors only. Margins.jl previously computed the raw contrast and labeled the result
+`AME (elasticity)`, which silently misreported it.
+
+Behaviour:
+- A discrete variable the caller named explicitly is an error — the request cannot be
+  honoured as stated.
+- A discrete variable that was auto-detected (`vars=nothing`) is dropped with an `@info`,
+  so `population_margins(model, data; measure=:elasticity)` still works and returns only
+  the rows it can define. If nothing continuous remains, that is an error.
+
+# Arguments
+- `vars::Vector{Symbol}`: Resolved variable list from `_process_vars_parameter`
+- `data_nt::NamedTuple`: Data columns (used for continuity detection)
+- `measure::Symbol`: Requested measure
+- `vars_explicit::Bool`: Whether the caller supplied `vars` (vs. auto-detection)
+
+# Returns
+- `Vector{Symbol}`: `vars` unchanged for `measure === :effect`, otherwise continuous only
+"""
+function _filter_vars_for_measure(vars, data_nt::NamedTuple, measure::Symbol, vars_explicit::Bool)
+    (measure === :effect || isnothing(vars)) && return vars
+
+    discrete = [v for v in vars if !_is_continuous_variable(getproperty(data_nt, v))]
+    isempty(discrete) && return vars
+
+    discrete_list = join(string.(discrete), ", ")
+    if vars_explicit
+        throw(ArgumentError(
+            "measure=:$measure is only defined for continuous variables, but vars includes " *
+            "discrete variable(s): $discrete_list. Elasticities scale a derivative ∂y/∂x by " *
+            "x̄ and/or ȳ; a discrete level contrast has no such derivative. Request the " *
+            "discrete variables in a separate call with measure=:effect."
+        ))
+    end
+
+    continuous = [v for v in vars if !(v in discrete)]
+    if isempty(continuous)
+        throw(ArgumentError(
+            "measure=:$measure requires at least one continuous variable, but all detected " *
+            "variables are discrete: $discrete_list. Use measure=:effect for discrete contrasts."
+        ))
+    end
+
+    @info "Skipping measure=:$measure for discrete variable(s): $discrete_list " *
+          "(elasticity measures are defined for continuous variables only)."
+    return continuous
+end
+
 # End of validation.jl
