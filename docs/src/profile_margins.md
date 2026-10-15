@@ -193,20 +193,6 @@ scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 pro
 @time profile_margins(model, huge_data, scenarios)  # Maintains ~100μs complexity
 ```
 
-## Migration from Old API
-
-If you have code using the deprecated `at` parameter:
-
-```julia
-# OLD (deprecated):
-profile_margins(model, data; at=:means, type=:effects)
-profile_margins(model, data; at=Dict(:x => [0,1,2]), type=:effects)
-
-# NEW (current):
-profile_margins(model, data, means_grid(data); type=:effects)  
-profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)
-```
-
 ## Statistical Notes
 
 - **Standard errors**: Computed via delta method using full model covariance matrix
