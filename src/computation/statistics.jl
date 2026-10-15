@@ -149,8 +149,7 @@ interval. For an ordinary linear model this is `RSS / (n − p)` via
 `predict(lm, interval = "prediction")`.
 
 Throws an `ArgumentError` for any model that is not Gaussian with an identity
-link, rather than emitting a misleading symmetric interval. See
-`notes/PREDICTION_INTERVALS_PLAN.md` for the statistical rationale.
+link, rather than emitting a misleading symmetric interval.
 
 Note: this is the homoskedastic residual variance. The resulting prediction
 interval assumes constant error variance; if a heteroskedasticity-robust `vcov`

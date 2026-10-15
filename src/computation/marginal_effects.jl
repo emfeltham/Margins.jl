@@ -32,5 +32,4 @@ function compute_linear_predictor(β::Vector{Float64}, X_row::Vector{Float64})
     return η
 end
 
-# compute_categorical_contrast_effect! removed - obsolete DataScenario-based function
 # Categorical effects now use ContrastEvaluator kernel system (see kernels/categorical.jl)
