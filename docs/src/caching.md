@@ -210,10 +210,39 @@ These measurements reflect the elimination of compilation overhead while preserv
 
 ### Thread Safety Considerations
 
-The current implementation does not provide thread-safe cache access. Concurrent access from multiple threads may result in race conditions. For parallel computation, two strategies are available:
+Margins.jl is **not thread-safe**. Do not call `population_margins`, `profile_margins` or
+any other Margins function concurrently from several tasks or threads in one Julia process.
 
-1. Pre-populate the cache before initiating parallel computation
-2. Implement thread-local caches (not currently supported)
+The problem is not only the cache dictionary. A cached `MarginsEngine` owns mutable scratch
+buffers (gradient accumulators, model-row and Jacobian buffers, counterfactual state in its
+FormulaCompiler evaluators), and every call writes into them. Two concurrent calls that
+resolve to the same engine — the same model with the same data, which is exactly what a
+bootstrap or simulation loop produces — overwrite each other's intermediate results and
+return wrong estimates and standard errors without any error. Pre-populating the cache
+before a `Threads.@threads` loop does **not** help: it makes the calls share one engine,
+which is the unsafe case. (In testing, 64 of 64 concurrent calls on a pre-populated cache
+returned wrong values.)
+
+Safe ways to parallelize:
+
+1. **Separate processes** (recommended). Each process has its own cache and engines:
+
+   ```julia
+   using Distributed
+   addprocs(4)
+   @everywhere using Margins, GLM, DataFrames
+   results = pmap(1:200) do b
+       d = bootstrap_sample(data, b)          # your resampling function
+       m = glm(formula, d, Binomial(), LogitLink())
+       DataFrame(population_margins(m, d; vars=[:x]))
+   end
+   ```
+
+2. **Serial Margins calls.** Parallelize the expensive work that does not touch Margins
+   (model fitting, data preparation) and run the Margins calls one at a time, e.g. behind a
+   `ReentrantLock`.
+
+Thread-local engines are not currently supported.
 
 ### Cache Invalidation
 
@@ -261,7 +290,7 @@ depends only on the model structure, coefficients, and link function. By caching
 Several enhancements to the caching system are under consideration:
 
 1. **Least-recently-used eviction**: Automatic cache size management through LRU policies
-2. **Thread-local storage**: Safe concurrent access through thread-specific caches
+2. **Thread-local engines**: Safe concurrent use from several threads (engines and their buffers are currently shared and not thread-safe)
 3. **Weak references**: Enable garbage collection of unused engines while preserving active ones
 4. **Persistent caching**: Serialization of compiled engines for cross-session reuse
 

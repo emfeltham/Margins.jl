@@ -25,9 +25,11 @@ Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [weakdeps]
 FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
+MixedModels = "ff71e718-51f3-5ec2-a782-8ffcbfa3c316"
 
 [extensions]
 FixedEffectModelsExt = "FixedEffectModels"
+MixedModelsExt = "MixedModels"
 
 [compat]
 CategoricalArrays = "0.10, 1"
@@ -36,9 +38,10 @@ DataFrames = "1.7"
 Dates = "1"
 Distributions = "0.25"
 FixedEffectModels = "1.11"
-FormulaCompiler = "1.4.2"
+FormulaCompiler = "1.5"
 GLM = "1.9"
 LinearAlgebra = "1"
+MixedModels = "4.35"
 Printf = "1"
 Statistics = "1"
 StatsBase = "0.33, 0.34"

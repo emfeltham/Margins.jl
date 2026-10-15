@@ -47,7 +47,7 @@ function compute_predictions_batch!(
             η = dot(row_buf, β)
             
             results[i] = GLM.linkinv(link, η)
-            dμ_dη = GLM.mueta(link, η)
+            dμ_dη = _dmu_deta(link, η)
             
             # Store gradient: ∂μ/∂β = dμ_dη * ∂η/∂β
             gradients[i, :] .= dμ_dη .* row_buf

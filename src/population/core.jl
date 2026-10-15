@@ -36,6 +36,9 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
   - `:semielasticity_dyex` - Semielasticity d(y)/d(ln x) (change in y for percent change in x)
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
+  Each is the (weighted) mean over observations of the unit-level quantity — gᵢxᵢ/ŷᵢ,
+  gᵢxᵢ or gᵢ/ŷᵢ with gᵢ = ∂ŷᵢ/∂x — as in Stata `margins, eyex()/dyex()/eydx()` and R
+  `avg_slopes(slope = ...)`. (Before v2.2.0: a ratio of means such as (x̄/ȳ)·AME.)
   - Measures other than `:effect` apply to continuous variables only: naming a
     discrete variable in `vars` is an error, and auto-detected discrete variables
     are skipped with an informational message
@@ -150,7 +153,7 @@ function population_margins(
     # Convert all numeric columns to Float64 for type stability
     # This prevents heterogeneous NamedTuple types (e.g., Int64, Float64, etc.)
     # that cause type instability and allocations in downstream code
-    data_nt = _convert_numeric_to_float64(data_nt_raw)
+    data_nt = _prepare_margins_data(data_nt_raw, model)
 
     # Process weights parameter
     weights_vec = _process_weights_parameter(weights, data, data_nt)

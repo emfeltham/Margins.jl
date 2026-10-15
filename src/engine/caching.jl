@@ -107,7 +107,9 @@ each call. `build_engine` costs ~0.03-0.13 ms (1-3% of a single margins call, me
 returning results computed on the wrong data. Note that `_convert_numeric_to_float64`
 returns the original array for `Float64`, `Bool` and categorical columns, so ordinary data
 still hits the cache; only `Int`/`Float32` columns are re-converted per call and therefore
-force a rebuild.
+force a rebuild. `Union{Missing,T}` columns without missing values are narrowed by
+`_narrow_missing_eltype`, which memoizes the narrowed copy per source array, so repeated
+calls on the same data still hit the cache.
 """
 function _engine_data_matches(engine::MarginsEngine, data_nt::NamedTuple)
     cached_nt = engine.data_nt
@@ -122,7 +124,9 @@ end
 """
     clear_engine_cache!()
 
-Clear the engine cache. Useful for memory management in long-running sessions.
+Clear the engine cache, and the memo of converted data columns (`Union{Missing,T}`
+columns narrowed, model-categorical columns converted to `CategoricalArray`). Useful for
+memory management in long-running sessions.
 
 # Examples
 ```julia
@@ -135,6 +139,7 @@ engine = get_or_build_engine(PopulationUsage, model, data_nt, vars, vcov)  # Wil
 """
 function clear_engine_cache!()
     empty!(ENGINE_CACHE)
+    empty!(_NARROWED_COLUMNS)  # memoized narrowed / categorized data columns
     return nothing
 end
 

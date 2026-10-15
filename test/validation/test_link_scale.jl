@@ -143,9 +143,10 @@ end
     end
 
     @testset "elasticity quotient-rule gradient uses the link scale" begin
-        # ∂ȳ/∂β must be X̄ on the link scale, not the mueta-weighted mean design row.
-        # For y ~ x + z the link-scale AME of x is β_x, ȳ = η̄ = X̄β, and
-        #   ε = x̄ β_x / η̄  ⇒  ∂ε/∂β = (x̄/η̄) eₓ - (x̄ β_x / η̄²) X̄
+        # On the link scale ŷᵢ = ηᵢ, so ∇β ŷᵢ must be Xᵢ, not the mueta-weighted g⁻¹′(ηᵢ)Xᵢ.
+        # For y ~ x + z the unit link-scale effect of x is β_x and the elasticity is the
+        # mean of unit elasticities (v2.2.0; Stata eyex / R slope = "eyex"):
+        #   ε = mean(β_x xᵢ / ηᵢ)  ⇒  ∂ε/∂β = mean((xᵢ/ηᵢ) eₓ - (β_x xᵢ / ηᵢ²) Xᵢ)
         Random.seed!(7)
         n = 400
         df = DataFrame(x=abs.(randn(n)) .+ 1.0, z=randn(n))
@@ -154,23 +155,23 @@ end
 
         β = coef(m); Σ = GLM.vcov(m); X = modelmatrix(m)
         ix = _coef_index(m, "x")
-        x̄ = mean(df.x); η̄ = mean(X * β); X̄ = vec(mean(X, dims=1))
+        η = X * β
         eₓ = zeros(length(β)); eₓ[ix] = 1.0
 
-        expected_estimate = x̄ / η̄ * β[ix]
-        expected_grad = (x̄ / η̄) .* eₓ .- (x̄ * β[ix] / η̄^2) .* X̄
+        expected_estimate = mean(β[ix] .* df.x ./ η)
+        expected_grad = vec(mean((df.x ./ η) .* eₓ' .- (β[ix] .* df.x ./ η .^ 2) .* X, dims=1))
         expected_se = sqrt(dot(expected_grad, Σ, expected_grad))
 
         res = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
                                            measure=:elasticity, scale=:link))
-        @test res.estimate[1] ≈ expected_estimate atol=1e-10
-        @test res.se[1] ≈ expected_se atol=1e-10
+        @test res.estimate[1] ≈ expected_estimate rtol=1e-10
+        @test res.se[1] ≈ expected_se rtol=1e-8
 
-        # The old bug used the mueta-weighted design mean; assert we are not doing that
-        X̄_mueta = vec(mean(GLM.mueta.(LogitLink(), X * β) .* X, dims=1))
-        buggy_grad = (x̄ / η̄) .* eₓ .- (expected_estimate / η̄) .* X̄_mueta
+        # The old bug used the mueta-weighted design row; assert we are not doing that
+        μ′ = GLM.mueta.(LogitLink(), η)
+        buggy_grad = vec(mean((df.x ./ η) .* eₓ' .- (β[ix] .* df.x ./ η .^ 2 .* μ′) .* X, dims=1))
         buggy_se = sqrt(dot(buggy_grad, Σ, buggy_grad))
-        @test !isapprox(res.se[1], buggy_se; atol=1e-8)
+        @test !isapprox(res.se[1], buggy_se; rtol=1e-6)
     end
 
     @testset "identity link: scales coincide (no regression)" begin

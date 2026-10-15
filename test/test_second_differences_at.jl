@@ -476,8 +476,8 @@ using CategoricalArrays
             # All contrasts should be for religion
             @test all(sd.variable .== :religion)
 
-            # Contrasts should not be "derivative" (that's for continuous only)
-            @test !("derivative" in sd.contrast)
+            # Contrasts should not be "dy/dx" (that's for continuous only)
+            @test !("dy/dx" in sd.contrast)
 
             # Statistical properties
             @test all(isfinite.(sd.derivative))
@@ -519,11 +519,11 @@ using CategoricalArrays
             @test nrow(religion_rows) >= 2  # Multiple contrasts
             @test nrow(other_rows) == 1     # Single derivative
 
-            # Continuous variable should have "derivative" contrast
-            @test other_rows.contrast[1] == "derivative"
+            # Continuous variable should have "dy/dx" contrast
+            @test other_rows.contrast[1] == "dy/dx"
 
             # Categorical should not
-            @test !("derivative" in religion_rows.contrast)
+            @test !("dy/dx" in religion_rows.contrast)
         end
     end
 end

@@ -156,7 +156,7 @@ Process categorical variables using Phase 4 kernel architecture.
 Provides graceful degradation:
 - Missing ContrastEvaluator: Clear error message
 - Empty contrast pairs: Silently skip (single-level variables)
-- Individual variable errors: Log warning and continue
+- Individual variable errors: logged and rethrown (never a partially filled table)
 """
 function _process_categorical_variables!(
     results::DataFrame, G::Matrix, start_idx::Int,
@@ -174,8 +174,11 @@ function _process_categorical_variables!(
                 rows, scale, backend, contrasts, weights
             )
         catch e
-            @warn "Skipping categorical variable $var due to processing error: $e"
-            # Continue processing remaining variables
+            # Do not skip and continue: the results table was sized for this variable's
+            # contrasts, so skipping left unfilled rows that surfaced as an opaque
+            # `UndefRefError` far from the cause. Report the real error instead.
+            @error "Failed to compute contrasts for categorical variable $var"
+            rethrow()
         end
     end
 
@@ -229,21 +232,13 @@ function _process_single_categorical_variable!(
     if var_col isa AbstractVector{Bool}
         n_levels = 2
     else
-        # Find level map for this variable in ContrastEvaluator's cached maps
-        # (engine.contrast is guaranteed to exist when processing categorical variables)
-        n_levels = nothing
-        for level_map in engine.contrast.categorical_level_maps
-            # Extract variable symbol from type parameter
-            if typeof(level_map).parameters[1] === var
-                n_levels = length(level_map.levels)
-                break
-            end
+        # Number of levels the fitted model knows (FormulaCompiler's `categorical_levels`,
+        # decided by the model's contrasts, so non-CategoricalArray categoricals work too)
+        model_levels = get(categorical_levels(engine.compiled), var, nothing)
+        if isnothing(model_levels)
+            error("Categorical variable $var not found among the model's categorical variables. This indicates an internal consistency error.")
         end
-
-        # Sanity check (should never fail in normal operation)
-        if isnothing(n_levels)
-            error("Categorical variable $var not found in ContrastEvaluator level maps. This indicates an internal consistency error.")
-        end
+        n_levels = length(model_levels)
     end
 
     # Estimate max contrasts based on contrast type

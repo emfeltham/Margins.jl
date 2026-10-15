@@ -50,11 +50,6 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
         end
 
         if type === :effects
-            # PERFORMANCE OPTIMIZATION Phase 1: Build evaluators ONCE per context
-            # This prevents rebuilding evaluators n_vars times (was causing 300× overhead)
-            continuous_vars = continuous_variables(engine.compiled, context_data)
-            context_de = derivativeevaluator(backend, engine.compiled, context_data, continuous_vars)
-
             # Separate continuous and categorical variables for batch vs per-variable processing
             continuous_vars_to_compute = Symbol[]
             categorical_vars_to_compute = Symbol[]
@@ -79,6 +74,11 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
             # PERFORMANCE OPTIMIZATION Phase 2: BATCH process ALL continuous variables in one pass
             # This prevents redundant derivative computation (was n_vars × N calls, now just N calls)
             if !isempty(continuous_vars_to_compute)
+                # Build the derivative evaluator once per context, for the requested continuous
+                # variables only (as build_engine does). Differentiating w.r.t. every continuous
+                # model variable widens the dual numbers and converts each of those columns to
+                # Duals over all n rows.
+                context_de = derivativeevaluator(backend, engine.compiled, context_data, continuous_vars_to_compute)
                 cont_results, cont_gradients = _compute_all_continuous_context_effects_batch(
                     engine, context_data, context_indices, continuous_vars_to_compute,
                     scale, weights, context_de, measure
@@ -366,11 +366,10 @@ once per row and extract all requested variables.
 - `(results_df, gradients_matrix)`: Combined results and gradients for ALL continuous variables
 
 # Measure Handling
-Measure transformations use the CONTEXT's own normalizers: x̄, ȳ and ∂ȳ/∂β are computed
-over `context_indices` with scenario overrides applied (`context_data`). A group's
-elasticity therefore uses that group's means, and a scenario's elasticity uses the
-overridden x. The gradient gets both the scale factor and the quotient-rule correction,
-identically to the no-context path in `_process_continuous_variables!`.
+Elasticity measures are averages of unit-level quantities (e.g. gᵢxᵢ/ŷᵢ) over
+`context_indices`, evaluated on `context_data` (scenario overrides applied), with the
+delta-method gradient accumulated row by row — identically to the no-context path in
+`_process_continuous_variables!` (see `_accumulate_continuous_measures!`).
 
 # Performance
 - OLD: n_vars loops × N rows × compute_all_derivs = O(N × n_vars²)
@@ -407,31 +406,26 @@ function _compute_all_continuous_context_effects_batch(
         var_indices[i] = idx
     end
 
-    # Compute the context's mean response and total weight in one pass.
-    # For measure === :effect this returns (1.0, Σw) without touching the data.
-    (ȳ, total_weight) = _compute_response_mean_if_needed(
-        engine, context_data, context_indices, scale, measure, weights
-    )
+    # Total weight of this context's rows (errors if every weight in it is zero)
+    total_weight = _total_weight(context_indices, weights)
 
-    # For measures that divide by the mean response, the delta-method gradient needs the
-    # quotient-rule term ∂ȳ/∂β, evaluated over THIS context's rows.
-    ∂ȳ_∂β = if measure === :elasticity || measure === :semielasticity_eydx
-        _gradient_of_mean_response(
-            engine.compiled, engine.row_buf, engine.β, engine.link,
-            context_data, context_indices, scale, weights,
-            Vector{Float64}(undef, n_params)
+    # Single pass through the context's rows for ALL variables (same kernels as the
+    # no-context path). Elasticity measures average their unit-level quantity over this
+    # context's rows, with scenario overrides applied (`context_data`).
+    if measure === :effect
+        _batch_compute_continuous_effects!(
+            batch_ame_values, batch_gradients,
+            context_de, engine.β, engine.link, scale,
+            var_indices, context_indices, weights, total_weight
         )
     else
-        nothing
+        xcols = Tuple(getproperty(context_data, v) for v in continuous_vars_to_compute)
+        _batch_compute_continuous_measures!(
+            batch_ame_values, batch_gradients, context_de, engine.compiled, context_data,
+            engine.β, engine.link, scale, measure, var_indices, xcols,
+            context_indices, weights, total_weight
+        )
     end
-
-    # Call SHARED batch computation function (same code as non-scenarios path)
-    # This is the core optimization - single pass through rows extracts ALL variables
-    _batch_compute_continuous_effects!(
-        batch_ame_values, batch_gradients,
-        context_de, engine.β, engine.link, scale,
-        var_indices, context_indices, weights, total_weight
-    )
 
     # Build results DataFrame and gradients matrix
     results = DataFrame(
@@ -445,35 +439,14 @@ function _compute_all_continuous_context_effects_batch(
     gradients_list = Matrix{Float64}[]
 
     for (i, var) in enumerate(continuous_vars_to_compute)
-        ame_val = batch_ame_values[i]
+        final_val = batch_ame_values[i]
         gβ_avg = view(batch_gradients, i, :)
-
-        # Apply measure transformation (no-op for :effect) using this context's rows,
-        # weights and overridden data
-        (final_val, transform_factor) = apply_measure_transformations(
-            ame_val, measure, var,
-            context_data, context_indices, weights, ȳ, total_weight
-        )
-
-        if transform_factor != 1.0
-            # First term: k × ∂AME/∂β
-            gβ_avg .*= transform_factor
-
-            # Second term: quotient-rule correction for measures that divide by ȳ
-            # ∂ε/∂β = (x̄/ȳ) × ∂AME/∂β - (ε/ȳ) × ∂ȳ/∂β
-            if !isnothing(∂ȳ_∂β)
-                quotient_correction = final_val / ȳ
-                @inbounds for j in eachindex(gβ_avg)
-                    gβ_avg[j] -= quotient_correction * ∂ȳ_∂β[j]
-                end
-            end
-        end
 
         se = compute_se_only(gβ_avg, engine.Σ)
 
         push!(results, (
             variable = string(var),
-            contrast = "derivative",
+            contrast = "dy/dx",
             estimate = final_val,
             se = se,
             n = n_obs
@@ -693,7 +666,7 @@ function _compute_population_prediction_in_context(
         end
 
         if total_weight <= 0
-            error("All weights are zero in this context")
+            _throw_zero_weights("predictions")
         end
 
         # Weighted average

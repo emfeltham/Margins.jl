@@ -33,7 +33,7 @@ Automatically routes to the appropriate specialized function based on:
 - `vcov::Matrix{Float64}`: Parameter covariance matrix from the model
 
 # Keyword Arguments
-- `contrast::String="derivative"`: Focal variable contrast to analyze (for categorical variables)
+- `contrast::String="dy/dx"`: Focal variable contrast to analyze (for categorical variables; "derivative" is accepted as an alias of "dy/dx")
 - `modifier_type::Symbol=:auto`: Modifier type (:auto, :binary, :categorical, :continuous)
 - `all_contrasts::Bool=true`: Compute for all focal variable contrasts (if applicable)
 
@@ -92,7 +92,7 @@ function second_differences(
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
     vcov::Matrix{Float64};
-    contrast::String="derivative",
+    contrast::String="dy/dx",
     modifier_type::Symbol=:auto,
     all_contrasts::Bool=true
 )
@@ -121,9 +121,9 @@ function second_differences(
             )
         else
             # Use second_differences_pairwise for single contrast
-            # Auto-detect the contrast if it's the default "derivative" and there's only one contrast
+            # Auto-detect the contrast if it is the default "dy/dx" (or its alias "derivative") and there is only one contrast
             contrast_to_use = contrast
-            if contrast == "derivative" && length(variable_contrasts) == 1
+            if _contrast_label(contrast) == "dy/dx" && length(variable_contrasts) == 1
                 contrast_to_use = variable_contrasts[1]
             end
 
@@ -142,7 +142,7 @@ function second_differences(
 end
 
 """
-    second_difference(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="derivative")
+    second_difference(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="dy/dx")
 
 Calculate the second difference (interaction effect) of a variable's AME across a modifier
 using proper delta-method standard errors with gradient information.
@@ -155,7 +155,7 @@ i.e., the interaction ∂²P / (∂variable ∂modifier).
 - `variable`: The focal variable to calculate second difference for
 - `modifier`: The moderating variable. Must have exactly 2 levels in profile_values.
 - `vcov`: Parameter covariance matrix from the model (e.g., GLM.vcov(model))
-- `contrast`: The contrast type to filter on (default "derivative" for continuous vars)
+- `contrast`: The contrast type to filter on (default "dy/dx" for continuous vars; "derivative" is accepted as an alias)
 
 # Returns
 A NamedTuple with:
@@ -179,7 +179,7 @@ For socio4 as modifier (measuring accuracy/discrimination):
 """
 function second_difference(
     ame_result::EffectsResult, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64};
-    contrast="derivative"
+    contrast="dy/dx"
 )
     # Check that modifier exists in profile_values
     if isnothing(ame_result.profile_values) || !haskey(ame_result.profile_values, modifier)
@@ -204,7 +204,7 @@ function second_difference(
     modifier_levels = []
 
     for i in 1:length(ame_result.estimates)
-        if ame_result.variables[i] == var_str && ame_result.terms[i] == contrast
+        if ame_result.variables[i] == var_str && ame_result.terms[i] == _contrast_label(contrast)
             push!(indices, i)
             push!(modifier_levels, ame_result.profile_values[modifier][i])
         end
@@ -243,7 +243,7 @@ function second_difference(
         p_value = second_diff ≈ 0.0 ? 1.0 : 0.0
     else
         z_stat = second_diff / se_diff
-        p_value = 2 * (1 - cdf(Normal(), abs(z_stat)))
+        p_value = 2 * ccdf(Normal(), abs(z_stat))
     end
 
     return (
@@ -271,7 +271,7 @@ This is the comprehensive function that handles:
 - **Binary modifier** (2 levels): Uses `second_difference()` for each contrast
 - **Categorical/Continuous modifier** (>2 levels): Uses `second_differences_pairwise()` for each contrast
 
-For continuous variables with only "derivative" contrast, returns results for all modifier pairs.
+For continuous variables with only the "dy/dx" contrast, returns results for all modifier pairs.
 For categorical variables, returns results for all contrasts × all modifier pairs.
 
 # Arguments
@@ -398,7 +398,7 @@ function second_differences_all_contrasts(
 end
 
 """
-    second_differences_pairwise(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="derivative", modifier_type=:auto)
+    second_differences_pairwise(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="dy/dx", modifier_type=:auto)
 
 Calculate second differences (interaction effects) for all pairwise combinations of modifier levels.
 
@@ -410,7 +410,7 @@ computes all K(K-1)/2 pairwise contrasts. For continuous modifiers, scales diffe
 - `variable::Symbol`: The focal variable to calculate second differences for
 - `modifier::Symbol`: The moderating variable
 - `vcov::Matrix{Float64}`: Parameter covariance matrix from the model
-- `contrast::String`: The contrast type to filter on (default "derivative" for continuous vars)
+- `contrast::String`: The contrast type to filter on (default "dy/dx" for continuous vars; "derivative" is accepted as an alias)
 - `modifier_type::Symbol`: Modifier type (:binary, :categorical, :continuous, :auto for auto-detection)
 
 # Returns
@@ -466,7 +466,7 @@ function second_differences_pairwise(
     variable::Symbol,
     modifier::Symbol,
     vcov::Matrix{Float64};
-    contrast::String="derivative",
+    contrast::String="dy/dx",
     modifier_type::Symbol=:auto
 )
     # Check that modifier exists in profile_values
@@ -490,7 +490,7 @@ function second_differences_pairwise(
     modifier_levels = []
 
     for i in 1:length(ame_result.estimates)
-        if ame_result.variables[i] == var_str && ame_result.terms[i] == contrast
+        if ame_result.variables[i] == var_str && ame_result.terms[i] == _contrast_label(contrast)
             push!(indices, i)
             push!(modifier_levels, ame_result.profile_values[modifier][i])
         end
@@ -581,7 +581,7 @@ function second_differences_pairwise(
             p_value = second_diff ≈ 0.0 ? 1.0 : 0.0
         else
             z_stat = second_diff / se_diff
-            p_value = 2 * (1 - cdf(Normal(), abs(z_stat)))
+            p_value = 2 * ccdf(Normal(), abs(z_stat))
         end
 
         push!(results, (

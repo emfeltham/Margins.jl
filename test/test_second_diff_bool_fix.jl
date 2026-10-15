@@ -40,12 +40,12 @@ using CategoricalArrays
             contrasts=:pairwise
         )
 
-        # Check that the contrast is NOT "derivative"
+        # Check that the contrast is NOT "dy/dx"
         df_ames = DataFrame(ames)
         contrasts = unique(filter(row -> row.variable == "treated_cat", df_ames).contrast)
         println("Contrasts found: ", contrasts)
         @test length(contrasts) == 1
-        @test contrasts[1] != "derivative"  # Should be "true - false" or similar
+        @test contrasts[1] != "dy/dx"  # Should be "true - false" or similar
 
         # This should now work with the fix (auto-detects the contrast)
         sd = second_differences(ames, :treated_cat, :region, Σ; all_contrasts=true)

@@ -287,8 +287,13 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
         if isempty(continuous_vars)
             nothing
         else
-            # Use FormulaCompiler's derivativeevaluator (dispatches to :ad or :fd backend)
-            derivativeevaluator(backend, compiled, data_nt, continuous_vars)
+            # Use FormulaCompiler's derivativeevaluator (dispatches to :ad or :fd backend).
+            # Profile margins never evaluate engine.de on the data rows (they build their
+            # own evaluator over the reference grid and only check that a derivative
+            # evaluator exists), so bind it to a 1-row slice: the AD backend would otherwise
+            # convert all n rows of every continuous column to Duals (~1 GB at n = 500,000).
+            de_data = U <: ProfileUsage ? map(col -> col[1:min(1, length(col))], data_nt) : data_nt
+            derivativeevaluator(backend, compiled, de_data, continuous_vars)
         end
     else  # D <: NoDerivatives
         # NoDerivatives: No derivative evaluator, minimal memory footprint
@@ -402,6 +407,14 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
 end
 
 """
+    _mixedmodel_link(model) -> Union{GLM.Link, Nothing}
+
+Link function of a MixedModels.jl model, or `nothing` for any other model. Methods for
+`LinearMixedModel` and `GeneralizedLinearMixedModel` are added by `MixedModelsExt`.
+"""
+_mixedmodel_link(model) = nothing
+
+"""
     _auto_link(model) -> GLM.Link
 
 Automatically determine link function from model.
@@ -435,21 +448,12 @@ function _auto_link(model)
               "Statistical correctness cannot be guaranteed without proper link function.")
     end
     
-    # Handle MixedModels.jl models
-    if isdefined(Main, :MixedModels)  # Check if MixedModels is available
-        # LinearMixedModel: Always uses IdentityLink (like linear regression)
-        if model isa Main.MixedModels.LinearMixedModel
-            return GLM.IdentityLink()
-        end
-        
-        # GeneralizedLinearMixedModel: Extract from resp.link field
-        if model isa Main.MixedModels.GeneralizedLinearMixedModel
-            if hasfield(typeof(model), :resp) && hasfield(typeof(model.resp), :link)
-                return model.resp.link
-            end
-        end
-    end
-    
+    # Handle MixedModels.jl models. The methods live in ext/MixedModelsExt.jl and dispatch
+    # on the model type, so this does not depend on how (or whether) the user bound
+    # `MixedModels` in `Main`.
+    mm_link = _mixedmodel_link(model)
+    isnothing(mm_link) || return mm_link
+
     # Check for linear models (IdentityLink is correct for these)
     if hasfield(typeof(model), :model) && hasfield(typeof(model.model), :rr)
         # Linear models (LmResp) don't have a distribution, only GLM models do
