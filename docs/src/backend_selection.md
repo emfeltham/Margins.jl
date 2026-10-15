@@ -197,10 +197,6 @@ result = population_margins(model, data; backend=:fd)  #  Fails
 result = population_margins(model, data; backend=:ad)  # Works
 ```
 
-#### ~~Memory Pressure with AD Backend~~ (Obsolete)
-
-**Note:** This troubleshooting section is obsolete as of v2.0. Both AD and FD achieve zero allocation performance, so there is no memory efficiency difference between backends. If you encounter memory issues, they are likely related to dataset size or model complexity, not the backend choice.
-
 ### Backend Validation Testing
 
 ```julia

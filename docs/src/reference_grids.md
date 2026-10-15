@@ -429,38 +429,6 @@ result = profile_margins(model, data, mixed_grid; type=:predictions)
 DataFrame(result)  # Includes proper SEs for mixed scenarios
 ```
 
-## Migration Guide
-
-### From Old `at` Parameter Syntax
-
-```julia
-# OLD (deprecated):
-profile_margins(model, data; at=:means)
-profile_margins(model, data; at=Dict(:x => [0,1,2]))
-profile_margins(model, data; at=[Dict(:x => 0), Dict(:x => 1)])
-
-# NEW (current):
-profile_margins(model, data, means_grid(data))
-profile_margins(model, data, cartesian_grid(x=[0,1,2]))
-
-explicit_grid = DataFrame(x=[0, 1])
-profile_margins(model, data, explicit_grid)
-```
-
-### Builder Function Evolution
-
-```julia
-# OLD (deprecated internal names):
-refgrid_means(data)
-refgrid_cartesian(specs, data)
-
-# NEW (exported public API):
-means_grid(data)
-cartesian_grid(vars...)
-balanced_grid(data; vars...)
-quantile_grid(data; vars...)
-```
-
 ## Best Practices
 
 1. **Start with `means_grid()`** for basic analysis

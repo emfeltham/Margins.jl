@@ -58,7 +58,7 @@ abstract type MarginsResult end
 """
     EffectsResult <: MarginsResult
 
-Container for marginal effects results (AME, MEM, MER).
+Container for marginal effects results (AME, MEM).
 
 Effects represent "dy/dx for variable X" so they include variable/contrast information.
 
@@ -67,7 +67,7 @@ Fields:
 - `standard_errors::Vector{Float64}`: Standard errors
 - `variables::Vector{String}`: The "x" in dy/dx - which variable each row represents
 - `terms::Vector{String}`: Contrast descriptions (e.g., "dy/dx", "treated - control")
-- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile effects MEM/MER)
+- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile effects MEM)
 - `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
 - `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
@@ -85,7 +85,7 @@ struct EffectsResult <: MarginsResult
     standard_errors::Vector{Float64}
     variables::Vector{String}  # The "x" in dy/dx
     terms::Vector{String}      # Contrast descriptions
-    profile_values::Union{Nothing, NamedTuple}  # For profile effects (MEM/MER)
+    profile_values::Union{Nothing, NamedTuple}  # For profile effects (MEM)
     group_values::Union{Nothing, NamedTuple}
     gradients::Matrix{Float64}
     metadata::Dict{Symbol, Any}
@@ -936,7 +936,7 @@ function _create_type_description(analysis_type::Symbol, measure::Symbol, result
                 return "AME"
             end
         else  # profile
-            # Profile effects (MEM/MER)
+            # Profile effects (MEM)
             if measure == :effect
                 return "MEM"  # Marginal Effect at the Mean / Marginal Effect at Reference
             elseif measure == :elasticity
