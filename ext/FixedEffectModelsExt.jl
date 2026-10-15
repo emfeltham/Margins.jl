@@ -27,7 +27,7 @@ using Margins: _auto_link, validate_model_methods, MarginsError,
                PredictionsResult, EffectsResult,
                _population_predictions, _build_metadata, _ame_calculate,
                _population_margins_with_contexts, _process_vars_parameter,
-               _process_weights_parameter, _convert_numeric_to_float64,
+               _process_weights_parameter, _convert_numeric_to_float64, _prepare_margins_data,
                get_or_build_engine, PopulationUsage, ProfileUsage,
                HasDerivatives, NoDerivatives,
                _profile_margins, process_reference_grid,
@@ -129,7 +129,7 @@ function Margins.population_margins(
 
     # Data conversion
     data_nt_raw = Tables.columntable(data)
-    data_nt = _convert_numeric_to_float64(data_nt_raw)
+    data_nt = _prepare_margins_data(data_nt_raw, model)
 
     # Process weights
     weights_vec = _process_weights_parameter(weights, data, data_nt)
@@ -197,7 +197,7 @@ function Margins.profile_margins(
 )
     # Convert data
     data_nt_raw = Tables.columntable(data)
-    data_nt = _convert_numeric_to_float64(data_nt_raw)
+    data_nt = _prepare_margins_data(data_nt_raw, model)
 
     # Process reference grid
     processed_reference_grid = process_reference_grid(data, reference_grid)

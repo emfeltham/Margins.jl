@@ -93,6 +93,13 @@ Never use mode or arbitrary defaults for categorical variables.
 Always uses frequency mixtures to maintain population representativeness.
 """
 function _get_typical_value(col, typical)
+    col = _narrow_missing_eltype(col)
+    if col isa AbstractVector && Missing <: eltype(col) && any(ismissing, col)
+        throw(MarginsError("A column used to build the reference grid contains " *
+                           "$(count(ismissing, col)) missing values, so it has no typical value. " *
+                           "Build the grid from the estimation sample, e.g. " *
+                           "`dropmissing(data, <model variables>)`."))
+    end
     if _is_continuous_variable(col)
         return typical(col)
     elseif col isa CategoricalArray
@@ -139,7 +146,7 @@ All categorical variables use frequency mixtures based on actual population comp
 No arbitrary defaults or mode-based selection.
 """
 function get_typical_values(data; typical = mean)
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
     typical_values = Dict{Symbol, Any}()
 
     for (name, col) in pairs(data_nt)

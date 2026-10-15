@@ -1,64 +1,9 @@
 # inference/mixture_utilities.jl
 # Mixture creation utilities for reference grid construction
 
-"""
-    validate_mixture_weights(weights; atol=1e-10)
-
-Validate that mixture weights are non-negative and sum to 1.0.
-
-# Arguments
-- `weights::AbstractVector{<:Real}`: Vector of mixture weights
-- `atol::Real=1e-10`: Absolute tolerance for sum check
-
-# Throws
-- `ArgumentError`: If weights are negative or don't sum to 1.0
-
-# Example
-```julia
-validate_mixture_weights([0.3, 0.7])           # ✓ Valid
-validate_mixture_weights([0.3, 0.8])           # ✗ Doesn't sum to 1.0
-validate_mixture_weights([0.3, -0.7, 1.4])     # ✗ Negative weight
-```
-"""
-function validate_mixture_weights(weights::AbstractVector{<:Real}; atol::Real=1e-10)
-    if any(w < 0 for w in weights)
-        throw(ArgumentError("Mixture weights must be non-negative: $weights"))
-    end
-
-    weight_sum = sum(weights)
-    if !isapprox(weight_sum, 1.0, atol=atol)
-        throw(ArgumentError("Mixture weights must sum to 1.0 (±$atol): got $weights (sum = $weight_sum)"))
-    end
-end
-
-"""
-    validate_mixture_levels(levels::AbstractVector)
-
-Validate that mixture levels are unique and non-empty.
-
-# Arguments
-- `levels`: Vector of level identifiers
-
-# Throws
-- `ArgumentError`: If levels are invalid
-
-# Example
-```julia
-validate_mixture_levels(["A", "B", "C"])    # ✓ Valid
-validate_mixture_levels(["A", "A", "B"])    # ✗ Duplicate levels
-validate_mixture_levels(String[])           # ✗ Empty levels
-```
-"""
-function validate_mixture_levels(levels::AbstractVector)
-    if isempty(levels)
-        throw(ArgumentError("Mixture levels cannot be empty"))
-    end
-
-    if length(unique(levels)) != length(levels)
-        duplicates = [level for level in unique(levels) if count(==(level), levels) > 1]
-        throw(ArgumentError("Mixture levels must be unique. Duplicates found: $duplicates"))
-    end
-end
+# `validate_mixture_weights` and `validate_mixture_levels` are FormulaCompiler's (imported
+# and re-exported in src/Margins.jl); Margins' duplicate copies were removed because they
+# clashed with FormulaCompiler's exports under `using FormulaCompiler, Margins`.
 
 """
     create_mixture_column(mixture_spec, n_rows::Int)
@@ -177,11 +122,10 @@ function create_balanced_mixture(levels::AbstractVector)
         throw(ArgumentError("Cannot create balanced mixture from empty levels"))
     end
 
-    # Use FormulaCompiler's validation function
+    # FormulaCompiler's validation (errors on duplicate levels)
     validate_mixture_levels(levels)
 
-    n_levels = length(levels)
-    weight = 1.0 / n_levels
-
-    return Dict(string(level) => weight for level in levels)
+    # Delegate the construction to FormulaCompiler, keeping Margins' Dict return value
+    m = FormulaCompiler.create_balanced_mixture(levels)
+    return Dict{String, Float64}(string(l) => w for (l, w) in zip(m.levels, m.weights))
 end

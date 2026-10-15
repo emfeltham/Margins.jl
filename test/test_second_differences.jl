@@ -357,7 +357,7 @@ end
 
         # Should return 3 rows (pairwise education levels for single contrast)
         @test nrow(sd_single) == 3
-        @test all(sd_single.contrast .== "derivative")
+        @test all(sd_single.contrast .== "dy/dx")
     end
 
     @testset "Multiple Variables Support" begin

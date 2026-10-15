@@ -412,7 +412,7 @@ function profile_margins(
 
     # Convert all numeric columns to Float64 for type stability
     # This prevents heterogeneous NamedTuple types that cause allocations
-    data_nt = _convert_numeric_to_float64(data_nt_raw)
+    data_nt = _prepare_margins_data(data_nt_raw, model)
 
     # Process reference grid to convert string categorical specifications to proper categorical values
     # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
@@ -509,6 +509,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     data_nt_raw = Tables.columntable(reference_grid)
 
     # Convert all numeric columns to Float64 for type stability
+    _check_model_vars_not_missing(data_nt_raw, engine.model)
     data_nt = _convert_numeric_to_float64(data_nt_raw)
 
     # Single compilation with complete reference grid (using cache for performance)
@@ -536,7 +537,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     results.estimate = predictions
     results.se = se_vals
     results.t_stat = predictions ./ se_vals
-    results.p_value = 2 .* (1 .- cdf.(Normal(), abs.(predictions ./ se_vals)))
+    results.p_value = 2 .* ccdf.(Normal(), abs.(predictions ./ se_vals))
     
     # Add profile columns to show which profile each prediction corresponds to
     for (col_name, col_data) in pairs(Tables.columns(reference_grid))
@@ -718,21 +719,28 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     refgrid_compiled = get_or_compile_formula(engine.model, refgrid_data)
     refgrid_de = _build_refgrid_derivative_evaluator(refgrid_compiled, refgrid_data, continuous_requested, engine, backend)
 
-    # Step 3.5: Build the ContrastEvaluator used for categorical contrasts at grid rows.
+    # Step 3.5: Build the ContrastEvaluators used for categorical contrasts at grid rows.
     #
-    # The evaluator needs each contrasted column to carry the model's FULL level pool (the
+    # An evaluator needs the contrasted column to carry the model's FULL level pool (the
     # grid may pin one level, or hold a mixture that is not a level at all), while every
     # other column keeps its grid value — the contrast is evaluated at the grid row's
-    # covariates. So each contrasted column is replaced by a grid-length column drawn from
+    # covariates. So the contrasted column is replaced by a grid-length column drawn from
     # the original data's pool. Its stored values are irrelevant: `contrast_modelrow!` sets
     # both endpoints of the contrast explicitly.
     #
+    # One evaluator per contrasted variable: when two or more categoricals are requested,
+    # contrasting one of them must hold the OTHERS at the grid row's values (a level or a
+    # mixture). A single evaluator with every requested column replaced by a placeholder
+    # evaluated each contrast with the other categoricals at their placeholder (first
+    # level / `false`) instead of their grid values, which gave wrong estimates and SEs.
+    #
     # Building it grid-length matters: splicing in the original column (length n_obs) breaks
     # as soon as the grid has more rows than the data.
-    refgrid_contrast, contrast_compiled, contrast_data = if !isempty(categorical_requested)
+    refgrid_contrasts = Dict{Symbol, Any}()
+    for var in categorical_requested
         hybrid_data_dict = Dict{Symbol, Any}()
         for (k, v) in pairs(refgrid_data)
-            hybrid_data_dict[k] = k in categorical_requested ?
+            hybrid_data_dict[k] = k === var ?
                 _pooled_column_for_grid(getproperty(engine.data_nt, k), n_profiles) : v
         end
         hybrid_data = NamedTuple(hybrid_data_dict)
@@ -741,9 +749,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
         # pooled column changes the column's semantic type, so refgrid_compiled (built for
         # the mixture) does not apply.
         hybrid_compiled = get_or_compile_formula(engine.model, hybrid_data)
-        (contrastevaluator(hybrid_compiled, hybrid_data, categorical_requested), hybrid_compiled, hybrid_data)
-    else
-        (nothing, refgrid_compiled, refgrid_data)  # No categorical contrasts needed
+        refgrid_contrasts[var] = contrastevaluator(hybrid_compiled, hybrid_data, [var])
     end
 
     # Step 4: Pre-allocate profile computation buffers (PHASE 3 FIX)
@@ -781,7 +787,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
         # Process requested categorical variables
         for var in categorical_requested
             row_idx = _process_profile_categorical_variable!(results, G, row_idx, engine, var,
-                                                           refgrid_contrast, reference_grid, profile_idx,
+                                                           refgrid_contrasts[var], reference_grid, profile_idx,
                                                            scale, categorical_modes[var],
                                                            categorical_pairs[var],
                                                            contrast_buf, η_baseline_buf, gradient_buf)
@@ -890,6 +896,10 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
             η = dot(output_buf, local_β)  # Linear predictor = X'β
             # Apply link inverse if on response scale
             pred_value = scale === :response ? GLM.linkinv(local_link, η) : η
+            # Same guard as the population path: eyex/eydx divide by ŷ
+            if (measure === :elasticity || measure === :semielasticity_eydx) && iszero(pred_value)
+                _throw_zero_prediction(measure, profile_idx, scale)
+            end
             (estimate, transform_factor) = apply_measure_transformation(marginal_effect, var_value, pred_value, measure)
 
             # Compute ∂μ/∂β at this profile point for quotient rule correction
@@ -897,7 +907,7 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
             if measure === :elasticity || measure === :semielasticity_eydx
                 ∂μ_∂β = if scale === :response
                     # For response scale: μ = g⁻¹(η), so ∂μ/∂β = g⁻¹'(η) × X
-                    dμ_dη = GLM.mueta(local_link, η)
+                    dμ_dη = _dmu_deta(local_link, η)
                     dμ_dη .* output_buf  # Element-wise: creates vector
                 else
                     # For linear scale: η = X'β, so ∂η/∂β = X
@@ -913,22 +923,18 @@ function _process_profile_continuous_variable!(results, G, row_idx, engine, var,
         # Gβ has shape (n_params, n_vars), so column j contains gradient for variable j
         gradient_view = view(Gβ, :, var_idx)
 
-        # Scale gradient by transformation factor AND apply quotient rule correction
-        if transform_factor != 1.0
-            # First term: k × ∂(∂μ/∂x)/∂β (existing transformation)
-            engine.gβ_accumulator .= gradient_view .* transform_factor
-
-            # Second term: quotient rule correction for measures that divide by μ
-            # For ε = (x/μ) × ∂μ/∂x, the full quotient rule is:
-            # ∂ε/∂β = (x/μ) × ∂(∂μ/∂x)/∂β - (ε/μ) × ∂μ/∂β
-            if !isnothing(∂μ_∂β)
-                quotient_correction = estimate / pred_value
-                @inbounds for j in eachindex(engine.gβ_accumulator)
-                    engine.gβ_accumulator[j] -= quotient_correction * ∂μ_∂β[j]
-                end
+        # Scale the gradient by the transformation factor and, for measures that divide by
+        # ŷ, apply the quotient-rule term. Both are applied whatever the factor's value: the
+        # correction used to sit inside `if transform_factor != 1.0`, so it was silently
+        # dropped when the factor happened to be exactly 1 (eyex with x == ŷ, eydx with
+        # ŷ == 1), leaving a correct estimate with a wrong SE.
+        #   ∂ε/∂β = k × ∂(∂μ/∂x)/∂β − (ε/μ) × ∂μ/∂β   (second term only when dividing by μ)
+        engine.gβ_accumulator .= gradient_view .* transform_factor
+        if !isnothing(∂μ_∂β)
+            quotient_correction = estimate / pred_value
+            @inbounds for j in eachindex(engine.gβ_accumulator)
+                engine.gβ_accumulator[j] -= quotient_correction * ∂μ_∂β[j]
             end
-        else
-            engine.gβ_accumulator .= gradient_view
         end
 
         # Store result (extracted from lines 1355-1374)
@@ -1048,8 +1054,8 @@ end
 """
     _match_pool_level(engine, var, value)
 
-Resolve `value` (a level, a string, or a Bool) to the corresponding entry of `var`'s pool in
-the original data, which is what `contrast_modelrow!` expects.
+Resolve `value` (a level, a string, or a Bool) to the corresponding level of `var` in the
+fitted model (a raw level value), which is what `contrast_modelrow!` accepts.
 """
 function _match_pool_level(engine, var::Symbol, value)
     orig_col = getproperty(engine.data_nt, var)
@@ -1062,13 +1068,18 @@ function _match_pool_level(engine, var::Symbol, value)
         lowered in ("false", "f", "0", "0.0") && return false
         throw(ArgumentError("Cannot interpret \"$value\" as a level of the boolean variable :$var."))
     end
-    target = string(value)
-    lvls = levels(orig_col)
+    # Levels as the fitted model knows them (raw values, model order), which is also the
+    # form `generate_contrast_pairs` uses; the ContrastEvaluator resolves them by value.
+    target = string(value isa CategoricalMixture ? value : _unwrap_value(value))
+    lvls = get(categorical_levels(engine.compiled), var, nothing)
+    if isnothing(lvls)
+        lvls = CategoricalArrays.unwrap.(levels(orig_col))
+    end
     idx = findfirst(l -> string(l) == target, lvls)
     isnothing(idx) && throw(ArgumentError(
-        "Level \"$target\" of :$var is not among the levels of the fitted data ($(lvls))."
+        "Level \"$target\" of :$var is not among the levels of the fitted model ($(lvls))."
     ))
-    return orig_col.pool[idx]
+    return lvls[idx]
 end
 
 """

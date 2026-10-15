@@ -81,7 +81,7 @@ Consider using `second_differences()` directly for more flexibility.
 - `vcov::Matrix{Float64}`: Parameter covariance matrix
 
 # Keyword Arguments
-- `contrast::String="derivative"`: Focal variable contrast to analyze
+- `contrast::String="dy/dx"`: Focal variable contrast to analyze
 - `modifier_type::Symbol=:auto`: Modifier type (:auto, :binary, :categorical, :continuous)
 - `all_contrasts::Bool=true`: Compute for all focal variable contrasts (if applicable)
 
@@ -100,7 +100,7 @@ function second_differences_table(
     variables::Vector{Symbol},
     modifier::Symbol,
     vcov::Matrix{Float64};
-    contrast::String="derivative",
+    contrast::String="dy/dx",
     modifier_type::Symbol=:auto,
     all_contrasts::Bool=true
 )
@@ -119,3 +119,7 @@ function second_differences_table(
 
     return df
 end
+
+# Continuous effects are labelled "dy/dx" (v2.2.0; the scenarios/groups path used to say
+# "derivative"). "derivative" is still accepted wherever a contrast label is passed in.
+_contrast_label(c::AbstractString) = c == "derivative" ? "dy/dx" : String(c)
