@@ -330,9 +330,6 @@ The elasticity transformation ε = (x̄/mean(ŷ)) × AME requires the full quoti
 - Zero allocations (uses pre-allocated gradient_accumulator)
 - Single pass through data
 - O(n × p) complexity where n = observations, p = parameters
-
-# References
-See notes/QUOTIENT_RULE_IMPLEMENTATION_PLAN.md for detailed derivation.
 """
 function _gradient_of_mean_response(
     compiled, row_buf, β, link, data_nt, rows, scale, weights,

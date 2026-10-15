@@ -115,8 +115,6 @@ function validate_vars_parameter(vars, type::Symbol)
     end
 end
 
-# Legacy validate_at_parameter function removed - no longer needed with reference grid API
-
 """
     validate_grouping_parameters(over, within, by)
 
