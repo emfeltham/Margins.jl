@@ -163,7 +163,7 @@ function _prediction_residual_variance(model)::Float64
             "Prediction intervals (interval=:prediction) are only supported for " *
             "Gaussian models with an identity link (ordinary linear models). " *
             "Model of type $(typeof(model)) is not eligible — use " *
-            "interval=:confidence instead. See notes/PREDICTION_INTERVALS_PLAN.md."))
+            "interval=:confidence instead."))
     end
     dof_resid = GLM.dof_residual(model)
     if dof_resid <= 0
