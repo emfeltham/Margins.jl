@@ -309,27 +309,25 @@ using LinearAlgebra
     @testset "Raw String variable validation" begin
         @debug "Testing raw String variable rejection"
 
-        @testset "Raw String columns should error" begin
-            # Create data with raw String column
+        @testset "Raw String columns are handled as the model's categorical" begin
+            # A raw String column used to be rejected with a "convert it with categorical()"
+            # error. Margins now takes the model's view of every variable (v2.2.0): a column
+            # the fitted model treats as categorical is handled as categorical with the
+            # model's levels, so a raw String column gives the same contrasts as its
+            # CategoricalArray equivalent.
             df_string = DataFrame(
                 y = randn(50),
                 x = randn(50),
                 str_var = repeat(["A", "B"], 25)  # Raw String, not CategoricalArray
             )
             m_string = lm(@formula(y ~ x + str_var), df_string)
-
-            # Should throw MarginsError with helpful message
-            err = nothing
-            try
-                population_margins(m_string, df_string; vars=[:str_var])
-            catch e
-                err = e
-            end
-
-            @test err isa Margins.MarginsError
-            @test occursin("raw String column", err.msg)
-            @test occursin("CategoricalArray", err.msg)
-            @test occursin("categorical(data.str_var)", err.msg)  # Should include fix
+            res = DataFrame(population_margins(m_string, df_string; vars=[:str_var]))
+            df_cat = transform(df_string, :str_var => categorical => :str_var)
+            m_cat = lm(@formula(y ~ x + str_var), df_cat)
+            ref = DataFrame(population_margins(m_cat, df_cat; vars=[:str_var]))
+            @test res.contrast == ref.contrast == ["B - A"]
+            @test res.estimate ≈ ref.estimate
+            @test res.se ≈ ref.se
         end
 
         @testset "CategoricalArray String columns should work" begin
@@ -347,7 +345,7 @@ using LinearAlgebra
         end
 
         @testset "Multiple variables with String" begin
-            # Test that error is caught even when String is not the first variable
+            # A raw String variable alongside a continuous one
             df_multi = DataFrame(
                 y = randn(50),
                 x = randn(50),
@@ -356,8 +354,10 @@ using LinearAlgebra
             )
             m_multi = lm(@formula(y ~ x + z + str_var), df_multi)
 
-            # Should error when trying to analyze str_var
-            @test_throws Margins.MarginsError population_margins(m_multi, df_multi; vars=[:x, :str_var])
+            # Works: str_var is categorical in the model (see above)
+            res = DataFrame(population_margins(m_multi, df_multi; vars=[:x, :str_var]))
+            @test res.variable == ["x", "str_var"]
+            @test res.contrast[2] == "B - A"
         end
     end
     # Regression: vars/groups overlap used to crash with an opaque DataFrames error

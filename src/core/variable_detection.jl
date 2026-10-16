@@ -172,8 +172,16 @@ function count_categorical_rows(categorical_vars::Vector{Symbol}, engine::Margin
             n_levels = length(levels)
 
             if contrasts == :baseline
-                # For baseline contrasts, we get (n_levels - 1) contrasts
-                total += max(0, n_levels - 1)
+                # One contrast per observed non-baseline level. The baseline is the
+                # model's reference level, which need not occur in the data (e.g. a
+                # subset without it), so count against it rather than assume n_levels - 1.
+                col = getproperty(engine.data_nt, var)
+                if eltype(col) <: Bool
+                    total += max(0, n_levels - 1)
+                else
+                    baseline_str = string(_get_baseline_level(engine.model, var, engine.data_nt))
+                    total += count(l -> string(l) != baseline_str, levels)
+                end
             elseif contrasts == :pairwise
                 # All unique pairs: n*(n-1)/2
                 total += div(n_levels * (n_levels - 1), 2)

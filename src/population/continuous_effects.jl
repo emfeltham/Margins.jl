@@ -95,10 +95,13 @@ Uses type-stable buffer management and focused computation kernels.
 - Conditional response computation optimizes for :effect measure
 
 # Supported Measures
-- `:effect`: Raw marginal effects (∂μ/∂x)
-- `:elasticity`: (x̄/ȳ) × (∂μ/∂x) - proportional change interpretation
-- `:semielasticity_dyex`: x̄ × (∂μ/∂x) - unit change in x, percent change in y
-- `:semielasticity_eydx`: (1/ȳ) × (∂μ/∂x) - percent change in x, unit change in y
+Each measure is the (weighted) average over `rows` of a unit-level quantity, where
+gᵢ = ∂ŷᵢ/∂x and ŷᵢ is the prediction on `scale` — the definition used by Stata's
+`margins, eyex()/dyex()/eydx()` and R's `avg_slopes(slope = ...)`:
+- `:effect`: mean(gᵢ)
+- `:elasticity` (eyex): mean(gᵢ xᵢ / ŷᵢ)
+- `:semielasticity_dyex` (dy/d ln x): mean(gᵢ xᵢ)
+- `:semielasticity_eydx` (d ln y/dx): mean(gᵢ / ŷᵢ)
 """
 function _process_continuous_variables!(
     results::DataFrame, G::Matrix, start_idx::Int,
@@ -119,55 +122,24 @@ function _process_continuous_variables!(
     fill!(engine.batch_ame_values, 0.0)
     fill!(engine.batch_gradients, 0.0)
 
-    # Step 2: Compute average response for measure transformations (if needed)
-    ȳ, total_weight = _compute_response_mean_if_needed(engine, data_nt, rows, scale, measure, weights)
+    # Step 2: Total weight of the rows being averaged (errors if every weight is zero)
+    total_weight = _total_weight(rows, weights)
 
-    # Step 2b: For elasticity measures, compute ∂mean(ŷ)/∂β for quotient rule
-    # This gradient is needed to correctly apply the quotient rule when transforming elasticity gradients
-    # For ε = (x̄/mean(ŷ)) × AME, the full quotient rule requires this term
-    ∂ȳ_∂β = if measure !== :effect && (measure === :elasticity || measure === :semielasticity_eydx)
-        # Allocate buffer for gradient of mean response (reused across all variables)
-        grad_buf = similar(engine.gβ_accumulator)
-        _gradient_of_mean_response(
-            engine.compiled, engine.row_buf, engine.β, engine.link,
-            data_nt, rows, scale, weights, grad_buf
-        )
+    # Step 3: Main computation loop. The plain AME path is untouched by the measure
+    # machinery; elasticity measures average their unit-level quantity in a separate loop.
+    if measure === :effect
+        _compute_continuous_marginal_effects!(engine, continuous_requested, rows, scale, weights, total_weight)
     else
-        nothing
+        _compute_continuous_measures!(engine, continuous_requested, data_nt, rows, scale,
+                                      measure, weights, total_weight)
     end
-
-    # Step 3: Main computation loop - Apply FormulaCompiler pattern for marginal effects (zero allocations)
-    _compute_continuous_marginal_effects!(engine, continuous_requested, rows, scale, weights, total_weight)
 
     # Step 4: Store results using engine's accumulated values
     cont_idx = start_idx
     for var_idx in eachindex(continuous_requested)
         var = continuous_requested[var_idx]
-        ame_val = engine.batch_ame_values[var_idx]
+        final_val = engine.batch_ame_values[var_idx]
         gradient = view(engine.batch_gradients, var_idx, :)
-
-        # Apply measure transformations using extracted function
-        (final_val, transform_factor) = apply_measure_transformations(
-            ame_val, measure, var,
-            data_nt, rows, weights, ȳ, total_weight
-        )
-
-        # Transform gradient by same factor AND apply quotient rule correction
-        if transform_factor != 1.0
-            # First term: k × ∂AME/∂β (existing transformation)
-            gradient .*= transform_factor
-
-            # Second term: quotient rule correction for measures that divide by mean(ŷ)
-            # For ε = (x̄ / mean(ŷ)) × AME, the full quotient rule is:
-            # ∂ε/∂β = (x̄/ȳ) × ∂AME/∂β - (ε/ȳ) × ∂ȳ/∂β
-            # We need to subtract the second term: (final_val / ȳ) × ∂ȳ/∂β
-            if !isnothing(∂ȳ_∂β)
-                quotient_correction = final_val / ȳ
-                @inbounds for j in eachindex(gradient)
-                    gradient[j] -= quotient_correction * ∂ȳ_∂β[j]
-                end
-            end
-        end
 
         # Store result using extracted function
         store_continuous_result!(results, G, cont_idx, var, final_val, gradient, engine.Σ, n_rows)
@@ -178,246 +150,31 @@ function _process_continuous_variables!(
 end
 
 """
-    _compute_response_mean_if_needed(engine, data_nt, rows, scale, measure, weights) -> (ȳ::Float64, total_weight::Float64)
+    _total_weight(rows, weights) -> Float64
 
-Compute average response and total weight if needed for measure transformations.
-Optimizes by computing only when required (measure !== :effect).
+Normalizer for averaging over `rows`: `length(rows)` when unweighted, otherwise the sum of
+the weights of `rows`.
 
-# Arguments
-- `engine`: MarginsEngine with compiled formula and parameters
-- `data_nt`: Named tuple containing data
-- `rows`: Row indices to process
-- `scale`: Scale for predictions (:response or :link)
-- `measure`: Econometric measure type
-- `weights`: Optional observation weights
-
-# Returns
-- `(Float64, Float64)`: Tuple of (average_response, total_weight)
-
-# Optimization Strategy
-For `:effect` measure, returns (1.0, weight_sum) to avoid unnecessary computation.
-For other measures, computes actual average response using zero-allocation prediction loop.
-
-# Performance
-- Conditional computation eliminates unnecessary work for :effect measure
-- Single pass through data for response calculation
-- Zero allocations through buffer reuse
+Throws a `MarginsError` when weights are given and none of `rows` has a positive weight.
+Such a set of rows (typically a `groups` cell whose observations all have weight zero) has
+no weighted average; reporting `0.0 ± 0.0` for it would read as a precisely estimated null.
+Categorical effects and predictions raise the same error for the same situation.
 """
-function _compute_response_mean_if_needed(engine, data_nt, rows, scale, measure, weights)
-    # Hoist loop-invariant length call
-    n_rows = length(rows)
-
-    # Compute total weight once for all measure types (OPT.md §2.3)
-    # Hoisting eliminates duplicate O(n) summation for non-effect measures
-    total_weight = if isnothing(weights)
-        Float64(n_rows)
-    else
-        # Zero-allocation weight sum
-        s = 0.0
-        for row in rows
-            s += weights[row]
-        end
-        s
+function _total_weight(rows, weights)
+    isnothing(weights) && return Float64(length(rows))
+    s = 0.0
+    @inbounds for row in rows
+        w = weights[row]
+        w > 0 && (s += w)
     end
-
-    # Early return for :effect measure (no response computation needed)
-    if measure === :effect
-        return (1.0, total_weight)
-    end
-
-    # Compute average response for measure transformations
-    ȳ = _average_response_over_rows(engine.compiled, engine.row_buf, engine.β, engine.link,
-                                   data_nt, rows, scale, weights)
-    return (ȳ, total_weight)
+    s > 0 || _throw_zero_weights()
+    return s
 end
 
-"""
-    _average_response_over_rows(
-        compiled, row_buf, β, link, data_nt, rows, scale, weights
-    ) -> Float64
-
-Compute average predicted response over specified rows with optional weighting.
-Zero allocations through buffer reuse and single-pass computation.
-
-# Arguments
-- `compiled`: FormulaCompiler compiled formula
-- `row_buf`: Pre-allocated buffer for model row evaluation
-- `β`: Model parameter vector
-- `link`: Link function for scale transformation
-- `data_nt`: Named tuple containing data
-- `rows`: Row indices to process
-- `scale`: Prediction scale (:response or :link)
-- `weights`: Optional observation weights
-
-# Returns
-- `Float64`: Average predicted response across specified rows
-
-# Mathematical Details
-- Link scale: η = Xβ (linear predictor)
-- Response scale: μ = g⁻¹(η) where g is the link function
-- Weighted average: Σᵢ wᵢ × yᵢ / Σᵢ wᵢ
-- Unweighted average: (1/n) × Σᵢ yᵢ
-
-# Performance
-- Zero allocations through buffer reuse (row_buf)
-- Single pass through specified rows
-- Conditional weighting without branching inside hot loop
-"""
-function _average_response_over_rows(compiled, row_buf, β, link, data_nt, rows, scale, weights)
-    # Hoist loop-invariant length call
-    n_rows = length(rows)
-    response_sum = 0.0
-
-    if isnothing(weights)
-        # Unweighted case (@inbounds for validated row indices)
-        @inbounds for row in rows
-            modelrow!(row_buf, compiled, data_nt, row)
-            η = dot(row_buf, β)
-            response = scale === :response ? GLM.linkinv(link, η) : η
-            response_sum += response
-        end
-        return response_sum / n_rows
-    else
-        # Weighted case (@inbounds for validated row indices)
-        total_weight = 0.0
-        @inbounds for row in rows
-            w = weights[row]
-            if w > 0
-                modelrow!(row_buf, compiled, data_nt, row)
-                η = dot(row_buf, β)
-                response = scale === :response ? GLM.linkinv(link, η) : η
-                response_sum += w * response
-                total_weight += w
-            end
-        end
-        return total_weight > 0 ? response_sum / total_weight : 0.0
-    end
-end
-
-"""
-    _gradient_of_mean_response(
-        compiled, row_buf, β, link, data_nt, rows, scale, weights,
-        gradient_accumulator::Vector{Float64}
-    ) -> Vector{Float64}
-
-Compute ∂mean(ŷ)/∂β using the chain rule for GLMs (quotient rule component).
-
-# Mathematical Details
-For GLM: mean(ŷ) = (1/n) Σᵢ g⁻¹(Xᵢβ)
-Therefore: ∂mean(ŷ)/∂β = (1/n) Σᵢ g⁻¹'(Xᵢβ) × Xᵢ
-
-For linear model (identity link): ∂mean(ŷ)/∂β = X̄ (mean design matrix row)
-
-This gradient is needed for the quotient rule when computing elasticity standard errors.
-The elasticity transformation ε = (x̄/mean(ŷ)) × AME requires the full quotient rule:
-∂ε/∂β = (x̄/mean(ŷ)) × ∂AME/∂β - (x̄ × AME / mean(ŷ)²) × ∂mean(ŷ)/∂β
-
-# Arguments
-- `compiled`: FormulaCompiler compiled formula
-- `row_buf`: Pre-allocated buffer for model row evaluation
-- `β`: Model parameter vector
-- `link`: Link function
-- `data_nt`: Named tuple containing data
-- `rows`: Row indices to process
-- `scale`: Prediction scale (:response or :link)
-- `weights`: Optional observation weights
-- `gradient_accumulator`: Pre-allocated buffer for gradient (length = n_params)
-
-# Returns
-- `Vector{Float64}`: Gradient vector ∂mean(ŷ)/∂β (modifies and returns gradient_accumulator)
-
-# Performance
-- Zero allocations (uses pre-allocated gradient_accumulator)
-- Single pass through data
-- O(n × p) complexity where n = observations, p = parameters
-"""
-function _gradient_of_mean_response(
-    compiled, row_buf, β, link, data_nt, rows, scale, weights,
-    gradient_accumulator::Vector{Float64}
-)
-    n_params = length(β)
-    n_rows = length(rows)
-
-    # Initialize accumulator to zero
-    fill!(gradient_accumulator, 0.0)
-
-    if scale !== :response
-        # Link scale: mean(η) = mean(Xβ) = X̄β
-        # So ∂mean(η)/∂β = X̄ (mean design matrix row)
-
-        if isnothing(weights)
-            # Unweighted: X̄ = (1/n) Σᵢ Xᵢ
-            @inbounds for row in rows
-                modelrow!(row_buf, compiled, data_nt, row)
-                for j in 1:n_params
-                    gradient_accumulator[j] += row_buf[j]
-                end
-            end
-            gradient_accumulator ./= n_rows
-        else
-            # Weighted: X̄ = Σᵢ wᵢXᵢ / Σᵢ wᵢ
-            total_weight = 0.0
-            @inbounds for row in rows
-                w = weights[row]
-                if w > 0
-                    total_weight += w
-                    modelrow!(row_buf, compiled, data_nt, row)
-                    for j in 1:n_params
-                        gradient_accumulator[j] += w * row_buf[j]
-                    end
-                end
-            end
-            if total_weight > 0
-                gradient_accumulator ./= total_weight
-            end
-        end
-
-    else  # scale === :response
-        # Response scale: mean(μ) = (1/n) Σᵢ g⁻¹(Xᵢβ)
-        # So ∂mean(μ)/∂β = (1/n) Σᵢ g⁻¹'(Xᵢβ) × Xᵢ
-
-        if isnothing(weights)
-            # Unweighted
-            @inbounds for row in rows
-                modelrow!(row_buf, compiled, data_nt, row)
-                η = dot(row_buf, β)
-
-                # Compute dμ/dη = g⁻¹'(η) using GLM.mueta
-                dμ_dη = GLM.mueta(link, η)
-
-                # Accumulate: dμ/dη × X
-                for j in 1:n_params
-                    gradient_accumulator[j] += dμ_dη * row_buf[j]
-                end
-            end
-            gradient_accumulator ./= n_rows
-        else
-            # Weighted
-            total_weight = 0.0
-            @inbounds for row in rows
-                w = weights[row]
-                if w > 0
-                    total_weight += w
-                    modelrow!(row_buf, compiled, data_nt, row)
-                    η = dot(row_buf, β)
-
-                    # Compute dμ/dη = g⁻¹'(η) using GLM.mueta
-                    dμ_dη = GLM.mueta(link, η)
-
-                    # Accumulate: w × dμ/dη × X
-                    for j in 1:n_params
-                        gradient_accumulator[j] += w * dμ_dη * row_buf[j]
-                    end
-                end
-            end
-            if total_weight > 0
-                gradient_accumulator ./= total_weight
-            end
-        end
-    end
-
-    return gradient_accumulator
-end
+@noinline _throw_zero_weights(what::AbstractString="marginal effects") = throw(MarginsError(
+    "All weights are zero for the observations being averaged (for example, every " *
+    "observation in a `groups` cell has weight 0); cannot compute weighted $what. " *
+    "Drop that subgroup or give its observations positive weights."))
 
 """
     _compute_continuous_marginal_effects!(engine, continuous_requested, rows, scale, weights, total_weight)
@@ -605,6 +362,103 @@ function _compute_me_loop_response!(
 end
 
 """
+    _compute_me_loop_response!(g_all, Gβ_all, de::ADEvaluator, β, link, batch_ame_values,
+                              batch_gradients, fc_var_indices, rows, weights, total_weight)
+
+Response-scale loop specialized for the AD backend. Produces the same AMEs and parameter
+gradients as the generic method, but accumulates the gradients without materializing the
+per-row `n_params × n_vars` matrix Gβ or making strided writes into `batch_gradients`:
+
+    ∂AME_j/∂β = Σᵢ wᵢ [g'(ηᵢ) Jᵢ[:,j] + g''(ηᵢ) (Jᵢ[:,j]'β) xᵢ] = A[:,j] + B[:,j]
+
+with `A = Σ w g' J` and `B = Σ x (w g'' J'β)'`, both accumulated column-wise.
+"""
+function _compute_me_loop_response!(
+    g_all::AbstractVector{Float64},
+    Gβ_all::AbstractMatrix{Float64},
+    de::ADEvaluator,
+    β::AbstractVector{Float64},
+    link::GLM.Link,
+    batch_ame_values::AbstractVector{Float64},
+    batch_gradients::AbstractMatrix{Float64},
+    fc_var_indices::AbstractVector{Int},
+    rows::Union{AbstractVector{Int}, UnitRange{Int}},
+    weights::Union{Nothing, AbstractVector{<:Real}},
+    total_weight::Float64
+)
+    n_params = length(β)
+    n_vars = length(fc_var_indices)
+    core = de.core
+    J = Matrix{Float64}(undef, size(core.jacobian_buffer))
+    xrow = Vector{Float64}(undef, length(core.xrow_buffer))
+    A = zeros(n_params, n_vars)
+    B = zeros(n_params, n_vars)
+    c = zeros(n_vars)
+    _fused_me_rows!(A, B, c, J, xrow, core.compiled_base, core.base_data, de, β, link,
+                    batch_ame_values, fc_var_indices, rows, weights, total_weight,
+                    1.0 / length(rows))
+    @inbounds for k in 1:n_vars
+        fc_var_indices[k] == 0 && continue
+        for i in 1:n_params
+            batch_gradients[k, i] += A[i, k] + B[i, k]
+        end
+    end
+    return nothing
+end
+
+# Function barrier for the fused AD loop (concrete types for compiled_base/base_data)
+function _fused_me_rows!(A::Matrix{Float64}, B::Matrix{Float64}, c::Vector{Float64},
+                         J::Matrix{Float64}, xrow::Vector{Float64}, compiled_base, base_data,
+                         de::ADEvaluator, β::AbstractVector{Float64}, link::GLM.Link,
+                         batch_ame_values::AbstractVector{Float64},
+                         fc_var_indices::AbstractVector{Int},
+                         rows::Union{AbstractVector{Int}, UnitRange{Int}},
+                         weights::Union{Nothing, AbstractVector{<:Real}},
+                         total_weight::Float64, unweighted_weight::Float64)
+    n_params = length(β)
+    n_vars = length(fc_var_indices)
+    @inbounds for row in rows
+        w = if isnothing(weights)
+            unweighted_weight
+        else
+            wr = weights[row]
+            wr <= 0 && continue
+            wr / total_weight
+        end
+
+        derivative_modelrow!(J, de, row)      # Jᵢ = ∂xᵢ/∂vars
+        compiled_base(xrow, base_data, row)   # xᵢ
+        η = dot(β, xrow)
+        wg′ = w * _dmu_deta(link, η)
+        wg″ = w * _d2mu_deta2(link, η)
+
+        for k in 1:n_vars
+            j = fc_var_indices[k]
+            if j == 0
+                c[k] = 0.0
+                continue
+            end
+            Jβ = 0.0
+            @simd for i in 1:n_params
+                Jβ += J[i, j] * β[i]
+            end
+            batch_ame_values[k] += wg′ * Jβ
+            c[k] = wg″ * Jβ
+            @simd for i in 1:n_params
+                A[i, k] += wg′ * J[i, j]
+            end
+        end
+        for k in 1:n_vars
+            ck = c[k]
+            @simd for i in 1:n_params
+                B[i, k] += ck * xrow[i]
+            end
+        end
+    end
+    return nothing
+end
+
+"""
     _batch_compute_continuous_effects!(
         batch_ame_values, batch_gradients, de, β, link, scale,
         fc_var_indices, rows, weights, total_weight
@@ -672,87 +526,142 @@ function _batch_compute_continuous_effects!(
 end
 
 """
-    apply_measure_transformations(
-        ame_val::Float64, measure::Symbol, var::Symbol,
-        data_nt::NamedTuple, rows, weights, ȳ::Float64,
-        total_weight::Float64
-    ) -> (Float64, Float64)
+    _compute_continuous_measures!(engine, continuous_requested, data_nt, rows, scale,
+                                  measure, weights, total_weight)
 
-Apply econometric measure transformations to marginal effects.
-Handles elasticity, semi-elasticity transformations with proper gradient scaling.
-
-# Arguments
-- `ame_val`: Raw marginal effect value
-- `measure`: Econometric measure type
-- `var`: Variable name for mean calculation
-- `data_nt`: Named tuple containing data
-- `rows`: Row indices to process
-- `weights`: Optional observation weights
-- `ȳ`: Average response value
-- `total_weight`: Total weight for normalization
-
-# Returns
-- `(Float64, Float64)`: Tuple of (transformed_effect, gradient_transform_factor)
-
-# Supported Measures
-- `:effect`: No transformation (∂μ/∂x)
-- `:elasticity`: (x̄/ȳ) × (∂μ/∂x) - percentage change interpretation
-- `:semielasticity_dyex`: x̄ × (∂μ/∂x) - unit change in x, percent change in y
-- `:semielasticity_eydx`: (1/ȳ) × (∂μ/∂x) - percent change in x, unit change in y
-
-# Mathematical Foundation
-Econometric measures provide different interpretations of marginal effects:
-- Effect: Raw derivative ∂μ/∂x
-- Elasticity: (∂μ/∂x) × (x/μ) ≈ percentage change in μ per 1% change in x
-- Semi-elasticity (dyex): (∂μ/∂x) × x ≈ percentage change in μ per unit change in x
-- Semi-elasticity (eydx): (∂μ/∂x) × (1/μ) ≈ unit change in μ per 1% change in x
-
-# Performance
-- Single pass through variable data for mean calculation
-- Conditional computation based on weights
-- Transform factors applied consistently to effects and gradients
+Elasticity-type measures for the requested continuous variables, accumulated into
+`engine.batch_ame_values` / `engine.batch_gradients`. See
+`_accumulate_continuous_measures!` for the definitions.
 """
-function apply_measure_transformations(
-    ame_val::Float64, measure::Symbol, var::Symbol,
-    data_nt::NamedTuple, rows, weights, ȳ::Float64,
-    total_weight::Float64
-)
-    if measure === :effect
-        return (ame_val, 1.0)
+function _compute_continuous_measures!(engine, continuous_requested, data_nt, rows, scale,
+                                       measure, weights, total_weight)
+    indices_buf = engine.cont_var_indices_buf
+    n_requested = length(continuous_requested)
+    for i in 1:n_requested
+        indices_buf[i] = engine.var_index_map[continuous_requested[i]]
     end
-
-    # Hoist loop-invariant length call
-    n_rows = length(rows)
-
-    # Compute variable mean for transformations
-    xcol = getproperty(data_nt, var)
-    x̄ = if isnothing(weights)
-        # Zero-allocation manual loop instead of generator
-        s = 0.0
-        @inbounds for row in rows
-            s += float(xcol[row])
-        end
-        s / n_rows
-    else
-        # Zero-allocation weighted sum
-        s = 0.0
-        @inbounds for row in rows
-            s += weights[row] * float(xcol[row])
-        end
-        s / total_weight
-    end
-
-    # Apply transformations
-    if measure === :elasticity
-        transform_factor = x̄ / ȳ
-        return (transform_factor * ame_val, transform_factor)
-    elseif measure === :semielasticity_dyex
-        transform_factor = x̄
-        return (transform_factor * ame_val, transform_factor)
-    elseif measure === :semielasticity_eydx
-        transform_factor = 1.0 / ȳ
-        return (transform_factor * ame_val, transform_factor)
-    else
-        throw(ArgumentError("Unknown measure: $measure"))
-    end
+    xcols = Tuple(getproperty(data_nt, v) for v in continuous_requested)
+    _accumulate_continuous_measures!(
+        engine.batch_ame_values, engine.batch_gradients, engine.g_all_buf, engine.Gβ_all_buf,
+        engine.row_buf, engine.de, engine.compiled, data_nt, engine.β, engine.link,
+        scale, measure, view(indices_buf, 1:n_requested), xcols, rows, weights, total_weight
+    )
+    return nothing
 end
+
+"""
+    _batch_compute_continuous_measures!(batch_values, batch_gradients, de, compiled, data_nt,
+                                        β, link, scale, measure, fc_var_indices, xcols,
+                                        rows, weights, total_weight)
+
+Allocating wrapper around `_accumulate_continuous_measures!` for the scenarios/groups path,
+which builds its own derivative evaluator per context.
+"""
+function _batch_compute_continuous_measures!(batch_values, batch_gradients, de, compiled, data_nt,
+                                             β, link, scale, measure, fc_var_indices, xcols,
+                                             rows, weights, total_weight)
+    n_params = length(β)
+    g_all = Vector{Float64}(undef, length(de.vars))
+    Gβ_all = Matrix{Float64}(undef, n_params, length(de.vars))
+    row_buf = Vector{Float64}(undef, length(compiled))
+    _accumulate_continuous_measures!(batch_values, batch_gradients, g_all, Gβ_all, row_buf,
+                                     de, compiled, data_nt, β, link, scale, measure,
+                                     fc_var_indices, xcols, rows, weights, total_weight)
+    return nothing
+end
+
+"""
+    _accumulate_continuous_measures!(batch_values, batch_gradients, g_all, Gβ_all, row_buf,
+                                     de, compiled, data_nt, β, link, scale, measure,
+                                     fc_var_indices, xcols, rows, weights, total_weight)
+
+Average a unit-level elasticity measure over `rows`, with its delta-method gradient.
+
+With gᵢ = ∂ŷᵢ/∂x (on `scale`), ŷᵢ the prediction on `scale` and xᵢ the variable's value
+at row i, the measures are the (weighted) means of
+
+| measure                | unit quantity qᵢ | ∇β qᵢ                                   |
+|------------------------|------------------|-----------------------------------------|
+| `:elasticity` (eyex)   | gᵢ xᵢ / ŷᵢ       | (xᵢ/ŷᵢ) ∇gᵢ − (gᵢ xᵢ/ŷᵢ²) ∇ŷᵢ          |
+| `:semielasticity_dyex` | gᵢ xᵢ            | xᵢ ∇gᵢ                                  |
+| `:semielasticity_eydx` | gᵢ / ŷᵢ          | (1/ŷᵢ) ∇gᵢ − (gᵢ/ŷᵢ²) ∇ŷᵢ               |
+
+where ∇ŷᵢ = g⁻¹′(ηᵢ) Xᵢ on the response scale and Xᵢ on the link scale. This is what
+Stata's `margins, eyex()/dyex()/eydx()` and R's `marginaleffects::avg_slopes(slope = ...)`
+compute (a mean of unit-level ratios, not a ratio of means).
+
+A row with ŷᵢ = 0 makes `:elasticity` and `:semielasticity_eydx` undefined; rather than
+return Inf/NaN, this throws a `MarginsError`.
+"""
+function _accumulate_continuous_measures!(
+    batch_values::AbstractVector{Float64}, batch_gradients::AbstractMatrix{Float64},
+    g_all::AbstractVector{Float64}, Gβ_all::AbstractMatrix{Float64},
+    row_buf::AbstractVector{Float64}, de, compiled, data_nt, β::AbstractVector{Float64},
+    link, scale::Symbol, measure::Symbol, fc_var_indices::AbstractVector{Int},
+    xcols::Tuple, rows, weights, total_weight::Float64
+)
+    measure in (:elasticity, :semielasticity_dyex, :semielasticity_eydx) ||
+        throw(ArgumentError("Unknown measure: $measure"))
+    n_params = length(β)
+    n_vars = length(fc_var_indices)
+    divides_by_y = measure !== :semielasticity_dyex
+    uses_x = measure !== :semielasticity_eydx
+    unweighted_weight = 1.0 / length(rows)
+
+    @inbounds for row in rows
+        w = if isnothing(weights)
+            unweighted_weight
+        else
+            wr = weights[row]
+            wr <= 0 && continue
+            wr / total_weight
+        end
+
+        if scale === :response
+            marginal_effects_mu!(g_all, Gβ_all, de, β, link, row)
+        else
+            marginal_effects_eta!(g_all, Gβ_all, de, β, row)
+        end
+
+        # ŷᵢ and ∇ŷᵢ = dŷ · Xᵢ (only needed for measures that divide by ŷ)
+        ŷ = 1.0; dŷ = 0.0
+        if divides_by_y
+            modelrow!(row_buf, compiled, data_nt, row)
+            η = dot(row_buf, β)
+            if scale === :response
+                ŷ = GLM.linkinv(link, η); dŷ = _dmu_deta(link, η)
+            else
+                ŷ = η; dŷ = 1.0
+            end
+            iszero(ŷ) && _throw_zero_prediction(measure, row, scale)
+        end
+
+        for k in 1:n_vars
+            j = fc_var_indices[k]
+            j == 0 && continue
+            g = g_all[j]
+            xi = uses_x ? Float64(xcols[k][row]) : 1.0
+            # qᵢ = a·gᵢ with a = xᵢ/ŷᵢ, xᵢ or 1/ŷᵢ;  ∇qᵢ = a ∇gᵢ − (qᵢ/ŷᵢ) ∇ŷᵢ
+            a = divides_by_y ? xi / ŷ : xi
+            q = a * g
+            batch_values[k] += w * q
+            wa = w * a
+            for i in 1:n_params
+                batch_gradients[k, i] += wa * Gβ_all[i, j]
+            end
+            if divides_by_y
+                c = w * (q / ŷ) * dŷ
+                for i in 1:n_params
+                    batch_gradients[k, i] -= c * row_buf[i]
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+@noinline _throw_zero_prediction(measure, row, scale) = throw(MarginsError(
+    "measure=:$measure divides by the prediction ŷ, which is exactly 0 at row $row " *
+    "(a data row, or a reference-grid row for profile margins) " *
+    "(scale=:$scale), so the unit-level quantity is undefined there. Use " *
+    "measure=:semielasticity_dyex or :effect, or exclude such observations."))

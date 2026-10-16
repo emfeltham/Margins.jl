@@ -75,7 +75,6 @@ src/
 │   ├── marginal_effects_automatic_diff.jl  # AD backend
 │   ├── marginal_effects_finite_diff.jl     # FD backend
 │   ├── derivative_utilities.jl       # _matrix_multiply_eta!, continuous_variables
-│   ├── contrast_gradient.jl          # Contrast gradient computation
 │   └── mixture_utilities.jl          # Categorical mixture support (mix(), CategoricalMixture)
 ├── core/                              # Core utilities
 │   ├── variable_detection.jl          # Variable type detection

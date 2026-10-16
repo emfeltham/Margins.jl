@@ -89,7 +89,7 @@ second_differences(
     variables::Union{Symbol, Vector{Symbol}},
     modifier::Symbol,
     vcov::Matrix{Float64};
-    contrast::String = "derivative",
+    contrast::String = "dy/dx",
     modifier_type::Symbol = :auto,
     all_contrasts::Bool = true
 )
@@ -102,7 +102,7 @@ second_differences(
 - `vcov`: Parameter covariance matrix from the model (via `vcov(model)`)
 
 **Keyword Arguments**:
-- `contrast`: Focal variable contrast for categorical variables (default: "derivative")
+- `contrast`: Focal variable contrast for categorical variables (default: "dy/dx"; "derivative" is accepted as an alias)
 - `modifier_type`: Modifier classification (:auto, :binary, :categorical, :continuous)
 - `all_contrasts`: Compute all focal variable contrasts when applicable (default: true)
 
@@ -134,7 +134,7 @@ second_differences_pairwise(
     variable::Symbol,
     modifier::Symbol,
     vcov::Matrix{Float64};
-    contrast::String = "derivative",
+    contrast::String = "dy/dx",
     modifier_type::Symbol = :auto
 )
 ```
@@ -287,7 +287,7 @@ DataFrame(sd)
  Row │ variable  modifier  contrast    modifier_level1  modifier_level2  second_diff  se        z_stat   p_value   ame_at_level1  ame_at_level2  significant
      │ Symbol    Symbol    String      Int64           Int64            Float64      Float64   Float64  Float64   Float64        Float64        Bool
 ─────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   1 │ x         treated   derivative               0                1       0.152    0.0428    3.55    0.0004          0.298          0.450      true
+   1 │ x         treated   dy/dx                    0                1       0.152    0.0428    3.55    0.0004          0.298          0.450      true
 ```
 
 **Interpretation**: The marginal effect of `x` is 0.152 units larger when `treated=1` compared to `treated=0` (p < 0.001), indicating a significant positive interaction.

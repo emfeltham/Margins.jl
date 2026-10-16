@@ -30,28 +30,27 @@ _wmean(v, rows, w) = isnothing(w) ? mean(@view v[rows]) :
 """
 Closed-form (estimate, se) for the marginal effect of a continuous `var` over `rows`,
 under `measure` and `scale`. `X` is the design matrix already reflecting any scenario
-override. Gradients come from a central difference in β, so this covers the
-quotient-rule term without deriving it by hand.
+override. Measures are (weighted) means of unit-level quantities, as in Stata `margins,
+eyex()/dyex()/eydx()` and R `avg_slopes(slope = ...)` (v2.2.0; earlier versions used a
+ratio of means — see test/validation/test_elasticity_unit_definitions.jl). Gradients come
+from a central difference in β, so this covers the quotient-rule terms without deriving
+them by hand.
 """
 function _measure_oracle(X, β, Σ, link, xcol, ix, rows, measure, scale, w)
     function estimate(bb)
         η = X * bb
-        # AME: ∂η/∂x = β_x on the link scale, g'(η)·β_x on the response scale
+        # Unit marginal effect: ∂η/∂x = β_x on the link scale, g'(η)·β_x on the response scale
         d = if scale === :response
             [GLM.mueta(link, η[r]) * bb[ix] for r in eachindex(η)]
         else
             fill(bb[ix], length(η))
         end
-        ame = _wmean(d, rows, w)
-        measure === :effect && return ame
-
-        x̄ = _wmean(xcol, rows, w)
-        measure === :semielasticity_dyex && return x̄ * ame
+        measure === :effect && return _wmean(d, rows, w)
+        measure === :semielasticity_dyex && return _wmean(d .* xcol, rows, w)
 
         ŷ = scale === :response ? GLM.linkinv.(link, η) : η
-        ȳ = _wmean(ŷ, rows, w)
-        measure === :elasticity && return (x̄ / ȳ) * ame
-        measure === :semielasticity_eydx && return ame / ȳ
+        measure === :elasticity && return _wmean(d .* xcol ./ ŷ, rows, w)
+        measure === :semielasticity_eydx && return _wmean(d ./ ŷ, rows, w)
         error("unhandled measure $measure")
     end
 
@@ -100,7 +99,8 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
                                                   measure, scale, nothing)
             r = only(eachrow(res[string.(res.g) .== lev, :]))
             @test r.estimate ≈ want_est atol=1e-9
-            @test r.se ≈ want_se atol=1e-6      # central difference on β
+            @test r.se ≈ want_se atol=1e-6 rtol=1e-6   # central difference on β (link-scale unit
+            # elasticities divide by η, which can be near 0, so SEs can be large)
             @test r.n == length(rows)
         end
     end
@@ -176,8 +176,8 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
 
     @testset "context normalizers are context-specific" begin
         # The exact signature of the bug: a transformed measure must differ from the raw
-        # AME, and each group must get its own x̄/ȳ (so the three groups differ from the
-        # single whole-sample elasticity).
+        # AME, and each group must average over its own rows (so the three groups differ
+        # from the single whole-sample elasticity).
         m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
 
         raw = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=:g))

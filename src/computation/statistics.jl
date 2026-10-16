@@ -50,7 +50,7 @@ Compute two-tailed p-value from t-statistic.
 Zero allocation scalar computation.
 """
 @inline function compute_p_value(t_stat::Float64)::Float64
-    return 2 * (1 - cdf(Normal(), abs(t_stat)))
+    return 2 * ccdf(Normal(), abs(t_stat))
 end
 
 """

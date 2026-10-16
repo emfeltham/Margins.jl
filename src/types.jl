@@ -962,7 +962,7 @@ end
 
 function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
+    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1110,7 +1110,7 @@ end
 function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false)
     # Predictions-specific format: omits variable/contrast columns
     t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
+    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1159,7 +1159,7 @@ end
 
 function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
     t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* (1 .- cdf.(Normal(), abs.(t_stats)))
+    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)

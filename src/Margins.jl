@@ -50,7 +50,9 @@ using FormulaCompiler:
     LoadOp, ContrastOp,
     CategoricalCounterfactualVector,  # Needed by continuous_variables
     fixed_effects_form,
-    ContrastEvaluator, contrast_modelrow!,
+    ContrastEvaluator, contrast_modelrow!, contrast_gradient!,
+    validate_mixture_weights, validate_mixture_levels,
+    categorical_levels, categorical_variables,
     get_or_compile_formula,
     mix,
     _dmu_deta, _d2mu_deta2  # Link function derivatives for marginal_effects_mu!
@@ -61,11 +63,11 @@ using LinearAlgebra
 using Statistics: mean, median
 using CategoricalArrays
 using Printf: @sprintf
-using Distributions: Normal, cdf, quantile
+using Distributions: Normal, cdf, ccdf, quantile
 using Dates: now
 
 # Version info
-const VERSION = v"2.0.0"
+const VERSION = pkgversion(@__MODULE__)  # read from Project.toml, so it cannot drift
 
 # Core API - Clean 2×2 framework
 export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult, ContrastResult
@@ -80,7 +82,7 @@ export contrast
 # Re-export FormulaCompiler's native mixture functionality
 export CategoricalMixture, mix
 export create_balanced_mixture, create_mixture_column, expand_mixture_grid
-export validate_mixture_weights, validate_mixture_levels
+export validate_mixture_weights, validate_mixture_levels  # FormulaCompiler's, re-exported
 
 # Reference grid builders (NEW - AsBalanced support)
 export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_grid, complete_reference_grid
@@ -94,7 +96,6 @@ include("inference/marginal_effects.jl")                 # marginal_effects_eta!
 include("inference/marginal_effects_automatic_diff.jl")  # marginal_effects_eta!, marginal_effects_mu! (AD backend)
 include("inference/marginal_effects_finite_diff.jl")     # marginal_effects_eta!, marginal_effects_mu! (FD backend)
 include("inference/delta_method.jl")                     # delta_method_se
-include("inference/contrast_gradient.jl")                # contrast_gradient!, contrast_gradient (migrated from FormulaCompiler)
 include("inference/mixture_utilities.jl")                # create_mixture_column, expand_mixture_grid, create_balanced_mixture
 
 include("core/data_conversion.jl")  # Data type conversion utilities

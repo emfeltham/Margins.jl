@@ -76,47 +76,32 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
         if T <: Bool
             return ContrastPair{Bool}[ContrastPair(false, true)]
         elseif T <: CategoricalArrays.CategoricalValue
-            # For categorical variables, use ALL levels from the categorical variable,
-            # not just levels in the subset of rows (important for AME computation)
-            baseline_level_str = _get_baseline_level(model, var, data_nt)  # Returns String
+            # Levels come from the FITTED MODEL (FormulaCompiler's `categorical_levels`), in
+            # model order, not from the data's pool: the pool may be reordered, or lack
+            # levels the model knows — e.g. a subset without the reference level. Pairs hold
+            # the raw level values; the ContrastEvaluator resolves them by value.
+            (model_levels, observed_strs) = _model_contrast_levels(var_col, model, var, data_nt)
+            baseline_level_str = string(_get_baseline_level(model, var, data_nt))
+            bidx = findfirst(l -> string(l) == baseline_level_str, model_levels)
+            isnothing(bidx) && error("Baseline level '$baseline_level_str' is not a level of :$var in the fitted model")
+            baseline_level = model_levels[bidx]
 
-            # Build a map from level strings to CategoricalValue instances using pool
-            # This ensures all schema-defined levels are included, not just observed values
-            level_map = Dict{String, T}()
-            pool = var_col.pool
-            for (i, level) in enumerate(levels(var_col))
-                level_str = string(level)  # Convert actual type (Bool, String, Int, etc.) to String
-                level_map[level_str] = pool[i]  # Direct pool indexing (1-based)
-            end
-
-            # Get baseline as CategoricalValue
-            if !haskey(level_map, baseline_level_str)
-                error("Baseline level '$baseline_level_str' not found in categorical variable :$var")
-            end
-            baseline_level = level_map[baseline_level_str]
-
-            # Determine which pool levels are actually observed. Unused levels (present in the
-            # CategoricalArray pool but with zero observations) are dropped by StatsModels when
-            # it builds the model's contrasts, so generating a contrast for them would be
-            # meaningless (a spurious zero effect) and would also over-count relative to
-            # `count_categorical_rows` (which sizes the results DataFrame from `unique(var_col)`),
-            # truncating a real contrast. Filter on the full data column, not `rows`, so that
-            # levels present in the full data but absent from a subgroup are still included.
-            observed_strs = Set{String}(string(var_col[i]) for i in eachindex(var_col))
-
-            # Create contrast pairs using CategoricalValue type
-            all_levels = levels(var_col)  # Returns actual types (Bool, String, Int, etc.)
-            contrast_pairs = ContrastPair{T}[]
-            for level in all_levels
-                level_str = string(level)  # Convert to string for map lookup
+            # Unused levels (no observations in the data) are skipped: StatsModels drops
+            # zero-count pool levels when it builds the contrasts, and a contrast to a level
+            # with no rows would be a spurious zero effect. The baseline is always the
+            # reference, observed or not. Filter on the full data column, not `rows`, so that
+            # levels present in the data but absent from a subgroup are still included.
+            L = eltype(model_levels)
+            contrast_pairs = ContrastPair{L}[]
+            for level in model_levels
+                level_str = string(level)
                 if level_str != baseline_level_str && level_str in observed_strs
-                    push!(contrast_pairs, ContrastPair(baseline_level, level_map[level_str]))
+                    push!(contrast_pairs, ContrastPair{L}(baseline_level, level))
                 end
             end
 
-            # Handle case where only baseline level exists
             if isempty(contrast_pairs)
-                return ContrastPair{T}[ContrastPair(baseline_level, baseline_level)]
+                return ContrastPair{L}[ContrastPair{L}(baseline_level, baseline_level)]
             end
 
             return contrast_pairs
@@ -144,26 +129,15 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
         end
     elseif contrasts === :pairwise
         if T <: CategoricalArrays.CategoricalValue
-            # For categorical variables, use canonical level ordering from levels()
-            # This ensures consistent, predictable ordering (not data-dependent)
-            level_map = Dict{String, T}()
-            pool = var_col.pool
-            for (i, level) in enumerate(levels(var_col))
-                level_str = string(level)  # Convert actual type to String
-                level_map[level_str] = pool[i]  # Direct pool indexing (1-based)
-            end
-
-            # Use canonical level ordering (same as baseline contrasts), but exclude unused
-            # (zero-observation) pool levels — see the baseline branch for rationale.
-            observed_strs = Set{String}(string(var_col[i]) for i in eachindex(var_col))
-            all_levels = levels(var_col)  # Returns actual types in canonical order
-            unique_levels = [level_map[string(level)] for level in all_levels if string(level) in observed_strs]
+            # Model level order (see the baseline branch), observed levels only
+            (model_levels, observed_strs) = _model_contrast_levels(var_col, model, var, data_nt)
+            unique_levels = [l for l in model_levels if string(l) in observed_strs]
         else
             # For other types, unique works fine
             unique_levels = unique(var_col[rows])
         end
 
-        contrast_pairs = ContrastPair{T}[]
+        contrast_pairs = ContrastPair{eltype(unique_levels)}[]
         for (i, level1) in enumerate(unique_levels)
             for (j, level2) in enumerate(unique_levels)
                 if i < j
@@ -205,4 +179,18 @@ function format_categorical_results(contrast_results::Vector)
     # Results are already in the correct format from the ContrastEvaluator kernel
     # This function can be extended for additional formatting needs
     return contrast_results
+end
+"""
+    _model_contrast_levels(var_col, model, var, data_nt) -> (levels, observed_strings)
+
+Levels of categorical `var` as the fitted model knows them (raw values, model order, from
+FormulaCompiler's `categorical_levels`), and the set of level strings observed in `var_col`.
+Falls back to the column's own levels when the compiled formula does not expose them.
+"""
+function _model_contrast_levels(var_col, model, var::Symbol, data_nt)
+    cats = _model_categorical_levels(model, data_nt)
+    model_levels = haskey(cats, var) ? collect(cats[var]) :
+        CategoricalArrays.unwrap.(levels(var_col))
+    observed = Set{String}(string(var_col[i]) for i in eachindex(var_col))
+    return (model_levels, observed)
 end
