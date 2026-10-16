@@ -74,7 +74,7 @@ Eliminates allocation during result construction for profile-based analysis.
 
 # DataFrame Schema
 - `variable::String`: Variable name
-- `contrast::String`: Contrast type ("derivative" for continuous variables)
+- `contrast::String`: Contrast type ("dy/dx" for continuous variables)
 - `estimate::Float64`: Point estimate of marginal effect
 - `se::Float64`: Standard error via delta method
 - `profile_desc::NamedTuple`: Profile specification (variable values at which effect is computed)
@@ -181,7 +181,7 @@ function store_profile_result!(results::DataFrame, G::Matrix, row_idx::Int,
     # Store results
     push!(results, (
         variable = string(var),
-        contrast = "derivative",
+        contrast = "dy/dx",
         estimate = effect_val,
         se = se,
         profile_desc = NamedTuple(profile)

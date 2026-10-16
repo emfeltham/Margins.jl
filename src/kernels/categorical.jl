@@ -10,6 +10,39 @@ using LinearAlgebra: dot
 using GLM: linkinv
 
 """
+    _accumulate_contrast_gradient!(acc, w, contrast_buf, evaluator, β, link)
+
+Add `w × ∇β` of one row's contrast to `acc`, reusing the X₀/X₁ rows that
+`contrast_modelrow!` already left in `evaluator.y_from_buf` / `evaluator.y_to_buf`.
+Equivalent to `contrast_gradient!` followed by `acc .+= w .* ∇β`, without evaluating
+the model rows a second time.
+
+- Link scale (`link === nothing`): ∇β = X₁ - X₀ (`contrast_buf`)
+- Response scale: ∇β = g'(η₁) X₁ - g'(η₀) X₀
+"""
+@inline function _accumulate_contrast_gradient!(acc::Vector{Float64}, w::Float64,
+                                                contrast_buf::Vector{Float64}, evaluator,
+                                                β::Vector{Float64}, ::Nothing)
+    @inbounds @simd for i in eachindex(acc)
+        acc[i] += w * contrast_buf[i]
+    end
+    return acc
+end
+
+@inline function _accumulate_contrast_gradient!(acc::Vector{Float64}, w::Float64,
+                                                contrast_buf::Vector{Float64}, evaluator,
+                                                β::Vector{Float64}, link)
+    x₀ = evaluator.y_from_buf
+    x₁ = evaluator.y_to_buf
+    g₀ = _dmu_deta(link, dot(β, x₀))
+    g₁ = _dmu_deta(link, dot(β, x₁))
+    @inbounds @simd for i in eachindex(acc)
+        acc[i] += w * (g₁ * x₁[i] - g₀ * x₀[i])
+    end
+    return acc
+end
+
+"""
     categorical_contrast_ame!(
         contrast_buf::Vector{Float64},
         gradient_buf::Vector{Float64},
@@ -121,11 +154,8 @@ function categorical_contrast_ame!(
             end
             ame_sum += contrast_effect
 
-            # Gradient (0 bytes)
-            # For identity link: ∂(Δη)/∂β = Δ
-            # For non-identity links: handled by contrast_gradient!
-            contrast_gradient!(gradient_buf, evaluator, row, var, from_level, to_level, β, link)
-            gradient_accum .+= gradient_buf
+            # Gradient (0 bytes), reusing X₀/X₁ from contrast_modelrow!
+            _accumulate_contrast_gradient!(gradient_accum, 1.0, contrast_buf, evaluator, β, link)
         end
 
         # Average over observations
@@ -156,16 +186,15 @@ function categorical_contrast_ame!(
                 end
                 ame_sum += w * contrast_effect
 
-                # Weighted gradient (0 bytes)
-                contrast_gradient!(gradient_buf, evaluator, row, var, from_level, to_level, β, link)
-                gradient_accum .+= w .* gradient_buf
+                # Weighted gradient (0 bytes), reusing X₀/X₁ from contrast_modelrow!
+                _accumulate_contrast_gradient!(gradient_accum, Float64(w), contrast_buf, evaluator, β, link)
 
                 total_weight += w
             end
         end
 
         if total_weight <= 0
-            error("All weights are zero for contrast $(to_level) - $(from_level); cannot compute weighted effect.")
+            _throw_zero_weights("contrast $(to_level) - $(from_level)")
         end
 
         # Weighted average

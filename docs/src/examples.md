@@ -251,9 +251,9 @@ println(DataFrame(edu_elasticities))
 ### Semi-Elasticities
 
 ```julia
-# Semi-elasticity: % change in wages per unit change in unemployment
+# Semi-elasticity d(ln y)/dx: proportional change in wages per unit change in unemployment
 unemployment_semi = population_margins(wage_model, data;
-                                     measure=:semielasticity_dyex,
+                                     measure=:semielasticity_eydx,
                                      vars=[:unemployment_rate])
 println("Unemployment semi-elasticity (% wage change per point):")
 println(DataFrame(unemployment_semi))

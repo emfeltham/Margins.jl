@@ -1,6 +1,6 @@
 # population/effects.jl - Zero-allocation AME/AAP computation
 
-using Distributions: Normal, cdf
+using Distributions: Normal, cdf, ccdf
 
 """
     _population_predictions(engine, data_nt; scale, weights) -> (DataFrame, Matrix{Float64})
@@ -47,7 +47,7 @@ function _population_predictions(
         estimate = [mean_prediction],
         se = [se],
         t_stat = [mean_prediction / se],
-        p_value = [2 * (1 - cdf(Normal(), abs(mean_prediction / se)))],
+        p_value = [2 * ccdf(Normal(), abs(mean_prediction / se))],
         n = [n_obs]  # Add sample size
     )
     
@@ -71,7 +71,7 @@ function _compute_population_predictions!(
                 modelrow!(row_buf, compiled, data_nt, i)
                 η = dot(row_buf, β)
                 μ = GLM.linkinv(link, η)
-                dμ_dη = GLM.mueta(link, η)
+                dμ_dη = _dmu_deta(link, η)
                 mean_acc += μ
                 @inbounds for j in 1:length(row_buf)
                     G[1, j] += (dμ_dη * row_buf[j]) / n_obs
@@ -102,7 +102,7 @@ function _compute_population_predictions!(
                     modelrow!(row_buf, compiled, data_nt, i)
                     η = dot(row_buf, β)
                     μ = GLM.linkinv(link, η)
-                    dμ_dη = GLM.mueta(link, η)
+                    dμ_dη = _dmu_deta(link, η)
                     weighted_acc += w * μ
                     @inbounds for j in 1:length(row_buf)
                         G[1, j] += (w * dμ_dη * row_buf[j]) / total_weight

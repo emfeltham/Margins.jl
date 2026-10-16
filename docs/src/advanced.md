@@ -8,10 +8,19 @@ Margins.jl provides comprehensive elasticity support through the `measure` param
 
 ### Types of Elasticity Measures
 
-#### Standard Elasticity
-Definition: Percent change in Y per percent change in X
-Formula: `(∂Y/∂X) × (X/Y)`
-Interpretation: "A 1% increase in X leads to an ε% change in Y"
+With gᵢ = ∂ŷᵢ/∂x the marginal effect at observation i and ŷᵢ the prediction (on the
+requested `scale`), Margins.jl provides the three measures Stata calls `eyex`, `dyex` and
+`eydx` (R marginaleffects: `slope = "eyex"`, `"dyex"`, `"eydx"`):
+
+| `measure` | Stata / R | Unit-level quantity | Interpretation |
+|-----------|-----------|---------------------|----------------|
+| `:elasticity` | `eyex` | `gᵢ · xᵢ / ŷᵢ` = d(ln y)/d(ln x) | % change in y per 1% change in x |
+| `:semielasticity_dyex` | `dyex` | `gᵢ · xᵢ` = dy/d(ln x) | change in y (units) per proportional change in x (divide by 100 for a 1% change) |
+| `:semielasticity_eydx` | `eydx` | `gᵢ / ŷᵢ` = d(ln y)/dx | proportional change in y per 1-unit change in x (× 100 for %) |
+
+#### Standard Elasticity (`eyex`)
+Formula: `(∂y/∂x) × (x/y)`
+Interpretation: "A 1% increase in x leads to an ε% change in y"
 
 ```julia
 # Population average elasticities
@@ -21,28 +30,31 @@ population_margins(model, data; type=:effects, measure=:elasticity)
 profile_margins(model, data, means_grid(data); type=:effects, measure=:elasticity)
 ```
 
-#### Semi-Elasticity with respect to X  
-Definition: Percent change in Y per unit change in X
-Formula: `(∂Y/∂X) × (1/Y)`
-Interpretation: "A 1-unit increase in X leads to a (100×ε)% change in Y"
+#### Semi-Elasticity d(y)/d(ln x) (`dyex`)
+Formula: `(∂y/∂x) × x`
+Interpretation: "A 1% increase in x changes y by about ε/100 units"
 
 ```julia
-# Population average semi-elasticities (X)
 population_margins(model, data; type=:effects, measure=:semielasticity_dyex)
 
 # Semi-elasticities at specific scenarios
 profile_margins(model, data, cartesian_grid(x1=[0,1,2]); type=:effects, measure=:semielasticity_dyex)
 ```
 
-#### Semi-Elasticity with respect to Y
-Definition: Unit change in Y per percent change in X  
-Formula: `(∂Y/∂X) × X`
-Interpretation: "A 1% increase in X leads to an ε-unit change in Y"
+#### Semi-Elasticity d(ln y)/dx (`eydx`)
+Formula: `(∂y/∂x) × (1/y)`
+Interpretation: "A 1-unit increase in x changes y by about (100×ε)%"
 
 ```julia
-# Population average semi-elasticities (Y)
 population_margins(model, data; type=:effects, measure=:semielasticity_eydx)
 ```
+
+!!! note "Changed in v2.2.0"
+    Before v2.2.0 the population measures were computed as a ratio of means — e.g.
+    `(x̄/ȳ) × AME` for `:elasticity` — rather than the mean of the unit-level quantities in
+    the table above, which is what this page always documented and what Stata and R
+    compute. Earlier versions of this page also swapped the descriptions of `dyex` and
+    `eydx`; the computations themselves always matched the names.
 
 ### Elasticity Framework Application
 
@@ -50,9 +62,13 @@ Elasticities follow the same **Population vs Profile** distinction as marginal e
 
 | Measure | Population Approach | Profile Approach |
 |---------|-------------------|------------------|
-| **Elasticity** | Average of `(∂Y/∂X) × (Xᵢ/Yᵢ)` across sample | `(∂Y/∂X) × (X̄/Ȳ)` at representative values |
-| **Semi-elasticity (X)** | Average of `(∂Y/∂X) × (1/Yᵢ)` across sample | `(∂Y/∂X) × (1/Ȳ)` at representative values |
-| **Semi-elasticity (Y)** | Average of `(∂Y/∂X) × Xᵢ` across sample | `(∂Y/∂X) × X̄` at representative values |
+| **Elasticity** (`eyex`) | Average of `gᵢ × (xᵢ/ŷᵢ)` across sample | `g × (x/ŷ)` at the grid row |
+| **Semi-elasticity d(ln y)/dx** (`eydx`) | Average of `gᵢ × (1/ŷᵢ)` across sample | `g × (1/ŷ)` at the grid row |
+| **Semi-elasticity dy/d(ln x)** (`dyex`) | Average of `gᵢ × xᵢ` across sample | `g × x` at the grid row |
+
+With `weights`, the population average is the weighted mean; with `groups`/`scenarios`,
+it is taken over each context's rows. Observations where ŷᵢ = 0 make `eyex` and `eydx`
+undefined, and raise an error rather than returning `Inf`/`NaN`.
 
 ### Practical Example: Wage Elasticities
 
@@ -203,38 +219,37 @@ profile_elasticities = profile_margins(model, data,
 
 #### Understanding the Difference
 
-For elasticity measures like `ε = (x̄/ȳ) × (∂y/∂x)`, the transformation involves sample moments (x̄, ȳ) that are treated differently by different inference methods:
+A population elasticity is an average over the sample of unit-level quantities such as
+`εᵢ = gᵢ xᵢ / ŷᵢ`, which depend on β̂ and on the observed data:
 
 Delta Method (Default):
-- Assumption: Observed data X and Y are fixed constants
+- Assumption: Observed data X are fixed constants
 - Uncertainty source: Only parameter estimates β̂
-- Variance: `Var[ε(β̂) | X, Y]`
+- Variance: `Var[ε(β̂) | X]`
 - Advantages: Fast, analytically exact (given the conditional assumption)
-- Implementation: Uses the quotient rule to account for mean(ŷ) depending on β
+- Implementation: accumulates the gradient of each unit quantity, e.g.
+  `∇β εᵢ = (xᵢ/ŷᵢ) ∇β gᵢ − (gᵢ xᵢ/ŷᵢ²) ∇β ŷᵢ`, over the same rows as the estimate
 
 Bootstrap:
 - Assumption: Data are sampled from a population
-- Uncertainty sources: Both β̂ and the sample moments x̄, ȳ
-- Variance: `Var[ε(β̂, x̄, ȳ)]`
+- Uncertainty sources: Both β̂ and the sampled observations (xᵢ, ŷᵢ)
+- Variance: `Var[ε(β̂, X)]`
 - Advantages: Accounts for full sampling variation
 - Trade-off: Computationally intensive (requires refitting model many times)
 
 #### Why They Differ
 
-The key distinction is that elasticity formulas involve ratios of sample statistics:
-
 ```julia
-# For elasticity: ε = (x̄ / mean(ŷ)) × AME
+# For elasticity: ε = mean(gᵢ xᵢ / ŷᵢ)
 # Where:
-#   x̄ = sample mean of predictor (varies across bootstrap samples)
-#   mean(ŷ) = sample mean of predictions (varies with both β and resampled data)
-#   AME = average marginal effect (varies with β)
+#   xᵢ = the observed predictor values (vary across bootstrap samples)
+#   ŷᵢ, gᵢ = predictions and marginal effects (vary with β and the resampled data)
 ```
 
 When you bootstrap:
-1. Different observations are sampled → x̄ changes
-2. Model is refit → β̂ changes → AME changes
-3. Predictions are recomputed → mean(ŷ) changes
+1. Different observations are sampled → the xᵢ being averaged change
+2. Model is refit → β̂ changes → gᵢ and ŷᵢ change
+3. Predictions are recomputed on the resampled rows
 
 The delta method only captures variation from (2), treating (1) and parts of (3) as fixed.
 
@@ -277,13 +292,14 @@ println("Bootstrap SE: ", boot_se)
 
 #### Technical Details
 
-Margins.jl implements the full quotient rule for elasticity derivatives:
+Margins.jl differentiates each unit quantity with the quotient rule and averages the
+results with the same weights as the estimate (shown for `:elasticity`):
 
 ```math
-\frac{\partial \varepsilon}{\partial \beta} = \frac{\bar{x}}{\bar{y}} \frac{\partial \text{AME}}{\partial \beta} - \frac{\varepsilon}{\bar{y}} \frac{\partial \bar{y}}{\partial \beta}
+\frac{\partial \varepsilon}{\partial \beta} = \frac{1}{n}\sum_i \left[ \frac{x_i}{\hat{y}_i} \frac{\partial g_i}{\partial \beta} - \frac{g_i x_i}{\hat{y}_i^2} \frac{\partial \hat{y}_i}{\partial \beta} \right]
 ```
 
-Here, the second term accounts for mean(ŷ) depending on β.
+where ∂ŷᵢ/∂β = g⁻¹′(ηᵢ) Xᵢ on the response scale and Xᵢ on the link scale.
 
 !!! info "References"
     - Krinsky, I., & Robb, A. L. (1986). "On Approximating the Statistical Properties of Elasticities." *Review of Economics and Statistics*, 68(4), 715-719.

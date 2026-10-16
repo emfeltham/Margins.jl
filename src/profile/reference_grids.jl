@@ -163,7 +163,8 @@ function _build_means_refgrid(data_nt::NamedTuple, model, typical)
             cols[k] = [v]  # Generic for strings, categoricals, etc.
         end
     end
-    return DataFrame(cols)
+    df = DataFrame(cols)
+    return _mark_typical_values!(df, names(df))
 end
 
 """
@@ -1162,7 +1163,10 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
         end
     end
     
-    return DataFrame(cols)
+    df = DataFrame(cols)
+    # Columns no combination specifies hold only typical values
+    typical_only = [k for k in all_keys if !any(combo -> haskey(combo, k), grid_combinations)]
+    return _mark_typical_values!(df, [string(k) for k in typical_only if string(k) in names(df)])
 end
 
 """
@@ -1277,7 +1281,7 @@ This provides the most sophisticated reference grid system in any statistical so
 enabling complex multi-dimensional policy analysis that is currently impossible elsewhere.
 """
 function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
     
     # Enhanced validation with depth checking
     _validate_reference_specification(spec, data_nt, max_depth)
@@ -1329,8 +1333,27 @@ result = profile_margins(model, data, ref_grid)
 ref_grid = means_grid(data; typical=median)
 ```
 """
+const _TYPICAL_VALUE_KEY = "Margins.typical_value"
+
+"""
+    _mark_typical_values!(df, cols) -> df
+
+Record (as DataFrames column metadata) that `cols` of a reference grid hold typical values
+computed from the data alone, rather than values the user chose. `complete_reference_grid`
+may replace such a column — and only such a column — when the model treats the variable as
+categorical and the typical value is not one of its levels (e.g. the mean of an integer code).
+"""
+function _mark_typical_values!(df::DataFrame, cols)
+    for c in cols
+        colmetadata!(df, c, _TYPICAL_VALUE_KEY, true; style=:note)
+    end
+    return df
+end
+
+_is_typical_value_column(df::DataFrame, col) = colmetadata(df, col, _TYPICAL_VALUE_KEY, false) === true
+
 function means_grid(data; typical=mean)
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
     
     # Use existing infrastructure with frequency weighting
     typical_values = get_typical_values(data_nt; typical=typical)
@@ -1347,7 +1370,8 @@ function means_grid(data; typical=mean)
         end
     end
     
-    return DataFrame(cols)
+    df = DataFrame(cols)
+    return _mark_typical_values!(df, names(df))
 end
 
 """
@@ -1384,7 +1408,7 @@ result = profile_margins(model, data, ref_grid)
 ```
 """
 function balanced_grid(data; typical=mean, vars...)
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
 
     # Start with frequency-weighted typical values
     typical_values = get_typical_values(data_nt; typical=typical)
@@ -1449,7 +1473,9 @@ function balanced_grid(data; typical=mean, vars...)
         end
     end
     
-    return DataFrame(cols)
+    df = DataFrame(cols)
+    balanced = Set(Symbol(k) for (k, _) in vars)
+    return _mark_typical_values!(df, [c for c in names(df) if !(Symbol(c) in balanced)])
 end
 
 """
@@ -1590,14 +1616,24 @@ result = profile_margins(model, data, complete_grid)
 """
 function complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean)
     # Convert data to NamedTuple for consistency
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
     
+    # Columns the MODEL treats as categorical (e.g. integer codes fitted with
+    # `contrasts = Dict(:k => DummyCoding())`) become CategoricalArrays, so their typical
+    # value is a frequency mixture over the model's levels rather than the mean code.
+    data_nt = _categorize_model_categoricals(data_nt, model)
+
     # Filter data to model variables only
     filtered_data = _filter_data_to_model_variables(data_nt, model)
     
-    # Get typical values for all model variables
-    typical_values = get_typical_values(filtered_data; typical=typical)
-    
+    # Typical values are needed only for model variables the grid does not specify;
+    # values for grid columns would be discarded. Skipping them avoids O(n) passes
+    # (including categorical frequency tables) over every grid-specified column.
+    grid_syms = Set(Symbol.(names(reference_grid)))
+    unspecified = Tuple(k for k in keys(filtered_data) if !(k in grid_syms))
+    typical_values = get_typical_values(NamedTuple{unspecified}(map(k -> filtered_data[k], unspecified));
+                                        typical=typical)
+
     # Create complete reference grid
     n_rows = nrow(reference_grid)
     # NOTE: must be AbstractVector, not Vector. A CategoricalVector is not a `Vector`
@@ -1611,8 +1647,33 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     # This prevents non-model variables from leaking through
     for col_name in names(reference_grid)
         col_sym = Symbol(col_name)
-        if haskey(typical_values, col_sym)  # Only include if it's a model variable
-            complete_cols[col_sym] = reference_grid[!, col_name]
+        if haskey(filtered_data, col_sym)  # Only include if it's a model variable
+            gcol = reference_grid[!, col_name]
+            dcol = filtered_data[col_sym]
+            # Numeric grid values (codes, Bools) for a variable the model treats as
+            # categorical must be model levels.
+            if dcol isa CategoricalArray && eltype(gcol) <: Real
+                lv = CategoricalArrays.unwrap.(levels(dcol))
+                is_level(v) = any(l -> isequal(l, v) || (l isa Real && l == v), lv)
+                if !all(is_level, gcol)
+                    if _is_typical_value_column(reference_grid, col_name)
+                        # A data-only builder (`means_grid`, `balanced_grid`, ...) filled this
+                        # column with a typical value (e.g. the mean code k = 1.94) without
+                        # knowing the model treats it as categorical. Use the frequency
+                        # mixture over the model's levels, as for any categorical variable.
+                        @debug "Variable $col_sym is categorical in the model; using its frequency mixture instead of the typical value $(unique(gcol))."
+                        gcol = fill(_create_frequency_mixture(dcol), length(gcol))
+                    else
+                        bad = unique(filter(!is_level, gcol))
+                        throw(MarginsError(
+                            "Reference grid values $(bad) for :$col_sym are not levels of " *
+                            "this variable, which the fitted model treats as categorical. " *
+                            "Valid levels: $(lv). (Use a mixture, e.g. mix(...), for a " *
+                            "weighted combination of levels.)"))
+                    end
+                end
+            end
+            complete_cols[col_sym] = gcol
         end
     end
 
@@ -1661,7 +1722,7 @@ result = profile_margins(model, data, ref_grid)
 ```
 """
 function quantile_grid(data; vars...)
-    data_nt = data isa NamedTuple ? data : Tables.columntable(data)
+    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
     
     # Convert quantile specifications to actual values
     at_dict = Dict{Symbol, Any}()
