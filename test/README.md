@@ -42,6 +42,7 @@ Further validation lives in separate files in `statistical_validation/`:
 - `robust_se_tests.jl`: CovarianceMatrices.jl robust and clustered SEs
 - `population_context_bootstrap_validation.jl`: bootstrap SEs for `population_margins` with scenarios
 - `backend_reliability_tests.jl`: AD vs FD behavior on domain-sensitive functions
+- `function_composition_tests.jl`: nested and trigonometric formula terms checked against closed-form derivatives
 - `specialized_se_tests.jl`: integer variables, elasticities, categorical mixtures, error propagation
 
 `MARGINS_COMPREHENSIVE_TESTS=true` enables additional checks in `elasticity_se_validation.jl`.
