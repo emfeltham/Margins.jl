@@ -36,12 +36,15 @@ Further validation lives in separate files in `statistical_validation/`:
 
 - `backend_consistency.jl`: AD vs FD agreement
 - `incompatible_formula_se_validation.jl`: SEs for formulas that need special handling
-- `elasticity_se_validation.jl`: elasticity SEs
+- `elasticity_se_validation.jl`: elasticity SEs (bootstrap)
+- `analytical_elasticity_se_validation.jl`: elasticity SEs (hand-calculated)
 - `bootstrap_validation_tests.jl`: bootstrap SE agreement
 - `robust_se_tests.jl`: CovarianceMatrices.jl robust and clustered SEs
+- `population_context_bootstrap_validation.jl`: bootstrap SEs for `population_margins` with scenarios
+- `backend_reliability_tests.jl`: AD vs FD behavior on domain-sensitive functions
 - `specialized_se_tests.jl`: integer variables, elasticities, categorical mixtures, error propagation
 
-`MARGINS_COMPREHENSIVE_TESTS=true` enables additional checks in `elasticity_se_validation.jl` and `categorical_mixture_se_validation.jl`.
+`MARGINS_COMPREHENSIVE_TESTS=true` enables additional checks in `elasticity_se_validation.jl`.
 
 ## Statistical Validation Features
 

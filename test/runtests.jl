@@ -78,6 +78,9 @@ end
     include("statistical_validation/bootstrap_validation_tests.jl")
     include("statistical_validation/robust_se_tests.jl")
     include("statistical_validation/specialized_se_tests.jl")
+    include("statistical_validation/analytical_elasticity_se_validation.jl")
+    include("statistical_validation/population_context_bootstrap_validation.jl")
+    include("statistical_validation/backend_reliability_tests.jl")
 end
 
 @testset "Computational Primitives" begin

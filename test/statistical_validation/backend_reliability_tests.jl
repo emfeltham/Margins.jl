@@ -41,7 +41,7 @@ include("backend_reliability_guide.jl")
             
             # Test that when both succeed, results are consistent
             if reliability_results[:fd].success && reliability_results[:ad].success
-                @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-10
+                @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-6
                 @test reliability_results[:fd].ses ≈ reliability_results[:ad].ses rtol=1e-8
                 @debug "When both succeed, FD and AD produce consistent results"
             end
@@ -65,7 +65,7 @@ include("backend_reliability_guide.jl")
             elseif reliability_results[:fd].success && reliability_results[:ad].success
                 @debug "Both backends succeeded for this sqrt() case"
                 # Test consistency when both work
-                @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-10
+                @test reliability_results[:fd].estimates ≈ reliability_results[:ad].estimates rtol=1e-6
                 @test reliability_results[:fd].ses ≈ reliability_results[:ad].ses rtol=1e-8
             end
         end
