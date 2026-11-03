@@ -5,7 +5,7 @@
 # using FormulaCompiler's ContrastEvaluator for zero-allocation contrast computation.
 
 using FormulaCompiler: contrast_modelrow!
-# contrast_gradient! now defined in Margins/src/inference/contrast_gradient.jl
+# contrast_gradient! is FormulaCompiler's (see src/inference/delta_method.jl)
 using LinearAlgebra: dot
 using GLM: linkinv
 

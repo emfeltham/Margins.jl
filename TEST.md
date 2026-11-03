@@ -64,8 +64,7 @@ test/
 │   ├── analytical_se_validation.jl     # Analytical SE verification
 │   ├── backend_consistency.jl          # AD vs FD agreement
 │   ├── robust_se_validation.jl         # Robust/clustered SEs
-│   ├── incompatible_formula_se_validation.jl  # Specialized validation
-│   └── ci_validation.jl                # Confidence intervals
+│   └── incompatible_formula_se_validation.jl  # Specialized validation
 │
 ├── validation/                          # Mathematical validation (6 files)
 │   ├── test_contrast_invariance.jl     # Categorical invariance
@@ -188,7 +187,6 @@ Tolerance: ±10% agreement between delta-method and bootstrap SEs
 Files:
 - `bootstrap_se_validation.jl`: Core bootstrap validation framework
 - `elasticity_se_validation.jl`: Elasticity-specific bootstrap validation
-- `ci_validation.jl`: Confidence interval coverage validation
 
 ### Analytical Validation
 
@@ -423,7 +421,6 @@ implies that Margins.jl is production-ready.
 - Backend Consistency (`backend_consistency.jl`): AD vs FD agreement at machine precision
 - Robust SE (`robust_se_validation.jl`): HC0-HC3, cluster-robust SE validation
 - Incompatible Formulas (`incompatible_formula_se_validation.jl`): Specialized validation for interactions/mixed models
-- CI Validation (`ci_validation.jl`): Confidence interval coverage properties
 - Function Composition (`function_composition_tests.jl`): Complex mathematical transformations
 
 ### Validation Tests (`test/validation/`)
