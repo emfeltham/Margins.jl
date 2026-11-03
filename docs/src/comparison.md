@@ -113,7 +113,7 @@ DataFrame(age_effects)
 
 Margins.jl was designed with several key principles:
 
-1. **Performance first**: Built on FormulaCompiler.jl for zero-allocation computation paths
+1. **Performance**: Built on FormulaCompiler.jl, with allocation-free per-row loops
 2. **Conceptual clarity**: Population vs Profile framework instead of statistical acronyms
 3. **Ecosystem integration**: Works seamlessly with Julia's statistical ecosystem via StatsAPI
 4. **Mathematical rigor**: Proper gradient computation and delta-method standard errors throughout
@@ -139,7 +139,7 @@ Margins.jl was designed with several key principles:
 |---------|------------|------------|-----------|---------------|-------------------|
 | Mixed models |  (automatic) |  |  (manual) |  |  (limited) |
 | Multiple backends (FD/AD) |  | ✗ | ✗ | ✗ | ✗ |
-| Zero-allocation paths |  | ✗ | ✗ | ✗ | ✗ |
+| Allocation-free per-row loops |  | ✗ | ✗ | ✗ | ✗ |
 | Compiled evaluation |  | ✗ | ✗ |  | ✗ |
 | Table-based profiles |  | ✗ | ✗ | ✗ | ✗ |
 | Multiple comparison adjustments |  |  |  |  |  (basic) |
@@ -161,34 +161,32 @@ Average marginal effects (AME) have traditionally been slow because most impleme
 
 ### Computational Approach
 
-**Margins.jl**: Uses compiled formula evaluation with dual FD/AD backends. In indicative benchmark results, achieves approximately 50ns per marginal effect with zero allocations after warmup via FormulaCompiler.jl. Computes derivatives directly from compiled formulas rather than repeated model prediction calls.
+**Margins.jl**: Uses compiled formula evaluation (via FormulaCompiler.jl) with AD and FD backends. Derivatives are computed directly from the compiled formula, one row at a time, rather than through repeated model prediction calls; the per-row loops allocate nothing after warmup. The cost per row depends on the model: for the AME of three variables in a 9-coefficient model it was 70-130 ns per row (see [Backend Selection](backend_selection.md#Speed-Performance)).
 
-**Effects.jl**: Uses automatic differentiation (ForwardDiff.jl) for gradient computation with standard Julia model prediction. Clean implementation but allocates ~400-500 bytes per gradient computation.
+**Effects.jl**: Uses automatic differentiation (ForwardDiff.jl) for gradient computation with standard Julia model prediction.
 
-**R margins**: Interpretation-based approach requiring repeated `predict()` calls per observation. Generally slower for large datasets due to evaluation overhead (Leeper, 2017).
+**R margins and marginaleffects**: Compute derivatives numerically from `predict()` on the data at shifted covariate values, and standard errors by differentiating again with respect to the coefficients (Leeper, 2017). Each step works on data-sized intermediates.
 
-**Stata margins**: Compiled implementation with good performance, but still uses interpretation-based approach. Closed-source implementation limits optimization possibilities.
+**Stata margins**: Built into Stata; its implementation is closed-source.
 
-**Python statsmodels**: Mixed approach with some optimizations, but limited by Python overhead for large-scale AME computation.
+**Python statsmodels**: Provides marginal effects for its discrete-choice models through `get_margeff`.
 
 ### Performance Differences
 
 The key difference is computational approach:
 
-- **Traditional approach**: n model evaluations × interpretation overhead  
-- **Margins.jl approach**: Compiled formula evaluation (~7ns) + finite difference (~40ns) + delta-method SE (~10ns) = ~57ns per observation with zero allocations
+- **Traditional approach**: predictions for the whole data (or a copy of it) at shifted values, with intermediate model matrices and Jacobians the size of the data
+- **Margins.jl approach**: one compiled pass over the rows, accumulating the estimate and its parameter gradient (for the delta-method standard error) in fixed buffers, so memory use does not grow with n beyond the data columns themselves
 
-These architectural differences may become more noticeable with larger datasets.
+### Benchmark Against R
 
-### Benchmarking Context
+The paper on FormulaCompiler.jl and Margins.jl compares Margins.jl with R's marginaleffects (version 1.0.0) on matched estimands (same models, data, estimates and covariance matrix), on an Apple M4 Pro:
 
-While formal cross-language benchmarks are complex due to different implementations and ecosystems, indicative performance characteristics suggest architectural differences:
+- Geometric-mean time ratio (R / Julia) across the benchmark tasks: 42x at 5,000 rows, 19x at 50,000 rows and 17x at 500,000 rows.
+- AME of all variables at 500,000 rows: Julia 1.8 s and 27 MiB allocated; R 26 s and 74 GiB.
+- At 1,000,000 rows: Julia 3.8 s and 54 MiB; R stopped at its default 48 GB vector memory limit.
 
-- **Small problems (n < 1,000)**: Most packages perform adequately, overhead differences typically negligible
-- **Medium problems (n ~ 10,000)**: Different architectural approaches may show varying performance characteristics
-- **Large problems (n > 100,000)**: Architectural differences become more apparent, with allocation patterns affecting scalability
-
-Zero-allocation approaches can help AME computation scale with dataset size by avoiding additional memory allocation.
+The gap is largest in memory: Margins.jl's allocation stays small as n grows, while an approach that materializes data-sized intermediates grows with n. These figures are for those tasks on that machine; other models, settings and hardware will give different ratios. No comparison with Stata, Python statsmodels or Effects.jl was run.
 
 ## API Design Comparison
 
@@ -202,8 +200,7 @@ profile_margins(model, data, means_grid(data); type=:effects)
 
 **Effects.jl**: Function-based approach with keyword arguments:
 ```julia
-effects(model; x1=0.5, x2=[0, 1])  # At specific values
-effects(model, data)               # Average marginal effects
+effects(Dict(:x2 => [0, 1]), model)  # Predictions (with SEs) over a reference grid
 ```
 
 **R margins**: Function-based approach with extensive options:
@@ -228,7 +225,7 @@ marginal_effects = model.get_margeff(at='mean')
 - Type-stable, composable design
 - Interface consistent across model types
 - Elasticity support across multiple measures
-- Focus on zero-allocation performance
+- Per-row loops that allocate nothing
 
 **Effects.jl characteristics:**
 - Simple, focused API
@@ -243,7 +240,6 @@ marginal_effects = model.get_margeff(at='mean')
 
 **Effects.jl limitations:**
 - More limited feature set (no observation weights, limited grouping)
-- Less performance optimization
 - Fewer advanced statistical features
 
 ## Ecosystem Integration
@@ -276,7 +272,7 @@ Most packages implement delta-method standard errors, with different approaches 
 
 Margins.jl brings several distinctive features to marginal effects analysis:
 
-**Computational approach**: Uses compiled formula evaluation with zero-allocation performance paths, which in indicative benchmarks can be beneficial for large-scale analysis and repeated computations.
+**Computational approach**: Uses compiled formula evaluation with allocation-free per-row loops, which matters most for large datasets and repeated computations (see the benchmark against R above).
 
 **Conceptual framework**: Separates the question of *where* to evaluate (population vs profile) from *what* to compute (effects vs predictions), providing conceptual clarity in analysis design.
 

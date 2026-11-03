@@ -466,7 +466,7 @@ All scenarios maintain **publication-grade statistical validity**:
 **Performance Characteristics:**
 - One new column of n values per overridden variable per scenario; buffers are reused
 - O(n) time per scenario where n = observations
-- Scenarios evaluated sequentially within a call (separate Margins calls may run concurrently; see the caching documentation)
+- Scenarios evaluated sequentially within a call (separate Margins calls may run concurrently; see [Thread Safety](caching.md#Thread-Safety))
 - FD backend: minimal override sets constructed
 - AD backend: exact derivatives with no per-row allocation
 

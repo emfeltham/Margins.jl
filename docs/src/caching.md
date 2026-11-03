@@ -47,7 +47,7 @@ Removing the cache fixed all three and deleted the locks, the engine pool and th
 
 ## Engine Structure
 
-Each engine holds pre-allocated buffers sized for its usage pattern:
+Each engine holds pre-allocated buffers sized for its usage pattern (selected fields; see `src/engine/core.jl` for the full definition):
 
 ```julia
 struct MarginsEngine{L, U, C, E, CE, O}

@@ -6,9 +6,9 @@
 
 **TL;DR:** Use `backend=:ad` (the default) for all marginal effects computations. It provides:
 - **Zero per-row allocation** after warmup
-- **Machine precision** accuracy
-- **Domain safety** for log(), sqrt(), and other sensitive functions
-- **3-5x faster** than FD in most cases
+- **Exact derivatives** (up to floating-point rounding), with no step size to choose
+- **Domain safety** for log(), sqrt(), and other sensitive functions: no evaluation outside the data
+- **Faster** than FD (about 1.6-2x in the measurements below)
 - **All numeric types** supported (Int8, Int16, Float64, etc.)
 
 ```julia
@@ -35,7 +35,7 @@ For all applications:
 └── Use backend=:ad (default)
     ├── Required for: log(x), sqrt(x), 1/x, x^(1/3), etc.
     ├── Recommended for: all other formulas
-    └── Never fails: domain-safe evaluation
+    └── Evaluates only at the observed values (no domain errors from stepping)
 
 Only use backend=:fd if:
 ├── Maintaining legacy code that explicitly uses FD
@@ -71,20 +71,22 @@ population_margins(model, data; backend=:ad)  # Recommended
 - `sqrt(x+h)` where `x+h < 0` → `DomainError`
 - `1/(x+h)` where `x+h ≈ 0` → numerical instability
 
-**Why AD succeeds**: Automatic differentiation computes exact derivatives without domain-violating function evaluations.
+With `log(w)` or `sqrt(w)` and a few values of `w` near zero (1e-12 to 1e-7), `backend=:fd` stops with a `DomainError` (the finite-difference step, about 6e-6 here, crosses zero), while `backend=:ad` returns the estimate.
+
+**Why AD succeeds**: Automatic differentiation computes exact derivatives without evaluating the function away from the observed values. It cannot repair a derivative that is itself infinite: with an observation at exactly `w = 0`, the AD estimate for `log(w)` is `-Inf`.
 
 ### **Functions Safe for Either Backend**
 
 ```julia
 # Linear relationships - both backends equivalent
 model = lm(@formula(y ~ x + z), data)  
-population_margins(model, data; backend=:fd)   # Efficient performance
-population_margins(model, data; backend=:ad)   # Equivalent results
+population_margins(model, data; backend=:fd)   # Works
+population_margins(model, data; backend=:ad)   # Same estimates (to about 1e-8)
 
 # Polynomial functions - both work well
 model = lm(@formula(y ~ x + x^2), data)
-population_margins(model, data; backend=:fd)   # Choose based on performance needs
-population_margins(model, data; backend=:ad)   # Same statistical results
+population_margins(model, data; backend=:fd)   # Works
+population_margins(model, data; backend=:ad)   # Same estimates (to about 1e-8)
 
 # Simple transformations - no domain issues
 model = lm(@formula(y ~ x/10 + z*2), data)
@@ -106,44 +108,37 @@ population_margins(model, data; backend=:fd)   # No per-row allocation
 **Memory Usage Decision:**
 - **All dataset sizes**: Neither backend allocates per row
 - **Choice based on reliability and accuracy**: AD provides superior domain handling
-- **Construction cost**: AD requires slightly more memory during evaluator setup (amortized over many evaluations)
+- **Construction cost**: the per-call allocation is nearly the same for both (about 52 KiB for AD and 51 KiB for FD in the measurements below)
 
 ### Speed Performance
 
-Both backends achieve excellent performance, with AD providing 3-5x improvements:
+Both backends scale linearly with n; AD has the smaller constant. Measured with BenchmarkTools (median of 30 warm calls; Apple M4 Pro, Julia 1.13.3, one thread, Margins 3.0.0), for the AME of three continuous variables in `y ~ x + z + x & z + log(w) + g` (`g` a three-level factor; 9 coefficients), with the same precomputed `vcov` passed to every call:
 
-```julia
-# Typical performance ranges (varies by system and model complexity)
-# Small problems (n=100-1000)  
-@btime population_margins($model, $data; backend=:fd)  # 0.1-10ms (baseline)
-@btime population_margins($model, $data; backend=:ad)  # 0.05-5ms (3-5x faster!)
+| Model | n | `:ad` | `:fd` | FD / AD |
+|-------|---|-------|-------|---------|
+| `lm` | 1,000 | 0.11 ms | 0.17 ms | 1.6 |
+| `lm` | 10,000 | 0.74 ms | 1.5 ms | 2.0 |
+| `lm` | 100,000 | 7.1 ms | 15 ms | 2.1 |
+| logit `glm` | 1,000 | 0.13 ms | 0.19 ms | 1.5 |
+| logit `glm` | 10,000 | 0.86 ms | 1.7 ms | 2.0 |
+| logit `glm` | 100,000 | 8.5 ms | 17 ms | 2.0 |
 
-# Large problems (n=10000+)
-@btime population_margins($model, $large_data; backend=:fd)  # Scales linearly with n
-@btime population_margins($model, $large_data; backend=:ad)  # Scales linearly, but with better constant factors
-```
-
-**Key insight**: With zero-allocation AD, the performance differences now favor AD in most cases, while maintaining superior numerical properties.
+Each call allocated about 44 KiB (n = 1,000) to 52 KiB (n = 10,000 and 100,000) on either backend, with no growth from 10,000 to 100,000 rows. Timings depend on the machine and the model; the ratio is the more portable figure.
 
 ## Numerical Accuracy
 
-### Both Backends Provide Equivalent Accuracy
+### Both Backends Agree Closely
 
 For well-conditioned problems, both backends produce statistically equivalent results:
 
 ```julia
-# Linear models - identical to machine precision
 fd_result = population_margins(model, data; backend=:fd)
 ad_result = population_margins(model, data; backend=:ad)
 
-DataFrame(fd_result).estimate ≈ DataFrame(ad_result).estimate  # rtol=1e-12 PASS
-
-# GLM models - equivalent within appropriate tolerances  
-fd_glm = population_margins(glm_model, data; backend=:fd)
-ad_glm = population_margins(glm_model, data; backend=:ad)
-
-DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
+isapprox(DataFrame(fd_result).estimate, DataFrame(ad_result).estimate; rtol=1e-6)  # true
 ```
+
+In the benchmark models above (`lm` and logit), the FD estimates and standard errors differed from the AD ones by at most about 1e-8 in relative terms: the error of the finite-difference approximation, which AD does not have.
 
 ### AD May Be More Accurate For
 
@@ -165,9 +160,9 @@ DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
 | **Use Case** | **Backend** | **Rationale** |
 |--------------|-------------|---------------|
 | **Domain-sensitive functions** (log, sqrt, 1/x) | `:ad` | **Required** - FD fails with DomainError |
-| **General production workflows** | `:ad` | No per-row allocation + reliability + 3-5x faster |
-| **Large datasets (>10k observations)** | `:ad` | No per-row allocation + superior performance |
-| **Development/testing** | `:ad` | Higher reliability + machine precision |
+| **General production workflows** | `:ad` | No per-row allocation, reliability, about 2x faster |
+| **Large datasets (>10k observations)** | `:ad` | No per-row allocation, faster |
+| **Development/testing** | `:ad` | Higher reliability, exact derivatives |
 | **High-precision requirements** | `:ad` | Exact derivatives vs numerical approximation |
 | **Legacy code maintenance** | `:fd` | Only if existing code explicitly uses FD |
 | **Debugging/validation** | Both | Compare results to verify correctness |
@@ -207,7 +202,7 @@ function test_backend_compatibility(model, data)
         fd_est = DataFrame(try_fd).estimate
         ad_est = DataFrame(try_ad).estimate
         
-        if fd_est ≈ ad_est rtol=1e-10
+        if isapprox(fd_est, ad_est; rtol=1e-6)
             @info "Both backends produce consistent results"
             return :either_ok
         else
@@ -238,8 +233,7 @@ Both backends leverage FormulaCompiler.jl's optimized evaluation:
 
 # AD: Uses dual number arithmetic with compiled evaluators (OPTIMIZED)
 # - Zero allocation per row after warmup (columns are read as Float64 and converted to duals on read)
-# - Exact derivative computation with machine precision
-# - 3-5x performance improvement over previous AD implementation
+# - Exact derivative computation (up to floating-point rounding)
 # - Composition via chain rule with type homogeneity
 ```
 
@@ -259,9 +253,9 @@ For functions near domain boundaries, you may need custom tolerances:
 
 **Use `backend=:ad` for everything.** The AD backend is now the recommended default for all use cases, providing:
 - No per-row allocation (as FD)
-- Superior speed (3-5x faster than FD)
-- Domain safety (handles log, sqrt, 1/x correctly)
-- Machine precision accuracy
+- Faster than FD (about 1.6-2x in the measurements above)
+- Domain safety (no DomainError from stepping outside the domain of log, sqrt, 1/x)
+- Exact derivatives (up to floating-point rounding)
 - Statistical validity
 
 ### **When to Use FD:**
@@ -271,7 +265,7 @@ Only use `backend=:fd` for:
 2. **Validation** - Comparing AD vs FD results for debugging
 3. **Very rare edge cases** - Contact maintainers if you believe you need FD for a new use case
 
-**Important:** FD is not faster, not more memory-efficient, and less reliable than AD in v2.0+. There is no performance or memory reason to prefer FD for new code.
+**Important:** FD is not faster, not more memory-efficient, and less reliable than AD. There is no performance or memory reason to prefer FD for new code.
 
 ### **Statistical Guarantees:**
 

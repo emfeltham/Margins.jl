@@ -271,6 +271,8 @@ using BenchmarkTools
 @allocated profile_margins(model, large_data, means_grid(large_data))  # Larger, still small
 ```
 
+The package's test suite checks these properties in `test/performance/` (`test_allocation_scaling.jl`, `test_ame_fd_loop_zero_alloc.jl`, `test_population_aap_loop_zero_alloc.jl`): the per-row loops allocate 0 bytes, and warm `population_margins` calls (predictions and effects) on `Float64` data allocate about the same amount as n grows (the tests compare sizes between 100 and 50,000 rows). Contributors changing a hot path should keep the loops allocation-free (preallocate and reuse buffers such as `row_buf`, `g_buf` and the `MEWorkspace`; prefer scalar loops to allocating broadcasts) and run these tests.
+
 #### Performance Monitoring
 ```julia
 # Production monitoring pattern

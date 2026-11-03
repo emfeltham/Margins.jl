@@ -19,6 +19,7 @@ makedocs(;
     "Introduction" => "index.md",
     "Mathematical Foundation" => "mathematical_foundation.md",
     "Computational Architecture" => "computational_architecture.md",
+    "Per-Call State and Thread Safety" => "caching.md",
     "User Guide" => [
       "Reference Grids" => "reference_grids.md",
       "Profile Analysis" => "profile_margins.md",

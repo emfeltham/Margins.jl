@@ -103,7 +103,6 @@ suite_phase("Computational Primitives")
     include("primitives/test_derivatives.jl")
     include("primitives/test_links.jl")
     include("primitives/test_prediction_kernel.jl")
-    include("primitives/test_derivatives_log_profile_regression.jl")
     include("helpers/test_mixture_utilities.jl")
     include("primitives/test_formulacompiler_public_api.jl")  # no FC internals; baseline from contrasts
 end

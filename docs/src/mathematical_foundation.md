@@ -49,8 +49,8 @@ Population approaches compute marginal quantities averaged across the empirical 
 
 **Why This Matters for Users**:
 Different fields use related but slightly different terminology:
-- **Economics**: "Average Marginal Effects" (AME) - mean of individual-level derivatives
-- **Biostatistics**: "Average Partial Effects" (APE) - often equivalent to AME, with some nuance for discrete variables
+- **Economics**: "Average Marginal Effects" (AME), also "Average Partial Effects" (APE, as in Wooldridge's econometrics texts) - mean of individual-level derivatives or discrete changes
+- **Epidemiology and biostatistics**: "marginal standardization" (also model-based standardization or g-computation) - predictions averaged over the sample under set covariate values, and contrasts between them
 - **Machine Learning**: "Partial Dependence" - conceptually similar, typically in visualization contexts
 
 While these concepts overlap substantially, each field may have specific conventions for handling categorical variables or estimation approaches. This package provides a unified framework that works consistently across disciplines.
@@ -59,7 +59,7 @@ The absence of standardized terminological conventions across quantitative disci
 
 ### Disciplinary Terminological Variations
 
-Economics employs Marginal Effects at the Mean and Average Marginal Effects as primary analytical categories, while biostatistics utilizes Average Partial Effects to denote methodologically identical procedures. Machine learning contexts frequently employ "partial effects" as an umbrella term that may conflate distinct analytical approaches including SHAP values and traditional marginal effects. Statistical software packages compound these inconsistencies through accommodation of diverse terminological preferences across user communities.
+Economics employs Marginal Effects at the Mean and Average Marginal Effects as primary analytical categories, econometrics also speaks of Average Partial Effects for the same quantity, and epidemiology and biostatistics describe averaged counterfactual predictions as marginal standardization. Machine learning contexts frequently employ "partial effects" as an umbrella term that may conflate distinct analytical approaches including SHAP values and traditional marginal effects. Statistical software packages compound these inconsistencies through accommodation of diverse terminological preferences across user communities.
 
 ### Fundamental Methodological Impediments
 
@@ -92,19 +92,23 @@ The 2×2 framework applies equally to both descriptive and causal analysis. The 
 
 ## When Profile ≠ Population
 
-The choice between profile and population approaches matters most when the link function is non-identity:
+In general the effect at a profile (MEM, or an effect at any other representative values) and the average effect (AME) are different numbers. They are the same when the unit-level effect does not depend on the covariates: then every observation, and every profile, has the same effect, and averaging changes nothing.
 
-### Linear Models with Identity Link
-- **Profile = Population**: MEM = AME for effects (predictions differ only by constants)
-- **Practical implication**: Choice mainly affects interpretation, not numerical results
+### When MEM = AME
+- **Linear model, identity link, and the variable enters only linearly**: no interactions with other variables, no nonlinear transforms of it (`x^2`, `log(x)`, splines). The effect of x is then its coefficient, the same at every point, so the effect at any profile equals the AME (and so do the standard errors).
+- **A special case at the means**: in a linear model with identity link, if the effect of x is a linear function of the covariates (as with `x * z` or `x + x^2`), the effect at the sample means equals the AME, because the mean of a linear function is the function of the means. This holds at the means only, not at other profiles.
+- **Adjusted predictions**: in a linear model with identity link, the prediction at the sample means equals the average prediction only if every model column is linear in the variables averaged over (no transforms or interactions); in general they differ.
 
-### GLMs with Non-Identity Links
-- **Profile ≠ Population**: All quantities can differ substantially
-- **With interactions**: Profile vs Population can yield opposite conclusions  
-- **Heterogeneous samples**: Larger differences between approaches
+### When MEM ≠ AME (the general case)
+- **Non-identity links** (logit, probit, log, ...): the effect on the response scale is scaled by the derivative of the inverse link, which varies across observations.
+- **Interactions**: in `y ~ x * z` the effect of x is β_x + β_xz·z, which depends on z, so the effect differs across profiles (it equals the AME at the mean of z only in a linear model with identity link).
+- **Nonlinear transforms of the variable**: in `y ~ x + log(x)` the effect of x is β₁ + β₂/x, which varies with x even in a linear model, and its value at the mean of x is not its average.
+- **Heterogeneous samples**: the further the covariates spread over the region where the effect changes, the larger the difference between the two.
+
+With interactions or nonlinear links, MEM and AME can differ substantially and even in sign.
 
 ### Example: Logistic Regression
-Consider education effects on probability of employment in a logistic model:
+Consider education effects on probability of employment in a logistic model (illustrative numbers):
 
 - **Profile (MEM)**: "For someone with average characteristics, +1 year education → +0.08 probability of employment"
 - **Population (AME)**: "On average across the sample, +1 year education → +0.05 probability of employment"
@@ -126,7 +130,7 @@ Elasticities are transformations of marginal effects that follow the same 2×2 f
 - **Profile elasticities**: Calculate (∂Y/∂X) × (X/Ŷ) at the representative values of the grid row
 - **Population elasticities**: Average the unit-level (∂Ŷᵢ/∂X) × (Xᵢ/Ŷᵢ) across sample observations (as Stata `margins, eyex()` and R `avg_slopes(slope = "eyex")` do; before v3.0.0 Margins used the ratio of means (X̄/Ȳ) × AME)
 
-In GLMs with non-identity links, profile elasticity ≠ average elasticity, following the same logic as marginal effects.
+An elasticity depends on X and Ŷ, which vary across observations, so the profile elasticity and the average elasticity generally differ, even in a linear model where MEM = AME; they coincide only in special cases.
 
 *For detailed elasticity examples and applications to policy analysis, see [Advanced Features](advanced.md).*
 

@@ -273,6 +273,30 @@ that row's covariates, and therefore varies across profiles.
 Reference grids combining several categorical variables can generate substantial numbers of
 rows, so name only the variables you want contrasted.
 
+### Contrasts between grid rows
+
+A difference between two rows of a result, such as two profiles that differ in one variable
+while the variables left out of the grid are held at their frequency mixtures, is computed with
+`contrast()`. The result carries the parameter gradient of every row and the covariance
+matrix it was computed with, so the contrast gets a delta-method standard error from the full
+covariance matrix. Rows are named by number or by the values of their `DataFrame(result)`
+columns:
+
+```julia
+ref_grid = DataFrame(treatment = [false, true], age = [mean(df.age), mean(df.age)])
+apm = profile_margins(model, df, ref_grid; type=:predictions)  # education: frequency mixture
+
+c = contrast(apm, 2, 1)                                     # row 2 - row 1
+c = contrast(apm, (treatment=true,), (treatment=false,))    # the same rows, by value
+c.contrast, c.se, c.p_value, c.ci_lower, c.ci_upper
+DataFrame(c)
+```
+
+With `type=:effects` and `vars` omitted, a categorical variable that the grid holds at a
+mixture (an explicit `mix(...)`, or a `Bool` filled with its share of `true`) is not
+contrasted, and `profile_margins` says so in an `@info` message; name it in `vars` to get its
+contrasts at each grid row.
+
 ## Examples
 
 ### Basic Workflow

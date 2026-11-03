@@ -809,6 +809,10 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
     `test_derivatives.jl` (613 → 97 lines) drops its retests of FormulaCompiler, and adds
     exact checks of `delta_method_se`: its contrast form, and the negative-variance branch,
     which warns and returns NaN.
+  - The FormulaCompiler checks still in `primitives/` (`fd_jacobian_column!`, the `log(x)` row-1
+    regression, FD at extreme scales) move to FormulaCompiler's `test_fd_jacobian_column.jl`.
+    `primitives/test_derivatives_log_profile_regression.jl` is deleted with them; its remaining
+    check of the `marginal_effects_eta!` test oracle is covered exactly by `primitives/test_links.jl`.
 - **Stata migration guide corrected.** It mapped `margins, at(x=…)` to `profile_margins` with a
   `cartesian_grid` (other variables at their means); Stata's `at()` leaves the other variables as
   observed and averages over the sample (`asobserved`, its default), which is `population_margins(…;

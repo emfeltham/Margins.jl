@@ -1,9 +1,9 @@
 # test_derivatives.jl
-# Margins' delta_method_se (both methods), and two FormulaCompiler derivative checks that no
-# FormulaCompiler test makes yet (fd_jacobian_column!, FD at extreme variable scales).
+# Margins' delta_method_se (both methods).
 #
 # FormulaCompiler's derivative_modelrow!, AD vs FD, integer columns, transforms, MixedModels and
-# contrast_modelrow! are tested in FormulaCompiler's own suite; the internal test oracles
+# contrast_modelrow!, fd_jacobian_column! and FD at extreme scales are tested in FormulaCompiler's
+# own suite; the internal test oracles
 # marginal_effects_eta!/_mu! in validation/test_gradient_correctness.jl and primitives/test_links.jl.
 
 using Test
@@ -45,49 +45,3 @@ using Margins: delta_method_se
     end
 end
 
-@testset "FormulaCompiler FD checks not in its own suite" begin
-    Random.seed!(06515)
-
-    @testset "fd_jacobian_column! equals the Jacobian's column" begin
-        n = 200
-        df = DataFrame(y = randn(n), x = randn(n), z = abs.(randn(n)) .+ 0.1,
-                       group3 = categorical(rand(["A", "B", "C"], n)))
-        data = Tables.columntable(df)
-        compiled = FormulaCompiler.compile_formula(lm(@formula(y ~ 1 + x + z + x & group3), df), data)
-        vars = [:x, :z]
-        de_ad = FormulaCompiler.derivativeevaluator_ad(compiled, data, vars)
-        de_fd = FormulaCompiler.derivativeevaluator_fd(compiled, data, vars)
-        J_ad = Matrix{Float64}(undef, length(compiled), length(vars))
-        J_fd = similar(J_ad)
-        FormulaCompiler.derivative_modelrow!(J_ad, de_ad, 5)
-        FormulaCompiler.derivative_modelrow!(J_fd, de_fd, 5)
-        for i in eachindex(vars)
-            Jk = Vector{Float64}(undef, length(compiled))
-            FormulaCompiler.fd_jacobian_column!(Jk, de_fd, 5, i)
-            @test isapprox(Jk, J_ad[:, i]; rtol = 1e-6, atol = 1e-8)
-            @test Jk == J_fd[:, i]
-        end
-    end
-
-    @testset "FD at extreme variable scales (1e-6, 1e6) matches AD" begin
-        n = 100
-        df = DataFrame(y = randn(n), x_tiny = randn(n) * 1e-6, x_large = randn(n) * 1e6,
-                       x_normal = randn(n),
-                       group4 = categorical(rand(["A", "B", "C", "D"], n)),
-                       group2 = categorical(rand(["X", "Y"], n)))
-        data = Tables.columntable(df)
-        model = lm(@formula(y ~ 1 + x_tiny + x_large + x_normal + x_tiny & group4 +
-                            x_normal & group2 + x_large & group4), df)
-        compiled = FormulaCompiler.compile_formula(model, data)
-        vars = [:x_tiny, :x_large, :x_normal]
-        de_ad = FormulaCompiler.derivativeevaluator_ad(compiled, data, vars)
-        de_fd = FormulaCompiler.derivativeevaluator_fd(compiled, data, vars)
-        J_ad = Matrix{Float64}(undef, length(compiled), length(vars))
-        J_fd = similar(J_ad)
-        for row in (1, 10, 15, 25, 50, 75, 90)
-            FormulaCompiler.derivative_modelrow!(J_ad, de_ad, row)
-            FormulaCompiler.derivative_modelrow!(J_fd, de_fd, row)
-            @test isapprox(J_fd, J_ad; rtol = 1e-3, atol = 1e-6)
-        end
-    end
-end
