@@ -296,4 +296,38 @@ using CategoricalArrays
         @test_throws ArgumentError profile_margins(m_fe, df, grid; type=:predictions, interval=:prediction)
         @test_throws ArgumentError profile_margins(m_fe, df, grid; type=:effects, interval=:prediction)
     end
+
+    @testset "Absorbed slopes (fe(g)&x): effects of x blocked, others exact" begin
+        # ∂ŷ/∂x includes each state's slope, which is absorbed (not in coef or vcov): the
+        # coefficient-based AME of x would leave it out, so it is an error, named or auto-detected
+        i = 1:300
+        ds = DataFrame(st = "s" .* string.(mod.(i, 12) .+ 1), x = 0.5 .+ mod.(i .* 37, 101) ./ 40,
+                       z = cos.(i .* 0.7))
+        ds.y = 1 .+ 0.5 .* ds.x .- 0.3 .* ds.z .+ 0.4 .* ds.x .* ds.z .+
+               0.2 .* mod.(i, 12) .* ds.x .+ sin.(i .* 2.3)
+        ms = reg(ds, @formula(y ~ z + x&z + fe(st)*x); save=:fe)
+        msg(f) = try f(); "" catch e; sprint(showerror, e) end
+        @test_throws Margins.MarginsError population_margins(ms, ds; type=:effects, vars=[:x])
+        @test_throws Margins.MarginsError population_margins(ms, ds; type=:effects, vars=[:x, :z])
+        auto = msg(() -> population_margins(ms, ds; type=:effects))
+        @test occursin("group-specific slopes in :x", auto) && occursin("vars = [:z]", auto)
+        @test occursin("group-specific slopes", msg(() -> population_margins(ms, ds; type=:effects, vars=[:x])))
+        grid = DataFrame(x = [1.0, 2.0], z = [0.0, 0.0])
+        @test_throws Margins.MarginsError profile_margins(ms, ds, grid; type=:effects, vars=[:x])
+        @test_throws Margins.MarginsError second_differences(ms, ds, :x, :z)
+
+        # The effect of z does not involve the slopes: β_z + β_xz x, averaged; SE from the gradient
+        r = DataFrame(population_margins(ms, ds; type=:effects, vars=[:z]))
+        cn = coefnames(ms)
+        jz, jxz = findfirst(==("z"), cn), findfirst(==("x & z"), cn)
+        # (only z and x&z: FixedEffectModels < 2 reports the dropped common x with NaN in vcov)
+        g = [1.0, mean(ds.x)]
+        @test r.estimate[1] ≈ coef(ms)[jz] + coef(ms)[jxz] * mean(ds.x) rtol = 1e-10
+        @test r.se[1] ≈ sqrt(g' * vcov(ms)[[jz, jxz], [jz, jxz]] * g) rtol = 1e-8
+        # x as the modifier of z's effect is fine: ∂AME(z)/∂x = β_xz
+        sd = DataFrame(second_differences(ms, ds, :z, :x))
+        @test sd.second_diff[1] ≈ coef(ms)[jxz] rtol = 1e-6
+        # predictions were already blocked for these models
+        @test_throws Margins.MarginsError population_margins(ms, ds; type=:predictions)
+    end
 end

@@ -24,6 +24,19 @@ using LinearAlgebra
         @test_throws ArgumentError profile_margins(m, df, means_grid(df); type=:invalid)
     end
 
+    # A predictor of the model absent from `data` is an ArgumentError naming it, not a
+    # FieldError from inside FormulaCompiler's evaluation
+    @testset "Model variable missing from data" begin
+        dz = select(df, Not(:z))
+        msg(f) = try f(); "" catch e; e isa ArgumentError ? sprint(showerror, e) : string(typeof(e)) end
+        @test occursin("missing the model variable(s) :z", msg(() -> population_margins(m, dz)))
+        @test occursin("missing the model variable(s) :z", msg(() -> population_margins(m, dz; vars=[:x])))
+        @test occursin("missing the model variable(s) :z", msg(() -> profile_margins(m, dz, means_grid(dz))))
+        @test occursin("missing the model variable(s) :x, :z", msg(() -> population_margins(m, select(df, :y))))
+        # The response is not needed
+        @test population_margins(m, select(df, Not(:y))) isa EffectsResult
+    end
+
     # Test deprecated target parameter rejection (defensive testing)
     @testset "Deprecated target parameter rejection" begin
         @debug "Testing deprecated target parameter error handling" test_input=:invalid expected_error=MethodError

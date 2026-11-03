@@ -25,6 +25,8 @@ validator apply as for any other model. What is specific to a `FixedEffectModel`
 - Predictions with a fixed effect interacted with a continuous variable (`fe(g)&x`)
 - Counterfactual scenarios on fixed-effect variables for predictions
 - Marginal effects of absorbed fixed-effect variables
+- Marginal effects of a variable with absorbed group-specific slopes (`x` in `fe(g)&x`): its
+  derivative includes the slopes, which are not in `coef()` or `vcov()`
 """
 module FixedEffectModelsExt
 
@@ -36,6 +38,7 @@ using FixedEffectModels: FixedEffectModel
 using GLM
 using GLM: IdentityLink
 import FormulaCompiler
+import StatsModels
 using StatsModels: formula
 using DataFrames: DataFrame, nrow, ncol, names
 using Tables
@@ -200,6 +203,10 @@ function Margins._validate_request(model::FixedEffectModel, req::MarginsRequest)
     if req.type === :predictions
         _validate_no_fe_scenarios(model, req.scenarios)
     end
+    # Block effects of a variable with absorbed slopes, named or auto-detected
+    if req.type === :effects && !isnothing(req.vars)
+        _validate_no_fe_slope_vars(model, req.vars, req.vars_explicit)
+    end
     return nothing
 end
 
@@ -294,6 +301,46 @@ function _validate_no_fe_scenarios(model::FixedEffectModel, scenarios)
             ))
         end
     end
+end
+
+"""
+    _fe_slope_variables(model::FixedEffectModel) -> Vector{Symbol}
+
+Return the variables that a fixed effect is interacted with (`x` in `fe(g)&x` or `fe(g)*x`).
+"""
+function _fe_slope_variables(model::FixedEffectModel)
+    out = Symbol[]
+    for t in FixedEffectModels.eachterm(model.formula.rhs)
+        FixedEffectModels.is_cont_fe_int(t) || continue
+        for s in t.terms
+            FixedEffectModels.has_fe(s) || append!(out, StatsModels.termvars(s))
+        end
+    end
+    return unique!(out)
+end
+
+"""
+    _validate_no_fe_slope_vars(model, vars, vars_explicit)
+
+Block marginal effects of a variable with absorbed group-specific slopes. With `fe(g)&x`,
+∂ŷ/∂x includes the slope of each row's group, which FixedEffectModels absorbs: it is in neither
+`coef()` nor `vcov()`, so an effect computed from the coefficients would leave it out.
+"""
+function _validate_no_fe_slope_vars(model::FixedEffectModel, vars, vars_explicit::Bool)
+    slope_vars = _fe_slope_variables(model)
+    bad = intersect(vars, slope_vars)
+    isempty(bad) && return
+    names_str = join((":$v" for v in bad), ", ")
+    msg = "The model absorbs group-specific slopes in $names_str (a fixed effect interacted " *
+          "with $(length(bad) == 1 ? "it" : "them"), fe(g)&x). The marginal effect of " *
+          "$(length(bad) == 1 ? "this variable" : "these variables") includes those slopes, " *
+          "which are not in coef() or vcov(), so it is not supported."
+    if !vars_explicit
+        rest = setdiff(vars, bad)
+        msg *= isempty(rest) ? " No other variable has an effect to compute." :
+               "\nPass the other variables explicitly: vars = [" * join((":$v" for v in rest), ", ") * "]"
+    end
+    throw(MarginsError(msg))
 end
 
 """

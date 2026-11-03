@@ -153,6 +153,23 @@ function _model_variable_names(model)
 end
 
 """
+    _check_model_vars_present(data_nt, model)
+
+Throw an `ArgumentError` naming the columns when a predictor of the model's (fixed-effects)
+formula is not a column of `data_nt`. Without this check the first evaluation of the formula
+fails inside FormulaCompiler with a `FieldError` (Julia ≥ 1.12) or an `ErrorException`. The
+response is not required: Margins never evaluates it.
+"""
+function _check_model_vars_present(data_nt::NamedTuple, model)
+    absent = sort!([v for v in _get_model_formula_variables(model) if !haskey(data_nt, v)])
+    isempty(absent) && return nothing
+    throw(ArgumentError(
+        "data is missing the model variable(s) $(join(repr.(absent), ", ")). Margins evaluates " *
+        "the fitted formula on `data`, so it needs every predictor column the model was fit " *
+        "with (columns in `data`: $(join(repr.(collect(keys(data_nt))), ", ")))."))
+end
+
+"""
     _check_model_vars_not_missing(data_nt, model)
 
 Throw an actionable `MarginsError` when a model variable in `data_nt` contains `missing`.
@@ -195,6 +212,7 @@ FormulaCompiler resolves categorical values, and contrast endpoints, against the
 model's levels.
 """
 function _prepare_margins_data(data_nt_raw::NamedTuple, model)
+    _check_model_vars_present(data_nt_raw, model)
     _check_model_vars_not_missing(data_nt_raw, model)
     data_nt = _categorize_model_categoricals(_narrow_missing_columns(data_nt_raw), model)
     return _convert_numeric_to_float64(data_nt)

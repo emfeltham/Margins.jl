@@ -261,9 +261,14 @@ _ocontrast(c) = c == "dY/dX" ? "dy/dx" : c
         # FixedEffectModels dof_fes = 12 + 11 = 23 (dof_residual 274), so simple and HC1 SEs differ by
         # sqrt(275/274); clustered by state, fixest uses n − K = 286 (state FE nested in the cluster)
         # and FixedEffectModels 285, a factor sqrt(286/285). Margins' SEs must carry the model's own
-        # convention: the same ratio for every quantity.
-        predicted = Dict("simple" => sqrt(275 / 274), "robust" => sqrt(275 / 274), "cluster" => sqrt(286 / 285))
-        @test dof_residual(fits["simple"]) == 274
+        # convention: the same ratio for every quantity. FixedEffectModels 2.2 no longer counts the
+        # level that is redundant across the two fixed effects, nor the state FE nested in the
+        # cluster, so its conventions equal fixest's (dof_residual 275, ratio 1).
+        fem_old = pkgversion(FixedEffectModels) < v"2.2"
+        predicted = fem_old ?
+            Dict("simple" => sqrt(275 / 274), "robust" => sqrt(275 / 274), "cluster" => sqrt(286 / 285)) :
+            Dict("simple" => 1.0, "robust" => 1.0, "cluster" => 1.0)
+        @test dof_residual(fits["simple"]) == (fem_old ? 274 : 275)
         @test dof_residual(fits["cluster"]) == 11
         for (k, m) in fits
             cr = ref[(ref.vcov .== k) .& (ref.quantity .== "coef"), :]
