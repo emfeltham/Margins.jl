@@ -32,9 +32,9 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         
         # Continuous representative specification - quartiles
         grid = hierarchical_grid(data, (:income, :quartiles))
-        @test nrow(grid) == 4  # Q1, Q2, Q3, Q4
+        @test nrow(grid) == 3  # the cut points 0.25, 0.5, 0.75 (as quantile_grid(data; income = 4))
         @test "income" in names(grid)
-        @test length(unique(grid.income)) == 4
+        @test length(unique(grid.income)) == 3
         
         # Continuous representative specification - mean
         grid = hierarchical_grid(data, (:age, :mean))
@@ -56,15 +56,15 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         
         # New Phase 1.2 features - deciles
         grid = hierarchical_grid(data, (:income, :deciles))
-        @test nrow(grid) == 10
+        @test nrow(grid) == 9
         @test "income" in names(grid)
-        @test length(unique(grid.income)) == 10
+        @test length(unique(grid.income)) == 9
         
         # Terciles/tertiles
         grid = hierarchical_grid(data, (:age, :terciles))
-        @test nrow(grid) == 3
+        @test nrow(grid) == 2
         @test "age" in names(grid)
-        @test length(unique(grid.age)) == 3
+        @test length(unique(grid.age)) == 2
         
         # Min and max
         grid = hierarchical_grid(data, (:age, :min))
@@ -88,9 +88,9 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         @test sort(grid.income) ≈ sort(expected)
         
         # Custom n-quantiles
-        grid = hierarchical_grid(data, (:income, (:quantiles, 7)))  # septiles
-        @test nrow(grid) == 7
-        expected = [quantile(data.income, i/7) for i in 1:7]
+        grid = hierarchical_grid(data, (:income, (:quantiles, 7)))  # septiles: 6 cut points
+        @test nrow(grid) == 6
+        expected = [quantile(data.income, i/7) for i in 1:6]
         @test sort(grid.income) ≈ sort(expected)
         
         # Range specifications
@@ -118,19 +118,19 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         
         # Hierarchical with continuous: region => income quartiles
         grid = hierarchical_grid(data, :region => (:income, :quartiles))
-        @test nrow(grid) == 8  # 2 regions × 4 quartiles  
+        @test nrow(grid) == 6  # 2 regions × 3 quartile cut points
         @test "region" in names(grid) && "income" in names(grid)
         
         # Verify that quartiles are computed within each region
         north_incomes = grid[grid.region .== "North", :income]
         south_incomes = grid[grid.region .== "South", :income]
-        @test length(unique(north_incomes)) == 4
-        @test length(unique(south_incomes)) == 4
+        @test length(unique(north_incomes)) == 3
+        @test length(unique(south_incomes)) == 3
         
         # Mixed hierarchical specification
         spec = :region => [(:income, :quartiles), (:age, :mean)]
         grid = hierarchical_grid(data, spec)
-        @test nrow(grid) == 10  # 2 regions × (4 quartiles + 1 mean) = 2 × 5
+        @test nrow(grid) == 8  # 2 regions × (3 quartile cut points + 1 mean) = 2 × 4
         @test "region" in names(grid) && "income" in names(grid) && "age" in names(grid)
     end
     
@@ -191,7 +191,8 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         spec = (:income, :quartiles)
         grid = hierarchical_grid(data, spec)
         
-        expected_quartiles = [quantile(data.income, q) for q in [0.25, 0.50, 0.75, 1.0]]
+        @test nrow(grid) == 3
+        expected_quartiles = [quantile(data.income, q) for q in [0.25, 0.50, 0.75]]
         computed_quartiles = sort(grid.income)
         
         for (expected, computed) in zip(expected_quartiles, computed_quartiles)
@@ -201,9 +202,9 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         # Test quintiles  
         spec = (:income, :quintiles)
         grid = hierarchical_grid(data, spec)
-        @test nrow(grid) == 5
+        @test nrow(grid) == 4
         
-        expected_quintiles = [quantile(data.income, q) for q in [0.2, 0.4, 0.6, 0.8, 1.0]]
+        expected_quintiles = [quantile(data.income, q) for q in [0.2, 0.4, 0.6, 0.8]]
         computed_quintiles = sort(grid.income)
         
         for (expected, computed) in zip(expected_quintiles, computed_quintiles)
@@ -230,8 +231,8 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         
         grid = hierarchical_grid(data, spec)
         
-        # Should have: 2 regions × (2 education + 4 quartiles + 1 mean) = 2 × 7 = 14 rows
-        @test nrow(grid) == 14
+        # Should have: 2 regions × (2 education + 3 quartile cut points + 1 mean) = 2 × 6 = 12 rows
+        @test nrow(grid) == 12
         @test "region" in names(grid)
         @test "education" in names(grid) 
         @test "income" in names(grid)
@@ -373,7 +374,9 @@ end
         # Continuous representative
         cont_spec = (:income, :quartiles)
         estimated = Margins._estimate_grid_size(cont_spec, Tables.columntable(data))
-        @test estimated == 4  # 4 quartiles
+        @test estimated == 3  # 3 quartile cut points
+        @test Margins._estimate_grid_size((:income, (:quantiles, 7)), Tables.columntable(data)) == 6
+        @test Margins._estimate_grid_size((:income, :deciles), Tables.columntable(data)) == 9
     end
     
     @testset "Depth Validation" begin
@@ -477,7 +480,7 @@ end
         # Test quartiles specification
         reference_grid = hierarchical_grid(data, (:income, :quartiles))
         @test reference_grid isa DataFrame
-        @test nrow(reference_grid) == 4
+        @test nrow(reference_grid) == 3
         @test eltype(reference_grid.income) <: Real
         @test all(x -> x isa Real, reference_grid.income)
         
@@ -546,7 +549,7 @@ end
         
         # Quartiles specification  
         result = Margins._parse_continuous_representative_spec(:cont1, :quartiles, data_nt)
-        @test length(result) == 4
+        @test length(result) == 3
         
         # Fixed values specification
         result = Margins._parse_continuous_representative_spec(:cont1, [0.5, 1.5, 2.5], data_nt)
@@ -619,4 +622,28 @@ end
     @test quantile_grid(d; x = 4).x == quantile_grid(d; x = [0.25, 0.5, 0.75]).x
     @test_throws ArgumentError quantile_grid(d; x = 1)
     @test_throws ArgumentError quantile_grid(d; x = 2.5)
+end
+
+@testset "one quantile convention: hierarchical_grid = quantile_grid (pre-freeze)" begin
+    # Named quantiles and (:quantiles, n) are the n - 1 interior cut points i/n, as quantile_grid(x = n);
+    # they used to include the maximum (probability 1.0)
+    rng = MersenneTwister(79)
+    d = DataFrame(x = randn(rng, 200), z = randn(rng, 200))
+    for (spec, n) in ((:terciles, 3), (:tertiles, 3), (:quartiles, 4), (:quintiles, 5), (:deciles, 10))
+        h = hierarchical_grid(d, (:x, spec)).x
+        @test h == quantile_grid(d; x = n).x
+        @test h == quantile(d.x, [i / n for i in 1:(n - 1)])
+        @test maximum(d.x) ∉ h
+    end
+    for n in (2, 3, 7)
+        @test hierarchical_grid(d, (:x, (:quantiles, n))).x == quantile_grid(d; x = n).x
+    end
+    @test hierarchical_grid(d, (:x, (:quantiles, 2))).x == [median(d.x)]
+    # explicit probabilities stay as given, 0 and 1 included
+    @test hierarchical_grid(d, (:x, [0.1, 0.9])).x == quantile(d.x, [0.1, 0.9])
+    @test hierarchical_grid(d, (:x, (:percentiles, [0.0, 1.0]))).x == [minimum(d.x), maximum(d.x)]
+    # weighted: the same convention
+    w = rand(rng, 200) .+ 0.5
+    @test hierarchical_grid(d, (:x, :quartiles); weights = w).x == quantile_grid(d; x = 4, weights = w).x
+    @test_throws Exception hierarchical_grid(d, (:x, (:quantiles, 1)))
 end

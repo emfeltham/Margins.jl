@@ -24,7 +24,8 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `data_nt` | the data as a column table, prepared by `_prepare_margins_data` (any Tables.jl source) |
 | `vars` | resolved focal variables (`nothing` for predictions) |
 | `vars_explicit` | whether the caller named `vars` (otherwise auto-detected) |
-| `Σ` | the covariance matrix, the one evaluation of `vcov` for the call |
+| `Σ` | the covariance matrix, the one evaluation of `vcov` for the call, with the rows and columns of dropped coefficients set to 0 |
+| `dropped` | the coefficients the fit dropped as collinear (empty for a full-rank fit; see `_vcov_and_dropped`) |
 | `vcov_source` | the `vcov` the caller passed (provenance) |
 | `df` | inference degrees of freedom: the `df` keyword, else `_inference_df(model)` |
 | `alpha` | significance level, in (0, 1) |
@@ -52,6 +53,7 @@ struct MarginsRequest{K,M}
     vars::Union{Nothing,Vector{Symbol}}
     vars_explicit::Bool
     Σ::Matrix{Float64}
+    dropped::Vector{Int}
     vcov_source::Any
     df::Float64
     alpha::Float64
@@ -213,8 +215,10 @@ function _normalize_request(model, data;
         nothing
     end
 
-    # Σ, the one evaluation of `vcov` for this call; df from the model class unless given
-    Σ = validate_vcov_parameter(vcov, model)
+    # Σ, the one evaluation of `vcov` for this call (dropped coefficients' rows and columns zeroed);
+    # df from the model class unless given
+    (Σ, dropped) = _vcov_and_dropped(vcov, model)
+    isempty(dropped) || _warn_dropped_coefficients(model, dropped)
     df_value = isnothing(df_override) ? _inference_df(model) : df_override
 
     changed = _changed_vars(scenario_vars, grid, changed_vars)
@@ -230,11 +234,24 @@ function _normalize_request(model, data;
     end
 
     req = MarginsRequest{_request_kind(reference_grid), typeof(model)}(
-        model, type, data_nt, resolved_vars, vars_explicit, Σ, vcov, df_value, α, weights_vec,
+        model, type, data_nt, resolved_vars, vars_explicit, Σ, dropped, vcov, df_value, α, weights_vec,
         weights_source, offset_vec, scenarios_nt, scenario_specs, groups, group_specs, grid, completed,
         grid_vars, changed, contrasts, measure, scale, backend, interval)
     _validate_request(model, req)
     return req
+end
+
+# One warning per call on a rank-deficient fit (decision for ISSUES #10: R's behaviour, with a NaN
+# standard error for quantities that are not identified)
+function _warn_dropped_coefficients(model, dropped::Vector{Int})
+    @warn "The model is rank deficient: the fit dropped coefficient(s) $(_coef_list(model, dropped)) " *
+          "as collinear (reported as 0 with NaN variance). Margins treats them as fixed at 0, as R " *
+          "does: their rows and columns of the covariance matrix are set to 0 (result.inference.vcov), " *
+          "and estimates and standard errors that depend on them are computed with those coefficients " *
+          "at 0. A quantity that depends only on dropped coefficients (e.g. the effect of a variable " *
+          "whose every coefficient was dropped) is not identified: its estimate is 0 and its standard " *
+          "error NaN. Refit without the redundant term(s) to remove this warning."
+    return nothing
 end
 
 _request_kind(::Nothing) = :population
@@ -265,7 +282,7 @@ function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,Name
     specs = _parse_scenario_specs(scenarios)
     _validate_context_count(length(specs), length(req.group_specs))
     return MarginsRequest{K,M}(
-        req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
+        req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.dropped, req.vcov_source,
         req.df, req.alpha, req.weights, req.weights_source, req.offset, scenarios, specs, req.groups,
         req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars, req.changed_vars,
         req.contrasts, req.measure, req.scale, req.backend, req.interval)
@@ -281,7 +298,7 @@ stratum (`at=:mean` / `:median` with `groups=`).
 """
 function _with_group_specs(req::MarginsRequest{K,M}, group_specs::Vector) where {K,M}
     return MarginsRequest{K,M}(
-        req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
+        req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.dropped, req.vcov_source,
         req.df, req.alpha, req.weights, req.weights_source, req.offset, req.scenarios,
         req.scenario_specs, req.groups, group_specs, req.reference_grid, req.completed_grid,
         req.grid_vars, req.changed_vars, req.contrasts, req.measure, req.scale, req.backend,

@@ -56,6 +56,9 @@ and standard errors are unchanged; p-values and confidence intervals change for 
 | profile effects `df.lower`, `df.upper` | `df.ci_lower`, `df.ci_upper` |
 | `DataFrame(r; format=:stata).t` (always) | `.t` for linear models (any `vcov`) and FixedEffectModels, `.z` otherwise |
 | weighted models (`glm(…; wts=w)`, `fit(MixedModel, …; wts=w)`): `population_margins(m, data)` was unweighted | results are now weighted by the model's weights by default; pass `weights=:none` for the 2.x behaviour |
+| `quantile_grid(d; x=4)` → 0.2, 0.4, 0.6, 0.8 (`i/(n+1)`) | 0.25, 0.5, 0.75; for the old values pass `x=[0.2, 0.4, 0.6, 0.8]` |
+| `hierarchical_grid(d, (:x, :quartiles))` → 0.25, 0.5, 0.75, 1.0; `(:x, (:quantiles, n))` → `i/n`, `i = 1…n` | the `n − 1` cut points (0.25, 0.5, 0.75); for the old rows pass `(:x, [0.25, 0.5, 0.75, 1.0])` |
+| rank-deficient fit (a coefficient dropped as collinear): every SE NaN | SEs as for the refit without the redundant term; the dropped variable's own effect has SE NaN; one warning per call (refit without the term to silence it) |
 
 ```julia
 # before
@@ -525,6 +528,50 @@ built with R 4.6.1, marginaleffects 1.0.0 and fixest 0.14.2:
 checked against hand computations and AD ≈ FD. 56 golden rows for these paths were appended to
 the snapshot after verification; existing rows are unchanged.
 
+### Rank-deficient fits: dropped coefficients fixed at 0 (numbers change: NaN → finite SEs)
+
+A fit that drops a coefficient as collinear (GLM.jl's default `dropcollinear=true`; MixedModels;
+FixedEffectModels for a regressor collinear with the fixed effects) reports it as 0 with NaN rows
+and columns in `vcov`. Every standard error was NaN, also for quantities that do not involve the
+dropped term (g'Σg with 0·NaN = NaN). Example: `y ~ x + z + w` with `w = 2z` gave AME(x) SE = NaN;
+R's `avg_slopes` gives 0.0423, the SE of β_x.
+
+- **A dropped coefficient is treated as fixed at 0, as in R.** Its rows and columns of Σ are set to 0
+  once per call, in the request layer (`result.inference.vcov` holds the zeroed matrix). Every estimate
+  and SE now equals the one from the refit without the redundant term (tested for lm, logit and
+  FixedEffectModels with simple, robust and clustered covariance: AME, AAP, MEM, APM, `groups=`,
+  `scenarios=`, pairwise contrasts, `contrast()`, model- and result-level second differences; to 1e-12,
+  1e-10 for logit, 1e-6 for an LMM).
+- **Detection:** the model's own rank information, a new model-interface method
+  `Margins._dropped_coefficients(model)` (GLM.jl: the pivoted Cholesky's rank and pivot; MixedModels:
+  `feterm.rank`/`piv`; FixedEffectModels: coefficient 0 with a NaN variance in its stored `vcov`). For a
+  model class without it, the coefficients with estimate 0 and a non-finite variance.
+- **Not identified:** a quantity whose gradient is nonzero only in dropped coefficients (the effect of
+  a variable whose every coefficient was dropped) has estimate 0 and a NaN SE, statistic, p-value and
+  interval, not a misleading 0 ± 0. R's marginaleffects gives estimate 0 and SE `NA` for these rows (it
+  turns any zero SE into `NA`; Margins does this only for the not-identified case, so full-rank results
+  are unchanged). The same rule applies to `contrast()` and second differences; such second differences
+  are not reported as structural zeros.
+- **One warning per call** on a rank-deficient fit names the dropped coefficients.
+- **New field `Inference.dropped::Vector{Int}`** (the dropped coefficients; empty for a full-rank fit).
+  `Inference(vcov, df, alpha)` still works (`dropped = Int[]`).
+- **`vcov=`:** a matrix is used as given apart from the dropped rows and columns (any value there is
+  ignored). A non-finite entry anywhere else is an `ArgumentError` for every kind of `vcov` (it was
+  an error for a matrix and silently gave NaN SEs for a function or estimator); a function or
+  estimator returning a matrix of the wrong size is an `ArgumentError`. CovarianceMatrices on a
+  rank-deficient GLM.jl fit (0.30.5): `HC0` works; `HC1` (and HAC) scale by n/(n − p) with p counting the
+  dropped coefficient, which Margins rescales to n/(n − rank), the refit's and R `sandwich`'s value;
+  `HC2`–`HC5` compute the leverage incorrectly (they take the first `rank` columns of X) and are refused
+  with an `ArgumentError`; the cluster-robust `CR` estimators throw a `DimensionMismatch` inside
+  CovarianceMatrices, now reported as an `ArgumentError` that names the dropped coefficients.
+- **R oracle** (`rank_deficient_reference.csv`, 90 rows: lm, logit on both scales, `feols` with a
+  regressor collinear with the FE; AME, AME by g, AAP, AAP by g, MEM). Estimates agree to 2.0e-10;
+  SEs agree with R on the refit to 1.6e-6 and with R on the rank-deficient fit to 1.9e-5 (marginaleffects'
+  numerical Jacobian is noisier on a rank-deficient `lm`); the 20 not-identified rows are NaN in Margins
+  and `NA` in R.
+- **Fixtures:** the step-11 oracle CSVs were ignored by `.gitignore`'s `*.csv` and are now committed
+  (byte-identical regenerations).
+
 ### Smaller fixes and clean-ups
 
 - **`n` counts only the rows with a positive weight** (behaviour change for weighted calls with zero
@@ -542,6 +589,14 @@ the snapshot after verification; existing rows are unchanged.
   as its docstring said: `x = 4` is the quartiles (0.25, 0.5, 0.75), `x = 5` the quintiles, `x = 2`
   the median. It gave `n` values at `i/(n+1)` (`x = 4` → 0.2, 0.4, 0.6, 0.8). A non-integer `n`
   is an `ArgumentError` (was an `InexactError`). Vectors of probabilities are unchanged.
+- **`hierarchical_grid`'s quantile specifications use the same convention** (behaviour change: one
+  row fewer). `(:x, :quartiles)` gave 0.25, 0.5, 0.75 and 1.0 (the maximum), `:quintiles` and `:deciles`
+  likewise ended at 1.0, `:terciles`/`:tertiles` gave 1/3, 2/3, 1.0, and `(:x, (:quantiles, n))` gave
+  `i/n` for `i = 1, …, n`. They are now the `n − 1` interior cut points `i/n`, `i = 1, …, n − 1`, the
+  values of `quantile_grid(data; x = n)`: `:quartiles` → 0.25, 0.5, 0.75; `:quintiles` → 0.2, …, 0.8;
+  `:deciles` → 0.1, …, 0.9; `:terciles` → 1/3, 2/3; `(:quantiles, n)` → `n − 1` values (`n = 2` is the
+  median). Explicit probabilities (`(:x, [0.1, 0.9])`, `(:x, (:percentiles, […]))`) are used as given,
+  and `(:x, :max)` gives the maximum. The grid-size estimate counts the new number of rows.
 - **`hierarchical_grid` keeps categorical columns categorical**, with the data column's levels
   (including unused ones) and ordering; it returned `String` columns. Columns that mix levels with
   frequency mixtures (e.g. `:r => [:g, (:x, :mean)]`) are unchanged (`Vector{Any}`).

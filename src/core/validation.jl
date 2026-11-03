@@ -201,8 +201,9 @@ end
 
 Validate the `vcov` parameter for margins functions and return the covariance matrix Σ it
 gives for `model`. `vcov` is a function of the model returning a covariance matrix, a
-CovarianceMatrices estimator, or a covariance matrix itself (square, finite, symmetric, one
-row per coefficient).
+CovarianceMatrices estimator, or a covariance matrix itself (square, symmetric, one row per
+coefficient). The rows and columns of coefficients the fit dropped as collinear are set to 0
+(see `_vcov_and_dropped`, which also returns which coefficients those are).
 
 This is the one place `vcov` is evaluated: `_normalize_request` calls it once per call and
 keeps the returned Σ (a fresh copy, never aliasing the caller's matrix) in the request, so a
@@ -219,30 +220,140 @@ robust or clustered estimator is computed once per call, also for the model-leve
 Σ = validate_vcov_parameter(CovarianceMatrices.HC1(), model)
 ```
 """
-function validate_vcov_parameter(vcov, model)::Matrix{Float64}
-    # A covariance matrix given directly: check its shape, not the model
-    if vcov isa AbstractMatrix
-        k = length(_coef(model))
+validate_vcov_parameter(vcov, model)::Matrix{Float64} = first(_vcov_and_dropped(vcov, model))
+
+"""
+    _vcov_and_dropped(vcov, model) -> (Σ::Matrix{Float64}, dropped::Vector{Int})
+
+Σ for `vcov` (see `validate_vcov_parameter`) and the coefficients the fit dropped as collinear.
+
+**Rank-deficient fits.** GLM.jl (`dropcollinear=true`), MixedModels and FixedEffectModels drop a
+coefficient that is collinear with the others (or with the absorbed fixed effects): they report
+it as 0 with NaN rows and columns in `vcov`. Margins treats a dropped coefficient as fixed at 0,
+as R does (`lm` reports it as `NA` and `marginaleffects` drops it from the Jacobian): its rows and
+columns of Σ are set to 0, whatever `vcov` gives there (NaN from the model's own `vcov` or a
+CovarianceMatrices estimator, or any value in a matrix passed as `vcov=`). The zeroed Σ is what
+`result.inference.vcov` holds. Which coefficients are dropped:
+
+1. the model's own rank information, `_dropped_coefficients(model)` (GLM.jl's pivoted Cholesky
+   rank and pivot, MixedModels' `feterm` rank and pivot, FixedEffectModels' zero coefficient with
+   a NaN variance in its stored `vcov`);
+2. for a model class without it (`_dropped_coefficients` returns `nothing`): the coefficients
+   whose estimate is 0 and whose variance (diagonal of Σ) is not finite.
+
+Any other non-finite entry of Σ is an `ArgumentError` (a broken matrix or estimator is not
+silently zeroed), and so is a Σ of the wrong size. CovarianceMatrices estimators on a
+rank-deficient GLM.jl fit (CovarianceMatrices 0.30):
+- `HC0` gives NaN rows for the dropped coefficients and the refit's values elsewhere;
+- `HC1`/`HR1` and HAC scale by n/(n − p) with p counting the dropped coefficients; Σ is rescaled
+  to n/(n − rank), the value of the refit without the redundant terms (and of R's `sandwich`);
+- `HC2` to `HC5` compute the leverage incorrectly and are refused (`_check_rank_deficient_estimator`);
+- the cluster-robust `CR` estimators throw inside CovarianceMatrices (a `DimensionMismatch`),
+  reported as an `ArgumentError` that names the dropped coefficients.
+
+A full-rank fit's Σ is the matrix `vcov` gives, unchanged.
+"""
+function _vcov_and_dropped(vcov, model)::Tuple{Matrix{Float64}, Vector{Int}}
+    β = _coef(model)
+    k = length(β)
+    known = _dropped_coefficients(model)
+
+    raw = if vcov isa AbstractMatrix
         size(vcov) == (k, k) ||
             throw(ArgumentError("vcov matrix is $(size(vcov, 1))×$(size(vcov, 2)) but the model has $k coefficients"))
-        all(isfinite, vcov) || throw(ArgumentError("vcov matrix contains non-finite values"))
-        isapprox(vcov, vcov'; rtol=1e-8, atol=1e-12) || throw(ArgumentError("vcov matrix is not symmetric"))
-        return Matrix{Float64}(vcov)
+        vcov
+    else
+        !isnothing(known) && !isempty(known) && _check_rank_deficient_estimator(vcov, model, known)
+        # Evaluate the estimator on the model
+        r = try
+            _evaluate_vcov(vcov, model)
+        catch e
+            # The default estimator failing means the model has no covariance method
+            vcov === GLM.vcov &&
+                throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
+            msg = "vcov failed when applied to provided model: $e"
+            if !isnothing(known) && !isempty(known)
+                msg *= ". The model is rank deficient (coefficient(s) dropped as collinear by the fit: " *
+                       "$(_coef_list(model, known))), which some CovarianceMatrices estimators (the " *
+                       "cluster-robust CR estimators on GLM.jl fits) do not support. Refit without the " *
+                       "collinear term(s), or pass the covariance matrix itself as vcov=<matrix>."
+            end
+            throw(ArgumentError(msg))
+        end
+        r isa AbstractMatrix ||
+            throw(ArgumentError("vcov failed when applied to provided model: " *
+                                "vcov must produce a matrix when applied to the model"))
+        size(r) == (k, k) || throw(ArgumentError(
+            "vcov gave a $(size(r, 1))×$(size(r, 2)) matrix but the model has $k coefficients"))
+        r
+    end
+    Σ = Matrix{Float64}(raw)   # a fresh copy, never the caller's matrix
+
+    dropped = isnothing(known) ? _nonfinite_zero_coefs(Σ, β) : known
+    if !isempty(dropped)
+        for j in dropped
+            Σ[j, :] .= 0.0
+            Σ[:, j] .= 0.0
+        end
+        vcov isa AbstractMatrix || _rank_dof_rescale!(Σ, vcov, model, k - length(dropped))
     end
 
-    # Evaluate the estimator on the model
-    vcov_result = try
-        _evaluate_vcov(vcov, model)
-    catch e
-        # The default estimator failing means the model has no covariance method
-        vcov === GLM.vcov &&
-            throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
-        throw(ArgumentError("vcov failed when applied to provided model: $e"))
+    if !all(isfinite, Σ)
+        bad = [i for i in 1:k if any(!isfinite, view(Σ, i, :))]
+        throw(ArgumentError(
+            "The covariance matrix (vcov) has non-finite values in the rows of coefficient(s) " *
+            "$(_coef_list(model, bad)), which the fit did not drop as collinear" *
+            (isempty(dropped) ? "" : " (dropped: $(_coef_list(model, dropped)))") *
+            ". Check the vcov matrix or estimator."))
     end
-    vcov_result isa AbstractMatrix ||
-        throw(ArgumentError("vcov failed when applied to provided model: " *
-                            "vcov must produce a matrix when applied to the model"))
-    return Matrix{Float64}(vcov_result)
+    vcov isa AbstractMatrix && !isapprox(Σ, Σ'; rtol=1e-8, atol=1e-12) &&
+        throw(ArgumentError("vcov matrix is not symmetric"))
+    return (Σ, dropped)
+end
+
+# Coefficients with estimate 0 and a non-finite variance: dropped as collinear, for a model class
+# that does not expose its rank (the fallback of `_vcov_and_dropped`)
+_nonfinite_zero_coefs(Σ::Matrix{Float64}, β::Vector{Float64}) =
+    [i for i in eachindex(β) if iszero(β[i]) && !isfinite(Σ[i, i])]
+
+# Coefficient names for messages (indices if the model gives no names)
+function _coef_list(model, idx::Vector{Int})
+    names = try
+        string.(StatsModels.coefnames(model))
+    catch
+        nothing
+    end
+    labels = [(!isnothing(names) && length(names) >= i) ? names[i] : "β[$i]" for i in idx]
+    return join(labels, ", ")
+end
+
+# CovarianceMatrices' leverage-based estimators (HC2-HC5) on a rank-deficient GLM.jl fit: its
+# leverage for a pivoted Cholesky takes the first `rank` columns of X instead of the kept (pivoted)
+# ones (CovarianceMatrices 0.30, GLMExt `_leverage`), so the result is silently wrong (5x on a test
+# logit). Refused rather than passed on.
+_check_rank_deficient_estimator(vcov, model, dropped) = nothing
+function _check_rank_deficient_estimator(
+        vcov::Union{CovarianceMatrices.HR2, CovarianceMatrices.HR3, CovarianceMatrices.HR4,
+                    CovarianceMatrices.HR4m, CovarianceMatrices.HR5},
+        model::Union{StatsModels.TableRegressionModel, GLM.LinPredModel}, dropped)
+    throw(ArgumentError(
+        "vcov=$(nameof(typeof(vcov)))(): the model is rank deficient (coefficient(s) dropped as " *
+        "collinear by the fit: $(_coef_list(model, dropped))), and CovarianceMatrices' leverage-based " *
+        "estimators (HC2 to HC5) compute the leverage of a rank-deficient GLM.jl fit incorrectly. " *
+        "Refit without the collinear term(s), use HC0()/HC1(), or pass the covariance matrix itself " *
+        "as vcov=<matrix>."))
+end
+
+# CovarianceMatrices' HC1/HR1 and HAC degrees-of-freedom factor n/(n − p) counts every coefficient,
+# dropped ones included (CovarianceMatrices 0.30); on a rank-deficient GLM.jl fit, rescale it to
+# n/(n − rank), as for the refit without the dropped terms and in R's `sandwich`.
+_rank_dof_rescale!(Σ, vcov, model, rank::Int) = Σ
+function _rank_dof_rescale!(Σ, vcov::Union{CovarianceMatrices.HR1, CovarianceMatrices.HAC},
+                            model::Union{StatsModels.TableRegressionModel, GLM.LinPredModel}, rank::Int)
+    n = CovarianceMatrices.numobs(model)
+    p = length(_coef(model))
+    rmul!(Σ, (n - p) / (n - rank))
+    return Σ
 end
 
 # `vcov` applied to the model: a function of the model (`GLM.vcov`, `m -> ...`) or a

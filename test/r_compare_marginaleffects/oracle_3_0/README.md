@@ -16,6 +16,7 @@ dependency. The R scripts here write CSV fixtures, which are committed, and
 | `weights_reference.R` | `weights_reference.csv` | 216 | AME, AAP, MEM and `groups = :g` for fits with integer (`fw`) and non-integer (`sw`) weights |
 | `offsets_reference.R` | `offsets_reference.csv` | 156 | Poisson with `offset(log(expo))`: AAP, AME, MEM and APM, with the offset given at the grid |
 | `fixest_reference.R` | `fixest_reference.csv` | 129 | `reg(... + fe(st) + fe(yr))` against `fixest::feols(y ~ x * z \| st + yr)` |
+| `rank_deficient_reference.R` | `rank_deficient_reference.csv` | 90 | rank-deficient lm, logit and `feols` (a dropped collinear coefficient), with the refit's values alongside |
 
 Regenerate from this directory (fixest is not in the default R library; see below):
 
@@ -25,6 +26,7 @@ Rscript observed_sd_reference.R > observed_sd_reference.csv
 Rscript weights_reference.R     > weights_reference.csv
 Rscript offsets_reference.R     > offsets_reference.csv
 R_LIBS=<private lib with fixest> Rscript fixest_reference.R > fixest_reference.csv
+R_LIBS=<private lib with fixest> Rscript rank_deficient_reference.R > rank_deficient_reference.csv
 ```
 
 Versions: R 4.6.1, marginaleffects 1.0.0, fixest 0.14.2 (with its dependencies dreamerr,
@@ -178,6 +180,29 @@ included, therefore differs by the same constant:
 
 Margins' delta method carries the model's own convention unchanged. Its df is FixedEffectModels'
 `dof_residual`, 274 here, or G − 1 = 11 when clustered. marginaleffects reports z.
+
+### Rank-deficient fits (90 rows)
+
+`v = x + z` makes `z` redundant in `lm(yc ~ x * w + g + v + z)` and the logit
+`yb ~ x + w + g + v + z` (GLM.jl's pivoted Cholesky drops `z`; R drops the last aliased column, so `z`
+is last in R's formula), and `c` (a value per level of `g`) is collinear with `fe(g)` in
+`feols(yc ~ x * w + z + c | g)` / `reg(... + fe(g))`. Quantities: AME of every variable, AME by `g`,
+AAP overall and by `g`, and the effects at one grid row, on the response scale (and the link scale for
+the logit). Each row also has `refit_estimate` / `refit_std_error`, the same quantity from R on the
+refit without the redundant term.
+
+R's glm detects the collinear column only with `epsilon = 1e-11` (its QR tolerance is
+min(1e-7, epsilon/1000)), so the logit is fit less tightly than in the other scripts.
+
+| | estimate rel | SE rel |
+|---|---|---|
+| vs R on the rank-deficient fit | ≤ 2.0e-10 | ≤ 1.9e-5 |
+| vs R on the refit | ≤ 2.0e-10 | ≤ 1.6e-6 |
+
+marginaleffects' numerical Jacobian is noisier on the rank-deficient `lm`: the MEM SE of `x` is
+1.9e-5 from the refit's (exact for a linear model, and equal to Margins' to 1e-12), 2.6% with the
+default `numderiv`. The effect of the dropped variable (`z`, `c`; 20 rows) is 0 with SE `NA` in R and
+0 with SE NaN in Margins (not identified).
 
 ## Related Julia-only checks
 

@@ -138,6 +138,8 @@ Every estimate θ̂ (a marginal effect, an adjusted prediction, a contrast or a 
 - **FixedEffectModels**: `df = dof_residual(model)`, the value FixedEffectModels uses for its own t tests (net of the absorbed fixed effects, and G − 1 with a cluster covariance).
 - **All other cases** — non-identity links and mixed models — use z (`df = Inf`): the delta-method standard errors are justified asymptotically.
 
+**Rank-deficient fits.** A coefficient the fit dropped as collinear (reported as 0 with NaN rows and columns in `vcov` by GLM.jl, MixedModels and FixedEffectModels) is treated as fixed at 0, as in R: its rows and columns of Σ are set to 0, so every θ̂ and SE(θ̂) equals the refit's without the redundant term. A θ̂ whose gradient g is nonzero only in dropped coefficients (the effect of a variable whose every coefficient was dropped) is not identified, and its SE is NaN. Each call warns once; see `population_margins`, *Rank-deficient fits*.
+
 The rule is a property of the model class; the `df` keyword overrides it. Contrasts are linear combinations of the same estimates and use the same `df` as the result they are computed from, and so do second differences, whatever covariance matrix they are computed with. The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
 
 ## Implementation in Margins.jl

@@ -36,6 +36,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_model_interface.jl")   # model-class interface: df rule, offsets, FixedEffectModels
     include("core/test_derived_columns.jl")   # SetTo/Shift counterfactuals and the derived-column warning
     include("core/test_ordering.jl")          # deterministic grid, groups and scenarios order (step 9)
+    include("core/test_rank_deficient.jl")    # dropped (collinear) coefficients fixed at 0 (ISSUES #10)
     include("statistical_validation/robust_se_validation.jl")
 end
 

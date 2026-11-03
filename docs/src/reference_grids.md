@@ -133,6 +133,9 @@ Uses quantiles of continuous variables:
 grid = quantile_grid(data; income=[0.25, 0.5, 0.75])
 result = profile_margins(model, data, grid; type=:effects)
 
+# The same grid: n quantiles are the n − 1 cut points i/n (4 → 0.25, 0.5, 0.75)
+grid = quantile_grid(data; income=4)
+
 # Multiple quantile specifications
 grid = quantile_grid(data; 
     income=[0.1, 0.5, 0.9],
@@ -210,15 +213,24 @@ grid = hierarchical_grid(data, very_deep_spec; max_depth=10, warn_large=true)
 spec = :region => [
     (:income, :mean),           # Mean income per region
     (:income, :median),         # Median income per region
-    (:income, :quartiles),      # Q1, Q2, Q3, Q4 per region
-    (:income, :quintiles),      # Quintiles per region
-    (:income, :deciles),        # Deciles per region
+    (:income, :quartiles),      # The 3 quartile cut points (0.25, 0.5, 0.75) per region
+    (:income, :quintiles),      # The 4 quintile cut points (0.2, …, 0.8) per region
+    (:income, :deciles),        # The 9 decile cut points (0.1, …, 0.9) per region
+    (:income, (:quantiles, 7)), # The 6 cut points i/7 per region
     (:income, [0.1, 0.5, 0.9]), # Custom percentiles per region
     (:age, [25, 45, 65]),       # Fixed representative ages
     (:score, (:range, 5))       # 5 evenly spaced points from min to max
 ]
 grid = hierarchical_grid(data, spec)
 ```
+
+Named quantiles (`:terciles`/`:tertiles`, `:quartiles`, `:quintiles`, `:deciles`) and
+`(:quantiles, n)` use the convention of `quantile_grid(data; x = n)`: the `n − 1` interior cut points,
+probabilities `i/n` for `i = 1, …, n − 1`, so `(:income, :quartiles)` and `quantile_grid(data; income=4)`
+give the same three values. The maximum is not a quantile cut point; use `(:income, :max)` or the
+probabilities `(:income, [0.25, 0.5, 0.75, 1.0])` (explicit probabilities are used as given). Before 3.0,
+the named quantiles and `(:quantiles, n)` gave `n` values ending at the maximum, and `quantile_grid`
+gave `n` values at `i/(n+1)`.
 
 **Mixture Integration:**
 ```julia

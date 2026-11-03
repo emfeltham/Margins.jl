@@ -57,6 +57,12 @@ Margins._response_name(model::FixedEffectModel) = Symbol(model.responsename)
 # absorbed fixed effects otherwise. Decision D1: a property of the model, whatever `vcov` is passed.
 Margins._inference_df(model::FixedEffectModel) = Margins._finite_df(dof_residual(model))
 
+# Regressors dropped as collinear (with each other or with the fixed effects): FixedEffectModels
+# keeps no pivot, but reports a dropped coefficient as exactly 0 with a NaN variance in its stored
+# `vcov`, which is the rule here (whatever `vcov=` the call passes)
+Margins._dropped_coefficients(model::FixedEffectModel) =
+    [i for i in eachindex(model.coef) if iszero(model.coef[i]) && isnan(model.vcov[i, i])]
+
 # A FixedEffectModel keeps neither the `weights=` column name nor the weight vector
 # (FixedEffectModels 1.13), so whether `reg` was weighted cannot be known: `weights=:model`
 # averages without weights and warns once per session (decision D2).

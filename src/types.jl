@@ -56,7 +56,7 @@ See `EffectsResult` and `PredictionsResult` for concrete implementations.
 abstract type MarginsResult end
 
 """
-    Inference(vcov, df, alpha)
+    Inference(vcov, df, alpha, dropped=Int[])
 
 How the standard errors, tests and intervals of a result were computed. Every
 `EffectsResult` and `PredictionsResult` carries one (`result.inference`), set from the call
@@ -72,6 +72,11 @@ Fields:
   `df == Inf` (the `df=` keyword of the call, else the model class's rule; see
   `population_margins`)
 - `alpha::Float64`: significance level of the intervals, in (0, 1) (the `alpha=` keyword)
+- `dropped::Vector{Int}`: the coefficients the fit dropped as collinear (a rank-deficient fit;
+  empty otherwise). They are treated as fixed at 0: their rows and columns of `vcov` are 0. A
+  row (or a contrast or second difference of rows) whose gradient is nonzero only in dropped
+  coefficients is not identified and has a NaN standard error (see `population_margins`,
+  *Rank-deficient fits*).
 
 To use a different covariance estimator, pass `vcov=` to `population_margins` /
 `profile_margins` / `second_differences`; a result is not re-used with another Σ.
@@ -80,16 +85,19 @@ struct Inference
     vcov::Matrix{Float64}
     df::Float64
     alpha::Float64
-    function Inference(vcov::Matrix{Float64}, df::Float64, alpha::Float64)
+    dropped::Vector{Int}
+    function Inference(vcov::Matrix{Float64}, df::Float64, alpha::Float64, dropped::Vector{Int}=Int[])
         size(vcov, 1) == size(vcov, 2) ||
             throw(ArgumentError("Inference: vcov must be square, got size $(size(vcov))"))
         df > 0 || throw(ArgumentError("Inference: df must be positive (Inf for z), got $df"))
         0 < alpha < 1 || throw(ArgumentError("Inference: alpha must be in (0, 1), got $alpha"))
-        return new(vcov, df, alpha)
+        all(j -> 1 <= j <= size(vcov, 1), dropped) ||
+            throw(ArgumentError("Inference: dropped coefficient indices must be in 1:$(size(vcov, 1)), got $dropped"))
+        return new(vcov, df, alpha, dropped)
     end
 end
-Inference(vcov::AbstractMatrix{<:Real}, df::Real, alpha::Real) =
-    Inference(Matrix{Float64}(vcov), Float64(df), Float64(alpha))
+Inference(vcov::AbstractMatrix{<:Real}, df::Real, alpha::Real, dropped::AbstractVector{<:Integer}=Int[]) =
+    Inference(Matrix{Float64}(vcov), Float64(df), Float64(alpha), Vector{Int}(dropped))
 
 """
     ResultContext(columns::NamedTuple, kinds::Vector{Symbol})

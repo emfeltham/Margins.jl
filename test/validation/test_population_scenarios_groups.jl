@@ -78,13 +78,13 @@ end
     z = repeat([-0.8, -0.2, 0.2, 0.8], inner=4)
     y = 0.3 .+ 1.5 .* x .- 0.9 .* z .+ 0.4 .* (g .== "B")
     df = DataFrame(y=y, x=x, z=z, g=g, segment=segment)
-    m = lm(@formula(y ~ x + z + g), df)
+    m = lm(@formula(y ~ x + z + g), df)   # 4 distinct rows: rank deficient (z dropped), which these shape checks do not depend on
 
     scenarios = (x=[-1.0, 1.0], z=[-0.5, 0.5])
     expected_pairs = Set([(xv, zv) for xv in scenarios.x for zv in scenarios.z])
 
     for backend in (:fd, :ad)
-        res = population_margins(m, df; type=:effects, vars=[:g], scenarios=scenarios,
+        res = @test_logs (:warn, r"rank deficient") population_margins(m, df; type=:effects, vars=[:g], scenarios=scenarios,
                                  scale=:link, backend=backend)
         dfres = DataFrame(res)
 
@@ -98,7 +98,7 @@ end
 
     # With grouping: one row per (scenario, group) combination
     for backend in (:fd, :ad)
-        res = population_margins(m, df; type=:effects, vars=[:g], scenarios=scenarios,
+        res = @test_logs (:warn, r"rank deficient") population_margins(m, df; type=:effects, vars=[:g], scenarios=scenarios,
                                  groups=:segment, scale=:link, backend=backend)
         dfres = DataFrame(res)
 
@@ -123,11 +123,11 @@ end
     m = lm(@formula(y ~ x + z + g + flag), df)
 
     # Warm run to ensure overall API still works under scenario overrides
-    cat_res = population_margins(m, df; type=:effects, vars=[:x], scenarios=(g="A",), scale=:link)
+    cat_res = @test_logs (:warn, r"rank deficient") population_margins(m, df; type=:effects, vars=[:x], scenarios=(g="A",), scale=:link)
     df_cat = DataFrame(cat_res)
     @test all(df_cat.at_g .== "A")
 
-    bool_res = population_margins(m, df; type=:effects, vars=[:g], scenarios=(flag=false,), scale=:link)
+    bool_res = @test_logs (:warn, r"rank deficient") population_margins(m, df; type=:effects, vars=[:g], scenarios=(flag=false,), scale=:link)
     df_bool = DataFrame(bool_res)
     @test all(df_bool.at_flag .== false)
 

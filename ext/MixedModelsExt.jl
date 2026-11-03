@@ -34,4 +34,11 @@ Margins._offset(m::GeneralizedLinearMixedModel, data_nt::NamedTuple) =
 Margins._model_weights(m::LinearMixedModel) = isempty(m.sqrtwts) ? nothing : Vector{Float64}(abs2.(m.sqrtwts))
 Margins._model_weights(m::GeneralizedLinearMixedModel) = Margins._weights_from_storage(m.wt)
 
+# Fixed-effect coefficients dropped as collinear (rank-deficient X): MixedModels pivots the
+# fixed-effects term and keeps its rank; `coef` reports the dropped ones as (-)0 with NaN `vcov`
+# rows. A GLMM holds its fixed-effects term in the embedded LinearMixedModel.
+_feterm_dropped(fe) = sort!(fe.piv[(fe.rank + 1):end])
+Margins._dropped_coefficients(m::LinearMixedModel) = _feterm_dropped(m.feterm)
+Margins._dropped_coefficients(m::GeneralizedLinearMixedModel) = _feterm_dropped(m.LMM.feterm)
+
 end # module

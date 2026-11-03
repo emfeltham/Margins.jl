@@ -462,16 +462,20 @@ using Margins: mix
             
             model = lm(@formula(y ~ x1 + x2 + z), df)
             
-            # Error out rather than approximate when statistical correctness cannot be guaranteed
-            # With perfect collinearity, SE computation should fail (produce NaN)
-            result = population_margins(model, df; type=:effects, vars=[:x1, :x2])
+            # GLM.jl drops one of x1, x2 as collinear (coefficient 0, NaN vcov row). Margins treats
+            # it as fixed at 0 and warns (ISSUES #10): the other variable's SE is finite, and the
+            # dropped variable's effect is not identified (estimate 0, SE NaN), not silently 0 ± 0
+            # (x2 is also flagged as a rescaled copy of x1 by the derived-column detector)
+            result = @test_logs (:warn, r"rank deficient") (:warn, r"look like functions of a variable") population_margins(model, df; type=:effects, vars=[:x1, :x2])
             result_df = DataFrame(result)
             
             # Verify that statistical invalidity is properly detected
             validation = validate_all_finite_positive(result_df)
             @test !validation.all_valid  # Should detect the invalid SEs
             @test !validation.finite_ses  # SEs should be non-finite (NaN/Inf)
-            @test any(isnan.(result_df.se)) || any(isinf.(result_df.se))  # Should be NaN or Inf
+            @test count(isnan, result_df.se) == 1
+            @test only(result_df.estimate[isnan.(result_df.se)]) == 0
+            @test all(isfinite, result_df.se[.!isnan.(result_df.se)])
             
             # This demonstrates ERROR-FIRST principle: invalid statistics are detected, not hidden
         end

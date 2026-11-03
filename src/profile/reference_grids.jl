@@ -325,6 +325,16 @@ function _parse_categorical_reference_spec(vars, data_nt)
     return isempty(specs) ? [Dict()] : specs
 end
 
+# The one quantile convention of the grid builders: `n` quantiles are the `n − 1` interior cut
+# points that divide the distribution into `n` equal-probability groups, probabilities `i/n` for
+# `i = 1, …, n − 1` (`quantile_grid(data; x = n)`, `hierarchical_grid`'s `(:x, :quartiles)` and
+# `(:x, (:quantiles, n))`). The maximum (probability 1) is not a cut point.
+_cut_probabilities(n::Integer) = [i / n for i in 1:(n - 1)]
+
+# Named quantile specifications of `hierarchical_grid` and their number of groups
+const _NAMED_QUANTILES = Dict{Symbol,Int}(:terciles => 3, :tertiles => 3, :quartiles => 4,
+                                          :quintiles => 5, :deciles => 10)
+
 """
     _parse_continuous_representative_spec(var, rep_spec, data_nt) -> Vector{Dict}
 
@@ -345,18 +355,9 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt; weights=n
     # Quantiles (weighted with `weights`: `_typical_quantiles`)
     q(ps) = _typical_quantiles(col, ps; weights)
     
-    if rep_spec === :quartiles
-        quartile_values = q([0.25, 0.50, 0.75, 1.0])
-        representatives = [Dict(var => val) for val in quartile_values]
-    elseif rep_spec === :quintiles
-        quintile_values = q([0.2, 0.4, 0.6, 0.8, 1.0])
-        representatives = [Dict(var => val) for val in quintile_values]
-    elseif rep_spec === :deciles
-        decile_values = q([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-        representatives = [Dict(var => val) for val in decile_values]
-    elseif rep_spec === :terciles || rep_spec === :tertiles
-        tercile_values = q([1/3, 2/3, 1.0])
-        representatives = [Dict(var => val) for val in tercile_values]
+    if haskey(_NAMED_QUANTILES, rep_spec)
+        # the n − 1 interior cut points, as `quantile_grid(data; x = n)`: :quartiles → 0.25, 0.5, 0.75
+        representatives = [Dict(var => val) for val in q(_cut_probabilities(_NAMED_QUANTILES[rep_spec]))]
     elseif rep_spec === :mean
         representatives = [Dict(var => typical_value(col, mean; weights))]
     elseif rep_spec === :median
@@ -382,10 +383,10 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt; weights=n
             error("Percentiles must be a vector of values between 0 and 1: $percentiles")
         end
     elseif rep_spec isa Tuple && length(rep_spec) == 2 && rep_spec[1] === :quantiles
-        # N-quantiles specification: (:quantiles, 7) for septiles
+        # N-quantiles specification: (:quantiles, 7), the 6 cut points of the septiles
         n_quantiles = rep_spec[2]
         if n_quantiles isa Integer && n_quantiles > 1
-            quantile_values = q([i/n_quantiles for i in 1:n_quantiles])
+            quantile_values = q(_cut_probabilities(n_quantiles))
             representatives = [Dict(var => val) for val in quantile_values]
         else
             error("Number of quantiles must be an integer > 1: $n_quantiles")
@@ -648,14 +649,8 @@ function _estimate_size_recursive(spec, data_nt)
         var, rep_spec = spec
         if _is_mixture_specification(rep_spec)
             return 1  # Mixtures produce single reference point
-        elseif rep_spec === :quartiles
-            return 4
-        elseif rep_spec === :quintiles  
-            return 5
-        elseif rep_spec === :deciles
-            return 10
-        elseif rep_spec === :terciles || rep_spec === :tertiles
-            return 3
+        elseif haskey(_NAMED_QUANTILES, rep_spec)
+            return _NAMED_QUANTILES[rep_spec] - 1
         elseif rep_spec isa Vector
             return length(rep_spec)
         elseif rep_spec === :mean || rep_spec === :median || rep_spec === :min || rep_spec === :max
@@ -665,7 +660,7 @@ function _estimate_size_recursive(spec, data_nt)
             if spec_type === :percentiles && spec_value isa Vector
                 return length(spec_value)
             elseif spec_type === :quantiles && spec_value isa Integer
-                return spec_value
+                return spec_value - 1
             elseif spec_type === :range
                 if spec_value isa Integer
                     return spec_value
@@ -1170,21 +1165,26 @@ result = profile_margins(model, data, reference_grid; vars=[:treatment])
 
 # Grammar Support
 
+Named quantiles (`:terciles`, `:quartiles`, `:quintiles`, `:deciles`) and `(:quantiles, n)` follow
+`quantile_grid(data; x = n)`: the n − 1 interior cut points, probabilities i/n for i = 1, …, n − 1,
+so `(:x, :quartiles)` and `quantile_grid(data; x = 4)` give the same three values. (Before 3.0 they
+gave n values including the maximum, probability 1.0.)
+
 ## Basic References
 - `:education` - All observed levels of categorical variable
 - `[:region, :education]` - Cross-tabulation of categorical variables
-- `(:income, :quartiles)` - Income quartiles (Q1, Q2, Q3, Q4)
-- `(:income, :quintiles)` - Income quintiles (P1, P2, P3, P4, P5)
-- `(:income, :deciles)` - Income deciles (D1, D2, ..., D10)
-- `(:income, :terciles)` - Income terciles/tertiles (T1, T2, T3)
+- `(:income, :quartiles)` - Income quartiles: the 3 cut points at probabilities 0.25, 0.5, 0.75
+- `(:income, :quintiles)` - Income quintiles: the 4 cut points 0.2, 0.4, 0.6, 0.8
+- `(:income, :deciles)` - Income deciles: the 9 cut points 0.1, …, 0.9
+- `(:income, :terciles)` (or `:tertiles`) - Income terciles: the 2 cut points 1/3, 2/3
 - `(:age, :mean)` - Overall mean age
 - `(:age, :median)` - Overall median age
 - `(:age, :min)` - Minimum age
 - `(:age, :max)` - Maximum age
 - `(:age, [30, 50, 70])` - Fixed representative ages
-- `(:income, [0.1, 0.5, 0.9])` - Custom percentiles (10th, 50th, 90th)
+- `(:income, [0.1, 0.5, 0.9])` - Custom percentiles (10th, 50th, 90th), as given (0 and 1 give the min and max)
 - `(:income, (:percentiles, [0.25, 0.75]))` - Explicit percentiles specification
-- `(:income, (:quantiles, 7))` - Custom n-quantiles (septiles)
+- `(:income, (:quantiles, 7))` - n-quantiles: the n − 1 cut points i/n, i = 1, …, n − 1 (septiles: 6 values)
 - `(:income, (:range, 5))` - 5 evenly spaced points from min to max
 - `(:income, (:range, (25000, 75000)))` - Fixed range endpoints
 
@@ -1709,9 +1709,7 @@ function quantile_grid(data; weights=nothing, vars...)
         if spec isa Integer && spec > 1
             # n-quantiles: the n - 1 cut points that divide the distribution into n groups of
             # equal probability (4 → quartiles 0.25, 0.5, 0.75; 2 → the median)
-            n_quantiles = Int(spec)
-            quantiles = [i / n_quantiles for i in 1:(n_quantiles - 1)]
-            push!(at_spec, var => _typical_quantiles(col, quantiles; weights=w))
+            push!(at_spec, var => _typical_quantiles(col, _cut_probabilities(Int(spec)); weights=w))
         elseif spec isa Vector{<:Real} && all(0 .≤ spec .≤ 1)
             # Explicit quantiles
             push!(at_spec, var => _typical_quantiles(col, spec; weights=w))

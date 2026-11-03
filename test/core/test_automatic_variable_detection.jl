@@ -85,10 +85,10 @@ using Random
             cat3 = categorical(repeat(["X", "Y", "Z", "W"], 25))  # Clearly categorical
         )
         
-        model = lm(@formula(y ~ cat1 + cat2 + cat3), df)
+        model = lm(@formula(y ~ cat1 + cat2 + cat3), df)   # cat1 is a function of cat3: rank deficient
         
         # Should work fine and return baseline contrasts for all categorical variables
-        result = population_margins(model, df; type=:effects)
+        result = @test_logs (:warn, r"rank deficient") population_margins(model, df; type=:effects)
         df_result = DataFrame(result)
         
         # Should have baseline contrasts for all categorical variables

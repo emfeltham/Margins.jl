@@ -50,7 +50,46 @@ _inference_dist(df::Real) = isfinite(df) ? TDist(df) : Normal()
 
 # The inference of a request's result: the engine's covariance matrix (a fresh copy of the
 # request's Σ, so results never share it), the request's df and alpha.
-_request_inference(req, engine) = Inference(engine.Σ, req.df, req.alpha)
+_request_inference(req, engine) = Inference(engine.Σ, req.df, req.alpha, req.dropped)
+
+# ---- rank-deficient fits: quantities that are not identified ----------------------------------
+
+"""
+    _not_identified(g, dropped) -> Bool
+
+Whether the quantity with parameter gradient `g` depends only on coefficients the fit dropped as
+collinear (`dropped`, see `_vcov_and_dropped`): `g` is nonzero in some dropped coefficient and
+exactly zero in every other. Its estimate treats the dropped coefficients as 0 (e.g. the effect of
+a variable whose every coefficient was dropped is 0), but nothing in the data identifies it, so
+its standard error is NaN, not the 0 that the zeroed Σ would give. This is R marginaleffects'
+result for such a quantity (estimate 0, standard error `NA`). Always `false` for a full-rank fit.
+"""
+function _not_identified(g::AbstractVector{<:Real}, dropped::Vector{Int})::Bool
+    isempty(dropped) && return false
+    loads = false
+    @inbounds for j in dropped
+        loads |= !iszero(g[j])
+    end
+    loads || return false
+    @inbounds for j in eachindex(g)
+        (iszero(g[j]) || j in dropped) || return false
+    end
+    return true
+end
+
+"""
+    _mark_not_identified!(standard_errors, G, dropped) -> standard_errors
+
+Set to NaN the standard error of every row of `G` that is not identified (`_not_identified`).
+A no-op for a full-rank fit (`dropped` empty), so full-rank results are unchanged.
+"""
+function _mark_not_identified!(se::AbstractVector{Float64}, G::AbstractMatrix{Float64}, dropped::Vector{Int})
+    isempty(dropped) && return se
+    for i in eachindex(se)
+        _not_identified(view(G, i, :), dropped) && (se[i] = NaN)
+    end
+    return se
+end
 
 """
     compute_statistic(estimate::Float64, se::Float64) -> Float64
@@ -272,10 +311,14 @@ function _contrast_rows(result::MarginsResult, row1::Int, row2::Int, alpha::Floa
     contrast_val = result.estimates[row1] - result.estimates[row2]
     grad_contrast = result.gradients[row1, :] .- result.gradients[row2, :]
 
-    (; vcov, df) = result.inference
+    (; vcov, df, dropped) = result.inference
     se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
         contrast_val, grad_contrast, vcov, alpha, df
     )
+    # A contrast that depends only on coefficients the fit dropped as collinear is not identified
+    if _not_identified(grad_contrast, dropped)
+        se = statistic = p_value = ci_lower = ci_upper = NaN
+    end
     metadata[:alpha] = alpha
 
     return ContrastResult(

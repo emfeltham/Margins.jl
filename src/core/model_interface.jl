@@ -9,6 +9,7 @@
 # | `_link(model)` | link function g (η = g(μ)) | `GLM.Link`, or an error |
 # | `_coef(model)` | β as `Vector{Float64}` | `coef(model)` |
 # | `_default_vcov(model)` | the model's own covariance (what `vcov=GLM.vcov` means) | `GLM.vcov(model)` |
+# | `_dropped_coefficients(model)` | coefficients the fit dropped as collinear (`nothing`: unknown) | `nothing` |
 # | `_response_name(model)` | the response variable (`nothing` if not a plain column) | the formula's lhs |
 # | `_inference_df(model)` | df of the reference distribution (t or z) | `Inf` |
 # | `_model_weights(model, data_nt)` | estimation weights: `nothing`, a vector, or `UnknownWeights` | `_model_weights(model)` |
@@ -56,6 +57,30 @@ _coef(model)::Vector{Float64} = Vector{Float64}(coef(model))
 The model's own covariance matrix of β, which the default `vcov = GLM.vcov` means.
 """
 _default_vcov(model) = GLM.vcov(model)
+
+"""
+    _dropped_coefficients(model) -> Union{Nothing, Vector{Int}}
+
+The coefficients (indices into `_coef(model)`, ascending) the fit dropped as collinear with the
+others, from the model's own rank information; empty for a full-rank fit, `nothing` when the
+model class does not expose it (Σ's non-finite rows are used instead; see `_vcov_and_dropped`).
+
+- GLM.jl (`dropcollinear=true`, a pivoted Cholesky factorization): the pivot positions past the
+  numerical rank, `chol.p[rank+1:end]`, the coefficients GLM.jl reports as 0 with NaN `vcov`
+  rows. An unpivoted Cholesky (`dropcollinear=false`) is full rank.
+- MixedModels (extension): `feterm.piv[feterm.rank+1:end]`.
+- FixedEffectModels (extension): the coefficients reported as 0 with a NaN variance in the
+  model's stored `vcov` (it keeps no pivot).
+"""
+_dropped_coefficients(model) = nothing
+_dropped_coefficients(model::StatsModels.TableRegressionModel) = _dropped_coefficients(model.model)
+_dropped_coefficients(model::GLM.LinPredModel) = _dropped_from_pivot(model.pp)
+_dropped_from_pivot(pp) = nothing
+_dropped_from_pivot(::GLM.DensePredChol{<:Any, <:LinearAlgebra.Cholesky}) = Int[]
+function _dropped_from_pivot(pp::GLM.DensePredChol{<:Any, <:LinearAlgebra.CholeskyPivoted})
+    ch = pp.chol
+    return sort!(ch.p[(ch.rank + 1):end])
+end
 
 # ---- response -----------------------------------------------------------------------------
 

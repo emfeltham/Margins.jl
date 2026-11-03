@@ -192,6 +192,7 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
     # The context columns: groups, then scenarios, each in the order the call gave them
     context = _context_result_context(results, groups_vars, scenarios_vars)
     inference = _request_inference(req, engine)
+    _mark_not_identified!(standard_errors, G, req.dropped)
 
     # Return type-specific result
     if type === :effects

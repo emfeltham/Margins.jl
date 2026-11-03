@@ -20,6 +20,7 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Statistics
 using CovarianceMatrices, MixedModels, FixedEffectModels
 using Margins
 using FormulaCompiler: CategoricalMixture
+import Test
 
 const GLEVELS = ["a", "b", "c"]
 const MEASURES = (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
@@ -182,6 +183,7 @@ function cases()
     _model_interface_cases!(out)
     _second_difference_cases!(out)
     _mixed_fem_second_difference_cases!(out)
+    _rank_deficient_cases!(out)
     return out
 end
 
@@ -393,6 +395,51 @@ function _mixed_fem_second_difference_cases!(out)
     sd_forms!("fem-esample", fs, ds; weights=:none)
     d = matrix_data("logit")
     sd_forms!("glmm-logit", fit(MixedModel, FM, d, Bernoulli(); progress=false), d)
+    return out
+end
+
+# Rank-deficient fits (added before the 3.0 API freeze, ISSUES #10, after the checks in
+# test/core/test_rank_deficient.jl and the R oracle rank_deficient_reference.csv): `v = x + z` makes
+# one of x, z, v redundant in lm and logit, and `c` (a value per level of h) is collinear with fe(h).
+# The dropped coefficient is fixed at 0 (Σ's rows and columns zeroed); a quantity that loads only on
+# it has SE NaN. Every call warns once (captured here, so the warnings do not reach the test log).
+const FRD = @formula(y ~ x * z + x * g + b + v)
+const FRD_FE = @formula(y ~ x * z + x * g + b + c + fe(h))
+function _rank_deficient_data(linkname)
+    d = matrix_data(linkname)
+    d.v = d.x .+ d.z
+    d.c = [Dict("p" => 0.7, "q" => 1.9, "r" => -0.4)[string(l)] for l in d.h]
+    return d
+end
+_rd(f) = () -> Test.@test_logs (:warn, r"rank deficient") f()
+function _rank_deficient_cases!(out)
+    d = _rank_deficient_data("identity")
+    m = lm(FRD, d)
+    push!(out, ("rank-deficient:lm/population/effect/ad", "population_effects",
+                _rd(() -> population_margins(m, d; vars=[ALLV; :v]))))
+    push!(out, ("rank-deficient:lm/groups=h/effect/ad", "population_effects",
+                _rd(() -> population_margins(m, d; vars=[ALLV; :v], groups=:h))))
+    push!(out, ("rank-deficient:lm/predictions", "population_predictions",
+                _rd(() -> population_margins(m, d; type=:predictions))))
+    push!(out, ("rank-deficient:lm/profile:means_grid/effect/ad", "profile_effects",
+                _rd(() -> profile_margins(m, d, means_grid(d); vars=[ALLV; :v]))))
+    dl = _rank_deficient_data("logit")
+    ml = glm(FRD, dl, Binomial(), LogitLink())
+    for scale in (:response, :link), backend in (:ad, :fd)
+        push!(out, ("rank-deficient:logit/$scale/population/effect/$backend", "population_effects",
+                    _rd(() -> population_margins(ml, dl; vars=[ALLV; :v], scale, backend))))
+    end
+    push!(out, ("rank-deficient:logit/response/predictions", "population_predictions",
+                _rd(() -> population_margins(ml, dl; type=:predictions, groups=:h))))
+    push!(out, ("rank-deficient:logit/response/profile:means_grid/effect/ad", "profile_effects",
+                _rd(() -> profile_margins(ml, dl, means_grid(dl); vars=[ALLV; :v]))))
+    push!(out, ("sd:rank-deficient:logit/x,v × z", "second_differences",
+                _rd(() -> _sd_as_rows(second_differences(ml, dl, [:x, :v], :z)))))
+    f = reg(d, FRD_FE, Vcov.cluster(:h); save=:fe)
+    push!(out, ("rank-deficient:fem/population/effect/ad", "population_effects",
+                _rd(() -> population_margins(f, d; vars=[:x, :z, :g, :b, :c], weights=:none))))
+    push!(out, ("rank-deficient:fem/predictions", "population_predictions",
+                _rd(() -> population_margins(f, d; type=:predictions, weights=:none))))
     return out
 end
 

@@ -250,10 +250,12 @@ end
 # ---- warnings for calculations the model cannot support ------------------------------------
 
 # One aggregated warning per call for rows whose second difference is zero by construction. Such rows
-# carry NaN inference (see `_second_difference_row`).
+# carry NaN inference (see `_second_difference_row`). A row with a NaN standard error is not a
+# structural zero but not identified (it depends only on coefficients a rank-deficient fit dropped,
+# which the request's warning reports).
 function _warn_structural_zeros(df::DataFrame, modifier_in_model::Union{Nothing,Bool}=nothing)
     :p_value in propertynames(df) || return nothing
-    bad = findall(isnan, df.p_value)
+    bad = [i for i in eachindex(df.p_value) if isnan(df.p_value[i]) && !isnan(df.se[i])]
     isempty(bad) && return nothing
     pairs = unique(["$(df.variable[i]) × $(df.modifier[i])" for i in bad])
     shown = length(pairs) <= 5 ? join(pairs, ", ") : join(pairs[1:5], ", ") * ", …"

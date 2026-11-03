@@ -9,6 +9,8 @@
 #   offsets_reference.csv      Poisson with an exposure offset: AAP, AME, MEM and APM with the offset given
 #   fixest_reference.csv       FixedEffectModels against fixest: predictions including the fixed
 #                              effects, AME, by state, three covariance estimators, an esample-dropping fit
+#   rank_deficient_reference.csv  rank-deficient lm, logit and feols (a dropped collinear coefficient
+#                              fixed at 0), with R's values on the refit alongside
 #
 # R 4.6.1, marginaleffects 1.0.0, fixest 0.14.2. The README there lists the cases and the observed
 # differences. Every tolerance below is a few times the largest difference observed, and the
@@ -313,5 +315,81 @@ _ocontrast(c) = c == "dY/dX" ? "dy/dx" : c
         xb = b[1] .* fd.x[es] .+ b[2] .* fd.z[es] .+ b[3] .* fd.x[es] .* fd.z[es]
         aap = DataFrame(population_margins(m, fd; type = :predictions, weights = :none)).estimate[1]
         @test aap ≈ mean(xb .+ fes.fe_st[es] .+ fes.fe_yr[es]) rtol = 1e-12
+    end
+
+    @testset "rank-deficient fits vs R (dropped coefficient fixed at 0)" begin
+        # v = x + z: lm and logit drop z (GLM.jl's pivoted Cholesky and R's QR, z last in R's
+        # formula); c is constant within g, so the FixedEffectModels fit with fe(g) drops c (fixest
+        # removes it). R's marginaleffects: a dropped coefficient is not in the Jacobian; the effect
+        # of the dropped variable is 0 with SE NA. Margins: Σ's dropped rows/columns are 0, and a
+        # quantity that loads only on dropped coefficients has a NaN SE.
+        rd = copy(d)
+        rd.v = rd.x .+ rd.z
+        rd.c = [Dict("a" => 0.7, "b" => 1.9, "c" => -0.4)[string(l)] for l in rd.g]
+        fits = Dict{String,Any}(
+            "lm" => lm(@formula(yc ~ x * w + g + v + z), rd),
+            "logit" => glm(@formula(yb ~ x + w + g + v + z), rd, Binomial(), LogitLink(); _TIGHT...),
+            "fem" => reg(rd, @formula(yc ~ x * w + z + c + fe(g)); save = :fe, tol = 1e-12),
+        )
+        for (k, m) in fits
+            @test coefnames(m)[Margins._dropped_coefficients(m)] == [k == "fem" ? "c" : "z"]
+        end
+        ref = _oracle3_csv("rank_deficient_reference.csv")
+        @test nrow(ref) == 90
+        # every call warns once that the fit is rank deficient, and nothing else
+        rdcall(f) = @test_logs (:warn, r"rank deficient") f()
+        function julia_value(r)
+            m = fits[r.model]
+            sc = Symbol(r.type)
+            fem = r.model == "fem"
+            wk = fem ? (weights = :none,) : (;)   # a FixedEffectModels fit does not store weights
+            res = if r.quantity == "mem"
+                grid = fem ? DataFrame(x = [1.5], w = [1.2], z = [0.1], c = [1.9], g = ["b"]) :
+                             DataFrame(x = [1.5], w = [1.2], z = [0.1], v = [1.6], g = ["b"])
+                vars = fem ? [:x, :w, :z, :c] : [:x, :w, :v, :z]
+                rdcall(() -> DataFrame(profile_margins(m, rd, grid; vars, scale = sc)))
+            else
+                tp = r.quantity == "aap" ? :predictions : :effects
+                gk = r.by == "all" ? (;) : (groups = :g,)
+                vk = tp === :effects && r.by != "all" ? (vars = fem ? [:x, :z, :c] : [:x, :v, :z],) : (;)
+                out = rdcall(() -> DataFrame(population_margins(m, rd; type = tp, scale = sc, gk..., vk..., wk...)))
+                r.by == "all" ? out : out[string.(out.over_g) .== r.by, :]
+            end
+            r.quantity == "aap" || (res = res[(res.variable .== r.term) .& (res.contrast .== _ocontrast(r.contrast)), :])
+            @test nrow(res) == 1
+            return res.estimate[1], res.se[1]
+        end
+        worst_est, worst_se, worst_rd, n_na = 0.0, 0.0, 0.0, 0
+        for r in eachrow(ref)
+            est, se = julia_value(r)
+            label = "$(r.model) $(r.quantity) $(r.term) $(r.contrast) $(r.by) $(r.type)"
+            if ismissing(r.std_error)
+                # the dropped variable's effect: 0, not identified (R: SE NA; not in the refit)
+                @test est == 0 && r.estimate == 0 && ismissing(r.refit_estimate)
+                @test isnan(se) || (println("SE  ", label, " ", se, " vs NA"); false)
+                n_na += 1
+                continue
+            end
+            # R's estimates agree on the two fits; GLM.jl at rtol 1e-15 vs R's glm at epsilon 1e-11
+            # (needed for R's QR to detect the collinear column) and R's numerical slope: observed ≤ 2e-10
+            for ref_est in (r.estimate, r.refit_estimate)
+                @test isapprox(est, ref_est; rtol = 1e-8, atol = 1e-12) ||
+                      (println("EST ", label, " ", est, " vs ", ref_est); false)
+                worst_est = max(worst_est, abs(est - ref_est) / abs(ref_est))
+            end
+            # SE vs R on the refit: R's numerical Jacobian of a numerical slope, observed ≤ 1.6e-6
+            # (predictions ≤ 1e-9)
+            @test isapprox(se, r.refit_std_error; rtol = r.quantity == "aap" ? 1e-7 : 1e-5) ||
+                  (println("SE  ", label, " ", se, " vs refit ", r.refit_std_error); false)
+            worst_se = max(worst_se, abs(se - r.refit_std_error) / r.refit_std_error)
+            # SE vs R on the rank-deficient fit: marginaleffects' Jacobian is noisier there (lm MEM
+            # of x: 1.9e-5 from the refit's exact value), observed ≤ 2e-5
+            @test isapprox(se, r.std_error; rtol = 1e-4) ||
+                  (println("SE  ", label, " ", se, " vs ", r.std_error); false)
+            worst_rd = max(worst_rd, abs(se - r.std_error) / r.std_error)
+        end
+        @test n_na == 20
+        println("rank-deficient fits vs R: max relative difference estimate ", worst_est, ", se vs the R refit ",
+                worst_se, ", se vs R on the rank-deficient fit ", worst_rd, " (", n_na, " not-identified rows: NaN = R's NA)")
     end
 end

@@ -108,6 +108,27 @@ averages, `groups`, weights and the fixed effects all refer to the estimation sa
 the table passed to `reg` (one row per entry of `esample`; it is subset here), and any other
 number of rows is an `ArgumentError`. A weight vector may have one entry per row of `data`.
 
+# Rank-deficient fits
+When the fit drops a coefficient as collinear (GLM.jl's `dropcollinear=true`, the default;
+MixedModels; FixedEffectModels for a regressor collinear with the fixed effects), the model reports
+it as 0 with NaN rows and columns in `vcov`. Margins treats a dropped coefficient as fixed at 0, as
+R does (`lm` reports it as `NA` and `marginaleffects` leaves it out of the Jacobian):
+- its rows and columns of Σ are set to 0 (`result.inference.vcov`; the dropped coefficients are
+  `result.inference.dropped`), whatever `vcov` gives there, so every estimate and standard error
+  equals the one from the refit without the redundant term;
+- a quantity that depends only on dropped coefficients (the effect of a variable whose every
+  coefficient was dropped, e.g. `z` in `y ~ x + z + w` with `w = 2z` when GLM.jl drops `z`) is not
+  identified: its estimate is 0 and its standard error, statistic, p-value and interval are NaN
+  (R: estimate 0, SE `NA`). Which of the collinear terms is dropped is the fitting package's choice
+  (GLM.jl's pivoted Cholesky keeps the columns of largest norm; R keeps the first in the formula);
+- each call warns once, naming the dropped coefficients;
+- a non-finite entry of Σ in any other row (a broken matrix or estimator) is an `ArgumentError`;
+- CovarianceMatrices estimators on a rank-deficient GLM.jl fit: `HC0`/`HC1` work (`HC1`'s
+  n/(n − p) is rescaled to n/(n − rank), the refit's value); `HC2` to `HC5` are refused (their
+  leverage is computed incorrectly upstream); the cluster-robust `CR` estimators fail inside
+  CovarianceMatrices, which is reported as an `ArgumentError`. A matrix passed as `vcov` is used
+  as given apart from the dropped rows and columns.
+
 # Returns
 `EffectsResult` or `PredictionsResult` containing estimates, delta-method standard errors,
 the parameter gradient matrix, the context columns (`result.context`: the `groups` and
@@ -250,6 +271,7 @@ function _population_result(req::MarginsRequest{:population})
         variables = df.variable  # The "x" in dy/dx
         terms = df.contrast
     
+        _mark_not_identified!(standard_errors, G, req.dropped)
         return EffectsResult(estimates, standard_errors, variables, terms, nothing, G, _request_inference(req, engine), metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
@@ -265,6 +287,7 @@ function _population_result(req::MarginsRequest{:population})
         estimates = df.estimate
         standard_errors = df.se
     
+        _mark_not_identified!(standard_errors, G, req.dropped)
         return PredictionsResult(estimates, standard_errors, nothing, G, _request_inference(req, engine), metadata)
     end
 end

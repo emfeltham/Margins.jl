@@ -208,6 +208,8 @@ function _second_difference(
     # This properly accounts for the covariance between the two AMEs
     variance = dot(g_diff, vcov, g_diff)
     se_diff = sqrt(max(0.0, variance))  # Ensure non-negative due to numerical precision
+    # Not identified on a rank-deficient fit: depends only on dropped coefficients
+    _not_identified(g_diff, ame_result.inference.dropped) && (se_diff = NaN)
 
     return _second_difference_row(;
         variable, contrast = contrast, modifier, modifier_type = :binary,
@@ -349,6 +351,8 @@ function _second_differences_pairwise(
         # Delta method variance
         variance = dot(g_diff, vcov, g_diff)
         se_raw = sqrt(max(0.0, variance))
+        # Not identified on a rank-deficient fit: depends only on dropped coefficients
+        _not_identified(g_diff, ame_result.inference.dropped) && (se_raw = NaN)
 
         # For continuous modifiers, compute slope and scale SE
         if modifier_type == :continuous

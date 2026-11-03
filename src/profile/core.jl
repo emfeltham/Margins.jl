@@ -87,6 +87,11 @@ model fit with weights; for weighted fill-ins complete the grid first:
 `profile_margins(m, data, complete_reference_grid(cartesian_grid(x=[0, 1]), m, data; weights=:model))`.
 See "Typical values" in the Reference Grids documentation and the Weights page.
 
+# Rank-deficient fits
+A coefficient the fit dropped as collinear is treated as fixed at 0, and a quantity that depends
+only on dropped coefficients has a NaN standard error, with one warning per call; see
+`population_margins`, *Rank-deficient fits*.
+
 # Returns
 `EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients, the
 grid columns of each row `result.context`, the inference `result.inference` (covariance matrix,
@@ -252,6 +257,7 @@ function _profile_result(req::MarginsRequest{:profile})
         # row; a row pinned to the baseline level contributes none.)
         context = _grid_context(req, profile_of_row)
     
+        _mark_not_identified!(standard_errors, G, req.dropped)
         return EffectsResult(estimates, standard_errors, variables, terms, context, G, _request_inference(req, engine), metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
@@ -278,6 +284,7 @@ function _profile_result(req::MarginsRequest{:profile})
         # Grid columns, one entry per result row (one prediction per grid row)
         context = _grid_context(req, repeat(1:nrow(completed_reference_grid), inner=length(estimates) ÷ nrow(completed_reference_grid)))
 
+        _mark_not_identified!(standard_errors, G, req.dropped)
         return PredictionsResult(estimates, standard_errors, context, G, _request_inference(req, engine), metadata)
     end
 end
