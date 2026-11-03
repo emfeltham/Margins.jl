@@ -45,14 +45,19 @@ end
 
 # The CategoricalTerm of `var` in a formula's right-hand side: a main-effect term when there is
 # one, otherwise the first nested one (interactions, function arguments), in formula order.
-function _find_categorical_term(rhs, var::Symbol)
-    top = rhs isa Tuple ? collect(rhs) : [rhs]   # MixedModels: (MatrixTerm, re terms...)
+# The walk reads the term tuples with `nfields`/`getfield` on untyped values: iterating (or
+# `append!`-ing) a formula's term tuple compiles code for its concrete type, which for a formula
+# with many interactions cost about 0.45 s on the first call.
+_tuple_items(@nospecialize(t)) = Any[getfield(t, i) for i in 1:nfields(t)]
+
+function _find_categorical_term(@nospecialize(rhs), var::Symbol)
+    top = rhs isa Tuple ? _tuple_items(rhs) : Any[rhs]   # MixedModels: (MatrixTerm, re terms...)
     terms = Any[]
     for t in top
-        t isa StatsModels.MatrixTerm ? append!(terms, t.terms) : push!(terms, t)
+        t isa StatsModels.MatrixTerm ? append!(terms, _tuple_items(getfield(t, :terms))) : push!(terms, t)
     end
     for t in terms
-        t isa StatsModels.CategoricalTerm && t.sym == var && return t
+        t isa StatsModels.CategoricalTerm && getfield(t, :sym) == var && return t
     end
     for t in terms
         nested = _find_nested_categorical(t, var)
@@ -61,23 +66,19 @@ function _find_categorical_term(rhs, var::Symbol)
     return nothing
 end
 
-_find_nested_categorical(t::StatsModels.CategoricalTerm, var::Symbol) = t.sym == var ? t : nothing
-function _find_nested_categorical(t::StatsModels.InteractionTerm, var::Symbol)
-    for s in t.terms
-        r = _find_nested_categorical(s, var)
-        isnothing(r) || return r
+function _find_nested_categorical(@nospecialize(t), var::Symbol)
+    if t isa StatsModels.CategoricalTerm
+        return getfield(t, :sym) == var ? t : nothing
+    elseif t isa StatsModels.MatrixTerm
+        return _find_categorical_term(t, var)
+    elseif t isa StatsModels.InteractionTerm || t isa StatsModels.FunctionTerm
+        for s in _tuple_items(getfield(t, t isa StatsModels.InteractionTerm ? :terms : :args))
+            r = _find_nested_categorical(s, var)
+            isnothing(r) || return r
+        end
     end
     return nothing
 end
-function _find_nested_categorical(t::StatsModels.FunctionTerm, var::Symbol)
-    for s in t.args
-        r = _find_nested_categorical(s, var)
-        isnothing(r) || return r
-    end
-    return nothing
-end
-_find_nested_categorical(t::StatsModels.MatrixTerm, var::Symbol) = _find_categorical_term(t, var)
-_find_nested_categorical(t, var::Symbol) = nothing
 
 """
     _baseline_level(model, var::Symbol, data_nt::NamedTuple)

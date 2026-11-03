@@ -9876,14 +9876,14 @@ fill-weights:identity/model/profile:cartesian_grid/effect/ad,profile_effects,x=2
 fill-weights:identity/model/profile:cartesian_grid/effect/ad,profile_effects,x=2.0|var=b|contrast=true - false,0.29651150339500454,0.035765458163248144,310.92770232222693
 fill-weights:identity/model/profile:cartesian_grid/predictions,profile_predictions,x=1.0,5.464594763412949,0.02325840636682374,310.92770232222693
 fill-weights:identity/model/profile:cartesian_grid/predictions,profile_predictions,x=2.0,5.781788713934018,0.02320412657651836,310.92770232222693
-fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=x|contrast=d",0.3169169995122407,0.03049479189697817,310.92770232222693
+fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=x|contrast=d",0.3164166122604876,0.030507059238305042,310.92770232222693
 fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=z|contrast=d",0.3684008613855595,0.039927814016707336,310.92770232222693
 fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=b|contrast=true - false",0.29651150339500454,0.035765458163248144,310.92770232222693
-fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=x|contrast=d",0.3169169995122407,0.03049479189697817,310.92770232222693
+fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=x|contrast=d",0.3164166122604876,0.030507059238305042,310.92770232222693
 fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=z|contrast=d",0.53949363543104,0.04078979007849044,310.92770232222693
 fill-weights:identity/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=b|contrast=true - false",0.29651150339500454,0.035765458163248144,310.92770232222693
-fill-weights:identity/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924",5.4626585003717105,0.02325797184762957,310.92770232222693
-fill-weights:identity/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924",5.7795754998839515,0.023204954527510206,310.92770232222693
+fill-weights:identity/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924",5.460827612821633,0.023251406041468338,310.92770232222693
+fill-weights:identity/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924",5.7772442250821205,0.023221504010597374,310.92770232222693
 fill-weights:logit/model/profile:cartesian_grid/effect/ad,profile_effects,x=1.0|var=x|contrast=d,0.058216085620247014,0.042021987839245774,Inf
 fill-weights:logit/model/profile:cartesian_grid/effect/ad,profile_effects,x=1.0|var=z|contrast=d,-0.030456745420768677,0.03877159186811084,Inf
 fill-weights:logit/model/profile:cartesian_grid/effect/ad,profile_effects,x=1.0|var=b|contrast=true - false,0.042690874166715576,0.03789962106946951,Inf
@@ -9892,13 +9892,13 @@ fill-weights:logit/model/profile:cartesian_grid/effect/ad,profile_effects,x=2.0|
 fill-weights:logit/model/profile:cartesian_grid/effect/ad,profile_effects,x=2.0|var=b|contrast=true - false,0.02588859226336626,0.023385895381063792,Inf
 fill-weights:logit/model/profile:cartesian_grid/predictions,profile_predictions,x=1.0,0.890908955745913,0.023022126781309445,Inf
 fill-weights:logit/model/profile:cartesian_grid/predictions,profile_predictions,x=2.0,0.9369706120187322,0.019163717587682996,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=x|contrast=d",0.05818451333269249,0.04205763452635642,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=z|contrast=d",-0.030493399621115174,0.03880361364955665,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=b|contrast=true - false",0.04267384929908158,0.0378844583636599,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=x|contrast=d",0.035392558523461015,0.015360031841469357,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=z|contrast=d",0.019643573553765958,0.03054647723307356,Inf
-fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=b|contrast=true - false",0.025900783105593517,0.02339606908042434,Inf
-fill-weights:logit/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924",0.890759318331866,0.023035722761484186,Inf
-fill-weights:logit/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924",0.9368178857114204,0.019186298005739014,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=x|contrast=d",0.05759712287956119,0.04191760782818276,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=z|contrast=d",-0.030497137142932305,0.038807355270046,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924|var=b|contrast=true - false",0.04267911226250587,0.03788397885022158,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=x|contrast=d",0.03522317115090788,0.015478506017776826,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=z|contrast=d",0.01975135229031475,0.030706660976238982,Inf
+fill-weights:logit/none/profile:cartesian_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924|var=b|contrast=true - false",0.026043333588914197,0.023516772888323097,Inf
+fill-weights:logit/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.0|z=0.005944164924",0.8907440570220548,0.023035202177907756,Inf
+fill-weights:logit/none/profile:cartesian_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=2.0|z=0.005944164924",0.936445994065828,0.01921498084750768,Inf
 fill-weights:lmm/model/profile:cartesian_grid/predictions,profile_predictions,x=1.0,5.464594763412959,0.020505939290353395,Inf
 fill-weights:lmm/model/profile:cartesian_grid/predictions,profile_predictions,x=2.0,5.781788713934008,0.020458083127418574,Inf

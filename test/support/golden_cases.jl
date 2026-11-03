@@ -449,6 +449,12 @@ end
 # `complete_reference_grid`'s default became weights=:model): a partial grid on weighted fits, so
 # z, g and b are filled in; and the same with weights=:none (the 2.x values). Verified against a
 # hand-built grid of weighted means and shares before they were appended.
+# The 12 "/none/" rows whose values depend on g's mixture were re-baselined after the
+# FormulaCompiler 1.5.0 mixture fix: as appended, they were computed AFTER the "/model/" case on
+# the same model, and FormulaCompiler's compiled-formula cache returned the "/model/" grid's
+# (weighted) shares of g instead of this grid's unweighted mix(a:0.4, b:0.4, c:0.2). The new
+# values equal the old code run with the cache cleared before each case (bitwise), and the
+# predictions equal a hand computation from the coefficients and the grid's own shares.
 function _profile_fill_weight_cases!(out)
     cg() = cartesian_grid(x=[1.0, 2.0])
     for linkname in ("identity", "logit")
