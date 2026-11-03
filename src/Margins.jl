@@ -73,6 +73,7 @@ const VERSION = pkgversion(@__MODULE__)  # read from Project.toml, so it cannot 
 
 # Core API - Clean 2×2 framework
 export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult, ContrastResult
+export Inference, ResultContext  # the types of `result.inference` and `result.context`
 
 # Display configuration
 export set_display_digits, get_display_digits, set_profile_digits, get_profile_digits
@@ -100,6 +101,7 @@ include("inference/delta_method.jl")                     # delta_method_se
 include("inference/mixture_utilities.jl")                # create_mixture_column, expand_mixture_grid, create_balanced_mixture
 
 include("core/data_conversion.jl")  # Data type conversion utilities
+include("core/model_interface.jl")  # model-class interface: _link, _coef, _inference_df, _offset, ...
 include("core/validation.jl")
 include("core/model_weights.jl")  # weights=:model default: _model_weights, _resolve_weights
 include("core/margins_validation.jl")

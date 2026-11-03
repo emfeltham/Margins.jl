@@ -33,7 +33,7 @@ function _population_predictions(
     total_weight = isnothing(weights) ? Float64(n_obs) : sum(weights)
     mean_prediction = average_prediction!(
         g, engine.row_buf, engine.compiled, data_nt, engine.β,
-        predscale(scale, engine.link), 1:n_obs, weights, total_weight
+        predscale(scale, engine.link), 1:n_obs, weights, total_weight, engine.offset
     )
     G = reshape(g, 1, :)  # Single row for population average
 

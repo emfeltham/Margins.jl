@@ -119,9 +119,9 @@ variable. With `p_adjust` set, a `p_adjusted` column follows `p_value`. With `in
 column (the vector ∂`second_diff`/∂β, for custom variance calculations) follows the schema columns; it is
 omitted by default, as in `DataFrame(result)`.
 
-`df` follows the same rule as the rest of the package, applied to the covariance matrix you pass:
-the residual df for a linear model when `vcov` is the model's own covariance, `Inf` (z) for any
-other matrix (robust, clustered, custom) and for non-linear models.
+`df` is the inference df of the effects compared (`result.inference.df`), which follows the
+package's rule: `dof_residual` for a linear model and a FixedEffectModels fit, whatever `vcov` is,
+`Inf` (z) otherwise, unless `df=` was given.
 """
 const SECOND_DIFFERENCE_COLUMNS = (
     :variable, :contrast, :modifier, :modifier_type, :modifier_level1, :modifier_level2,
@@ -185,9 +185,9 @@ end
 const P_ADJUST_METHODS = (:none, :bonferroni, :holm, :bh)
 
 # Significance level / confidence level (the public keyword is `alpha`, as in population_margins):
-# an explicit value, else the one the result was computed with, else 0.05.
+# an explicit value, else the one the result was computed with.
 function _resolve_alpha(alpha, ame_result)::Float64
-    a = isnothing(alpha) ? _result_alpha(ame_result) : Float64(alpha)
+    a = isnothing(alpha) ? ame_result.inference.alpha : Float64(alpha)
     0 < a < 1 || error("alpha must be in (0, 1), got $a")
     return a
 end
@@ -341,19 +341,16 @@ function _effect_index(r::EffectsResult)
               "$(length(r.terms)) terms and $(size(r.gradients, 1)) gradient rows.")
     variables = Symbol.(r.variables)
     contrasts = String[_contrast_label(t) for t in r.terms]
-    cells = NamedTuple()
+    ctx = r.context
+    cells = isnothing(ctx) ? NamedTuple() : ctx.columns
     sources = Dict{Symbol,String}()
-    # population_margins stores group columns in `profile_values`, and records which columns are
-    # groups and which are scenario variables in the metadata
-    group_vars = Set(_result_groups_vars(r))
-    for (source, nt) in (("scenario", r.profile_values), ("group", r.group_values))
-        isnothing(nt) && continue
-        for k in keys(nt)
-            length(nt[k]) == n || error("Malformed EffectsResult: $source column :$k has " *
-                                        "$(length(nt[k])) values for $n rows.")
-            sources[k] = (source == "group" || k in group_vars) ? "group" : "scenario"
+    # the context records which columns are groups; grid columns count as scenario/profile ones
+    if !isnothing(ctx)
+        for (k, kind) in zip(keys(ctx), ctx.kinds)
+            length(ctx[k]) == n || error("Malformed EffectsResult: context column :$k has " *
+                                         "$(length(ctx[k])) values for $n rows.")
+            sources[k] = kind === :group ? "group" : "scenario"
         end
-        cells = merge(cells, nt)
     end
     by_variable = Dict{Symbol,Vector{Int}}()
     for i in 1:n
@@ -426,21 +423,21 @@ _modifier_rows(r::EffectsResult, variable::Symbol, modifier::Symbol, contrast::A
     _modifier_rows(_effect_index(r), variable, modifier, contrast)
 
 # ============================================================================
-# `vcov` defaults to the covariance the result was computed with
+# The covariance matrix is the result's
 # ============================================================================
 
-# Without an explicit `vcov`, a `population_margins` result supplies its own covariance matrix
-# (`metadata[:vcov]`), so the standard errors of the second differences cannot disagree with
-# those of the AMEs they are built from. Pass `vcov` to use a different estimator.
-second_differences(ame_result::EffectsResult, variables::Union{Symbol,Vector{Symbol}}, modifier::Symbol;
-                   vcov=nothing, kwargs...) =
-    second_differences(ame_result, variables, modifier, isnothing(vcov) ? _stored_vcov(ame_result) : vcov; kwargs...)
-_second_difference(ame_result::EffectsResult, variable::Symbol, modifier::Symbol; kwargs...) =
-    _second_difference(ame_result, variable, modifier, _stored_vcov(ame_result); kwargs...)
-_second_differences_pairwise(ame_result::EffectsResult, variable::Symbol, modifier::Symbol; kwargs...) =
-    _second_differences_pairwise(ame_result, variable, modifier, _stored_vcov(ame_result); kwargs...)
-_second_differences_all_contrasts(ame_result::EffectsResult, variable::Symbol, modifier::Symbol; kwargs...) =
-    _second_differences_all_contrasts(ame_result, variable, modifier, _stored_vcov(ame_result); kwargs...)
+# A second difference of a result's effects uses the covariance matrix and df the result was
+# computed with (`result.inference`), so its standard errors cannot disagree with those of the
+# effects it is built from. Margins 2.x took a matrix here; say what to do instead.
+function second_differences(::EffectsResult, ::Union{Symbol,Vector{Symbol}}, ::Symbol,
+                            ::AbstractMatrix; kwargs...)
+    throw(ArgumentError(
+        "second_differences(result, variables, modifier, vcov) was removed in Margins 3.0: a " *
+        "result's second differences use the covariance matrix it was computed with " *
+        "(result.inference.vcov). Call second_differences(result, variables, modifier). For a " *
+        "different covariance estimator, recompute the result with vcov=… (population_margins / " *
+        "profile_margins), or use second_differences(model, data, variables, modifier; vcov=…)."))
+end
 
 # ============================================================================
 # Predictions results: say what to do instead of a bare MethodError

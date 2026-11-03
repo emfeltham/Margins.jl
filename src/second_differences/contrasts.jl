@@ -7,7 +7,7 @@
 using LinearAlgebra: dot
 
 """
-    second_differences(result, variables, modifier[, vcov]; contrast=nothing, modifier_type=:auto,
+    second_differences(result, variables, modifier; contrast=nothing, modifier_type=:auto,
                        alpha=nothing, p_adjust=:none, include_gradients=false, warn=true)
 
 Second differences (interaction effects) from an `EffectsResult` you already hold, from
@@ -27,10 +27,11 @@ levels in scenario order. A continuous modifier gives slopes (the difference per
   instead of pairing rows from different cells. A `PredictionsResult` is rejected.
 - `variables::Union{Symbol,Vector{Symbol}}`: focal variable(s)
 - `modifier::Symbol`: the moderating variable
-- `vcov::AbstractMatrix{<:Real}`: parameter covariance matrix. Optional: `population_margins` and
-  `profile_margins` results record the covariance they were computed with (`metadata[:vcov]`), which
-  is the default, so the standard errors agree with those of the effects. Pass a matrix to use a
-  different estimator; the t/z choice (`df` column) then follows that matrix.
+
+The standard errors use the covariance matrix the result was computed with, and the `df` column
+its degrees of freedom (`result.inference`), so they agree with those of the effects. For a
+different covariance estimator, recompute the result with `vcov=…`, or call the model-level
+form with `vcov=…`.
 
 # Keyword Arguments
 - `contrast=nothing`: `nothing` uses every contrast of each focal variable (a categorical variable has
@@ -80,11 +81,11 @@ second_differences(ames, :education, :region; contrast="college - hs")
 function second_differences(
     ame_result::EffectsResult,
     variables::Union{Symbol,Vector{Symbol}},
-    modifier::Symbol,
-    vcov::AbstractMatrix{<:Real};
+    modifier::Symbol;
     contrast::Union{Nothing,AbstractString}=nothing,
     modifier_type::Symbol=:auto,
     all_contrasts=nothing,
+    vcov=nothing,
     alpha=nothing,
     p_adjust::Symbol=:none,
     include_gradients::Bool=false,
@@ -92,6 +93,9 @@ function second_differences(
 )
     isnothing(all_contrasts) || error("`all_contrasts` was removed: leave `contrast` unset for every " *
         "contrast (the default), or pass `contrast=\"label\"` for one.")
+    isnothing(vcov) || throw(ArgumentError("`vcov` was removed from second_differences(result, …) in " *
+        "Margins 3.0: the result's own covariance matrix is used (result.inference.vcov). Recompute " *
+        "the result with vcov=…, or call second_differences(model, data, variables, modifier; vcov=…)."))
     _check_p_adjust(p_adjust)
     alpha = _resolve_alpha(alpha, ame_result)
 
@@ -110,7 +114,7 @@ function second_differences(
         if isnothing(contrast) && length(variable_contrasts) > 1
             # Use _second_differences_all_contrasts for comprehensive results
             df = _second_differences_all_contrasts(
-                ame_result, variable, modifier, vcov;
+                ame_result, variable, modifier;
                 modifier_type=modifier_type, alpha=alpha, include_gradients=true, warn=warn
             )
         else
@@ -123,7 +127,7 @@ function second_differences(
             end
 
             df = _second_differences_pairwise(
-                ame_result, variable, modifier, vcov;
+                ame_result, variable, modifier;
                 contrast=contrast_to_use,
                 modifier_type=modifier_type, alpha=alpha, include_gradients=true, warn=warn
             )
@@ -134,6 +138,15 @@ function second_differences(
 
     # Combine all results
     return _finalize_frame!(vcat(results..., cols=:union), p_adjust, alpha, include_gradients; warn)
+end
+
+# The covariance matrix of a result's parameters (`result.inference.vcov`), checked against its
+# gradients (a hand-built result could disagree)
+function _result_vcov(r::MarginsResult)::Matrix{Float64}
+    V = r.inference.vcov
+    size(V, 1) == size(r.gradients, 2) || error("Malformed result: its covariance matrix has " *
+        "$(size(V, 1)) parameters but its gradients have $(size(r.gradients, 2)).")
+    return V
 end
 
 # Two numeric levels other than 0/1 are auto-typed :binary, i.e. a raw difference of AMEs, not a slope.
@@ -148,23 +161,12 @@ end
 # Engine: exactly two modifier levels for one variable and contrast. Returns one row of the unified
 # schema as a NamedTuple, gradient included. `second_differences` is the public entry point.
 function _second_difference(
-    ame_result::EffectsResult, variable::Symbol, modifier::Symbol, vcov::AbstractMatrix{<:Real};
+    ame_result::EffectsResult, variable::Symbol, modifier::Symbol;
     contrast="dy/dx", alpha=nothing
 )
     idx = _effect_index(ame_result)
     _require_modifier(idx, modifier)
-
-    # Validate dimensions: vcov must match gradient dimensions
-    n_params_vcov = size(vcov, 1)
-    n_params_gradients = size(ame_result.gradients, 2)
-    if n_params_vcov != n_params_gradients
-        error("Dimension mismatch: vcov has $n_params_vcov parameters but gradients has $n_params_gradients")
-    end
-
-    # Validate vcov is square
-    if size(vcov, 1) != size(vcov, 2)
-        error("vcov must be square matrix, got size $(size(vcov))")
-    end
+    vcov = _result_vcov(ame_result)
 
     # Rows for this variable and contrast, one per modifier level, in canonical order
     indices, modifier_levels = _modifier_rows(idx, variable, modifier, contrast)
@@ -196,7 +198,7 @@ function _second_difference(
     return _second_difference_row(;
         variable, contrast = contrast, modifier, modifier_type = :binary,
         level1, level2, est1 = est_level1, est2 = est_level2,
-        second_diff, se = se_diff, gradient = g_diff, dof = _second_difference_dof(ame_result, vcov),
+        second_diff, se = se_diff, gradient = g_diff, dof = ame_result.inference.df,
         alpha = _resolve_alpha(alpha, ame_result), structural_zero = _is_structural_zero(g_diff, g1, g2),
     )
 end
@@ -206,8 +208,7 @@ end
 # Contrasts with fewer than two modifier levels are skipped with a warning. Public entry point:
 # `second_differences`.
 function _second_differences_all_contrasts(
-    ame_result::EffectsResult, variable::Symbol, modifier::Symbol,
-    vcov::AbstractMatrix{<:Real};
+    ame_result::EffectsResult, variable::Symbol, modifier::Symbol;
     modifier_type::Symbol=:auto,
     alpha=nothing,
     p_adjust::Symbol=:none,
@@ -241,7 +242,7 @@ function _second_differences_all_contrasts(
         warn && modifier_type === :auto && _warn_numeric_binary(modifier, _modifier_rows(idx, variable, modifier, first(kept))[2])
         for contrast in kept
             if length(_modifier_rows(idx, variable, modifier, contrast)[1]) == 2
-                push!(rows, _second_difference(ame_result, variable, modifier, vcov; contrast, alpha))
+                push!(rows, _second_difference(ame_result, variable, modifier; contrast, alpha))
             elseif warn
                 @warn "Skipped contrast '$contrast' for variable $variable: not exactly 2 modifier levels"
             end
@@ -252,7 +253,7 @@ function _second_differences_all_contrasts(
         # >2 modifier levels (or explicit categorical/continuous): all pairs per contrast
         frames = [
             _second_differences_pairwise(
-                ame_result, variable, modifier, vcov; contrast, modifier_type, alpha, include_gradients=true, warn
+                ame_result, variable, modifier; contrast, modifier_type, alpha, include_gradients=true, warn
             ) for contrast in kept
         ]
         return _finalize_frame!(vcat(frames..., cols=:union), p_adjust, alpha, include_gradients)
@@ -266,8 +267,7 @@ end
 function _second_differences_pairwise(
     ame_result::EffectsResult,
     variable::Symbol,
-    modifier::Symbol,
-    vcov::AbstractMatrix{<:Real};
+    modifier::Symbol;
     contrast::String="dy/dx",
     modifier_type::Symbol=:auto,
     alpha=nothing,
@@ -280,16 +280,7 @@ function _second_differences_pairwise(
 
     idx = _effect_index(ame_result)
     _require_modifier(idx, modifier)
-
-    # Validate dimensions
-    n_params_vcov = size(vcov, 1)
-    n_params_gradients = size(ame_result.gradients, 2)
-    if n_params_vcov != n_params_gradients
-        error("Dimension mismatch: vcov has $n_params_vcov parameters but gradients has $n_params_gradients")
-    end
-    if size(vcov, 1) != size(vcov, 2)
-        error("vcov must be square matrix, got size $(size(vcov))")
-    end
+    vcov = _result_vcov(ame_result)
 
     # Rows for this variable and contrast, one per modifier level, in canonical order
     # (numeric levels ascending, others in scenario order), so level1 < level2 for numeric modifiers
@@ -372,7 +363,7 @@ function _second_differences_pairwise(
         push!(results, _second_difference_row(;
             variable, contrast, modifier, modifier_type,
             level1, level2, est1 = est_level1, est2 = est_level2,
-            second_diff, se = se_diff, gradient = g_diff_scaled, dof = _second_difference_dof(ame_result, vcov),
+            second_diff, se = se_diff, gradient = g_diff_scaled, dof = ame_result.inference.df,
             alpha, structural_zero = _is_structural_zero(g_diff, g1, g2),
         ))
     end

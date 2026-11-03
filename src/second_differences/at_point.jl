@@ -120,7 +120,6 @@ end
         ames::EffectsResult,
         vars_vec::Vector{Symbol},
         modifier::Symbol,
-        vcov_matrix::AbstractMatrix{<:Real},
         eval_pt::Real,
         δ::Float64,
         profile_point::NamedTuple,
@@ -135,8 +134,7 @@ For each variable in `vars_vec`, finds all contrasts and computes the second dif
 # Arguments
 - `ames`: AME results from population_margins (at modifier ± δ)
 - `vars_vec`: Vector of focal variables to process
-- `modifier`: Modifier variable name
-- `vcov_matrix`: Parameter covariance matrix
+- `modifier`: Modifier variable name (the standard errors use `ames.inference.vcov`)
 - `eval_pt`: Evaluation point for the modifier
 - `δ`: Step size used in finite difference
 - `profile_point`: Fixed profile variables (added to results)
@@ -148,7 +146,6 @@ function _process_variable_contrasts(
     ames::EffectsResult,
     vars_vec::Vector{Symbol},
     modifier::Symbol,
-    vcov_matrix::AbstractMatrix{<:Real},
     eval_pt::Real,
     δ::Float64,
     profile_point::NamedTuple,
@@ -177,7 +174,7 @@ function _process_variable_contrasts(
             # Use _second_differences_pairwise to compute slope from the two AME points
             # modifier_type=:continuous ensures proper scaling by modifier distance
             second_diff_result = _second_differences_pairwise(
-                ames, var, modifier, vcov_matrix;
+                ames, var, modifier;
                 contrast = contrast,
                 modifier_type = :continuous,
                 alpha = alpha,
@@ -237,19 +234,20 @@ function _observed_derivative_rows(req::MarginsRequest, vars_vec, modifier, modi
     n_lo, n_hi = length(lo.estimates), length(hi.estimates)
     n_lo == n_hi && lo.variables == hi.variables && lo.terms == hi.terms ||
         error("Internal error: the shifted-modifier results do not have the same rows.")
-    pv = isnothing(hi.profile_values) ? NamedTuple() : hi.profile_values
+    ctx = hi.context
+    pv = isnothing(ctx) ? NamedTuple() : ctx.columns
     cells = merge(NamedTuple{(modifier,)}((vcat(fill(-δ, n_lo), fill(δ, n_hi)),)),
                   NamedTuple{keys(pv)}(Tuple(vcat(pv[k], pv[k]) for k in keys(pv))))
+    kinds = Symbol[:scenario; isnothing(ctx) ? Symbol[] : ctx.kinds]
     md = copy(hi.metadata)
-    md[:scenarios_vars] = collect(keys(cells))
-    md[:groups_vars] = Symbol[]
+    md[:scenarios_vars] = Symbol[k for (k, kind) in zip(keys(cells), kinds) if kind === :scenario]
+    md[:groups_vars] = Symbol[k for (k, kind) in zip(keys(cells), kinds) if kind === :group]
     stacked = EffectsResult(
         vcat(lo.estimates, hi.estimates), vcat(lo.standard_errors, hi.standard_errors),
-        vcat(lo.variables, hi.variables), vcat(lo.terms, hi.terms), cells, nothing,
-        vcat(lo.gradients, hi.gradients), md,
+        vcat(lo.variables, hi.variables), vcat(lo.terms, hi.terms), ResultContext(cells, kinds),
+        vcat(lo.gradients, hi.gradients), hi.inference, md,
     )
-    _align_second_difference_df!(stacked, req.df)
-    rows = _process_variable_contrasts(stacked, vars_vec, modifier, req.Σ, NaN, δ, profile_point, alpha, contrast)
+    rows = _process_variable_contrasts(stacked, vars_vec, modifier, NaN, δ, profile_point, alpha, contrast)
     return [merge(r, (modifier_level1 = NaN, modifier_level2 = NaN)) for r in rows]
 end
 
@@ -293,11 +291,12 @@ end
 # set to eval_point ± δ, and the profile variables; `at=:observed` shifts the modifier column instead, so
 # it is not a scenario variable there.
 function _local_derivative_request(model, cols::NamedTuple, vars_vec::Vector{Symbol}, modifier::Symbol, at,
-                                   profile::NamedTuple; scale, backend, measure, contrasts, vcov, weights, alpha)
+                                   profile::NamedTuple; scale, backend, measure, contrasts, vcov, weights, alpha,
+                                   df=nothing)
     held = collect(Symbol, keys(_local_profile(at, profile, modifier)))
     scenario_vars = at === :observed ? held : Symbol[modifier; held]
     return _normalize_request(model, cols; type=:effects, vars=vars_vec, scale, backend, measure,
-                              contrasts, alpha, vcov, weights, scenario_vars,
+                              contrasts, alpha, vcov, weights, df, scenario_vars,
                               changed_vars=Symbol[modifier; held])
 end
 
@@ -431,8 +430,8 @@ function _local_derivatives(req::MarginsRequest, cols::NamedTuple, vars_vec::Vec
     # This enables stratified analysis: "does the interaction vary across subgroups?"
     profile_combinations = _expand_profile_to_cartesian(full_profile)
 
-    # 7. Covariance matrix: the request's, the one evaluation of `vcov` for the call
-    vcov_matrix = req.Σ
+    # 7. Covariance matrix: the request's, the one evaluation of `vcov` for the call, which every
+    # result computed from the request carries (`result.inference.vcov`)
 
     # 8. Main computation loop: iterate over all profile combinations and evaluation points
     # Overall algorithm:
@@ -464,13 +463,10 @@ function _local_derivatives(req::MarginsRequest, cols::NamedTuple, vars_vec::Vec
             # (one computation from the request, with the scenarios set to this point)
             ames = _run(_with_scenarios(req, full_scenarios))
 
-            # t vs z from the model and the vcov as given (same rule as `_inference_df`)
-            _align_second_difference_df!(ames, req.df)
-
             # Extract derivatives for all variables and contrasts using symmetric FD formula
             # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)
             point_results = _process_variable_contrasts(
-                ames, vars_vec, modifier, vcov_matrix, eval_pt, δ, profile_point, alpha, contrast
+                ames, vars_vec, modifier, eval_pt, δ, profile_point, alpha, contrast
             )
 
             # Accumulate results from this (profile_point, eval_point) combination

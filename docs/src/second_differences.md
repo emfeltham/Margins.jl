@@ -104,10 +104,9 @@ the covariance between the two AME estimates and propagates the full parameter u
 continuous modifier the estimate, standard error and gradient are divided by the modifier distance.
 
 The test statistic is `statistic = second_diff / se`. Its reference distribution is recorded in the
-`df` column and follows the covariance used, by the same rule as the rest of the package: t with
-`df = dof_residual(model)` for a linear model (`lm`, or a Gaussian identity-link `glm`) when the
-covariance is the model's own (`GLM.vcov`, or a matrix equal to `vcov(model)`), and z (`df = Inf`) for
-every other model and for robust, clustered or custom covariances (see
+`df` column, by the same rule as the rest of the package, whatever covariance is used: t with
+`df = dof_residual(model)` for a linear model (`lm`, or a Gaussian identity-link `glm`) and a
+FixedEffectModels fit, and z (`df = Inf`) for every other model; the `df` keyword overrides it (see
 [Inference](api.md#Output-Columns-and-Inference)).
 
 ### Output Schema
@@ -214,7 +213,7 @@ second_differences(
 **Cost**: one `population_margins` call per `profile` stratum for a comparison of levels, and one per
 evaluation point and stratum (two modifier values each) for a local derivative.
 
-### `second_differences(result, variables, modifier[, vcov]; …)`
+### `second_differences(result, variables, modifier; …)`
 
 The same comparison on the rows of an `EffectsResult` you already hold: from
 `population_margins(...; scenarios=(modifier=levels,), type=:effects)` (differences of AMEs) or from
@@ -226,8 +225,7 @@ message pointing to `type=:effects`.
 second_differences(
     ame_result::EffectsResult,
     variables::Union{Symbol, Vector{Symbol}},
-    modifier::Symbol,
-    vcov::AbstractMatrix{<:Real} = <the result's own covariance>;
+    modifier::Symbol;
     contrast = nothing,
     modifier_type::Symbol = :auto,
     alpha = nothing,
@@ -237,9 +235,10 @@ second_differences(
 )
 ```
 
-- `vcov` may be omitted: `population_margins` and `profile_margins` results record the covariance they
-  were computed with (`metadata[:vcov]`), so the standard errors agree with those of the AMEs. Pass a matrix to use a
-  different estimator; `df` then follows that matrix.
+- The standard errors use the covariance matrix the result was computed with, and `df` its degrees of
+  freedom (`result.inference`), so they agree with those of the AMEs. For a different estimator,
+  compute the result with `vcov=…` (or call the model-level form with `vcov=…`). Margins 2.x took a
+  matrix as a fourth argument; that is now an error.
 - The result must vary over the modifier only: if another scenario variable or a `groups=` variable also
   varies across its rows, the function raises an error instead of pairing rows from different cells.
 - `modifier_type`: `:auto` classifies two levels as `:binary` (with a warning if they are numeric and not
@@ -656,12 +655,13 @@ second_differences(ames, :z, :treated)
 # → Error: "Variable :z not found in the effects result (variables: x). Include it in `vars` …"
 ```
 
-**Wrong covariance dimensions** (precomputed results with an explicit `vcov`):
+**A covariance matrix passed to a precomputed result**:
 ```julia
-second_differences(ames, :x, :treated, vcov(different_model))
-# → Error: "Dimension mismatch: vcov has N parameters but gradients has M"
+second_differences(ames, :x, :treated, vcov(other_estimator))
+# → ArgumentError: "second_differences(result, variables, modifier, vcov) was removed in Margins 3.0 …"
 ```
-Use the covariance of the model the result was computed from, or omit `vcov`.
+The result's own covariance is used (`ames.inference.vcov`). Recompute the result with
+`vcov=other_estimator`, or use the model-level form with `vcov=`.
 
 ### Validation Workflow
 

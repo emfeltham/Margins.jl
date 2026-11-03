@@ -4,7 +4,8 @@
 # (`PredScale`), measure (`Measure`), weights and derivative backend, shared by the
 # population, scenarios/groups and profile paths.
 #
-# Per row i, with Jᵢ = ∂xᵢ/∂vars (the model-row Jacobian), xᵢ the model row, η = xᵢ'β and
+# Per row i, with Jᵢ = ∂xᵢ/∂vars (the model-row Jacobian), xᵢ the model row, η = xᵢ'β (plus the
+# row's offset, if any) and
 # (ŷ, d₁, d₂) = (ŷ, dŷ/dη, d²ŷ/dη²) on the requested scale, for each requested variable j:
 #
 #   aⱼ = Jᵢ[:,j]'β            (∂η/∂xⱼ)
@@ -119,7 +120,7 @@ _float_column(col::AbstractVector) = convert(Vector{Float64}, col)
 
 """
     accumulate_continuous!(vals, grads, ws::MEWorkspace, de, β, s::PredScale, m::Measure,
-                           var_idx, xcols, rows, weights, total_weight)
+                           var_idx, xcols, rows, weights, total_weight, offset=nothing)
 
 Add to `vals[k]` the (weighted) average over `rows` of the unit quantity of measure `m` on
 scale `s` for variable `derivative_variables(de)[var_idx[k]]`, and to row `k` of `grads` its gradient with
@@ -129,7 +130,8 @@ Each row has weight `1/length(rows)` when `weights === nothing`, else
 `weights[row] / total_weight`; rows with weight ≤ 0 are skipped. `xcols[k]` is the data
 column of variable `k` (used only by measures that multiply by x; pass `()` otherwise; see
 [`XColumns`](@ref)).
-Measures that divide by ŷ throw a `MarginsError` at a row with ŷ = 0.
+Measures that divide by ŷ throw a `MarginsError` at a row with ŷ = 0. `offset` (indexed by
+row, see [`Offset`](@ref)) enters η, so ŷ and the link derivatives are taken at η + offset.
 
 `ws` must be sized for `de` and at least `length(var_idx)` variables. Allocation-free per
 row; the only backend-dependent call is `derivative_modelrow!(J, x, de, row)`.
@@ -139,7 +141,7 @@ function accumulate_continuous!(vals::AbstractVector{Float64}, grads::AbstractMa
                                 β::Vector{Float64}, s::PredScale, m::Measure,
                                 var_idx::AbstractVector{Int}, xcols::XColumns, rows,
                                 weights::Union{Nothing, AbstractVector{Float64}},
-                                total_weight::Float64)
+                                total_weight::Float64, offset::Offset=nothing)
     (; J, x, A, B, c) = ws
     n_params = length(β)
     n_vars = length(var_idx)
@@ -149,7 +151,7 @@ function accumulate_continuous!(vals::AbstractVector{Float64}, grads::AbstractMa
         B[i, k] = 0.0
     end
     _accumulate_continuous_rows!(vals, J, x, A, B, c, de, β, s, m, var_idx, xcols, rows,
-                                 weights, total_weight, 1.0 / length(rows))
+                                 weights, total_weight, 1.0 / length(rows), offset)
     @inbounds for k in 1:n_vars
         if xterm
             for i in 1:n_params
@@ -170,7 +172,8 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
                                       β::Vector{Float64}, s::PredScale, m::Measure,
                                       var_idx::AbstractVector{Int}, xcols::XColumns, rows,
                                       weights::Union{Nothing, AbstractVector{Float64}},
-                                      total_weight::Float64, unweighted_weight::Float64)
+                                      total_weight::Float64, unweighted_weight::Float64,
+                                      offset::Offset)
     n_params = length(β)
     n_vars = length(var_idx)
     xterm = _needs_xterm(s, m)
@@ -184,7 +187,7 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
         end
 
         derivative_modelrow!(J, x, de, row)   # Jᵢ and xᵢ
-        ŷ, d₁, d₂ = yhat2(s, dot(x, β))
+        ŷ, d₁, d₂ = yhat2(s, linear_predictor(x, β, offset, row))
         _divides_by_y(m) && iszero(ŷ) && _throw_zero_prediction(measure_symbol(m), row, scale_symbol(s))
 
         for k in 1:n_vars

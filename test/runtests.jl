@@ -26,12 +26,14 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_output_schema.jl")
     include("core/test_contrasts.jl")
     include("core/test_contrast_dataframe.jl")
+    include("core/test_typed_results.jl")      # result.inference / result.context (B9, B10)
     include("core/test_errors.jl")
     include("core/test_automatic_variable_detection.jl")
     include("core/test_mixedmodels.jl")
     include("core/test_weights.jl")
     include("core/test_model_weights.jl")
     include("core/test_request_layer.jl")
+    include("core/test_model_interface.jl")   # model-class interface: df rule, offsets, FixedEffectModels
     include("statistical_validation/robust_se_validation.jl")
 end
 

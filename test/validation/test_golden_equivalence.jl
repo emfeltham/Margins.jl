@@ -37,7 +37,7 @@ include(joinpath(@__DIR__, "..", "support", "golden_cases.jl"))
     golden_dir = joinpath(@__DIR__, "..", "support", "golden")
     golden = CSV.read(joinpath(golden_dir, "margins_golden.csv"), DataFrame;
                       types=Dict(:case_id => String, :operation => String, :key => String,
-                                 :estimate => Float64, :se => Float64))
+                                 :estimate => Float64, :se => Float64, :df => Float64))
     recorded = only(filter(startswith("fingerprint: "),
                            readlines(joinpath(golden_dir, "margins_golden_versions.txt"))))[14:end]
     comparable = recorded == MarginsGolden.fingerprint()
@@ -60,7 +60,7 @@ include(joinpath(@__DIR__, "..", "support", "golden_cases.jl"))
     @test nrow(current) == length(ckeys)   # keys unique
 
     j = innerjoin(rename(golden, :estimate => :estimate_golden, :se => :se_golden),
-                  select(current, :case_id, :key, :estimate => :estimate_now, :se => :se_now);
+                  select(current, :case_id, :key, :estimate => :estimate_now, :se => :se_now, :df => :df_now);
                   on=[:case_id, :key])
     reldiff(a, b) = (d = abs(a - b); d <= 1e-15 ? 0.0 : d / max(abs(a), abs(b)))
     j.rel_est = reldiff.(j.estimate_golden, j.estimate_now)
@@ -81,6 +81,11 @@ include(joinpath(@__DIR__, "..", "support", "golden_cases.jl"))
         println(io, "by operation:\n", ops)
         @error String(take!(io))
     end
+    # The inference df (t or z) must match exactly: it is a property of the model class (and
+    # of the `df` keyword), not a computed quantity
+    df_bad = j[j.df .!= j.df_now, :]
+    isempty(df_bad) || @error "inference df differs" n=nrow(df_bad) first=first(df_bad[:, [:case_id, :key, :df, :df_now]], 10)
+    @test nrow(df_bad) == 0
     if comparable
         @test nrow(bad) == 0   # details in the error log above
         @test nrow(j) == nrow(golden)

@@ -107,7 +107,10 @@ What is computed depends on the modifier:
   form; `contrasts` (plural) builds the contrasts, `contrast` selects one.
 - `vcov`: covariance estimator, as in `population_margins` (default `GLM.vcov`; a function, a
   matrix, or a CovarianceMatrices estimator). The t/z choice follows the same rule as the rest of
-  the package: t with the residual df for a linear model's own covariance, z otherwise.
+  the package, whatever `vcov` is: t with the residual df for a linear model (and
+  FixedEffectModels), z otherwise.
+- `df`: degrees of freedom of the t reference distribution, overriding that rule (`Inf` for z), as
+  in `population_margins`.
 - `weights`: observation weights, as in `population_margins`: `:model` (default; the fit's estimation
   weights if it has any, otherwise none), `:none` (or `nothing`) for unweighted, a column name or a vector.
   Every average marginal effect is then weighted, and the evaluation point `at=:mean` / `:median` of a
@@ -154,7 +157,7 @@ second_differences(m, df, :age, :treated; vcov=vcov(m))
 second_differences(m, df, :age, :education; p_adjust=:holm, alpha=0.1)    # adjusted tests, 90% intervals
 ```
 
-For an `EffectsResult` you have already computed, `second_differences(result, variables, modifier[, vcov])`
+For an `EffectsResult` you have already computed, `second_differences(result, variables, modifier)`
 does the same comparison on its rows (see its docstring).
 """
 function second_differences(
@@ -162,12 +165,15 @@ function second_differences(
     levels=nothing, at=nothing, modifier_type::Symbol=:auto, profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
     contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=:model, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
-    warn::Bool=true, backend::Symbol=:ad,
+    warn::Bool=true, backend::Symbol=:ad, df=nothing,
 )
     _check_p_adjust(p_adjust)
     0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
-    # Any Tables.jl source: the checks below read the columns as given
-    cols = Tables.columntable(data)
+    # Any Tables.jl source: the checks below read the columns restricted to the model's estimation
+    # rows (FixedEffectModels' `esample`), as every computation from the request is. The request
+    # itself gets the data and weights as given, and subsets them the same way.
+    data_cols = Tables.columntable(data)
+    (cols, _) = _estimation_subset(model, data_cols, weights)
     hasproperty(cols, modifier) || error("Modifier variable :$modifier not found in data. " *
         "Available columns: $(_column_list(cols))")
     modifier_type ∈ (:auto, :categorical, :continuous) ||
@@ -210,8 +216,8 @@ function second_differences(
         _check_local_derivative_inputs(cols, modifier, at)
         _check_focal_and_profile_vars(cols, vars_vec, keys(_local_profile(at, profile, modifier)))
         # One request for the whole call: every validator and the one evaluation of `vcov`
-        req = _local_derivative_request(model, cols, vars_vec, modifier, at, profile;
-                                        scale, backend, measure, contrasts, vcov, weights, alpha)
+        req = _local_derivative_request(model, data_cols, vars_vec, modifier, at, profile;
+                                        scale, backend, measure, contrasts, vcov, weights, alpha, df)
         out = _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, alpha, p_adjust,
                                  include_gradients, contrast)
         warn && _warn_structural_zeros(out, modifier_in_model)
@@ -233,16 +239,15 @@ function second_differences(
     # One request for the whole call: every validator (the scenario variables, the modifier and the
     # `profile` variables, included) and the one evaluation of `vcov` and of the weights. Each profile
     # point is then one AME computation from it, with the scenarios set to that point.
-    req = _normalize_request(model, cols; type=:effects, vars=vars_vec, scale, backend, measure,
-                             contrasts, alpha, vcov, weights,
+    req = _normalize_request(model, data_cols; type=:effects, vars=vars_vec, scale, backend, measure,
+                             contrasts, alpha, vcov, weights, df,
                              scenario_vars=Symbol[modifier, keys(profile)...])
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)
         scenarios = merge(NamedTuple{(modifier,)}((lv,)), profile_point)
         ames = _run(_with_scenarios(req, scenarios))
-        _align_second_difference_df!(ames, req.df)
         sd = second_differences(
-            ames, vars_vec, modifier, req.Σ; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
+            ames, vars_vec, modifier; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
         )
         for (k, v) in pairs(profile_point)
             sd[!, k] = fill(v, nrow(sd))

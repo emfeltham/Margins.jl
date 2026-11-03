@@ -53,18 +53,21 @@ ref_grid = DataFrame(
 
 # Get predictions at these profiles
 result = profile_margins(model, df, ref_grid; type=:predictions)
-result_df = DataFrame(result; include_gradients=true)
 ```
 
-**Key Point**: Include `include_gradients=true` to enable proper delta-method standard errors for contrasts.
+**Key Point**: The result carries the parameter gradients and the covariance matrix it was computed
+with (`result.inference`), which is all a delta-method contrast needs.
 
 ### Step 2: Compute Contrasts Manually
 
-Use the `contrast()` function to compute contrasts between specific rows:
+Use the `contrast()` function to compute contrasts between specific rows of the result, by
+row number or by the values of its `DataFrame(result)` columns:
 
 ```julia
 # Contrast row 2 vs row 1 (treatment:true - treatment:false)
-contrast_result = contrast(result_df, 2, 1, vcov(model))
+contrast_result = contrast(result, 2, 1)
+# the same rows, by their grid values
+contrast_result = contrast(result, (treatment=true,), (treatment=false,))
 
 println("Treatment effect: ", contrast_result.contrast)
 println("Standard error: ", contrast_result.se)
@@ -98,10 +101,9 @@ ref_grid = DataFrame(
 )
 
 result = profile_margins(model, df, ref_grid; type=:predictions)
-result_df = DataFrame(result; include_gradients=true)
 
 # Step 2: Compute treatment contrast
-treatment_effect = contrast(result_df, 2, 1, vcov(model))
+treatment_effect = contrast(result, 2, 1)
 
 println("Treatment Effect (at mean age, population-weighted education):")
 println("  Estimate: ", round(treatment_effect.contrast, digits=3))

@@ -54,12 +54,12 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
         r = population_margins(m, d; vars=[:x], alpha=0.1)
         for a in (1//10, 0.1f0)
             ra = population_margins(m, d; vars=[:x], alpha=a)
-            @test ra.metadata[:alpha] === Float64(a)
+            @test ra.inference.alpha === Float64(a)
             @test DataFrame(ra).estimate == DataFrame(r).estimate
         end
-        @test population_margins(m, d; vars=[:x], alpha=1//10).metadata[:alpha] == 0.1
+        @test population_margins(m, d; vars=[:x], alpha=1//10).inference.alpha == 0.1
         @test DataFrame(population_margins(m, d; vars=[:x], alpha=1//10)).ci_lower == DataFrame(r).ci_lower
-        @test profile_margins(m, d, means_grid(d); vars=[:x], alpha=1//10).metadata[:alpha] == 0.1
+        @test profile_margins(m, d, means_grid(d); vars=[:x], alpha=1//10).inference.alpha == 0.1
         for bad in (1.5, 1, 0, 0.0, -0.1, NaN)
             @test_throws ArgumentError population_margins(m, d; vars=[:x], alpha=bad)
             @test_throws ArgumentError profile_margins(m, d, means_grid(d); vars=[:x], alpha=bad)
@@ -68,9 +68,9 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
         @test_throws TypeError population_margins(m, d; vars=[:x], alpha="0.1")
         # contrast() takes the same alpha
         pr = profile_margins(m, d, cartesian_grid(x=[0.0, 1.0]); type=:predictions)
-        @test contrast(pr, 1, 2, vcov(m); alpha=1//10).ci_lower == contrast(pr, 1, 2, vcov(m); alpha=0.1).ci_lower
-        @test_throws ArgumentError contrast(pr, 1, 2, vcov(m); alpha=1.5)
-        @test_throws ArgumentError contrast(DataFrame(pr; include_gradients=true), 1, 2, vcov(m); alpha=0.0)
+        @test contrast(pr, 1, 2; alpha=1//10).ci_lower == contrast(pr, 1, 2; alpha=0.1).ci_lower
+        @test_throws ArgumentError contrast(pr, 1, 2; alpha=1.5)
+        @test_throws ArgumentError contrast(pr, (x=0.0,), (x=1.0,); alpha=0.0)
     end
 
     @testset "contrasts validated without categorical variables (B12)" begin

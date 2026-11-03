@@ -56,6 +56,96 @@ See `EffectsResult` and `PredictionsResult` for concrete implementations.
 abstract type MarginsResult end
 
 """
+    Inference(vcov, df, alpha)
+
+How the standard errors, tests and intervals of a result were computed. Every
+`EffectsResult` and `PredictionsResult` carries one (`result.inference`), set from the call
+that produced it, and everything computed from the result afterwards (`DataFrame(result)`,
+`contrast`, `second_differences`) reads it, so they cannot disagree with the result.
+
+Fields:
+- `vcov::Matrix{Float64}`: the parameter covariance matrix Σ the delta method used (from the
+  `vcov=` keyword of the call, `GLM.vcov(model)` by default). With `gᵢ = result.gradients[i, :]`,
+  the standard error of row `i` is `√(gᵢ'Σgᵢ)` and the covariance of rows `i` and `j` is
+  `gᵢ'Σgⱼ`; `contrast` and `second_differences` use it for the standard error of a difference.
+- `df::Float64`: degrees of freedom of the reference distribution: t(`df`), or z when
+  `df == Inf` (the `df=` keyword of the call, else the model class's rule; see
+  `population_margins`)
+- `alpha::Float64`: significance level of the intervals, in (0, 1) (the `alpha=` keyword)
+
+To use a different covariance estimator, pass `vcov=` to `population_margins` /
+`profile_margins` / `second_differences`; a result is not re-used with another Σ.
+"""
+struct Inference
+    vcov::Matrix{Float64}
+    df::Float64
+    alpha::Float64
+    function Inference(vcov::Matrix{Float64}, df::Float64, alpha::Float64)
+        size(vcov, 1) == size(vcov, 2) ||
+            throw(ArgumentError("Inference: vcov must be square, got size $(size(vcov))"))
+        df > 0 || throw(ArgumentError("Inference: df must be positive (Inf for z), got $df"))
+        0 < alpha < 1 || throw(ArgumentError("Inference: alpha must be in (0, 1), got $alpha"))
+        return new(vcov, df, alpha)
+    end
+end
+Inference(vcov::AbstractMatrix{<:Real}, df::Real, alpha::Real) =
+    Inference(Matrix{Float64}(vcov), Float64(df), Float64(alpha))
+
+"""
+    ResultContext(columns::NamedTuple, kinds::Vector{Symbol})
+
+The per-row context columns of a result: what each row was evaluated at or over
+(`result.context`; `nothing` for a plain AME/AAP).
+
+Fields:
+- `columns::NamedTuple`: one vector per context variable, one entry per result row, in output
+  order: for `profile_margins`, the reference grid's columns in the grid's order (the columns
+  the user gave, without the response; typical values filled in are not shown); for
+  `population_margins`, the `groups=` variables in the order given, then the `scenarios=`
+  variables in the order given
+- `kinds::Vector{Symbol}`: the kind of each column, in the same order: `:grid` (a reference-grid
+  column; bare name in `DataFrame(result)`), `:group` (a `groups=` variable; `over_<var>`) or
+  `:scenario` (a `scenarios=` variable; `at_<var>`)
+
+`keys(context)`, `context[name]` and `pairs(context)` read the columns;
+`Margins.context_kind(context, name)` gives a column's kind.
+"""
+struct ResultContext
+    columns::NamedTuple
+    kinds::Vector{Symbol}
+    function ResultContext(columns::NamedTuple, kinds::Vector{Symbol})
+        length(kinds) == length(columns) || throw(ArgumentError(
+            "ResultContext: $(length(columns)) columns but $(length(kinds)) kinds"))
+        for k in kinds
+            k in (:grid, :scenario, :group) || throw(ArgumentError(
+                "ResultContext: kind must be :grid, :scenario or :group, got $(repr(k))"))
+        end
+        isempty(columns) || allequal(map(length, values(columns))) || throw(ArgumentError(
+            "ResultContext: columns have different lengths $(map(length, columns))"))
+        return new(columns, kinds)
+    end
+end
+
+Base.keys(ctx::ResultContext) = keys(ctx.columns)
+Base.getindex(ctx::ResultContext, name::Symbol) = ctx.columns[name]
+Base.haskey(ctx::ResultContext, name::Symbol) = haskey(ctx.columns, name)
+Base.pairs(ctx::ResultContext) = pairs(ctx.columns)
+Base.length(ctx::ResultContext) = length(ctx.columns)
+Base.isempty(ctx::ResultContext) = isempty(ctx.columns)
+Base.:(==)(a::ResultContext, b::ResultContext) = a.columns == b.columns && a.kinds == b.kinds
+
+"""
+    context_kind(ctx::ResultContext, name::Symbol) -> Symbol
+
+The kind of context column `name`: `:grid`, `:group` or `:scenario`.
+"""
+function context_kind(ctx::ResultContext, name::Symbol)
+    i = findfirst(==(name), keys(ctx.columns))
+    isnothing(i) && throw(ArgumentError("No context column :$name (columns: $(join(keys(ctx), ", ")))"))
+    return ctx.kinds[i]
+end
+
+"""
     EffectsResult <: MarginsResult
 
 Container for marginal effects results (AME, MEM).
@@ -67,10 +157,10 @@ Fields:
 - `standard_errors::Vector{Float64}`: Standard errors
 - `variables::Vector{String}`: The "x" in dy/dx - which variable each row represents
 - `terms::Vector{String}`: Contrast descriptions (e.g., "dy/dx", "treated - control")
-- `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile effects MEM/MER) or the `scenarios=` and `groups=` variables (population effects); `nothing` for a plain AME. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
-- `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
+- `context::Union{Nothing, ResultContext}`: Per-row context columns: the reference grid (profile effects MEM/MER) or the `groups=` and `scenarios=` variables (population effects), in output order, with the kind of each column; `nothing` for a plain AME (see [`ResultContext`](@ref))
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
-- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, the covariance behind the standard errors, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
+- `inference::Inference`: the covariance matrix, degrees of freedom and `alpha` behind the standard errors and intervals (see [`Inference`](@ref))
+- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
 
 # Examples
 ```julia
@@ -85,9 +175,9 @@ struct EffectsResult <: MarginsResult
     standard_errors::Vector{Float64}
     variables::Vector{String}  # The "x" in dy/dx
     terms::Vector{String}      # Contrast descriptions
-    profile_values::Union{Nothing, NamedTuple}  # For profile effects (MEM)
-    group_values::Union{Nothing, NamedTuple}
+    context::Union{Nothing, ResultContext}  # grid / groups / scenarios columns
     gradients::Matrix{Float64}
+    inference::Inference
     metadata::Dict{Symbol, Any}
 end
 
@@ -101,10 +191,10 @@ Predictions represent "fitted value at scenario" so they don't need variable/con
 Fields:
 - `estimates::Vector{Float64}`: Point estimates (predicted values)
 - `standard_errors::Vector{Float64}`: Standard errors
-- `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile predictions APM/APR) or the `scenarios=` and `groups=` variables (population predictions); `nothing` for a plain AAP. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
-- `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
+- `context::Union{Nothing, ResultContext}`: Per-row context columns: the reference grid (profile predictions APM/APR) or the `groups=` and `scenarios=` variables (population predictions), in output order, with the kind of each column; `nothing` for a plain AAP (see [`ResultContext`](@ref))
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
-- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, the covariance behind the standard errors, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
+- `inference::Inference`: the covariance matrix, degrees of freedom and `alpha` behind the standard errors and intervals (see [`Inference`](@ref))
+- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
 
 # Examples
 ```julia
@@ -117,9 +207,9 @@ DataFrame(result)  # No variable/contrast columns, just statistical results
 struct PredictionsResult <: MarginsResult
     estimates::Vector{Float64}
     standard_errors::Vector{Float64}
-    profile_values::Union{Nothing, NamedTuple}  # For profile predictions (APM/APR)
-    group_values::Union{Nothing, NamedTuple}
+    context::Union{Nothing, ResultContext}  # grid / groups / scenarios columns
     gradients::Matrix{Float64}
+    inference::Inference
     metadata::Dict{Symbol, Any}
 end
 
@@ -128,8 +218,10 @@ end
 
 Container for contrast analysis results with delta-method inference.
 
-Returned by `contrast()` functions when comparing two estimates (predictions or effects).
-Provides complete statistical inference for the difference between two rows.
+Returned by `contrast(result, …)` when comparing two estimates (predictions or effects) of
+a result. Provides complete statistical inference for the difference between two rows, with
+the result's own covariance matrix, degrees of freedom and (by default) `alpha`
+(`result.inference`).
 
 # Fields
 - `contrast::Float64`: Contrast estimate (difference between estimates)
@@ -149,8 +241,8 @@ Provides complete statistical inference for the difference between two rows.
 # Examples
 ```julia
 # Profile predictions contrast
-pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]))
-cr = contrast(pred_result, 1, 2, vcov(model))
+pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]); type=:predictions)
+cr = contrast(pred_result, 1, 2)
 println("Contrast: ", cr.contrast, " ± ", cr.se)
 
 # Convert to DataFrame
@@ -163,7 +255,6 @@ println("95% CI: [", cr.ci_lower, ", ", cr.ci_upper, "]")
 
 # See Also
 - `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
-- `contrast(::AbstractDataFrame, ...)`: Compute contrasts from DataFrames
 - `DataFrame(::ContrastResult)`: Convert to DataFrame
 """
 struct ContrastResult
@@ -194,7 +285,7 @@ function DataFrame(mr::EffectsResult; format::Symbol=:auto, include_gradients::B
     end
 
     # Validate format compatibility
-    if format == :profile && isnothing(mr.profile_values)
+    if format == :profile && isnothing(mr.context)
         throw(ArgumentError("format=:profile requires profile-based results (from profile_margins)"))
     end
 
@@ -407,17 +498,12 @@ end
 """
     context_columns(mr::MarginsResult) -> (groups::Vector{Symbol}, scenarios::Vector{Symbol})
 
-Extract group and scenario column names from a MarginsResult, identifying which columns in 
-`profile_values` represent groups vs scenarios based on metadata.
-
-Returns two vectors:
-- `groups`: Variable names that represent grouping (from the `groups` parameter)
-- `scenarios`: Variable names that represent scenarios (from the `scenarios` parameter)
+The group and scenario columns of a result's context (`mr.context`), each in the order the
+`groups=` / `scenarios=` variables were given.
 
 These are the raw variable names; in `DataFrame(result)` the corresponding columns are
-`over_<var>` (groups) and `at_<var>` (scenarios).
-
-Only includes variables that are actually present in `mr.profile_values`.
+`over_<var>` (groups) and `at_<var>` (scenarios). Reference-grid columns (`profile_margins`) are
+neither.
 
 # Examples
 ```julia
@@ -426,164 +512,89 @@ groups, scenarios = context_columns(result)
 # groups = [:region], scenarios = [:x]
 
 result = profile_margins(model, data, means_grid(data))
-groups, scenarios = context_columns(result) 
+groups, scenarios = context_columns(result)
 # groups = Symbol[], scenarios = Symbol[] (profile analysis has no contexts)
 ```
 """
 function context_columns(mr::MarginsResult)
-    # Get metadata variables
-    groups_vars = _result_groups_vars(mr)
-    scenarios_vars = _result_scenarios_vars(mr)
-    
-    # Only include variables that are actually present in profile_values
-    if isnothing(mr.profile_values)
-        return Symbol[], Symbol[]
-    end
-    
-    profile_keys = Set(keys(mr.profile_values))
-    
-    # Filter to only include variables present in the actual result
-    groups = Symbol[var for var in groups_vars if var in profile_keys]
-    scenarios = Symbol[var for var in scenarios_vars if var in profile_keys]
-    
+    ctx = mr.context
+    isnothing(ctx) && return Symbol[], Symbol[]
+    names_ = collect(Symbol, keys(ctx))
+    groups = Symbol[n for (n, k) in zip(names_, ctx.kinds) if k === :group]
+    scenarios = Symbol[n for (n, k) in zip(names_, ctx.kinds) if k === :scenario]
     return groups, scenarios
 end
 
-"""
-    append_context_columns!(df::DataFrame, mr::MarginsResult; order=:front)
-
-Add context columns (groups and scenarios) to a DataFrame with consistent naming and placement.
-
-Implements the core naming convention:
-- **Population contexts** (`mr.metadata[:has_contexts] == true`):
-  - Group columns: `over_<var>` prefix (e.g., `over_region`), as in Stata's `over()`
-    (this covers plain, binned and nested groups)
-  - Scenario columns: `at_<var>` prefix (e.g., `at_x`)
-- **Profile analysis** (`mr.metadata[:analysis_type] == :profile`):
-  - All profile/grid columns: bare names (e.g., `x`, `z`) with no prefixes
-
-Dispatches on specific result types for type-safe behavior.
-
-# Arguments
-- `df::DataFrame`: DataFrame to modify in-place
-- `mr::MarginsResult`: Result containing context information (dispatches on EffectsResult/PredictionsResult)
-- `order=:front`: Place context columns at the front (`:front`) or back (`:back`)
-
-# Examples
-```julia
-# Population with contexts: groups over_-prefixed, scenarios at_-prefixed
-result = population_margins(model, data; groups=:region, scenarios=(x=[0, 1],))
-df = DataFrame()
-append_context_columns!(df, result)
-# Adds columns: over_region, at_x (groups first, then scenarios)
-
-# Profile analysis: bare profile names
-result = profile_margins(model, data, means_grid(data))
-df = DataFrame()  
-append_context_columns!(df, result)
-# Adds columns: x, z (bare profile variable names)
-```
-"""
 # Output column names of population context variables (DataFrame and `show`)
 _group_column_name(var) = Symbol("over_", var)
 _scenario_column_name(var) = Symbol("at_", var)
 
-# Display name of a `profile_values` key: prefixed for population contexts, bare otherwise
-function _context_display_name(mr::MarginsResult, name::Symbol)
-    has_contexts = _result_has_contexts(mr) &&
-                   _result_analysis_type(mr, :unknown) == :population
-    has_contexts || return string(name)
-    name in _result_groups_vars(mr) && return string(_group_column_name(name))
-    name in _result_scenarios_vars(mr) && return string(_scenario_column_name(name))
-    return string(name)
-end
+# Output name of a context column of the given kind: over_ for groups, at_ for scenarios,
+# bare for reference-grid columns
+_context_column_name(name::Symbol, kind::Symbol) =
+    kind === :group ? _group_column_name(name) :
+    kind === :scenario ? _scenario_column_name(name) : name
 
-# `profile_values` pairs in DataFrame column order: for population contexts, groups
-# (over_) first, then scenarios (at_); otherwise the stored order
-function _display_profile_pairs(mr::MarginsResult)
-    pv = mr.profile_values
-    has_contexts = _result_has_contexts(mr) &&
-                   _result_analysis_type(mr, :unknown) == :population
-    has_contexts || return collect(pairs(pv))
-    groups, scenarios = context_columns(mr)
-    ordered = Symbol[groups; scenarios]
-    rest = [k for k in keys(pv) if !(k in ordered)]
-    return [k => pv[k] for k in vcat(ordered, rest)]
-end
+"""
+    append_context_columns!(df::DataFrame, mr::MarginsResult; order=:front)
 
+Add the context columns of `mr` (`mr.context`) to a DataFrame, in the context's order, with
+the output naming convention:
+- reference-grid columns (`profile_margins`): bare names (e.g. `x`, `z`)
+- `groups=` columns: `over_<var>` (e.g. `over_region`), as in Stata's `over()` (this covers
+  plain, binned and nested groups)
+- `scenarios=` columns: `at_<var>` (e.g. `at_x`)
+
+Population results list the group columns first, then the scenario columns, each in the order
+given in the call; profile results list the grid columns in the grid's order.
+
+# Arguments
+- `df::DataFrame`: DataFrame to modify in-place
+- `mr::MarginsResult`: Result whose context columns are added
+- `order=:front`: Place context columns at the front (`:front`) or back (`:back`)
+
+# Examples
+```julia
+result = population_margins(model, data; groups=:region, scenarios=(x=[0, 1],))
+df = DataFrame()
+append_context_columns!(df, result)
+# Adds columns: over_region, at_x
+
+result = profile_margins(model, data, means_grid(data))
+df = DataFrame()
+append_context_columns!(df, result)
+# Adds columns: x, z (bare grid column names, in the grid's order)
+```
+"""
 function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol=:front)
-    if isnothing(mr.profile_values)
-        return df  # No context columns to add
-    end
-    
-    has_contexts = _result_has_contexts(mr)
-    analysis_type = _result_analysis_type(mr, :unknown)
-    
-    if has_contexts && analysis_type == :population
-        # Population contexts: distinguish groups from scenarios
-        groups, scenarios = context_columns(mr)
-        
-        # Add group columns first (over_ prefix)
-        for group_var in groups
-            values = mr.profile_values[group_var]
-            col_name = _group_column_name(group_var)  # over_ prefix for groups
-            
-            if order == :front
-                DataFrames.insertcols!(df, 1, col_name => values)
-            else
-                df[!, col_name] = values
-            end
-        end
-        
-        # Add scenario columns next (with at_ prefix)
-        for scenario_var in scenarios
-            values = mr.profile_values[scenario_var]
-            col_name = _scenario_column_name(scenario_var)  # at_ prefix for scenarios
-            
-            if order == :front
-                # Insert after existing columns (groups are already added)
-                insert_pos = length(groups) + 1
-                DataFrames.insertcols!(df, insert_pos, col_name => values)
-            else
-                df[!, col_name] = values
-            end
-        end
-        
-    elseif analysis_type == :profile
-        # Profile analysis: bare profile/grid column names (no prefixes)
-        for (var_name, values) in pairs(mr.profile_values)
-            col_name = var_name  # Bare variable name
-            
-            if order == :front
-                DataFrames.insertcols!(df, 1, col_name => values)
-            else
-                df[!, col_name] = values
-            end
-        end
-        
-    else
-        # Fallback: treat all as scenarios with at_ prefix
-        for (var_name, values) in pairs(mr.profile_values)
-            col_name = Symbol("at_", var_name)
-            
-            if order == :front
-                DataFrames.insertcols!(df, 1, col_name => values)
-            else
-                df[!, col_name] = values
-            end
+    ctx = mr.context
+    isnothing(ctx) && return df  # No context columns to add
+    for (j, (name, kind)) in enumerate(zip(keys(ctx), ctx.kinds))
+        col_name = _context_column_name(name, kind)
+        if order == :front
+            DataFrames.insertcols!(df, j, col_name => ctx[name])
+        else
+            df[!, col_name] = ctx[name]
         end
     end
-    
     return df
+end
+
+# Display columns of a result's context, in output order: (output name, values) pairs
+function _context_display_columns(mr::MarginsResult)
+    ctx = mr.context
+    isnothing(ctx) && return Pair{String,AbstractVector}[]
+    return Pair{String,AbstractVector}[string(_context_column_name(name, kind)) => ctx[name]
+                                       for (name, kind) in zip(keys(ctx), ctx.kinds)]
 end
 
 function _show_stata_table(io::IO, mr::EffectsResult)
     # Calculate confidence intervals
-    alpha = _result_alpha(mr)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
+    alpha = mr.inference.alpha
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=mr.inference.df)
     
-    # Check if this is profile margins (has profile_values)
-    has_profile = !isnothing(mr.profile_values)
+    # Context columns (reference grid, or population groups/scenarios)
+    has_profile = !isnothing(mr.context)
     
     # Column widths for alignment (effects always have Variable/Contrast columns)
     var_width = try
@@ -606,18 +617,11 @@ function _show_stata_table(io::IO, mr::EffectsResult)
     # Profile columns (for profile margins or population margins with contexts)
     profile_widths = Int[]  # Specify Int type to avoid sum() type issues
     profile_names = String[]  # Display names
-    profile_raw_names = Symbol[]  # Raw names for data access
+    profile_columns = AbstractVector[]  # Values, for data access
     if has_profile
-        scenarios_vars = _result_scenarios_vars(mr)
-        groups_vars = _result_groups_vars(mr)
-        
-        for (name, values) in _display_profile_pairs(mr)
-            # Store raw name for data access
-            push!(profile_raw_names, name)
-            
-            # Same names as the DataFrame: over_ for groups, at_ for scenarios, bare for profiles
-            display_name = _context_display_name(mr, Symbol(name))
-            
+        # Same names and order as the DataFrame: over_ for groups, at_ for scenarios, bare for grid columns
+        for (display_name, values) in _context_display_columns(mr)
+            push!(profile_columns, values)
             push!(profile_names, display_name)
             # Calculate width needed for this profile column
             max_val_width = try
@@ -690,10 +694,10 @@ function _show_stata_table(io::IO, mr::EffectsResult)
         
         # Profile values
         if has_profile
-            for (j, (display_name, raw_name, width)) in enumerate(zip(profile_names, profile_raw_names, profile_widths))
+            for (j, (display_name, values, width)) in enumerate(zip(profile_names, profile_columns, profile_widths))
                 print(io, " ")
                 profile_val = try
-                    val = mr.profile_values[raw_name][i]
+                    val = values[i]
                     # Handle both numeric and string values
                     if val isa Number
                         format_number(Float64(val); profile_column=true)
@@ -721,26 +725,21 @@ end
 
 function _show_stata_table(io::IO, mr::PredictionsResult)
     # Calculate confidence (or prediction) intervals
-    alpha = _result_alpha(mr)
+    alpha = mr.inference.alpha
     is_prediction_interval = get(mr.metadata, :interval, :confidence) === :prediction
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=mr.inference.df)
     
-    # Check if this is profile margins (has profile_values)
-    has_profile = !isnothing(mr.profile_values)
+    # Context columns (reference grid, or population groups/scenarios)
+    has_profile = !isnothing(mr.context)
     
     # Profile columns (for profile margins or population margins with contexts)
     profile_widths = Int[]
     profile_names = String[]
-    profile_raw_names = Symbol[]
+    profile_columns = AbstractVector[]
     if has_profile
-        scenarios_vars = _result_scenarios_vars(mr)
-        groups_vars = _result_groups_vars(mr)
-        
-        for (name, values) in _display_profile_pairs(mr)
-            push!(profile_raw_names, name)
-            
-            # Same names as the DataFrame: over_ for groups, at_ for scenarios, bare for profiles
-            display_name = _context_display_name(mr, Symbol(name))
+        # Same names and order as the DataFrame: over_ for groups, at_ for scenarios, bare for grid columns
+        for (display_name, values) in _context_display_columns(mr)
+            push!(profile_columns, values)
             push!(profile_names, display_name)
             
             # Calculate width needed for this profile column
@@ -786,9 +785,9 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
     for i in 1:length(mr.estimates)
         # Profile values
         if has_profile
-            for (display_name, raw_name, width) in zip(profile_names, profile_raw_names, profile_widths)
+            for (display_name, values, width) in zip(profile_names, profile_columns, profile_widths)
                 profile_val = try
-                    val = mr.profile_values[raw_name][i]
+                    val = values[i]
                     if val isa Number
                         format_number(Float64(val); profile_column=true)
                     else
@@ -937,7 +936,7 @@ _format_df(df::Real) = isinteger(df) ? string(Int(df)) : @sprintf("%g", df)
 
 # Test statistics, their df column and two-sided p-values for a result's rows.
 function _inference_columns(mr::MarginsResult)
-    dof = _result_df(mr)
+    dof = mr.inference.df
     statistics = mr.estimates ./ mr.standard_errors
     p_values = compute_p_value.(statistics, dof)
     return statistics, fill(dof, length(statistics)), p_values
@@ -1020,15 +1019,12 @@ function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     df[!, :df] = dfs
     df[!, :p_value] = p_values
 
-    # Add confidence (or prediction) intervals if alpha is specified in metadata.
+    # Confidence (or prediction) intervals at the result's alpha.
     # The reported `se`/`statistic`/`p_value` always describe the mean estimate;
     # only the interval bounds widen when `interval=:prediction` (see metadata).
-    if haskey(mr.metadata, :alpha)
-        alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
-        df[!, :ci_lower] = lower
-        df[!, :ci_upper] = upper
-    end
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, mr.inference.alpha; var_inflation=_interval_var_inflation(mr), df=mr.inference.df)
+    df[!, :ci_lower] = lower
+    df[!, :ci_upper] = upper
 
     # CRITICAL: Use actual subgroup sizes, never fallback to incorrect quantities
     if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
@@ -1076,8 +1072,8 @@ function _compact_table(mr::EffectsResult; include_gradients::Bool=false)
 end
 
 function _confidence_table(mr::EffectsResult; include_gradients::Bool=false)
-    alpha = _result_alpha(mr)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
+    alpha = mr.inference.alpha
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=mr.inference.df)
 
     # Create self-describing type column
     analysis_type = _result_analysis_type(mr, :population)
@@ -1108,8 +1104,8 @@ end
 
 function _profile_table(mr::EffectsResult; include_gradients::Bool=false)
     # Profile-first organization: reference grid with results attached
-    alpha = _result_alpha(mr)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
+    alpha = mr.inference.alpha
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=mr.inference.df)
 
     # Create self-describing type column
     analysis_type = _result_analysis_type(mr, :population)
@@ -1169,15 +1165,12 @@ function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false
     df[!, :df] = dfs
     df[!, :p_value] = p_values
 
-    # Add confidence (or prediction) intervals if alpha is specified in metadata.
+    # Confidence (or prediction) intervals at the result's alpha.
     # The reported `se`/`statistic`/`p_value` always describe the mean estimate;
     # only the interval bounds widen when `interval=:prediction` (see metadata).
-    if haskey(mr.metadata, :alpha)
-        alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
-        df[!, :ci_lower] = lower
-        df[!, :ci_upper] = upper
-    end
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, mr.inference.alpha; var_inflation=_interval_var_inflation(mr), df=mr.inference.df)
+    df[!, :ci_lower] = lower
+    df[!, :ci_upper] = upper
 
     # Add sample size
     if haskey(mr.metadata, :has_subgroup_n) && haskey(mr.metadata, :subgroup_n_values)
@@ -1200,7 +1193,7 @@ end
 function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
     statistics, _, p_values = _inference_columns(mr)
     # Stata labels the statistic `t` (P>|t|) for t inference and `z` (P>|z|) for z inference
-    t_based = isfinite(_result_df(mr))
+    t_based = isfinite(mr.inference.df)
 
     # Create self-describing type column
     analysis_type = _result_analysis_type(mr, :population)

@@ -177,10 +177,10 @@ result = profile_margins(model, data, complete_grid)
 **Common Fields:**
 - `estimates::Vector{Float64}`: Computed estimates (effects or predictions)
 - `standard_errors::Vector{Float64}`: Delta-method standard errors
-- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (profile_margins only)
-- `group_values::Union{Nothing, NamedTuple}`: Grouping values (when using groups parameter)
+- `context::Union{Nothing, ResultContext}`: Per-row context columns (`context.columns`, an ordered NamedTuple) and their kinds (`context.kinds`: `:grid`, `:group`, `:scenario`): the reference grid's columns in grid order (profile_margins), or the `groups` then `scenarios` variables in the order given (population_margins); `nothing` for a plain AME/AAP
 - `gradients::Matrix{Float64}`: Parameter gradients for delta-method computation
-- `metadata::Dict{Symbol, Any}`: Analysis options, model information, and technical details
+- `inference::Inference`: `vcov` (the parameter covariance matrix the delta method used), `df` (t(df), `Inf` = z) and `alpha`; `contrast` and `second_differences` read it
+- `metadata::Dict{Symbol, Any}`: Analysis options, model information, and technical details (provenance)
 
 **EffectsResult Additional Fields:**
 - `variables::Vector{String}`: Variable names (the "x" in dy/dx)

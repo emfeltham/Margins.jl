@@ -6,10 +6,14 @@
 # point estimate paired with that SE would describe two different samples.
 
 """
-    _model_weights(model) -> Union{Nothing, Vector{Float64}}
+    _model_weights(model, data_nt) -> Union{Nothing, Vector{Float64}, UnknownWeights}
+    _model_weights(model) -> Union{Nothing, Vector{Float64}, UnknownWeights}
 
-The estimation weights of a fitted model, one per row of the data it was fit to, or `nothing` if
-the model is unweighted or its weights cannot be recovered.
+The estimation weights of a fitted model, one per row of the data it was fit to; `nothing` if
+the model is unweighted; `UnknownWeights` if it may be weighted but does not store its weights.
+The two-argument form is the interface (`data_nt` is the prepared estimation data, for a model
+class that stores a weight column name); by default it calls the one-argument form, which reads
+the weights the model stores.
 
 - GLM.jl (`lm`/`glm` with `wts=`, bare or wrapped in a `TableRegressionModel`): the response
   object's `wts` field, which is empty for an unweighted fit (GLM 1.9 defines no
@@ -17,10 +21,13 @@ the model is unweighted or its weights cannot be recovered.
 - MixedModels.jl (`LinearMixedModel`, `GeneralizedLinearMixedModel`; in `ext/MixedModelsExt.jl`):
   the `wts=` given at fit time. `StatsAPI.weights` returns ones for an unweighted fit, so the stored
   weights field (`sqrtwts` / `wt`) decides whether there are any.
-- FixedEffectModels.jl: `nothing`. A `FixedEffectModel` keeps neither the `weights=` column nor
-  the weight vector, so pass `weights=:w` explicitly for a weighted `reg`.
+- FixedEffectModels.jl: `UnknownWeights`. A `FixedEffectModel` (1.13) keeps neither the
+  `weights=` column nor the weight vector, so `weights=:model` cannot tell whether `reg` was
+  weighted; it averages without weights and warns once per session (pass `weights=:w`
+  explicitly for a weighted `reg`, or `weights=:none`).
 - Any other model class: `nothing` (add a method to support one).
 """
+_model_weights(model, data_nt::NamedTuple) = _model_weights(model)
 _model_weights(model) = nothing
 _model_weights(model::StatsModels.TableRegressionModel) = _model_weights(model.model)
 _model_weights(model::Union{GLM.LinearModel, GLM.GeneralizedLinearModel}) = _weights_from_storage(model.rr.wts)
@@ -41,10 +48,10 @@ end
 const _WEIGHTS_KEYWORDS = (:model, :none)
 
 """
-    _resolve_weights(weights, model, data[, data_nt]) -> (weights_vec, source, weight_col)
+    _resolve_weights(weights, model, data[, data_nt]; rows=nothing) -> (weights_vec, source, weight_col)
 
 Turn the `weights` keyword into the averaging weights (`nothing` or a `Vector{Float64}` with one
-entry per row of `data`), where they came from (`:model`, `:user` or `:none`, recorded as
+entry per row of `data_nt`), where they came from (`:model`, `:user` or `:none`, recorded as
 `metadata[:weights_source]`) and the weight column to exclude from auto-detected variables
 (`nothing` unless `weights` is a column name).
 
@@ -52,21 +59,38 @@ entry per row of `data`), where they came from (`:model`, `:user` or `:none`, re
 unweighted result). `:model` and `:none` are reserved: a data column with one of these names is
 passed as a vector (`weights = data.model`).
 
+`rows` are the model's estimation rows (`_estimation_rows`) when `data` has been subset to
+them: `data` and `data_nt` are then the subset, and a weight vector given for every row of the
+caller's data (`n_full` entries) is subset the same way.
+
+Under `weights = :model`, a model whose weights cannot be read (`UnknownWeights`, e.g.
+FixedEffectModels) gives no weights and a warning, once per session (decision D2 of the 3.0
+plan); `weights=:none` or explicit weights do not warn.
+
 This is the one weights helper: `_normalize_request` calls it for every entry point,
 including the model-level `second_differences`.
 """
-function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data))
+function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data);
+                          rows=nothing, n_full::Int=0)
     (isnothing(weights) || weights === :none) && return (nothing, :none, nothing)
     if weights === :model
-        w = _model_weights(model)
+        w = _model_weights(model, data_nt)
         isnothing(w) && return (nothing, :none, nothing)
-        n = _n_rows(data)
+        if w isa UnknownWeights
+            _warn_unknown_weights(w)
+            return (nothing, :none, nothing)
+        end
+        n = length(first(data_nt))
         length(w) == n || throw(ArgumentError(
             "The model has $(length(w)) estimation weights but the data has $n rows, so the weights cannot be " *
             "matched to rows (the fit probably dropped rows with missing values). Pass the weights for these " *
             "rows explicitly with weights=<column or vector>, or weights=:none for an unweighted average."))
         _check_weight_values(w, "model weights")
         return (w, :model, nothing)
+    end
+    # A vector for every row of the caller's data, when the request uses the estimation rows only
+    if !isnothing(rows) && weights isa AbstractVector && length(weights) == n_full
+        weights = weights[rows]
     end
     _validate_weights_parameter(weights, data)
     if weights isa Symbol
@@ -77,6 +101,11 @@ function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data)
     end
     return (Float64.(weights), :user, nothing)
 end
+
+# Decision D2: once per session (per logger), not on every call
+@noinline _warn_unknown_weights(w::UnknownWeights) =
+    @warn "weights=:model: $(w.reason) The estimates are unweighted. Pass the fit's weights " *
+          "explicitly with weights=<column or vector>, or weights=:none to silence this warning." maxlog=1
 
 _n_rows(data) = Tables.rowaccess(data) && !Tables.columnaccess(data) ? length(Tables.rows(data)) :
                 length(first(Tables.columns(data)))

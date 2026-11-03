@@ -25,10 +25,11 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `vars` | resolved focal variables (`nothing` for predictions) |
 | `vars_explicit` | whether the caller named `vars` (otherwise auto-detected) |
 | `Σ` | the covariance matrix, the one evaluation of `vcov` for the call |
-| `vcov_source` | the `vcov` the caller passed, which the t/z df rule keys on |
-| `df` | inference degrees of freedom, `_inference_df(model, vcov_source)` |
+| `vcov_source` | the `vcov` the caller passed (provenance) |
+| `df` | inference degrees of freedom: the `df` keyword, else `_inference_df(model)` |
 | `alpha` | significance level, in (0, 1) |
 | `weights`, `weights_source` | averaging weights (`nothing` or one per row) and where they came from (`:model`, `:user`, `:none`) |
+| `offset` | the η offset (`nothing`, or a `Vector{Float64}`): population requests, one per row of `data_nt` (the model's stored offset); profile requests, one per row of `completed_grid`. `nothing` also when the model has an offset that cannot change the requested quantity (`_offset_matters`) |
 | `scenarios` | the `scenarios` keyword as a `NamedTuple` (`nothing` if none) |
 | `scenario_specs` | its parsed combinations, one `Dict` per scenario (`[Dict()]` if none) |
 | `groups` | the validated `groups` syntax (`nothing` if none) |
@@ -40,6 +41,9 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `contrasts`, `measure`, `scale`, `backend`, `interval` | validated options |
 
 `vars ∪ changed_vars` is the set step 7's derived-column detector runs over.
+
+`data_nt` holds the model's estimation rows only (`_estimation_rows`; FixedEffectModels drops
+rows), so weights, offsets and groups all refer to those rows.
 """
 struct MarginsRequest{K,M}
     model::M
@@ -53,6 +57,7 @@ struct MarginsRequest{K,M}
     alpha::Float64
     weights::Union{Nothing,Vector{Float64}}
     weights_source::Symbol
+    offset::Union{Nothing,Vector{Float64}}
     scenarios::Union{Nothing,NamedTuple}
     scenario_specs::Vector
     groups::Any
@@ -91,13 +96,15 @@ _validate_focal_vars(model, vars) = nothing
     _normalize_request(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad,
                        scenarios=nothing, groups=nothing, reference_grid=nothing, measure=:effect,
                        contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:none,
-                       interval=:confidence, scenario_vars=nothing, changed_vars=Symbol[]) -> MarginsRequest
+                       interval=:confidence, df=nothing, offset=nothing, scenario_vars=nothing,
+                       changed_vars=Symbol[]) -> MarginsRequest
 
 Validate every option and prepare everything a computation needs, once per call: the data
-(any Tables.jl source), the focal variables, Σ (`vcov` is evaluated here and nowhere else), the
-inference df, the averaging weights, the parsed scenarios and groups and, with a
-`reference_grid`, the completed grid. A `reference_grid` makes a `:profile` request, otherwise it
-is `:population`.
+(any Tables.jl source, subset to the model's estimation rows), the focal variables, Σ (`vcov` is
+evaluated here and nowhere else), the inference df (`df`, else the model class's), the averaging
+weights, the η offset, the parsed scenarios and groups and, with a `reference_grid`, the
+completed grid. A `reference_grid` makes a `:profile` request, otherwise it is `:population`.
+`offset` (profile requests only) gives the offset at the grid rows; see `_profile_offset`.
 
 Two keywords serve callers that run several computations from one request (the model-level
 `second_differences`): `scenario_vars` names the variables later requests set with
@@ -109,13 +116,13 @@ The validators run in a fixed order: the required arguments and the scalar optio
 `scale`, `backend`, `measure`, `alpha`, `contrasts`, `interval`), then the `scenarios` and
 `groups` syntax and their conflicts, the data, the weights, the variables (and the measure
 filter, preceded by the model class's `_validate_focal_vars`), the group columns, the reference
-grid, `vcov`, and last the model class (`_validate_request`).
+grid and its offset, `vcov`, and last the model class (`_validate_request`).
 """
 function _normalize_request(model, data;
         type::Symbol=:effects, vars=nothing, scale::Symbol=:response, backend::Symbol=:ad,
         scenarios=nothing, groups=nothing, reference_grid::Union{Nothing,DataFrame}=nothing,
         measure::Symbol=:effect, contrasts::Symbol=:baseline, alpha=0.05, vcov=GLM.vcov,
-        weights=:none, interval::Symbol=:confidence,
+        weights=:none, interval::Symbol=:confidence, df=nothing, offset=nothing,
         scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[])
     validate_required_args(model, data)
     validate_model_methods(model)
@@ -123,6 +130,12 @@ function _normalize_request(model, data;
     # Scalar options
     validate_population_parameters(type, scale, backend, measure, vars)
     α = _validate_alpha(alpha)
+    df_override = isnothing(df) ? nothing : _validate_df(df)
+    isnothing(offset) || isnothing(reference_grid) || offset isa Real || offset isa AbstractVector ||
+        throw(ArgumentError("offset must be a number or a vector with one entry per reference-grid row"))
+    isnothing(offset) || !isnothing(reference_grid) || throw(ArgumentError(
+        "offset= is a profile_margins keyword (the offset at the reference-grid rows); population " *
+        "margins use the model's own offset at each data row"))
     _validate_contrasts(contrasts)
     _validate_interval(interval, type)
 
@@ -147,12 +160,23 @@ function _normalize_request(model, data;
         end
     end
 
+    # The model's estimation rows only (FixedEffectModels' `esample`): everything below reads
+    # this subset, so weights, offsets and groups refer to the rows the model was fit to
+    cols = Tables.columntable(data)
+    n_full = length(first(cols))
+    est_rows = _estimation_rows(model, n_full)
+    if !isnothing(est_rows)
+        cols = map(c -> c[est_rows], cols)
+        data = cols
+    end
+
     # Single data conversion: a column table with Float64 numeric columns (type stability)
-    data_nt = _prepare_margins_data(Tables.columntable(data), model)
+    data_nt = _prepare_margins_data(cols, model)
 
     # Averaging weights (:model default on population requests), where they came from, and the
     # weight column (if a name) to exclude from auto-detected variables
-    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt)
+    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt;
+                                                                 rows=est_rows, n_full)
 
     # Focal variables. Elasticity measures are only defined for continuous variables; filter or
     # error BEFORE the engine is built so the discrete variables never reach computation
@@ -172,18 +196,29 @@ function _normalize_request(model, data;
     _validate_context_count(length(scenario_specs), length(group_specs))
 
     # Profile requests: resolve, validate and complete the reference grid
-    (grid, completed, grid_vars) = _prepare_reference_grid(model, data, data_nt, reference_grid)
+    # (an `offset` column of the grid is the offset at its rows, not a variable: split it off)
+    (grid_in, grid_offset) = _split_offset_column(model, reference_grid)
+    (grid, completed, grid_vars) = _prepare_reference_grid(model, data, data_nt, grid_in)
 
-    # Σ, the one evaluation of `vcov` for this call, and the df rule on the `vcov` given
+    # The η offset at the rows the request evaluates, when the model has one that matters
+    offset_vec = if _has_offset(model) && _offset_matters(_link(model), type, scale, measure)
+        isnothing(completed) ? _offset(model, data_nt) :
+            _profile_offset(model, grid, nrow(completed), offset, grid_offset)
+    else
+        isnothing(completed) || _check_unused_offset(model, offset, grid_offset)
+        nothing
+    end
+
+    # Σ, the one evaluation of `vcov` for this call; df from the model class unless given
     Σ = validate_vcov_parameter(vcov, model)
-    df = _inference_df(model, vcov)
+    df_value = isnothing(df_override) ? _inference_df(model) : df_override
 
     changed = _changed_vars(scenario_vars, grid, changed_vars)
     # (Step 7: the derived-column detector runs here, once, over resolved_vars ∪ changed.)
 
     req = MarginsRequest{_request_kind(reference_grid), typeof(model)}(
-        model, type, data_nt, resolved_vars, vars_explicit, Σ, vcov, df, α, weights_vec,
-        weights_source, scenarios_nt, scenario_specs, groups, group_specs, grid, completed,
+        model, type, data_nt, resolved_vars, vars_explicit, Σ, vcov, df_value, α, weights_vec,
+        weights_source, offset_vec, scenarios_nt, scenario_specs, groups, group_specs, grid, completed,
         grid_vars, changed, contrasts, measure, scale, backend, interval)
     _validate_request(model, req)
     return req
@@ -217,7 +252,7 @@ function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,Name
     _validate_context_count(length(specs), length(req.group_specs))
     return MarginsRequest{K,M}(
         req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
-        req.df, req.alpha, req.weights, req.weights_source, scenarios, specs, req.groups,
+        req.df, req.alpha, req.weights, req.weights_source, req.offset, scenarios, specs, req.groups,
         req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars, req.changed_vars,
         req.contrasts, req.measure, req.scale, req.backend, req.interval)
 end
@@ -227,12 +262,13 @@ end
 
 `req` evaluated on other rows' values: `data_nt` has the same rows and columns as `req.data_nt`
 with some values changed (the second differences' `at=:observed` shifts the modifier column).
-Nothing is validated again; parsed groups keep their row membership.
+Nothing is validated again; parsed groups keep their row membership, and the offset stays at
+its observed values.
 """
 function _with_data(req::MarginsRequest{K,M}, data_nt::NamedTuple) where {K,M}
     return MarginsRequest{K,M}(
         req.model, req.type, data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
-        req.df, req.alpha, req.weights, req.weights_source, req.scenarios, req.scenario_specs,
+        req.df, req.alpha, req.weights, req.weights_source, req.offset, req.scenarios, req.scenario_specs,
         req.groups, req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars,
         req.changed_vars, req.contrasts, req.measure, req.scale, req.backend, req.interval)
 end
@@ -382,20 +418,105 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
 
     # Attempt to remove response variable from display if it appears in the provided grid.
     # Be defensive: formulas with transformed responses (e.g., log(y)) may not expose `.sym`.
-    try
-        response_var = Symbol(model.mf.f.lhs.sym)
-        delete!(grid_vars, response_var)
-    catch
-        # If we cannot determine a simple response symbol, do nothing.
-        # Reference grids almost never include the response variable anyway.
-    end
+    response_var = _response_name(model)
+    isnothing(response_var) || delete!(grid_vars, response_var)
 
     # Complete reference grid with typical values for missing model variables
     # Note: complete_reference_grid now filters to model variables internally
     completed = complete_reference_grid(grid, model, data_nt)
+    # Predictors outside the formula Margins evaluates (FixedEffectModels' absorbed fixed effects,
+    # which a grid may set to choose their estimates) are kept, so they label the output rows
+    if nrow(completed) == nrow(grid)
+        formula_vars = Set(_formula_predictor_names(model))
+        for c in names(grid)
+            s = Symbol(c)
+            if !(c in names(completed)) && !(s in formula_vars) && s in _predictor_names(model)
+                completed[!, c] = grid[!, c]
+            end
+        end
+    end
 
     # Filter grid_vars to only model variables for proper output display
     # Get model variables from the completed grid to know what was actually kept
     grid_vars = intersect(grid_vars, Set(Symbol.(names(completed))))
     return (grid, completed, grid_vars)
+end
+
+# ---- offsets at reference-grid rows (decision D3) -------------------------------------------
+
+# The grid column that gives the offset at each grid row. Only for a model with an offset, and
+# only when `offset` is not itself a predictor of the model.
+_is_offset_column(model, grid::DataFrame) =
+    _has_offset(model) && "offset" in names(grid) && !(:offset in _predictor_names(model))
+
+"""
+    _split_offset_column(model, reference_grid) -> (grid, offset_column)
+
+The reference grid without its `offset` column, and that column (`nothing` if there is none).
+"""
+_split_offset_column(model, ::Nothing) = (nothing, nothing)
+function _split_offset_column(model, grid::DataFrame)
+    _is_offset_column(model, grid) || return (grid, nothing)
+    return (select(grid, Not("offset")), grid[!, "offset"])
+end
+
+"""
+    _profile_offset(model, grid, n, offset_kw, offset_col) -> Vector{Float64}
+
+The η offset at each of the `n` reference-grid rows of a profile request on a model with an
+offset (decision D3 of the 3.0 plan; GLM's `predict(m, newdata; offset=)` convention):
+
+1. the `offset=` keyword (a number for every row, or one value per row);
+2. else an `offset` column in the grid;
+3. else what the model class derives from the grid (`_grid_offset`; FixedEffectModels looks up
+   the estimated fixed effects of the levels the grid sets);
+4. else an `ArgumentError`. The offset is never silently 0: for a Poisson exposure model that
+   would predict the rate per unit exposure.
+"""
+function _profile_offset(model, grid::DataFrame, n::Int, offset_kw, offset_col)
+    !isnothing(offset_kw) && !isnothing(offset_col) && throw(ArgumentError(
+        "The offset is given twice, as offset= and as an `offset` column of the reference grid; give one"))
+    raw = !isnothing(offset_kw) ? offset_kw : offset_col
+    if isnothing(raw)
+        derived = _grid_offset(model, grid)
+        isnothing(derived) || return derived
+        throw(ArgumentError(
+            "The model has an offset (η = x'β + offset), and the requested quantity depends on it, so " *
+            "profile_margins needs the offset at each reference-grid row: pass offset=<number or one " *
+            "value per grid row> (as in GLM's predict(m, newdata; offset=)), or add an `offset` column to " *
+            "the grid. For a log-exposure offset, offset=log(exposure); offset=0 gives the rate per unit " *
+            "of exposure."))
+    end
+    v = raw isa Real ? fill(Float64(raw), n) : raw
+    length(v) == n || throw(ArgumentError(
+        "offset has $(length(v)) values but the reference grid has $n rows"))
+    any(ismissing, v) && throw(ArgumentError("offset contains missing values"))
+    out = Vector{Float64}(v)
+    all(isfinite, out) || throw(ArgumentError("offset contains NaN or Inf values"))
+    return out
+end
+
+# An offset given for a quantity it cannot change is accepted (and unused), but an offset given
+# to a model without one is a mistake
+function _check_unused_offset(model, offset_kw, offset_col)
+    if !isnothing(offset_kw) && !_has_offset(model)
+        throw(ArgumentError("offset= was given, but the model has no offset"))
+    end
+    return nothing
+end
+
+"""
+    _estimation_subset(model, cols, weights) -> (cols, weights)
+
+`cols` restricted to the model's estimation rows (`_estimation_rows`), and a weight vector given
+for every row of `cols` restricted the same way. For callers that read the data themselves
+before building a request (the model-level `second_differences`); the request is still built
+from the data as given (`_normalize_request` subsets it the same way).
+"""
+function _estimation_subset(model, cols::NamedTuple, weights)
+    n = length(first(cols))
+    rows = _estimation_rows(model, n)
+    isnothing(rows) && return (cols, weights)
+    weights isa AbstractVector && length(weights) == n && (weights = weights[rows])
+    return (map(c -> c[rows], cols), weights)
 end

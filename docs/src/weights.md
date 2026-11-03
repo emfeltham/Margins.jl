@@ -40,7 +40,7 @@ How each model class is read (`Margins._model_weights`):
 |:------|:-------------------------|
 | GLM.jl `lm`, `glm` | the `wts` of the fit (none for an unweighted fit) |
 | MixedModels.jl `LinearMixedModel`, `GeneralizedLinearMixedModel` | the `wts` of the fit |
-| FixedEffectModels.jl `reg(…; weights = :w)` | none: a `FixedEffectModel` does not store its weights, so pass `weights = :w` |
+| FixedEffectModels.jl `reg(…)` | none, with a warning (once per session): a `FixedEffectModel` does not store its weights, so whether it was weighted is unknown; pass `weights = :w` for a weighted `reg`, or `weights = :none` to silence the warning |
 | other model classes | none |
 
 The model's weight vector must have one entry per row of `data`. If the fit dropped rows (for example rows with missing values), the lengths differ and `:model` raises an error asking you to pass `weights=` for the rows of `data` explicitly; Margins does not try to match rows. If a model carries StatsBase `AnalyticWeights` (precision weights, which set the estimation precision but not the population), `:model` is an error asking for an explicit choice; frequency and probability weights are used as they are.

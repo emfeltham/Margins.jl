@@ -62,16 +62,14 @@ The `EffectsResult` type encapsulates computed marginal effects along with assoc
 - `standard_errors::Vector{Float64}` - Delta-method standard errors
 - `variables::Vector{String}` - The "x" in dy/dx (which variable each row represents)
 - `terms::Vector{String}` - Contrast descriptions (e.g., "dy/dx", "treated - control")
-- `profile_values::Union{Nothing, NamedTuple}` - Per-row values of the context columns: the reference-grid variables for `profile_margins()` (MEM/MER), and the `scenarios=` and `groups=` variables for `population_margins()`. `nothing` for a plain population result (AME). `metadata[:groups_vars]` and `metadata[:scenarios_vars]` record which of these columns are groups and which are scenarios (`Margins.context_columns(result)` returns them)
-- `group_values::Union{Nothing, NamedTuple}` - Reserved; currently always `nothing`. Group columns from the `groups` parameter are stored in `profile_values`
+- `context::Union{Nothing, ResultContext}` - Per-row values of the context columns, in output order, with the kind of each column (see [`ResultContext`](#ResultContext)): the reference-grid variables for `profile_margins()` (MEM/MER), the `groups=` and `scenarios=` variables for `population_margins()`. `nothing` for a plain population result (AME)
 - `gradients::Matrix{Float64}` - Parameter gradients (G matrix) for delta-method computation
+- `inference::Inference` - The covariance matrix, degrees of freedom and `alpha` behind the standard errors and intervals (see [`Inference`](#Inference))
 - `metadata::Dict{Symbol, Any}` - Analysis metadata (model info, options used, sample size, etc.)
 
 **Key Features:**
 - Multiple DataFrame formats: `:standard`, `:compact`, `:confidence`, `:profile`, `:stata`
 - Auto-detects appropriate format based on analysis type
-- `profile_values` holds the reference grid (`profile_margins()`) or the scenario and group columns (`population_margins()` with `scenarios=` or `groups=`); `nothing` for a plain population result
-- Group columns are in `profile_values` (not `group_values`); `metadata[:groups_vars]` identifies them
 
 ### `PredictionsResult`
 
@@ -82,17 +80,34 @@ The `PredictionsResult` type focuses specifically on predicted values without va
 **Fields:**
 - `estimates::Vector{Float64}` - Point estimates (predicted values)
 - `standard_errors::Vector{Float64}` - Delta-method standard errors
-- `profile_values::Union{Nothing, NamedTuple}` - Per-row values of the context columns: the reference-grid variables for `profile_margins()` (APM/APR), and the `scenarios=` and `groups=` variables for `population_margins()`. `nothing` for a plain population result (AAP); `metadata[:groups_vars]` and `metadata[:scenarios_vars]` say which columns are groups and which are scenarios
-- `group_values::Union{Nothing, NamedTuple}` - Reserved; currently always `nothing`. Group columns from the `groups` parameter are stored in `profile_values`
+- `context::Union{Nothing, ResultContext}` - Per-row values of the context columns, as for `EffectsResult`: the reference-grid variables for `profile_margins()` (APM/APR), the `groups=` and `scenarios=` variables for `population_margins()`; `nothing` for a plain population result (AAP)
 - `gradients::Matrix{Float64}` - Parameter gradients (G matrix) for delta-method computation
+- `inference::Inference` - The covariance matrix, degrees of freedom and `alpha` behind the standard errors and intervals
 - `metadata::Dict{Symbol, Any}` - Analysis metadata (model info, options used, sample size, etc.)
 
 **Key Features:**
 - Omits variable/contrast fields (not applicable to predictions - predictions don't have "x" or "dy/dx" concepts)
 - Single optimized DataFrame format for predictions display
 - Clean tabular output focused on prediction values and statistics
-- `profile_values` holds the reference grid (`profile_margins()`) or the scenario and group columns (`population_margins()` with `scenarios=` or `groups=`); `nothing` for a plain population result
-- Group columns are in `profile_values` (not `group_values`); `metadata[:groups_vars]` identifies them
+
+### `Inference`
+
+`result.inference`: how a result's standard errors, tests and intervals were computed, set from the call that produced it.
+
+- `vcov::Matrix{Float64}` - The parameter covariance matrix Σ the delta method used (the `vcov=` keyword; `GLM.vcov(model)` by default). With `gᵢ = result.gradients[i, :]`, the standard error of row `i` is `√(gᵢ'Σgᵢ)` and the covariance of rows `i` and `j` is `gᵢ'Σgⱼ`
+- `df::Float64` - Degrees of freedom of the reference distribution (`Inf` = z; see [Test statistic and degrees of freedom](#Test-statistic-and-degrees-of-freedom))
+- `alpha::Float64` - Significance level of the intervals
+
+`DataFrame(result)`, `contrast(result, …)` and `second_differences(result, …)` all read it, so they cannot disagree with the result. To use another covariance estimator, pass `vcov=` to the call that computes the result.
+
+### `ResultContext`
+
+`result.context`: the per-row context columns, or `nothing`.
+
+- `columns::NamedTuple` - One vector per context variable, one entry per result row, in output order: the reference grid's columns in the grid's order (`profile_margins`), or the `groups=` variables, then the `scenarios=` variables, each in the order given (`population_margins`)
+- `kinds::Vector{Symbol}` - The kind of each column: `:grid` (bare name in `DataFrame(result)`), `:group` (`over_<var>`) or `:scenario` (`at_<var>`)
+
+`keys(ctx)`, `ctx[name]` and `pairs(ctx)` read the columns; `Margins.context_columns(result)` returns the group and scenario names.
 
 **Data Integration Framework:**
 ```julia
@@ -104,18 +119,20 @@ predictions_result = population_margins(model, data; type=:predictions)  # Retur
 effects_result.estimates          # Vector{Float64} of marginal effects
 effects_result.standard_errors    # Vector{Float64} of standard errors
 effects_result.variables          # Vector{String} of variable names
-effects_result.profile_values     # Nothing (plain population result) or NamedTuple (profile, scenarios or groups)
-effects_result.group_values       # Reserved; always Nothing (group columns are in profile_values)
+effects_result.context            # nothing (plain population result) or a ResultContext
+effects_result.inference          # Inference(vcov, df, alpha)
+effects_result.inference.df       # Inf (z) or the residual df (t)
 effects_result.metadata           # Dict{Symbol, Any} with analysis info
 
-# Profile margins have profile_values populated
+# Profile margins have a context: the reference grid's columns, in the grid's order
 profile_result = profile_margins(model, data, means_grid(data); type=:effects)
-profile_result.profile_values     # NamedTuple(x1=[...], x2=[...], ...)
+profile_result.context.columns    # (x1=[...], x2=[...], ...)
+profile_result.context.kinds      # [:grid, :grid, ...]
 
-# Grouped analysis keeps its group columns in profile_values; metadata says which are groups
+# Grouped analysis: the context holds the group columns, marked as groups
 grouped_result = population_margins(model, data; type=:effects, groups=:region)
-grouped_result.profile_values     # NamedTuple(region=["North", "South", ...])
-grouped_result.metadata[:groups_vars]       # [:region]
+grouped_result.context[:region]             # ["North", "South", ...]
+grouped_result.context.kinds                # [:group]
 Margins.context_columns(grouped_result)     # ([:region], Symbol[]): (groups, scenarios)
 
 # Type-specific DataFrame conversion
@@ -150,23 +167,35 @@ Margins 3.0 uses one set of column names across result types:
 - **Group columns** carry an `over_` prefix (`groups=:region` gives `over_region`, as in Stata's `over()`), for plain, binned and nested groups alike.
 - **Scenario columns** carry an `at_` prefix (`scenarios=(x=[0, 1],)` gives `at_x`).
 - **Profile (reference-grid) columns** keep their bare names.
+- **Order:** group columns, then scenario columns, each in the order given in `groups` / `scenarios`; reference-grid columns in the grid's column order. `show(result)` uses the same order.
 - `format=:stata` uses Stata's labels: `margin, std_err, t, P_t, N` for t inference and `margin, std_err, z, P_z, N` for z inference.
 
 ### Test statistic and degrees of freedom
 
-`statistic = estimate / se`. Its reference distribution, used for `p_value` and the confidence interval, is t with `df` degrees of freedom (`df = Inf` is the standard Normal, i.e. z). The rule depends only on the model and the covariance estimator (`Margins._inference_df(model, vcov)`), and the same `df` is used for every row of a result, for contrasts between rows and for second differences:
+`statistic = estimate / se`. Its reference distribution, used for `p_value` and the confidence interval, is t with `df` degrees of freedom (`df = Inf` is the standard Normal, i.e. z). `df` is a property of the model class, whatever `vcov` is passed (`Margins._inference_df(model)`), and the same `df` is used for every row of a result, for contrasts between rows and for second differences:
 
-| model | `vcov` | `df` |
-|:------|:-------|:-----|
-| `lm(...)`, or `glm(..., Normal(), IdentityLink())` | default `GLM.vcov` (or a matrix equal to `vcov(model)`) | `dof_residual(model)` (t) |
-| the same linear models | robust / clustered / custom (`HC1()`, `CR1(cl)`, a function, another matrix) | `Inf` (z) |
-| other GLMs (logit, probit, Poisson, …), mixed models, FixedEffectModels | any | `Inf` (z) |
+| model | `df` |
+|:------|:-----|
+| `lm(...)`, or `glm(..., Normal(), IdentityLink())`, with any `vcov` (default, robust, clustered, a function, a matrix) | `dof_residual(model)` (t) |
+| FixedEffectModels `reg(...)` | `dof_residual(model)` (t): FixedEffectModels' own value, which is G − 1 with a cluster `vcov`, as its `coeftable` uses |
+| other GLMs (logit, probit, Poisson, …), mixed models | `Inf` (z) |
+
+The `df` keyword of `population_margins`, `profile_margins` and the model-level `second_differences` overrides the rule: a positive number, or `Inf` for z.
 
 For a linear model every marginal effect, adjusted prediction and contrast is a linear combination of β, so `estimate / se` has an exact t distribution with the residual degrees of freedom — the reference Stata's `margins` uses after `regress` and that `GLM.coeftable` reports for `lm`. For nonlinear models the delta-method standard errors are asymptotic, so z is used, as in Stata after `logit` and in R's marginaleffects. With an identity link the link and response scales coincide, so `scale` does not change `df`.
 
-Robust and clustered covariance: Stata uses the residual df after `vce(robust)` and `n_clusters − 1` after `vce(cluster)`. The `vcov` argument (a CovarianceMatrices estimator or a function) does not carry that information reliably, so Margins uses z for every non-default covariance estimator. With few clusters this is anti-conservative; compute the t-based p-value yourself if you need Stata's small-sample convention, e.g. `2 .* ccdf.(TDist(G - 1), abs.(df.statistic))`.
+Robust and clustered covariance: for a linear model Margins keeps the residual df with any `vcov`, as Stata does after `regress, vce(robust)` and as R's `coeftest(m, vcovHC(m))` does. After `vce(cluster c)` Stata uses `n_clusters − 1`; the `vcov` argument does not carry the cluster count, so pass it: `population_margins(m, data; vcov=CR1(data.c), df=G - 1)`. (Before 3.0, any covariance other than `GLM.vcov` gave z.)
 
-The df is stored in `result.metadata[:df]`.
+The df is stored in `result.inference.df`.
+
+### Offsets
+
+A model's offset enters the linear predictor, η = x′β + offset, and so every prediction and every derivative of the inverse link: GLM.jl `glm(...; offset=log.(exposure))`, a MixedModels GLMM's `offset=`, and for FixedEffectModels the estimated absorbed fixed effects (`reg(...; save=:fe)`).
+
+- **`population_margins`** uses each row's own offset, also within `groups` and under `scenarios` (where it stays at its observed value). The offset must have one entry per row of `data`. For a Poisson model with an intercept and an exposure offset the average adjusted prediction equals `mean(y)`, as `mean(predict(model))` does.
+- **`profile_margins`** needs the offset at each grid row when the requested quantity depends on it (predictions, and response-scale effects of a non-identity link or measures that divide by ŷ): pass `offset=` (a number, or one value per grid row, on the offset's scale, e.g. `offset=log(1000)`) or add an `offset` column to the grid. Without it the call is an error; the offset is never silently 0.
+
+Before 3.0 offsets were ignored (predictions at η = x′β).
 
 ## Second Differences (Interaction Effects)
 
@@ -205,7 +234,7 @@ sd = second_differences(ames, :age, :treated)
 ### Available Functions
 
 - **`second_differences(model, data, variables, modifier; …)`**: the entry point described above.
-- **`second_differences(result, variables, modifier[, vcov])`**: the same on a precomputed result.
+- **`second_differences(result, variables, modifier)`**: the same on a precomputed result, with its covariance matrix and df (`result.inference`).
 
 That is the whole API: the 2.x functions `second_differences_at`, `second_differences_pairwise`,
 `second_differences_all_contrasts`, `second_differences_table` and `second_difference` were removed in 3.0;

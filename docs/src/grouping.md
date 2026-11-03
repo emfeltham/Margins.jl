@@ -47,7 +47,8 @@ DataFrame(education_effects)
     (`groups=(:income, 4)` → `over_income` with labels `Q1`…`Q4`) and nested
     (`groups=:region => :education` → `over_region`, `over_education`) groups. Select rows with
     e.g. `df[df.over_education .== "College", :]` or
-    `contrast(df, (over_education="College",), (over_education="HS",), vcov(model))`.
+    `contrast(result, (over_education="College",), (over_education="HS",))`. Group columns
+    come first, then scenario columns, each in the order given in `groups` / `scenarios`.
 
 ### Cross-Tabulated Grouping
 

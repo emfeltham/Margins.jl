@@ -222,7 +222,7 @@ robust or clustered estimator is computed once per call, also for the model-leve
 function validate_vcov_parameter(vcov, model)::Matrix{Float64}
     # A covariance matrix given directly: check its shape, not the model
     if vcov isa AbstractMatrix
-        k = length(coef(model))
+        k = length(_coef(model))
         size(vcov) == (k, k) ||
             throw(ArgumentError("vcov matrix is $(size(vcov, 1))×$(size(vcov, 2)) but the model has $k coefficients"))
         all(isfinite, vcov) || throw(ArgumentError("vcov matrix contains non-finite values"))
@@ -249,6 +249,7 @@ end
 # CovarianceMatrices estimator (`HC1()`, `CR1(cl)`, ...). CovarianceMatrices is a hard
 # dependency, so it is called directly.
 _evaluate_vcov(vcov::Function, model) = vcov(model)
+_evaluate_vcov(::typeof(GLM.vcov), model) = _default_vcov(model)   # the model class's own
 _evaluate_vcov(vcov, model) = CovarianceMatrices.vcov(vcov, model)
 
 """

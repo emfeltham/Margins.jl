@@ -127,11 +127,12 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         @test groups_prof == Symbol[]
         @test scenarios_prof == Symbol[]
         
-        # Case 3: No profile values
+        # Case 3: No context
         # Create a minimal result for testing edge case
         mock_metadata = Dict{Symbol, Any}(:groups_vars => [:group1], :scenarios_vars => [:scenario1])
         groups_empty, scenarios_empty = Margins.context_columns(
-            Margins.EffectsResult(Float64[], Float64[], String[], String[], nothing, nothing, Matrix{Float64}(undef, 0, 0), mock_metadata)
+            Margins.EffectsResult(Float64[], Float64[], String[], String[], nothing, Matrix{Float64}(undef, 0, 0),
+                                  Inference(Matrix{Float64}(undef, 0, 0), Inf, 0.05), mock_metadata)
         )
         @test groups_empty == Symbol[]
         @test scenarios_empty == Symbol[]

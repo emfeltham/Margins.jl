@@ -40,9 +40,9 @@ using Random
         @test sc(M) ≈ 4 .* base
     end
 
-    @testset "t for the model's own matrix, z otherwise" begin
-        @test population_margins(m, df; vars = :x, vcov = V).metadata[:df] == dof_residual(m)
-        @test population_margins(m, df; vars = :x, vcov = 1.5 .* V).metadata[:df] == Inf
+    @testset "t for a linear model with any matrix (3.0 step 5, D1)" begin
+        @test population_margins(m, df; vars = :x, vcov = V).inference.df == dof_residual(m)
+        @test population_margins(m, df; vars = :x, vcov = 1.5 .* V).inference.df == dof_residual(m)
     end
 
     @testset "invalid matrices are rejected" begin

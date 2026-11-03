@@ -145,11 +145,11 @@ using Random
         @test sd.second_diff ≈ second_differences(lmm_w, df, :x, :t; weights = :w).second_diff
     end
 
-    @testset "FixedEffectModels: weights are not stored, so :model means none" begin
+    @testset "FixedEffectModels: weights are not stored, so :model means none (with a warning)" begin
         df.state = string.(df.g)
         fe_w = reg(df, @formula(y ~ x * t + fe(state)); weights = :w)
-        @test isnothing(Margins._model_weights(fe_w))
-        r = population_margins(fe_w, df; vars = :x)
+        @test Margins._model_weights(fe_w) isa Margins.UnknownWeights
+        r = @test_logs (:warn, r"weights=:model") population_margins(fe_w, df; vars = :x)
         @test r.metadata[:weights_source] === :none && !r.metadata[:weighted]
         u = population_margins(fe_w, df; vars = :x, weights = :w)
         @test u.metadata[:weights_source] === :user && u.metadata[:weighted]

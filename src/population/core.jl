@@ -1,7 +1,7 @@
 # population/core.jl - Main population_margins() function
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -56,12 +56,13 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   across calls), so a refitted model or a changed matrix is always picked up.
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator (e.g. `HC1()`) for robust/clustered
-    standard errors (inference is then z-based; see *Inference* below)
+    standard errors (the t/z choice does not depend on `vcov`; see *Inference* below)
 - `weights=:model`: observation weights for the averages, `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
   - `:model` - the fitted model's estimation weights (`glm(...; wts=w)`, `fit(MixedModel, ...; wts=w)`)
     if it has any, otherwise none (default). The weights must have one entry per row of `data`: if the
     fit dropped rows (missing values), this is an error; pass the weights explicitly. A
-    FixedEffectModels `reg(...; weights=:w)` does not keep its weights, so pass `weights=:w` there.
+    FixedEffectModels `reg(...; weights=:w)` does not keep its weights, so `:model` averages without
+    weights there and warns (once per session); pass `weights=:w` (or `weights=:none`) explicitly.
   - `:none` - no weights (equal weight for all observations; the 2.x default). `nothing` means the same.
   - `Symbol` - column name containing weights (e.g., `:sampling_weight`); `:model` and `:none` are
     reserved, so pass a column with one of those names as a vector
@@ -70,28 +71,48 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - Weights change the point estimates only. Standard errors come from `vcov` (by default the model's,
     which in GLM.jl treats `wts` as frequency weights); they are not design-based survey standard
     errors. For those, pass a design-based covariance estimator or matrix as `vcov`.
+- `df=nothing`: degrees of freedom of the t reference distribution of `statistic`, `p_value` and
+  the confidence interval, overriding the model-class default (see *Inference*). A positive number,
+  or `Inf` for z inference (e.g. `df = G - 1` with a clustered `vcov` on an `lm`, as Stata's
+  `vce(cluster)` does). Recorded in `result.inference.df`.
+
+# Offsets
+A model's η offset (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`, and for
+FixedEffectModels the estimated absorbed fixed effects, which need `reg(...; save=:fe)`) enters
+every prediction and every derivative of the link at each row: η = x'β + offsetᵢ. Under
+`scenarios` the offset stays at each row's observed value; within `groups` each row keeps its own.
+It must have one entry per row of `data`.
+
+# Estimation rows
+For a FixedEffectModels fit, only the rows the model was estimated on (its `esample`: rows
+without missing values, with positive weight, and not singletons of a fixed effect) are used, so
+averages, `groups`, weights and the fixed effects all refer to the estimation sample. `data` must be
+the table passed to `reg` (one row per entry of `esample`; it is subset here), and any other
+number of rows is an `ArgumentError`. A weight vector may have one entry per row of `data`.
 
 # Returns
 `EffectsResult` or `PredictionsResult` containing estimates, delta-method standard errors,
-the parameter gradient matrix and analysis metadata (including `metadata[:df]`, the
-inference degrees of freedom). `DataFrame(result)` has the columns
+the parameter gradient matrix, the context columns (`result.context`: the `groups` and
+`scenarios` values of each row), the inference (`result.inference`: the covariance matrix, the
+degrees of freedom and `alpha`) and analysis metadata. `DataFrame(result)` has the columns
 
 - effects: `[over_<g>…] [at_<s>…] type variable contrast estimate se statistic df p_value ci_lower ci_upper n`
 - predictions: `[over_<g>…] [at_<s>…] type estimate se statistic df p_value ci_lower ci_upper n`
 
-Group variables appear as `over_<var>` and scenario variables as `at_<var>`.
+Group variables appear as `over_<var>` and scenario variables as `at_<var>`, each in the order
+given in `groups` / `scenarios`.
 
 # Inference
 `statistic = estimate / se`. Its reference distribution, used for `p_value` and the
-confidence interval, is t with `df` degrees of freedom, where (see `Margins._inference_df`):
+confidence interval, is t with `df` degrees of freedom. `df` is a property of the model class,
+whatever `vcov` is passed (see `Margins._inference_df`), unless the `df` keyword gives it:
 - `df = dof_residual(model)` for a linear model — GLM.jl `lm`, or a `glm` with a `Normal`
-  family and `IdentityLink` — with the default model-based `vcov`. Every margin of such a
-  model is a linear combination of β, so the t reference is exact (Stata's `margins` after
-  `regress`; `GLM.coeftable`).
-- `df = Inf` (standard Normal, z) for all other models (non-identity GLMs, mixed models,
-  FixedEffectModels) and for any robust, clustered or custom `vcov`. The `vcov` argument
-  does not carry the small-sample df conventions Stata uses after `vce(robust)` /
-  `vce(cluster)`, so robust and clustered inference is asymptotic.
+  family and `IdentityLink` — with any `vcov`, including robust ones (as Stata's `margins` after
+  `regress` or `regress, vce(robust)`, `GLM.coeftable`, and R's `coeftest(m, vcovHC(m))`). Every
+  margin of such a model is a linear combination of β.
+- `df = dof_residual(model)` for a FixedEffectModels fit, which FixedEffectModels adjusts for
+  clustering (G − 1 with a cluster `vcov`), as its own `coeftable` does.
+- `df = Inf` (standard Normal, z) for all other models (non-identity GLMs, mixed models).
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
@@ -150,33 +171,30 @@ function population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
+    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
     # Every option is validated, and `vcov` evaluated, once, here
     req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
-                             measure, contrasts, alpha, vcov, weights)
+                             measure, contrasts, alpha, vcov, weights, df)
     return _run(req)
 end
 
 """
     _run(req::MarginsRequest{:population}) -> Union{EffectsResult, PredictionsResult}
 
-Compute a population request and attach its inference (`metadata[:df]`, `metadata[:vcov]`).
+Compute a population request: the AME/AAP, with its inference (`result.inference`: the
+request's Σ, df and alpha).
 """
-function _run(req::MarginsRequest{:population})
-    (res, Σ) = _population_result(req)
-    return _attach_inference_df!(res, req.model, req.df, Σ)
-end
+_run(req::MarginsRequest{:population}) = _population_result(req)
 
 """
-    _population_result(req::MarginsRequest{:population}) -> (result, Σ)
+    _population_result(req::MarginsRequest{:population}) -> Union{EffectsResult, PredictionsResult}
 
-The AME/AAP of a population request, without the inference df (the FixedEffectModels
-extension adds its fixed-effect offsets to this), and the engine's covariance matrix.
+The AME/AAP of a population request.
 """
 function _population_result(req::MarginsRequest{:population})
-    (; model, data_nt, type, vars, scale, backend, measure, contrasts, alpha) = req
+    (; model, data_nt, type, vars, scale, backend, measure, contrasts) = req
     weights_vec = req.weights
 
     # Build zero-allocation engine with PopulationUsage optimization.
@@ -184,8 +202,10 @@ function _population_result(req::MarginsRequest{:population})
     # never share mutable buffers and every call sees the current model, data and Σ.
     # The scenarios/groups path builds its own evaluators per context, so its engine gets none.
     has_contexts = _has_contexts(req)
+    # The η offset at each data row (held at its observed values under scenarios) is the
+    # engine's, so every population kernel reads it.
     engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend;
-                          evaluators = !has_contexts)
+                          evaluators = !has_contexts, offset = req.offset)
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if has_contexts
         # Whether a request has contexts is a run-time value (it is a type in the keyword
@@ -193,15 +213,12 @@ function _population_result(req::MarginsRequest{:population})
         # then not compiled into every plain AME/AAP call (first-call latency), only on first use.
         res = Base.invokelatest(_population_margins_with_contexts, engine, req)
         _set_weights_metadata!(res.metadata, weights_vec, req.weights_source)
-        return (res, engine.Σ)
+        return res
     end
 
     if type === :effects
         df, G = _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights_vec)  # → AME (both continuous and categorical)
         metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-    
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = alpha
     
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -215,13 +232,10 @@ function _population_result(req::MarginsRequest{:population})
         variables = df.variable  # The "x" in dy/dx
         terms = df.contrast
     
-        return (EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), engine.Σ)
+        return EffectsResult(estimates, standard_errors, variables, terms, nothing, G, _request_inference(req, engine), metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-    
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = alpha
     
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -233,7 +247,7 @@ function _population_result(req::MarginsRequest{:population})
         estimates = df.estimate
         standard_errors = df.se
     
-        return (PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), engine.Σ)
+        return PredictionsResult(estimates, standard_errors, nothing, G, _request_inference(req, engine), metadata)
     end
 end
 

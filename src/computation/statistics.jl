@@ -37,52 +37,8 @@ end
 # Inference distribution: t with residual df for linear models, z otherwise
 # =============================================================================
 
-"""
-    _inference_df(model, vcov) -> Float64
-
-Degrees of freedom of the reference distribution used for every test statistic, p-value
-and confidence interval that Margins reports for `model` with covariance estimator `vcov`.
-This is the single place where the rule is defined:
-
-- **Linear models with the model-based covariance** — a GLM.jl `LinearModel` (from `lm`) or
-  a `GeneralizedLinearModel` with a `Normal` family and an `IdentityLink`, with `vcov` the
-  default `GLM.vcov` (or a matrix equal to `vcov(model)`): `dof_residual(model)`. Marginal
-  effects, predictions and their contrasts are then linear combinations of β, so
-  `estimate / se` has an exact t distribution with the residual df (as in Stata's `margins`
-  after `regress`, R's `emmeans`, and `GLM.coeftable` for `lm`).
-- **Everything else** — other GLMs, mixed models, FixedEffectModels, and *any* robust,
-  clustered or user-supplied covariance (a CovarianceMatrices estimator such as `HC1()` or
-  `CR1(...)`, a custom function, or a matrix that differs from `vcov(model)`): `Inf`,
-  i.e. the standard Normal (z). The covariance argument does not carry the information
-  needed for Stata's small-sample conventions (residual df after `vce(robust)`,
-  `n_clusters - 1` after `vce(cluster)`), so these estimators use asymptotic z inference.
-
-The rule depends only on the model and the covariance estimator, not on the quantity: with an
-identity link the link and response scales coincide, and for a linear model all quantities
-(including elasticities) use the same t reference, as Stata does after `regress`.
-"""
-function _inference_df(model, vcov)::Float64
-    _is_linear_regression(model) || return Inf
-    _is_model_based_vcov(model, vcov) || return Inf
-    d = Float64(GLM.dof_residual(model))
-    return (isfinite(d) && d > 0) ? d : Inf
-end
-
-# A GLM.jl linear regression: `LinearModel`, or a Normal-family identity-link GLM (bare or
-# wrapped in a `TableRegressionModel`). Purely type-based, so it never errors on other models.
-function _is_linear_regression(model)::Bool
-    inner = model isa StatsModels.TableRegressionModel ? model.model : model
-    inner isa GLM.LinearModel && return true
-    if inner isa GLM.GeneralizedLinearModel
-        return inner.rr.d isa Normal && GLM.Link(inner) isa GLM.IdentityLink
-    end
-    return false
-end
-
-# Is `vcov` the model's own (classical) covariance estimator?
-_is_model_based_vcov(model, vcov::Function) = vcov === GLM.vcov
-_is_model_based_vcov(model, vcov::AbstractMatrix) = vcov == GLM.vcov(model)
-_is_model_based_vcov(model, vcov) = false  # CovarianceMatrices estimators and anything else
+# The df rule is a property of the model class: `_inference_df(model)` in
+# core/model_interface.jl, overridden by the entry points' `df=` keyword.
 
 """
     _inference_dist(df::Real)
@@ -92,55 +48,9 @@ Reference distribution for `df` degrees of freedom: `TDist(df)` when `df` is fin
 """
 _inference_dist(df::Real) = isfinite(df) ? TDist(df) : Normal()
 
-# Degrees of freedom stored on a result (`Inf` for results built without one).
-_result_df(mr)::Float64 = Float64(get(mr.metadata, :df, Inf))
-
-# Store the inference df on a result's metadata (called once per result, by `_run`, with the
-# request's `df = _inference_df(model, vcov)`).
-function _attach_inference_df!(result, model, df::Float64, Σ=nothing)
-    result.metadata[:df] = df
-    # The covariance matrix behind this result's standard errors, so that second differences
-    # can default to it (`_stored_vcov`).
-    isnothing(Σ) || (result.metadata[:vcov] = Matrix{Float64}(Σ))
-    # For a linear regression also keep the model-based covariance and residual df, so that
-    # second differences can decide t vs z from the covariance matrix they are *given*
-    # (see `_second_difference_dof`), not from the one this result was computed with.
-    if _is_linear_regression(model)
-        d = Float64(GLM.dof_residual(model))
-        if isfinite(d) && d > 0
-            result.metadata[:model_df] = d
-            result.metadata[:model_vcov] = Matrix{Float64}(GLM.vcov(model))
-        end
-    end
-    return result
-end
-
-# The covariance matrix a result was computed with (second-difference functions default to it).
-function _stored_vcov(ame_result)::Matrix{Float64}
-    V = get(ame_result.metadata, :vcov, nothing)
-    isnothing(V) && error("This result does not record the covariance matrix it was computed " *
-                          "with; pass `vcov` explicitly.")
-    return V
-end
-
-# Inference df for a second difference computed with covariance `Σ`: t with the residual df
-# when `Σ` is the linear model's own covariance, z (`Inf`) for any other matrix or when the
-# result carries no linear-model information (same rule as `_inference_df`).
-function _second_difference_dof(ame_result, Σ::AbstractMatrix)::Float64
-    d = get(ame_result.metadata, :model_df, Inf)
-    V = get(ame_result.metadata, :model_vcov, nothing)
-    (isfinite(d) && V !== nothing && size(V) == size(Σ) && Σ == V) ? Float64(d) : Inf
-end
-
-# Make the second-difference df rule agree with `_inference_df(model, vcov)` (`df`, the request's) for
-# the covariance the user gave: drop the recorded linear-model information when that rule says z
-# (e.g. `vcov = m -> vcov(m)`).
-function _align_second_difference_df!(ame_result, df::Float64)
-    isfinite(df) && return ame_result
-    delete!(ame_result.metadata, :model_df)
-    delete!(ame_result.metadata, :model_vcov)
-    return ame_result
-end
+# The inference of a request's result: the engine's covariance matrix (a fresh copy of the
+# request's Σ, so results never share it), the request's df and alpha.
+_request_inference(req, engine) = Inference(engine.Σ, req.df, req.alpha)
 
 """
     compute_statistic(estimate::Float64, se::Float64) -> Float64
@@ -222,7 +132,7 @@ models. Mixed models are excluded (their predictive variance involves the random
 effects, which is out of scope here).
 """
 function _is_gaussian_identity(model)::Bool
-    (_auto_link(model) isa GLM.IdentityLink) || return false
+    (_link(model) isa GLM.IdentityLink) || return false
     inner = hasfield(typeof(model), :model) ? getfield(model, :model) : model
     hasfield(typeof(inner), :rr) || return false
     rr = getfield(inner, :rr)
@@ -268,69 +178,96 @@ function _prediction_residual_variance(model)::Float64
 end
 
 """
-    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
+    contrast(result::MarginsResult, row1::Int, row2::Int; alpha=result.inference.alpha) -> ContrastResult
+    contrast(result::MarginsResult, spec1::NamedTuple, spec2::NamedTuple; alpha=result.inference.alpha) -> ContrastResult
 
-Compute contrast between two result rows with delta-method inference.
+Contrast between two rows of a result (`estimate[row1] − estimate[row2]`) with delta-method
+inference.
 
-This function works for both `EffectsResult` and `PredictionsResult` objects,
-computing the difference between estimates at two rows with proper standard errors.
+This function works for both `EffectsResult` and `PredictionsResult` objects. The rows are
+given by number, or by the values of their `DataFrame(result)` columns.
 
 # Arguments
 - `result`: EffectsResult or PredictionsResult object
 - `row1`, `row2`: Row numbers to contrast
-- `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
+- `spec1`, `spec2`: Column values that identify one row each, with the column names of
+  `DataFrame(result)`: bare grid columns for `profile_margins` results (e.g. `(treatment=1, age=30)`),
+  `over_<var>` for `groups=` and `at_<var>` for `scenarios=` columns of `population_margins`
+  results, and `variable` / `contrast` to pick an effect (e.g. `(variable="x1", at_age=60)`).
+  Each spec must match exactly one row.
+- `alpha`: Significance level, a real number in (0, 1) (default: the `alpha` the result was
+  computed with)
 
 # Returns
 `ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
 
 # Inference
-A contrast is a linear combination of the same estimates, so it uses the result's own
-reference distribution: `df = result.metadata[:df]` (t with the residual df for a linear
-model with the model-based covariance, `Inf` = z otherwise; see the `population_margins`
-docstring).
+Everything comes from the result (`result.inference`): the standard error is
+`√((g₁ − g₂)'Σ(g₁ − g₂))` with `gᵢ = result.gradients[rowᵢ, :]` and `Σ = result.inference.vcov`,
+the covariance matrix the result's standard errors were computed with, and the reference
+distribution is the result's (`df = result.inference.df`: t when finite, z when `Inf`). To
+contrast with a different covariance estimator, recompute the result with `vcov=`.
 
 # Statistical Correctness
 The standard error accounts for the covariance between the two estimates. The gradient-based delta method
 automatically handles scale transformations (_e.g._, log-odds → probability for logistic models).
 See `src/inference/delta_method.jl` for detailed mathematical justification of why
-`vcov(model)` is always on the right scale.
+the parameter covariance matrix is always on the right scale.
 
 # Examples
 ```julia
 # Prediction contrast
 pred_result = profile_margins(model, data, cartesian_grid(x = [0, 1]); type = :predictions)
-cr = contrast(pred_result, 1, 2, vcov(model))
+cr = contrast(pred_result, 2, 1)
 println(cr) # Formatted output
 
-# Effect contrast
-eff_result = profile_margins(model, data, cartesian_grid(x = [0, 1]); type = :effects, vars = [:z])
-cr = contrast(eff_result, 1, 2, vcov(model))
+# The same rows, by their column values
+cr = contrast(pred_result, (x = 1,), (x = 0,))
+
+# Effect contrast across scenarios, at 90%
+eff_result = population_margins(model, data; scenarios = (age = [30, 60],), vars = [:x1])
+cr = contrast(eff_result, (variable = "x1", at_age = 60), (variable = "x1", at_age = 30); alpha = 0.10)
 
 # Convert to DataFrame
 df = DataFrame(cr)
 ```
 """
-function contrast(result::MarginsResult, row1::Int, row2::Int,
-                 Σ::Matrix{Float64}; alpha::Real=0.05)
-    alpha = _validate_alpha(alpha)
+function contrast(result::MarginsResult, row1::Int, row2::Int; alpha::Real=result.inference.alpha)
     n = length(result.estimates)
     (row1 < 1 || row1 > n) && throw(ArgumentError("row1 = $row1 out of bounds (1:$n)"))
     (row2 < 1 || row2 > n) && throw(ArgumentError("row2 = $row2 out of bounds (1:$n)"))
+    return _contrast_rows(result, row1, row2, _validate_alpha(alpha),
+                          Dict{Symbol, Any}(:source => :result_object))
+end
 
+function contrast(result::MarginsResult, spec1::NamedTuple, spec2::NamedTuple;
+                  alpha::Real=result.inference.alpha)
+    alpha = _validate_alpha(alpha)
+    table = DataFrame(result)
+    row1 = _find_unique_row(table, spec1)
+    row2 = _find_unique_row(table, spec2)
+    return _contrast_rows(result, row1, row2, alpha,
+                          Dict{Symbol, Any}(:source => :result_namedtuple,
+                                            :row1_spec => spec1, :row2_spec => spec2))
+end
+
+# The contrast of two rows of a result, with the result's covariance matrix and df
+function _contrast_rows(result::MarginsResult, row1::Int, row2::Int, alpha::Float64,
+                        metadata::Dict{Symbol, Any})
     contrast_val = result.estimates[row1] - result.estimates[row2]
     grad_contrast = result.gradients[row1, :] .- result.gradients[row2, :]
 
-    dof = _result_df(result)
+    (; vcov, df) = result.inference
     se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, alpha, dof
+        contrast_val, grad_contrast, vcov, alpha, df
     )
+    metadata[:alpha] = alpha
 
     return ContrastResult(
         contrast_val,
         se,
         statistic,
-        dof,
+        df,
         p_value,
         ci_lower,
         ci_upper,
@@ -339,235 +276,25 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
         grad_contrast,
         row1,
         row2,
-        Dict{Symbol, Any}(:alpha => alpha, :source => :result_object)
+        metadata
     )
 end
 
-"""
-    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
-
-Compute contrast between two rows in a margins DataFrame using row indices.
-
-This method provides a simple interface for computing contrasts directly from DataFrames
-produced by `DataFrame(profile_margins(...))` or `DataFrame(population_margins(...))`.
-
-# Arguments
-- `df`: DataFrame from `DataFrame(result; include_gradients=true)`
-- `row1`, `row2`: Row numbers to contrast
-- `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
-
-# Returns
-`ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
-
-# Examples
-```julia
-using Margins, GLM, DataFrames
-
-# Get predictions DataFrame
-pred_result = profile_margins(model, data, cartesian_grid(treatment=[0, 1], age=[30, 40]))
-df = DataFrame(pred_result; include_gradients=true)
-println(df)  # View the structure
-
-# Contrast rows 2 and 1 directly
-cr = contrast(df, 2, 1, vcov(model))
-println(cr) # Formatted output
-
-# Works with any margins result
-eff_result = profile_margins(model, data, cartesian_grid(education=["HS", "College"]);
-                             type=:effects, vars=[:x1])
-df = DataFrame(eff_result; include_gradients=true)
-cr = contrast(df, 2, 1, vcov(model))  # Compare row 2 vs row 1
-```
-
-# Inference
-Uses the `df` column of the two rows (t with that df when finite, z when `Inf`); a
-DataFrame without a `df` column gets z inference.
-
-# Error Handling
-- Throws `ArgumentError` if gradient column is not present (use `include_gradients=true`)
-- Throws `ArgumentError` if row indices are out of bounds
-
-# See Also
-- `contrast(::MarginsResult, ::Int, ::Int, ...)`: Direct result object method
-- `contrast(::DataFrame, ::NamedTuple, ::NamedTuple, ...)`: Column-based row selection
-"""
-function contrast(
-    df::AbstractDataFrame,
-    row1::Int,
-    row2::Int,
-    Σ::Matrix{Float64};
-    alpha::Real=0.05,
-    estimatename = :estimate
-)
-    alpha = _validate_alpha(alpha)
-    # Validate gradient column exists
-    if !hasproperty(df, :gradient)
-        error("DataFrame must include gradient column. Use: DataFrame(result; include_gradients=true)")
-    end
-
-    # Validate row indices
-    n = nrow(df)
-    (row1 < 1 || row1 > n) && throw(ArgumentError("row1=$row1 out of bounds (1:$n)"))
-    (row2 < 1 || row2 > n) && throw(ArgumentError("row2=$row2 out of bounds (1:$n)"))
-
-    # Extract estimates and gradients
-    est1 = df[row1, estimatename]
-    est2 = df[row2, estimatename]
-    grad1 = df.gradient[row1]
-    grad2 = df.gradient[row2]
-
-    # Compute contrast
-    contrast_val = est1 - est2
-    grad_contrast = grad1 .- grad2
-
-    # Statistical inference
-    dof = _dataframe_contrast_df(df, row1, row2)
-    se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, alpha, dof
-    )
-
-    return ContrastResult(
-        contrast_val,
-        se,
-        statistic,
-        dof,
-        p_value,
-        ci_lower,
-        ci_upper,
-        est1,
-        est2,
-        grad_contrast,
-        row1,
-        row2,
-        Dict{Symbol, Any}(:alpha => alpha, :source => :dataframe_integer)
-    )
+# Margins 2.x forms of `contrast`, removed in 3.0: say what to call instead of a bare MethodError.
+function contrast(::MarginsResult, ::Union{Int,NamedTuple}, ::Union{Int,NamedTuple},
+                  ::AbstractMatrix; kwargs...)
+    throw(ArgumentError(
+        "contrast(result, row1, row2, Σ) was removed in Margins 3.0: a contrast uses the " *
+        "covariance matrix the result was computed with (result.inference.vcov). Call " *
+        "contrast(result, row1, row2). For a different covariance estimator, recompute the " *
+        "result with vcov=… (population_margins / profile_margins)."))
 end
-
-"""
-    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
-
-Compute contrast between two rows identified by column values in a margins DataFrame.
-
-This method provides a convenient interface for computing contrasts using column-based
-row selection, similar to DataFrame filtering. Works with DataFrames produced by
-`DataFrame(profile_margins(...))` or `DataFrame(population_margins(...))`.
-
-# Arguments
-- `df`: DataFrame from `DataFrame(result; include_gradients=true)`
-- `row1_spec`: NamedTuple specifying column values for first row (e.g., `(x=1, treatment=0)`)
-- `row2_spec`: NamedTuple specifying column values for second row (e.g., `(x=1, treatment=1)`)
-- `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
-
-# Column Specifications
-The NamedTuple keys must match column names in the DataFrame:
-- **Profile columns**: Bare variable names for `profile_margins()` results (e.g., `treatment`, `age`)
-- **Scenario columns**: `at_` prefixed for population scenarios (e.g., `at_education`)
-- **Effect columns**: `variable`, `contrast` for identifying specific effects
-- **Group columns**: `over_` prefixed for population groups (e.g., `over_region`)
-
-# Returns
-`ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
-
-# Examples
-```julia
-using Margins, GLM, DataFrames
-
-# Profile predictions across treatment levels
-pred_result = profile_margins(model, data,
-                              cartesian_grid(treatment=[0, 1], age=[30, 40, 50]))
-df = DataFrame(pred_result; include_gradients=true)
-
-# Contrast predictions at age=30 across treatment levels
-cr = contrast(df, (treatment=1, age=30), (treatment=0, age=30), vcov(model))
-println(cr)
-
-# Effect of x1 across modifier levels
-eff_result = profile_margins(model, data,
-                             cartesian_grid(education=["HS", "College", "Grad"]),
-                             type=:effects, vars=[:x1, :x2])
-df = DataFrame(eff_result; include_gradients=true)
-
-# Compare x1 effect between education levels
-cr = contrast(df, (variable="x1", education="College"), (variable="x1", education="HS"), vcov(model))
-
-# Population margins with scenarios
-pop_result = population_margins(model, data; scenarios=(age=[30, 60],), type=:effects)
-df = DataFrame(pop_result; include_gradients=true)
-
-# Contrast using at_ prefix (population scenarios)
-cr = contrast(df, (variable="x1", at_age=60), (variable="x1", at_age=30), vcov(model))
-```
-
-# Error Handling
-- Throws `ArgumentError` if specified column does not exist (lists available columns)
-- Throws `ArgumentError` if no rows match the specification
-- Throws `ArgumentError` if multiple rows match (ambiguous specification - be more specific)
-- Throws `ArgumentError` if gradient column is not present (use `include_gradients=true`)
-
-# See Also
-- `contrast(::MarginsResult, ::Int, ::Int, ...)`: Direct result object method
-- `contrast(::AbstractDataFrame, ::Int, ::Int, ...)`: Simple integer-based row selection
-"""
-function contrast(
-    df::AbstractDataFrame,
-    row1_spec::NamedTuple,
-    row2_spec::NamedTuple,
-    Σ::Matrix{Float64};
-    alpha::Real=0.05,
-    estimatename = :estimate
-)
-    alpha = _validate_alpha(alpha)
-    # Validate gradient column exists
-    if !hasproperty(df, :gradient)
-        error("DataFrame must include gradient column. Use: DataFrame(result; include_gradients=true)")
-    end
-
-    # Find matching rows
-    row1_idx = _find_unique_row(df, row1_spec)
-    row2_idx = _find_unique_row(df, row2_spec)
-
-    # Extract estimates and gradients
-    est1 = df[row1_idx, estimatename]
-    est2 = df[row2_idx, estimatename]
-    grad1 = df[row1_idx, :gradient]
-    grad2 = df[row2_idx, :gradient]
-
-    # Compute contrast
-    contrast_val = est1 - est2
-    grad_contrast = grad1 .- grad2
-
-    # Statistical inference
-    dof = _dataframe_contrast_df(df, row1_idx, row2_idx)
-    se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, alpha, dof
-    )
-
-    return ContrastResult(
-        contrast_val,
-        se,
-        statistic,
-        dof,
-        p_value,
-        ci_lower,
-        ci_upper,
-        est1,
-        est2,
-        grad_contrast,
-        row1_idx,
-        row2_idx,
-        Dict{Symbol, Any}(:alpha => alpha, :source => :dataframe_namedtuple,
-                          :row1_spec => row1_spec, :row2_spec => row2_spec)
-    )
-end
-
-# Inference df for a contrast between two rows of a margins DataFrame: the rows' `df`
-# column (they come from one result, so share it); `Inf` (z) if the column is absent.
-function _dataframe_contrast_df(df::AbstractDataFrame, row1::Int, row2::Int)::Float64
-    hasproperty(df, :df) || return Inf
-    d1 = Float64(df[row1, :df]); d2 = Float64(df[row2, :df])
-    return d1 == d2 ? d1 : min(d1, d2)
+function contrast(::AbstractDataFrame, args...; kwargs...)
+    throw(ArgumentError(
+        "contrast(df::DataFrame, …) was removed in Margins 3.0: contrast the result itself, " *
+        "contrast(result, row1, row2) or contrast(result, (col=value, …), (col=value, …)), with " *
+        "the same row numbers and DataFrame(result) column names. It uses the result's own " *
+        "covariance matrix, df and alpha (result.inference)."))
 end
 
 """
@@ -657,11 +384,10 @@ The resulting DataFrame contains:
 using Margins, GLM, DataFrames
 
 # Profile predictions
-pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]))
-df_pred = DataFrame(pred_result; include_gradients=true)
+pred_result = profile_margins(model, data, cartesian_grid(x=[0, 1]); type=:predictions)
 
 # Compute contrast
-cr = contrast(df_pred, 1, 2, vcov(model))
+cr = contrast(pred_result, 2, 1)
 
 # Convert to DataFrame
 df_contrast = DataFrame(cr)
@@ -677,7 +403,6 @@ df_contrast_complete = DataFrame(cr; include_gradient=true, include_metadata=tru
 
 # See Also
 - `contrast(::MarginsResult, ...)`: Compute contrasts from result objects
-- `contrast(::AbstractDataFrame, ...)`: Compute contrasts from DataFrames
 """
 function DataFrames.DataFrame(
     cr::ContrastResult;

@@ -101,13 +101,14 @@ using Distributions: TDist, Normal, quantile
             r = second_differences(lmod, df, :x, :t; vcov=v)
             @test r.se[1] ≈ base.se[1] && r.df[1] == dof_residual(lmod)
         end
-        # a function is a user-supplied estimator (same rule as population_margins): same numbers, z
+        # any other covariance: same t df (3.0 step 5, D1: df is the model class's)
         rf = second_differences(lmod, df, :x, :t; vcov=m -> vcov(m))
-        @test rf.se[1] ≈ base.se[1] && rf.df[1] == Inf
+        @test rf.se[1] ≈ base.se[1] && rf.df[1] == dof_residual(lmod)
         rob = second_differences(lmod, df, :x, :t; vcov=1.5 .* V)
         @test rob.se[1] ≈ sqrt(1.5) * base.se[1] rtol=1e-6
-        @test rob.df[1] == Inf
-        @test second_differences(lmod, df, :x, :w; vcov=1.5 .* V).df[1] == Inf
+        @test rob.df[1] == dof_residual(lmod)
+        @test second_differences(lmod, df, :x, :w; vcov=1.5 .* V).df[1] == dof_residual(lmod)
+        @test second_differences(lmod, df, :x, :w; vcov=1.5 .* V, df=Inf).df[1] == Inf
     end
 
     @testset "CovarianceMatrices estimator as vcov (HC1)" begin
@@ -121,18 +122,19 @@ using Distributions: TDist, Normal, quantile
         @test r_est.second_diff[1] ≈ second_differences(lmod, df, :x, :t).second_diff[1]
         @test r_est.se[1] ≈ r_mat.se[1] ≈ r_hand.se[1]
         @test r_est.se[1] != second_differences(lmod, df, :x, :t).se[1]
-        @test r_est.df[1] == Inf && r_mat.df[1] == Inf && r_hand.df[1] == Inf
-        # robust Σ analysed against the model-based one only changes the SE, and df follows Σ
-        @test second_differences(ames, :x, :t, V).df[1] == dof_residual(lmod)
+        dfr = dof_residual(lmod)   # robust lm: t(n − k) (3.0 step 5, D1)
+        @test r_est.df[1] == dfr && r_mat.df[1] == dfr && r_hand.df[1] == dfr
+        # the result carries the robust Σ it was computed with
+        @test ames.inference.vcov ≈ CovarianceMatrices.vcov(HC1(), lmod)
         # local derivative
         l_est = second_differences(lmod, df, :x, :w; vcov=HC1())
         l_mat = second_differences(lmod, df, :x, :w; vcov=Vr)
         @test l_est.se[1] ≈ l_mat.se[1]
-        @test l_est.df[1] == Inf
+        @test l_est.df[1] == dfr
         @test l_est.second_diff[1] ≈ second_differences(lmod, df, :x, :w).second_diff[1]
         # categorical modifier, several focal variables
         c_est = second_differences(lmod, df, [:x, :z], :g; vcov=HC1(), warn=false)
-        @test all(c_est.df .== Inf) && nrow(c_est) == 6
+        @test all(c_est.df .== dfr) && nrow(c_est) == 6
     end
 
     @testset "confidence intervals and alpha" begin
@@ -266,18 +268,21 @@ using Distributions: TDist, Normal, quantile
         V = vcov(lmod)
         grid = cartesian_grid(t=[0, 1])
         p = profile_margins(lmod, df, grid; type=:effects, vars=[:x])
-        @test p.metadata[:vcov] == V
-        sd = second_differences(p, :x, :t)                       # no vcov argument needed
+        @test p.inference.vcov == V
+        sd = second_differences(p, :x, :t)                       # the result's own covariance
         @test sd.second_diff[1] ≈ b("x & t") atol=1e-8           # difference of MEMs = interaction coefficient
         @test sd.df[1] == dof_residual(lmod)
-        @test sd.se[1] ≈ second_differences(p, :x, :t, V).se[1]
+        g = p.gradients[2, :] .- p.gradients[1, :]
+        @test sd.se[1] ≈ sqrt(g' * V * g)
         @test Margins._second_differences_pairwise(p, :x, :t).second_diff ≈ sd.second_diff
         @test Margins._second_difference(p, :x, :t).second_diff ≈ sd.second_diff[1]
         # robust covariance recorded and used
         pr = profile_margins(lmod, df, grid; type=:effects, vars=[:x], vcov=HC1())
-        @test pr.metadata[:vcov] != V
-        @test second_differences(pr, :x, :t).se[1] ≈ second_differences(pr, :x, :t, CovarianceMatrices.vcov(HC1(), lmod)).se[1]
-        @test second_differences(pr, :x, :t).df[1] == Inf
+        @test pr.inference.vcov != V
+        gr = pr.gradients[2, :] .- pr.gradients[1, :]
+        Vhc = CovarianceMatrices.vcov(HC1(), lmod)
+        @test second_differences(pr, :x, :t).se[1] ≈ sqrt(gr' * Vhc * gr)
+        @test second_differences(pr, :x, :t).df[1] == dof_residual(lmod)   # D1: t with a robust vcov
         # a grid that varies another variable too is rejected, not mixed
         p2 = profile_margins(lmod, df, cartesian_grid(t=[0, 1], g=["a", "b"]); type=:effects, vars=[:x])
         @test_throws ErrorException second_differences(p2, :x, :t)
@@ -285,7 +290,7 @@ using Distributions: TDist, Normal, quantile
         pp = profile_margins(lmod, df, grid; type=:predictions)
         ap = population_margins(lmod, df; scenarios=(t=[0, 1],), type=:predictions)
         for r in (pp, ap)
-            err = try second_differences(r, :x, :t, V); nothing catch e; e end
+            err = try second_differences(r, :x, :t); nothing catch e; e end
             @test err isa ErrorException && occursin("type=:effects", err.msg)
         end
         err = try second_differences(ap, [:x], :t); nothing catch e; e end

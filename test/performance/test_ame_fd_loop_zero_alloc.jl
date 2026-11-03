@@ -76,3 +76,63 @@ end
     @test DataFrame(profile_margins(model, df, means_grid(df); type=:effects, vars=vars)).estimate isa Vector{Float64}
     @test !isempty(DataFrame(population_margins(model, df; vars=[:x], scenarios=(group=["A", "B"],))).estimate)
 end
+
+# 3.0 step 5: an η offset (GLM `offset=`, GLMM `offset=`, FixedEffectModels' absorbed fixed
+# effects) enters every kernel through the engine's `offset::O` (`O = Vector{Float64}`), so the
+# loops stay allocation-free and concretely typed with an offset too.
+function _cat_loop_allocs(engine, var, pairs, rows, scale, weights)
+    n = length(pairs); p = length(engine.β)
+    ame = zeros(n); se = zeros(n); G = zeros(n, p)
+    s = Margins.predscale(scale, engine.link)
+    f() = Margins.categorical_contrast_ame_batch!(ame, se, G, engine.contrast_buf, engine.contrast, var,
+                                                  pairs, engine.β, engine.Σ, s, rows, weights, engine.offset)
+    f()
+    return @allocated f()
+end
+
+function _aap_loop_allocs(engine, data_nt, rows, scale, weights)
+    g = zeros(length(engine.β))
+    s = Margins.predscale(scale, engine.link)
+    tw = isnothing(weights) ? Float64(length(rows)) : sum(weights[rows])
+    f() = Margins.average_prediction!(g, engine.row_buf, engine.compiled, data_nt, engine.β, s, rows,
+                                      weights, tw, engine.offset)
+    f()
+    return @allocated f()
+end
+
+@testset "Hot loops with an offset: zero allocation, concrete engine type" begin
+    Random.seed!(11)
+    n = 20_000
+    df = DataFrame(x = randn(n), z = abs.(randn(n)) .+ 0.1, e = 0.5 .+ rand(n),
+                   group = categorical(rand(["A", "B", "C"], n)))
+    df.y = Float64.(rand(n) .< 0.3)
+    model = glm(@formula(y ~ x * group + log(z)), df, Poisson(), LogLink(); offset=log.(df.e))
+    data_nt = Margins._prepare_margins_data(Tables.columntable(df), model)
+    off = Margins._offset(model, data_nt)
+    @test off isa Vector{Float64} && length(off) == n
+    weights = rand(n) .+ 0.1
+    measures = (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
+    for backend in (:fd, :ad)
+        engine = Margins.build_engine(Margins.PopulationUsage, model, data_nt, [:x, :z, :group], GLM.vcov, backend;
+                                      offset=off)
+        @test engine.offset === off
+        @test fieldtype(typeof(engine), :offset) === Vector{Float64}
+        for scale in (:link, :response), w in (nothing, weights)
+            for measure in measures
+                @test _ame_loop_allocs(engine, [:x, :z], data_nt, 1:n, scale, measure, w) == 0
+            end
+            pairs = Margins.generate_contrast_pairs(data_nt.group, 1:n, :baseline, model, :group, data_nt)
+            @test _cat_loop_allocs(engine, :group, pairs, 1:n, scale, w) == 0
+            @test _aap_loop_allocs(engine, data_nt, 1:n, scale, w) == 0
+        end
+    end
+    # and without one: the engine records `Nothing`
+    e0 = Margins.build_engine(Margins.PopulationUsage, model, data_nt, [:x], GLM.vcov, :ad)
+    @test e0.offset === nothing && fieldtype(typeof(e0), :offset) === Nothing
+    for scale in (:link, :response)
+        @test _cat_loop_allocs(Margins.build_engine(Margins.PopulationUsage, model, data_nt, [:group], GLM.vcov, :ad),
+                               :group, Margins.generate_contrast_pairs(data_nt.group, 1:n, :baseline, model, :group, data_nt),
+                               1:n, scale, nothing) == 0
+        @test _aap_loop_allocs(e0, data_nt, 1:n, scale, nothing) == 0
+    end
+end

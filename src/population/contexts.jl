@@ -20,7 +20,7 @@ The request carries the parsed scenarios and groups (`req.scenario_specs`, `req.
 already checked against the combination limit.
 """
 function _population_margins_with_contexts(engine, req::MarginsRequest)
-    (; data_nt, vars, scenarios, groups, type, scale, backend, alpha, measure, contrasts) = req
+    (; data_nt, vars, scenarios, groups, type, scale, backend, measure, contrasts) = req
     weights = req.weights
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
@@ -143,9 +143,6 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
     metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)),
                               model_type=typeof(engine.model), has_contexts=true)
 
-    # Store confidence interval parameters in metadata
-    metadata[:alpha] = alpha
-
     # Store scenarios and groups variable information for Context column
     # (`req.scenarios` is already a NamedTuple, also for the Pair syntax)
     scenarios_vars = isnothing(scenarios) ? Symbol[] : collect(Symbol, keys(scenarios))
@@ -204,14 +201,15 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
         metadata[:has_subgroup_n] = true
     end
 
-    # Extract profile values from at_ columns (if any)
-    profile_values = _extract_context_profile_values(results)
+    # The context columns: groups, then scenarios, each in the order the call gave them
+    context = _context_result_context(results, groups_vars, scenarios_vars)
+    inference = _request_inference(req, engine)
 
     # Return type-specific result
     if type === :effects
-        return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+        return EffectsResult(estimates, standard_errors, variables, terms, context, G, inference, metadata)
     else # :predictions
-        return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
+        return PredictionsResult(estimates, standard_errors, context, G, inference, metadata)
     end
 end
 
@@ -304,25 +302,27 @@ function _extract_group_variables(groups)
 end
 
 """
-    _extract_context_profile_values(results) -> Union{Nothing, NamedTuple}
+    _context_result_context(results, groups_vars, scenarios_vars) -> Union{Nothing, ResultContext}
 
-Extract profile values from at_ columns in results DataFrame.
+The context of a population result from the `at_<var>` columns of the per-context results
+frame: the `groups` variables, then the `scenarios` variables, each in the order of the call
+(never the frame's column order). `nothing` when there is no context column.
 """
-function _extract_context_profile_values(results)
-    at_cols = [col for col in names(results) if startswith(String(col), "at_")]
-
-    if isempty(at_cols)
-        return nothing
+function _context_result_context(results, groups_vars::Vector{Symbol}, scenarios_vars::Vector{Symbol})
+    present = Set(Symbol(String(c)[4:end]) for c in names(results) if startswith(String(c), "at_"))
+    ordered = Pair{Symbol,Symbol}[]
+    for v in groups_vars
+        v in present && push!(ordered, v => :group)
     end
-
-    # Extract the profile data
-    profile_dict = Dict{Symbol, Vector}()
-    for col in at_cols
-        var_name = Symbol(String(col)[4:end])
-        profile_dict[var_name] = results[!, col]
+    for v in scenarios_vars
+        v in present && !(v in groups_vars) && push!(ordered, v => :scenario)
     end
-
-    return NamedTuple(profile_dict)
+    length(ordered) == length(present) || error("Internal error: context columns " *
+        "$(sort!(collect(present))) are not all groups ($groups_vars) or scenarios ($scenarios_vars).")
+    isempty(ordered) && return nothing
+    names_ = Tuple(first.(ordered))
+    columns = NamedTuple{names_}(Tuple(results[!, Symbol("at_", v)] for v in names_))
+    return ResultContext(columns, last.(ordered))
 end
 
 """
@@ -405,7 +405,7 @@ function _compute_all_continuous_context_effects_batch(
     xcols = _uses_x(measure) ? _float_columns(context_data, continuous_vars_to_compute) : ()
     accumulate_continuous!(batch_ame_values, batch_gradients, ws, context_de, engine.β,
                            predscale(scale, engine.link), measure, var_indices, xcols,
-                           context_indices, weights, total_weight)
+                           context_indices, weights, total_weight, engine.offset)
 
     # Build results DataFrame and gradients matrix
     results = DataFrame(
@@ -480,7 +480,7 @@ function _compute_categorical_context_effect(
         ames, ses, gradients_matrix, engine.contrast_buf,
         context_evaluator, var, contrast_pairs,
         engine.β, engine.Σ, predscale(scale, engine.link),
-        context_indices, weights
+        context_indices, weights, engine.offset
     )
 
     results = DataFrame(
@@ -534,7 +534,7 @@ function _compute_population_prediction_in_context(
     gβ_avg = Vector{Float64}(undef, length(engine.β))
     pred_val = average_prediction!(
         gβ_avg, engine.row_buf, engine.compiled, context_data, engine.β,
-        predscale(scale, engine.link), context_indices, weights, total_weight
+        predscale(scale, engine.link), context_indices, weights, total_weight, engine.offset
     )
 
     # Compute standard error

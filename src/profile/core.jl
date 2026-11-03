@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -49,6 +49,22 @@ or adjusted predictions at specific profiles (APM/APR).
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator for robust/clustered standard errors, or a covariance
     matrix itself (see `population_margins`)
+- `df=nothing`: degrees of freedom of the t reference distribution, overriding the model-class
+  default (`Inf` for z); see `population_margins`, *Inference*.
+- `offset=nothing`: the η offset at each reference-grid row, for a model with an offset
+  (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
+  per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
+  1000). An `offset` column of the grid does the same. See *Offsets*.
+
+# Offsets
+For a model with an offset (η = x'β + offset), predictions and response-scale effects depend on
+the offset, and a reference-grid row has none of its own. `profile_margins` then requires it: the
+`offset` keyword, an `offset` column in the grid, or (FixedEffectModels, whose offset is the sum
+of the absorbed fixed effects) grid columns setting every fixed-effect variable, whose estimated
+fixed effects are looked up. Otherwise it is an `ArgumentError`; the offset is never taken as 0,
+which for an exposure model would predict the rate per unit of exposure. Link-scale and
+identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on the offset and do
+not need it.
 
 # Weights
 `profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
@@ -57,13 +73,14 @@ for a model fit with weights; results record `metadata[:weights_source] = :none`
 weighted typical values, put them in the grid yourself. See the Weights page of the documentation.
 
 # Returns
-`EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients,
-metadata incl. the inference df `metadata[:df]`). `DataFrame(result)` columns:
-- effects: `<grid vars…> type variable contrast estimate se statistic df p_value lower upper n`
+`EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients, the
+grid columns of each row `result.context`, the inference `result.inference` (covariance matrix,
+df, `alpha`) and metadata). `DataFrame(result)` columns:
+- effects: `<grid vars…> type variable contrast estimate se statistic df p_value ci_lower ci_upper n`
 - predictions: `<grid vars…> type estimate se statistic df p_value ci_lower ci_upper n`
-Grid variables keep their bare names. `statistic = estimate / se`, referred to t(`df`):
-`df = dof_residual(model)` for a linear model with the default `vcov`, `Inf` (z) otherwise
-(see `population_margins`, *Inference*).
+Grid variables keep their bare names and the grid's column order. `statistic = estimate / se`, referred to t(`df`):
+`df = dof_residual(model)` for a linear model (with any `vcov`) and a FixedEffectModels fit,
+`Inf` (z) otherwise, unless `df=` is given (see `population_margins`, *Inference*).
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
@@ -154,86 +171,37 @@ See also: [`population_margins`](@ref) for population-averaged effects and predi
 """
 
 """
-    _extract_profile_values(reference_grid, result_length::Int) -> NamedTuple
+    _grid_context(req::MarginsRequest{:profile}, rows::AbstractVector{Int}) -> ResultContext
 
-Extract profile values from reference grid and expand to match the result length.
-Each profile can generate multiple results (one per variable), so we need to repeat
-each profile row for each variable it generates.
+The context of a profile result: the grid columns shown in the output (`req.grid_vars`: the
+user's grid columns, without the response; filled-in typical values are hidden), in the order
+of the user's grid, with `rows[i]` the completed-grid row result row `i` was evaluated at.
 """
-function _extract_profile_values(reference_grid, result_length::Int)
-    n_profiles = nrow(reference_grid)
-    vars_per_profile = result_length ÷ n_profiles
-    
-    # Convert to named tuple with expanded values
-    profile_dict = Dict{Symbol, Vector}()
-    
-    for col_name in names(reference_grid)
-        col_data = reference_grid[!, col_name]
-        # Repeat each profile value vars_per_profile times
-        expanded_data = repeat(col_data, inner=vars_per_profile)
-        profile_dict[Symbol(col_name)] = expanded_data
-    end
-    
-    return NamedTuple(profile_dict)
-end
-
-"""
-    _extract_and_filter_profile_values(reference_grid, result_length::Int, original_vars::Set{Symbol}) -> NamedTuple
-
-Extract profile values from reference grid and filter to only show variables that were
-originally specified by the user (hiding automatically added typical values).
-Each profile can generate multiple results (one per variable), so we need to repeat
-each profile row for each variable it generates.
-"""
-function _extract_and_filter_profile_values(reference_grid, profile_rows::AbstractVector{Int}, original_vars::Set{Symbol})
-    # Exact mapping: each result row names the grid row it was evaluated at. Needed because
-    # a categorical variable can contribute a different number of contrast rows per grid row
-    # (a row pinned to the baseline level contributes none), so the uniform
-    # result_length ÷ n_profiles expansion below does not apply.
-    profile_dict = Dict{Symbol, Vector}()
-    for col_name in names(reference_grid)
-        if Symbol(col_name) in original_vars
-            profile_dict[Symbol(col_name)] = reference_grid[!, col_name][profile_rows]
-        end
-    end
-    return NamedTuple(profile_dict)
-end
-
-function _extract_and_filter_profile_values(reference_grid, result_length::Int, original_vars::Set{Symbol})
-    n_profiles = nrow(reference_grid)
-    vars_per_profile = result_length ÷ n_profiles
-    
-    # Convert to named tuple with expanded values, filtering to original variables only
-    profile_dict = Dict{Symbol, Vector}()
-    
-    for col_name in names(reference_grid)
-        # Only include variables that were in the original reference grid
-        if Symbol(col_name) in original_vars
-            col_data = reference_grid[!, col_name]
-            # Repeat each profile value vars_per_profile times
-            expanded_data = repeat(col_data, inner=vars_per_profile)
-            profile_dict[Symbol(col_name)] = expanded_data
-        end
-    end
-    
-    return NamedTuple(profile_dict)
+function _grid_context(req::MarginsRequest{:profile}, rows::AbstractVector{Int})
+    grid = req.completed_grid
+    shown = Symbol[Symbol(c) for c in names(req.reference_grid) if Symbol(c) in req.grid_vars]
+    # grid columns that only completion keeps (none today), after the user's, in grid order
+    append!(shown, Symbol[Symbol(c) for c in names(grid) if Symbol(c) in req.grid_vars && !(Symbol(c) in shown)])
+    columns = NamedTuple{Tuple(shown)}(Tuple(grid[!, c][rows] for c in shown))
+    return ResultContext(columns, fill(:grid, length(shown)))
 end
 
 """
     _run(req::MarginsRequest{:profile}) -> Union{EffectsResult, PredictionsResult}
 
-Compute a profile request and attach its inference df (`metadata[:df]`).
+Compute a profile request: the MEM/APM, with its inference (`result.inference`: the request's
+Σ, df and alpha).
 """
-_run(req::MarginsRequest{:profile}) = _attach_inference_df!(_profile_result(req), req.model, req.df)
+_run(req::MarginsRequest{:profile}) = _profile_result(req)
 
 """
     _profile_result(req::MarginsRequest{:profile}) -> Union{EffectsResult, PredictionsResult}
 
-The MEM/APM of a profile request on its completed reference grid, without the inference df
-(the FixedEffectModels extension adds its fixed-effect offsets to this).
+The MEM/APM of a profile request on its completed reference grid.
+`req.offset` is the η offset at each grid row (`nothing` without one).
 """
 function _profile_result(req::MarginsRequest{:profile})
-    (; model, data_nt, type, vars, scale, backend, measure, contrasts, alpha, interval) = req
+    (; model, data_nt, type, vars, scale, backend, measure, contrasts, interval) = req
     completed_reference_grid = req.completed_grid
     original_grid_vars = req.grid_vars
     at_spec = req.reference_grid
@@ -246,7 +214,7 @@ function _profile_result(req::MarginsRequest{:profile})
     if type === :effects
         # Use the actual working function that already exists from the original utilities.jl
         # Pass original_grid_vars so we know which variables are scenario-defining
-        df, G, profile_of_row = _mem_by_grid_blocks(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, req.vars_explicit)
+        df, G, profile_of_row = _mem_by_grid_blocks(engine, completed_reference_grid, req.offset, original_grid_vars, scale, backend, measure, contrasts, req.vars_explicit)
     
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -258,34 +226,27 @@ function _profile_result(req::MarginsRequest{:profile})
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(completed_reference_grid)
     
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = alpha
-        metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
-    
         # Extract raw components from DataFrame  
         estimates = df.estimate
         standard_errors = df.se
         variables = string.(df.variable)  # The "x" in dy/dx
         terms = string.(df.contrast)  # Convert Symbol to String
     
-        # Extract profile values from reference grid, one entry per result row
-        # Filter to show only original reference grid variables (hide automatic typical values)
-        profile_values = _extract_and_filter_profile_values(completed_reference_grid, profile_of_row, original_grid_vars)
+        # Grid columns, one entry per result row: the grid row each result row was evaluated at.
+        # (A categorical variable can contribute a different number of contrast rows per grid
+        # row; a row pinned to the baseline level contributes none.)
+        context = _grid_context(req, profile_of_row)
     
-        return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+        return EffectsResult(estimates, standard_errors, variables, terms, context, G, _request_inference(req, engine), metadata)
     else # :predictions  
         # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions_by_grid_blocks(engine, completed_reference_grid, scale)  # → APM/APR
+        df, G = _profile_predictions_by_grid_blocks(engine, completed_reference_grid, scale, req.offset)  # → APM/APR
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
                                   model_type=typeof(model), at_spec=at_spec)
     
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(completed_reference_grid)
-
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = alpha
-        metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
 
         # Interval kind: :confidence (default) or :prediction. For prediction
         # intervals, store the residual variance σ̂² that widens the interval
@@ -299,16 +260,15 @@ function _profile_result(req::MarginsRequest{:profile})
         estimates = df.estimate
         standard_errors = df.se
 
-        # Extract profile values from reference grid - expand to match result length
-        # Filter to show only original reference grid variables (hide automatic typical values)
-        profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
+        # Grid columns, one entry per result row (one prediction per grid row)
+        context = _grid_context(req, repeat(1:nrow(completed_reference_grid), inner=length(estimates) ÷ nrow(completed_reference_grid)))
 
-        return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
+        return PredictionsResult(estimates, standard_errors, context, G, _request_inference(req, engine), metadata)
     end
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -347,6 +307,22 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
     `ŷ ± z·√(SE² + σ̂²)`. Only supported for Gaussian/identity-link (linear) models;
     errors for GLMs (no additive response-scale residual variance) and for
     `type=:effects`. Matches R's `predict(lm, interval="prediction")`.
+- `df=nothing`: degrees of freedom of the t reference distribution, overriding the model-class
+  default (`Inf` for z); see `population_margins`, *Inference*.
+- `offset=nothing`: the η offset at each reference-grid row, for a model with an offset
+  (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
+  per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
+  1000). An `offset` column of the grid does the same. See *Offsets*.
+
+# Offsets
+For a model with an offset (η = x'β + offset), predictions and response-scale effects depend on
+the offset, and a reference-grid row has none of its own. `profile_margins` then requires it: the
+`offset` keyword, an `offset` column in the grid, or (FixedEffectModels, whose offset is the sum
+of the absorbed fixed effects) grid columns setting every fixed-effect variable, whose estimated
+fixed effects are looked up. Otherwise it is an `ArgumentError`; the offset is never taken as 0,
+which for an exposure model would predict the rate per unit of exposure. Link-scale and
+identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on the offset and do
+not need it.
 
 # Weights
 `profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
@@ -391,13 +367,13 @@ function profile_margins(
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov,
-    interval::Symbol=:confidence, ci_alpha=nothing,
+    interval::Symbol=:confidence, df=nothing, offset=nothing, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
     # Every option and the reference grid are validated, and `vcov` evaluated, once, here.
     # `profile_margins` takes no weights (see "Weights" above).
     req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
-                             contrasts, alpha, vcov, weights=:none, interval)
+                             contrasts, alpha, vcov, weights=:none, interval, df, offset)
     return _run(req)
 end
 
@@ -443,10 +419,14 @@ end
 _grid_block(grid::DataFrame, rows::Vector{Int}) =
     DataFrame([c => identity.(grid[rows, c]) for c in propertynames(grid)])
 
-function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, scale)
+# The offset at a block's rows
+_block_offset(::Nothing, rows) = nothing
+_block_offset(offset::Vector{Float64}, rows) = offset[rows]
+
+function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, scale, offset=nothing)
     blocks = _heterogeneous_grid_blocks(grid)
-    isnothing(blocks) && return _profile_predictions(engine, grid, scale)
-    parts = [_profile_predictions(engine, _grid_block(grid, rows), scale) for rows in blocks]
+    isnothing(blocks) && return _profile_predictions(engine, grid, scale, offset)
+    parts = [_profile_predictions(engine, _grid_block(grid, rows), scale, _block_offset(offset, rows)) for rows in blocks]
     perm = sortperm(reduce(vcat, blocks))  # one result row per grid row
     df = reduce((a, b) -> vcat(a, b; cols=:union), first.(parts))[perm, :]
     G = reduce(vcat, last.(parts))[perm, :]
@@ -457,10 +437,10 @@ function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFr
     return df, G
 end
 
-function _mem_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, args...)
+function _mem_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, offset, args...)
     blocks = _heterogeneous_grid_blocks(grid)
-    isnothing(blocks) && return _mem_continuous_and_categorical(engine, grid, args...)
-    parts = [_mem_continuous_and_categorical(engine, _grid_block(grid, rows), args...) for rows in blocks]
+    isnothing(blocks) && return _mem_continuous_and_categorical(engine, grid, offset, args...)
+    parts = [_mem_continuous_and_categorical(engine, _grid_block(grid, rows), _block_offset(offset, rows), args...) for rows in blocks]
     profile_of_row = reduce(vcat, [rows[p[3]] for (rows, p) in zip(blocks, parts)])
     perm = sortperm(profile_of_row; alg=Base.Sort.DEFAULT_STABLE)  # keeps within-profile order
     df = reduce(vcat, [p[1] for p in parts])[perm, :]
@@ -469,14 +449,15 @@ function _mem_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, args...)
 end
 
 """
-    _profile_predictions(engine, reference_grid, scale) -> (DataFrame, Matrix{Float64})
+    _profile_predictions(engine, reference_grid, scale, offset=nothing) -> (DataFrame, Matrix{Float64})
 
 Compute adjusted predictions at profiles (APM/APR) with delta-method standard errors.
 
 This function evaluates predictions at each row of the reference grid, providing
-adjusted predictions at the mean (APM) or at representative values (APR).
+adjusted predictions at the mean (APM) or at representative values (APR). `offset` is the η
+offset at each grid row (`nothing` without one).
 """
-function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) where L
+function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale, offset=nothing) where L
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     
@@ -496,7 +477,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
 
     # Prediction and its gradient at each grid row (prediction kernel)
     predict_rows!(predictions, G, engine.row_buf, refgrid_compiled, data_nt, engine.β,
-                  predscale(scale, engine.link), 1:n_profiles)
+                  predscale(scale, engine.link), 1:n_profiles, offset)
     
     # Safely use g_buf for SE computation if large enough (performance optimization)
     # NOTE: Buffer fallback is intentional and harmless - engines are often created with
@@ -575,7 +556,7 @@ end
 Profile Effects (MEM) properly decomposed from the original working implementation.
 This is the correct decomposition that should have been completed during BREAKUP.md.
 """
-function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_grid, original_grid_vars::Set{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol=:baseline, vars_explicit::Bool=false) where L
+function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_grid, offset, original_grid_vars::Set{Symbol}, scale::Symbol, backend::Symbol, measure::Symbol, contrasts::Symbol=:baseline, vars_explicit::Bool=false) where L
     # Use the decomposed modular approach - break down the original 200-line function
 
     # Step 1: Calculate dimensions (extracted from original lines 1262-1286)
@@ -747,7 +728,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
                                                              continuous_requested, refgrid_de,
                                                              cont_ws, cont_vals, cont_grads,
                                                              cont_idx, cont_xcols, reference_grid,
-                                                             profile_idx, s_scale, cont_measure)
+                                                             profile_idx, s_scale, cont_measure, offset)
         end
 
         # Process requested categorical variables
@@ -756,7 +737,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
                                                            refgrid_contrasts[var], reference_grid, profile_idx,
                                                            scale, categorical_modes[var],
                                                            categorical_pairs[var],
-                                                           contrast_buf)
+                                                           contrast_buf, offset)
         end
 
         if row_idx > first_row_of_profile
@@ -838,11 +819,11 @@ function _process_profile_continuous_variables!(results, G, row_idx, engine, con
                                                 vals::Vector{Float64}, grads::Matrix{Float64},
                                                 var_idx::Vector{Int}, xcols::XColumns,
                                                 reference_grid, profile_idx::Int,
-                                                s::PredScale, measure::Measure)
+                                                s::PredScale, measure::Measure, offset=nothing)
     fill!(vals, 0.0)
     fill!(grads, 0.0)
     accumulate_continuous!(vals, grads, ws, refgrid_de, engine.β, s, measure, var_idx, xcols,
-                           profile_idx:profile_idx, nothing, 1.0)
+                           profile_idx:profile_idx, nothing, 1.0, offset)
     profile_nt = _profile_display_row(reference_grid, profile_idx)
     for (k, var) in enumerate(continuous_requested)
         engine.gβ_accumulator .= view(grads, k, :)
@@ -869,7 +850,7 @@ Extracted from original lines 1377-1444.
 function _process_profile_categorical_variable!(results, G, row_idx, engine, var,
                                               refgrid_contrast, reference_grid, profile_idx,
                                               scale::Symbol, mode::Symbol, contrast_pairs,
-                                              contrast_buf::Vector{Float64})
+                                              contrast_buf::Vector{Float64}, offset=nothing)
     # Which contrasts does this grid row contribute?
     #   :row_specific — the row pins a level, so the only contrast is that level against the
     #                   baseline; a row already at the baseline contributes nothing.
@@ -890,7 +871,8 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
         (effect, se) = categorical_contrast_ame!(
             contrast_buf, engine.gβ_accumulator,
             refgrid_contrast, var, from_level, to_level,
-            engine.β, engine.Σ, predscale(scale, engine.link), profile_idx:profile_idx, nothing
+            engine.β, engine.Σ, predscale(scale, engine.link), profile_idx:profile_idx, nothing,
+            offset
         )
 
         results.variable[row_idx] = string(var)

@@ -25,12 +25,12 @@ using Margins
     @testset "linear model: t with residual df" begin
         m = lm(@formula(y ~ x + z), d)
         dfr = dof_residual(m)
-        @test Margins._inference_df(m, GLM.vcov) == dfr
+        @test Margins._inference_df(m) == dfr
 
         # The AME of x in an additive lm is its coefficient: inference must equal coeftable
         res = population_margins(m, d; vars=[:x, :z])
         out = DataFrame(res)
-        @test res.metadata[:df] == dfr
+        @test res.inference.df == dfr
         @test all(out.df .== dfr)
         ct = coeftable(m)
         for (row, name) in enumerate(["x", "z"])
@@ -65,19 +65,19 @@ using Margins
 
         # Gaussian identity GLM follows the same rule
         mg = glm(@formula(y ~ x + z), d, Normal(), IdentityLink())
-        @test Margins._inference_df(mg, GLM.vcov) == dof_residual(mg)
+        @test Margins._inference_df(mg) == dof_residual(mg)
         @test DataFrame(population_margins(mg, d; vars=[:x])).df[1] == dof_residual(mg)
 
         # Contrasts inherit the df
         pr = profile_margins(m, d, cartesian_grid(x=[-1.0, 1.0]); type=:predictions)
-        cr = contrast(pr, 2, 1, vcov(m))
+        cr = contrast(pr, 2, 1)
         @test cr.df == dfr
         @test cr.statistic ≈ cr.contrast / cr.se
         @test cr.p_value ≈ 2 * ccdf(TDist(dfr), abs(cr.statistic))
         @test cr.ci_upper - cr.ci_lower ≈ 2 * tcrit * cr.se
-        crd = contrast(DataFrame(pr; include_gradients=true), 2, 1, vcov(m))
-        @test crd.df == dfr
-        @test crd.p_value ≈ cr.p_value
+        crd = contrast(pr, (x=1.0,), (x=-1.0,))   # the same rows, by their grid values
+        @test crd.df == dfr && crd.row1 == 2 && crd.row2 == 1
+        @test crd.p_value == cr.p_value
         @test occursin("t (df = $(Int(dfr)))", sprint(show, cr))
         @test names(DataFrame(cr))[1:7] == ["contrast", "se", "statistic", "df", "p_value", "ci_lower", "ci_upper"]
 
@@ -88,7 +88,7 @@ using Margins
 
     @testset "nonlinear / other models: z (df = Inf)" begin
         mb = glm(@formula(yb ~ x + z), d, Binomial(), LogitLink())
-        @test Margins._inference_df(mb, GLM.vcov) == Inf
+        @test Margins._inference_df(mb) == Inf
         out = DataFrame(population_margins(mb, d; vars=[:x]))
         @test out.df[1] == Inf
         @test out.statistic[1] ≈ out.estimate[1] / out.se[1]
@@ -103,22 +103,26 @@ using Margins
         @test Margins.compute_p_value(30.0, 30.0) > 0
 
         mm = fit(MixedModel, @formula(y ~ x + z + (1 | cl)), d; progress=false)
-        @test Margins._inference_df(mm, GLM.vcov) == Inf
+        @test Margins._inference_df(mm) == Inf
         @test DataFrame(population_margins(mm, d; vars=[:x])).df[1] == Inf
     end
 
-    @testset "robust / clustered / custom vcov: z (documented rule)" begin
+    # 3.0 step 5 (decision D1): df is a property of the model class, so a linear model keeps
+    # t(dof_residual) with robust, clustered and custom vcov (Stata `regress, vce(robust)` +
+    # `margins`, R `coeftest(m, vcovHC(m))`); before, any vcov other than GLM.vcov gave z.
+    @testset "robust / clustered / custom vcov: t for a linear model (D1)" begin
         m = lm(@formula(y ~ x + z), d)
+        dfr = dof_residual(m)
         for v in (HC1(), CR1(d.cl))
             r = population_margins(m, d; vars=[:x], vcov=v)
             out = DataFrame(r)
-            @test out.df[1] == Inf
-            @test out.p_value[1] ≈ 2 * ccdf(Normal(), abs(out.statistic[1]))
+            @test out.df[1] == dfr
+            @test out.p_value[1] ≈ 2 * ccdf(TDist(dfr), abs(out.statistic[1]))
         end
-        @test DataFrame(population_margins(m, d; vars=[:x], vcov = mm -> GLM.vcov(mm))).df[1] == Inf
-        # A matrix counts as model-based only if it equals vcov(model)
-        @test Margins._inference_df(m, vcov(m)) == dof_residual(m)
-        @test Margins._inference_df(m, 2 .* vcov(m)) == Inf
+        @test DataFrame(population_margins(m, d; vars=[:x], vcov = mm -> GLM.vcov(mm))).df[1] == dfr
+        @test DataFrame(population_margins(m, d; vars=[:x], vcov = 2 .* vcov(m))).df[1] == dfr
+        # z on request
+        @test DataFrame(population_margins(m, d; vars=[:x], vcov=HC1(), df=Inf)).df[1] == Inf
     end
 
     @testset "group columns: over_ prefix" begin
@@ -142,8 +146,7 @@ using Margins
 
         # contrast() addresses rows by the prefixed names
         r = population_margins(m, d; vars=[:x], groups=:g)
-        gdf = DataFrame(r; include_gradients=true)
-        cr = contrast(gdf, (over_g="b",), (over_g="a",), vcov(m))
+        cr = contrast(r, (over_g="b",), (over_g="a",))
         @test cr.df == dof_residual(m)
 
         # profile results keep bare grid names
@@ -156,12 +159,12 @@ using Margins
         cols = collect(Margins.SECOND_DIFFERENCE_COLUMNS)
 
         ame_bin = population_margins(m, d; vars=[:x, :g], scenarios=(t=[0, 1],))
-        sd_bin = second_differences(ame_bin, [:x, :g], :t, vcov(m))       # binary path
+        sd_bin = second_differences(ame_bin, [:x, :g], :t)       # binary path
         ame_3 = population_margins(m, d; vars=[:x], scenarios=(z=[-1.0, 0.0, 1.0],))
-        sd_cont = second_differences(ame_3, :x, :z, vcov(m))                # continuous
-        sd_cat = second_differences(ame_3, :x, :z, vcov(m); modifier_type=:categorical)
-        sd_pw = Margins._second_differences_pairwise(ame_bin, :x, :t, vcov(m))      # binary via pairwise
-        sd_all = Margins._second_differences_all_contrasts(ame_bin, :g, :t, vcov(m))
+        sd_cont = second_differences(ame_3, :x, :z)                # continuous
+        sd_cat = second_differences(ame_3, :x, :z; modifier_type=:categorical)
+        sd_pw = Margins._second_differences_pairwise(ame_bin, :x, :t)      # binary via pairwise
+        sd_all = Margins._second_differences_all_contrasts(ame_bin, :g, :t)
         sd_at = Margins._second_differences_local(m, d, :x, :z, vcov(m); at = :mean)
         sd_at_f = Margins._second_differences_local(m, d, :x, :z, GLM.vcov)
 
@@ -194,13 +197,13 @@ using Margins
         @test isnan(sd_obs.eval_point[1]) && isnan(sd_obs.modifier_level1[1]) && sd_obs.delta_used[1] > 0
 
         # single-row API
-        row = Margins._second_difference(ame_bin, :x, :t, vcov(m))
+        row = Margins._second_difference(ame_bin, :x, :t)
         @test keys(row) == (Tuple(cols)..., :gradient)   # the single-row API keeps the gradient
         @test row.modifier_type == :binary && row.df == dfr
 
         # logit: z
         mb = glm(@formula(yb ~ x * t), d, Binomial(), LogitLink())
-        sdb = second_differences(population_margins(mb, d; vars=[:x], scenarios=(t=[0, 1],)), :x, :t, vcov(mb))
+        sdb = second_differences(population_margins(mb, d; vars=[:x], scenarios=(t=[0, 1],)), :x, :t)
         @test sdb.df[1] == Inf
         @test sdb.p_value[1] ≈ 2 * ccdf(Normal(), abs(sdb.statistic[1]))
     end

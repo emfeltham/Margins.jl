@@ -1,6 +1,7 @@
 # test_result_metadata_contract.jl
 # Every result carries the documented metadata keys with the documented types
-# (Margins.result_metadata_keys), whichever path produced it.
+# (Margins.result_metadata_keys), its inference (`result.inference`) and its context columns
+# (`result.context`), whichever path produced it.
 
 using Test
 using Margins
@@ -48,12 +49,27 @@ using Random
                 haskey(r.metadata, key) && @test r.metadata[key] isa T
             end
             p = size(r.gradients, 2)
-            V = r.metadata[:vcov]
+            @test r.inference isa Inference
+            # the inference is not metadata (3.0 step 6b)
+            @test !any(k -> haskey(r.metadata, k), (:vcov, :df, :alpha))
+            V = r.inference.vcov
             @test size(V) == (p, p)
             @test V ≈ V'
             @test r.metadata[:analysis_type] in (:population, :profile)
-            @test r.metadata[:alpha] == 0.05
+            @test r.inference.alpha == 0.05
             @test r.metadata[:has_contexts] == (!isempty(r.metadata[:groups_vars]) || !isempty(r.metadata[:scenarios_vars]))
+            # the context: every column one value per row; kinds match the analysis
+            ctx = r.context
+            if r.metadata[:analysis_type] == :profile
+                @test ctx isa ResultContext && all(==(:grid), ctx.kinds)
+            elseif r.metadata[:has_contexts]
+                @test ctx isa ResultContext
+                @test collect(keys(ctx)) == [r.metadata[:groups_vars]; r.metadata[:scenarios_vars]]
+                @test ctx.kinds == [fill(:group, length(r.metadata[:groups_vars])); fill(:scenario, length(r.metadata[:scenarios_vars]))]
+            else
+                @test isnothing(ctx)
+            end
+            isnothing(ctx) || @test all(c -> length(c) == length(r.estimates), values(ctx.columns))
         end
     end
 
@@ -76,27 +92,45 @@ using Random
         @test produced["link scale"].metadata[:scale] == :link
         @test produced["profile effects"].metadata[:analysis_type] == :profile
         @test occursin("GeneralizedLinearModel", produced["AME"].metadata[:model_type])  # was the string "DataType"
-        # linear regressions also record the model's own covariance and residual df
-        @test haskey(produced["linear model"].metadata, :model_vcov) && haskey(produced["linear model"].metadata, :model_df)
-        @test !haskey(produced["AME"].metadata, :model_vcov)
+        # 3.0 step 5: df is a property of the model class (D1), so no result records the model's
+        # own covariance and residual df for second differences to compare against any more
+        @test !haskey(produced["linear model"].metadata, :model_vcov) && !haskey(produced["linear model"].metadata, :model_df)
+        @test produced["linear model"].inference.df > 0 && isfinite(produced["linear model"].inference.df)
+        @test produced["AME"].inference.df == Inf
     end
 
     @testset "accessors apply one default everywhere" begin
         r = produced["AME"]
-        bare = Margins.EffectsResult(r.estimates, r.standard_errors, r.variables, r.terms, nothing, nothing, r.gradients, Dict{Symbol,Any}())
-        @test Margins._result_alpha(bare) == 0.05
-        @test Margins._result_groups_vars(bare) == Symbol[]
-        @test Margins._result_scenarios_vars(bare) == Symbol[]
+        bare = Margins.EffectsResult(r.estimates, r.standard_errors, r.variables, r.terms, nothing, r.gradients,
+                                     r.inference, Dict{Symbol,Any}())
         @test Margins._result_has_contexts(bare) == false
         @test Margins._result_is_weighted(bare) == false
         @test Margins._result_weights_source(bare) === :none
         @test Margins._result_weights_source(produced["weighted model"]) === :model
         @test Margins._result_analysis_type(bare) == :unknown
         # string-valued entries (a result restored from text) read as Symbols
-        s = Margins.EffectsResult(r.estimates, r.standard_errors, r.variables, r.terms, nothing, nothing, r.gradients,
-                                  Dict{Symbol,Any}(:groups_vars => ["g"], :analysis_type => "population"))
-        @test Margins._result_groups_vars(s) == [:g] && Margins._result_analysis_type(s) == :population
-        # a result without a recorded covariance says so
-        @test_throws ErrorException second_differences(bare, :x, :t)
+        s = Margins.EffectsResult(r.estimates, r.standard_errors, r.variables, r.terms, nothing, r.gradients,
+                                  r.inference, Dict{Symbol,Any}(:analysis_type => "population"))
+        @test Margins._result_analysis_type(s) == :population
+        # a result's alpha and df come from its inference, whatever its metadata holds
+        @test DataFrame(bare).df == fill(Inf, length(r.estimates))
+        @test DataFrame(bare).ci_lower ≈ DataFrame(r).ci_lower
+    end
+
+    @testset "Inference and ResultContext validate their contents" begin
+        V = [1.0 0.0; 0.0 1.0]
+        @test Inference(V, 10, 0.1) isa Inference && Inference(V, 10, 0.1).df === 10.0
+        @test Inference(V, Inf, 0.05).df == Inf
+        @test_throws ArgumentError Inference(V, 0, 0.05)
+        @test_throws ArgumentError Inference(V, NaN, 0.05)
+        @test_throws ArgumentError Inference(V, 5, 1.0)
+        @test_throws ArgumentError Inference(ones(2, 3), 5, 0.05)
+        ctx = ResultContext((b = [1, 2], a = ["u", "v"]), [:group, :scenario])
+        @test collect(keys(ctx)) == [:b, :a] && ctx[:a] == ["u", "v"]
+        @test Margins.context_kind(ctx, :b) === :group && Margins.context_kind(ctx, :a) === :scenario
+        @test_throws ArgumentError Margins.context_kind(ctx, :zz)
+        @test_throws ArgumentError ResultContext((a = [1, 2],), [:other])
+        @test_throws ArgumentError ResultContext((a = [1, 2],), Symbol[])
+        @test_throws ArgumentError ResultContext((a = [1, 2], b = [1]), [:grid, :grid])
     end
 end

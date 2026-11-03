@@ -74,37 +74,60 @@ Weight of `row`: `1.0` when unweighted (`weights === nothing`), else `weights[ro
 @inline rowweight(weights::AbstractVector, row::Int) = Float64(weights[row])
 
 """
-    predict_row!(x, compiled, data, β, s::PredScale, row) -> (ŷ, dŷ/dη)
+    Offset
+
+The η offset of a computation: `nothing` (none) or a `Vector{Float64}` indexed like the rows
+evaluated (data rows for population margins, reference-grid rows for profile margins). Kernels
+take it as an argument, so each is compiled for one of the two and the row loop has no branch.
+"""
+const Offset = Union{Nothing, Vector{Float64}}
+
+"""
+    linear_predictor(x, β, offset, row) -> η
+
+η = x'β, plus `offset[row]` when there is an offset. Without one this is exactly `dot(x, β)`
+(no `+ 0.0`), so results without an offset are bitwise those of a kernel without offsets.
+"""
+@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, ::Nothing, row::Int) = dot(x, β)
+@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::Vector{Float64}, row::Int) =
+    dot(x, β) + offset[row]
+
+"""
+    predict_row!(x, compiled, data, β, s::PredScale, row, offset=nothing) -> (ŷ, dŷ/dη)
 
 Evaluate the model row xᵢ into `x` and return the prediction on scale `s` and its
-derivative with respect to η. The gradient of ŷ with respect to β is `(dŷ/dη) .* x`.
+derivative with respect to η = xᵢ'β (+ `offset[row]`). The gradient of ŷ with respect to β is
+`(dŷ/dη) .* x`.
 """
 @inline function predict_row!(x::AbstractVector{Float64}, compiled, data::NamedTuple,
-                              β::AbstractVector{Float64}, s::PredScale, row::Int)
+                              β::AbstractVector{Float64}, s::PredScale, row::Int,
+                              offset::Offset=nothing)
     compiled(x, data, row)
-    return yhat(s, dot(x, β))
+    return yhat(s, linear_predictor(x, β, offset, row))
 end
 
 """
-    average_prediction!(g, x, compiled, data, β, s::PredScale, rows, weights, total_weight) -> Float64
+    average_prediction!(g, x, compiled, data, β, s::PredScale, rows, weights, total_weight,
+                        offset=nothing) -> Float64
 
 (Weighted) average prediction over `rows`, Σ wᵢ ŷᵢ / `total_weight`, with its gradient with
 respect to β written into `g` (Σ wᵢ (dŷ/dη)ᵢ xᵢ / `total_weight`). Rows whose weight is not
 positive are skipped; `weights === nothing` gives every row weight 1. `x` is a model-row
-buffer (length of the compiled formula). Allocation-free.
+buffer (length of the compiled formula). `offset` is the η offset indexed by row (see
+[`Offset`](@ref)). Allocation-free.
 
 Used by the population AAP, with and without scenarios/groups contexts.
 """
 function average_prediction!(g::AbstractVector{Float64}, x::Vector{Float64}, compiled,
                              data::NamedTuple, β::Vector{Float64}, s::PredScale, rows,
                              weights::Union{Nothing, AbstractVector{Float64}},
-                             total_weight::Float64)
+                             total_weight::Float64, offset::Offset=nothing)
     fill!(g, 0.0)
     acc = 0.0
     @inbounds for row in rows
         w = rowweight(weights, row)
         w > 0 || continue
-        ŷ, d = predict_row!(x, compiled, data, β, s, row)
+        ŷ, d = predict_row!(x, compiled, data, β, s, row, offset)
         acc += w * ŷ
         wd = w * d
         @simd for j in eachindex(g)
@@ -118,16 +141,17 @@ function average_prediction!(g::AbstractVector{Float64}, x::Vector{Float64}, com
 end
 
 """
-    predict_rows!(ŷ, G, x, compiled, data, β, s::PredScale, rows)
+    predict_rows!(ŷ, G, x, compiled, data, β, s::PredScale, rows, offset=nothing)
 
 Prediction at each of `rows` into `ŷ[k]`, with its gradient with respect to β into row `k` of
-`G` (`k` indexing `rows`). Used for profile predictions (APM/APR), one per grid row.
+`G` (`k` indexing `rows`; `offset` indexed by row). Used for profile predictions (APM/APR), one
+per grid row.
 """
 function predict_rows!(ŷ::AbstractVector{Float64}, G::AbstractMatrix{Float64},
                        x::Vector{Float64}, compiled, data::NamedTuple, β::Vector{Float64},
-                       s::PredScale, rows)
+                       s::PredScale, rows, offset::Offset=nothing)
     for (k, row) in enumerate(rows)
-        yk, d = predict_row!(x, compiled, data, β, s, row)
+        yk, d = predict_row!(x, compiled, data, β, s, row, offset)
         ŷ[k] = yk
         @inbounds for j in eachindex(x)
             G[k, j] = d * x[j]

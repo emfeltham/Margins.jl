@@ -33,11 +33,11 @@ using Random
     @testset "df follows the same rule as population_margins" begin
         sd_default = second_differences(lmod, df, :x, :z)
         @test sd_default.df[1] == dof_residual(lmod)
-        # a function that merely returns the model covariance is a user-supplied estimator: z
+        # any covariance function: the model class's df (3.0 step 5, D1), as population_margins
         sd_fun = second_differences(lmod, df, :x, :z; vcov = m -> GLM.vcov(m))
         pm = population_margins(lmod, df; vars = :x, type = :effects, vcov = m -> GLM.vcov(m))
-        @test sd_fun.df[1] == Inf == pm.metadata[:df]
-        @test second_differences(lmod, df, :x, :w; vcov = m -> GLM.vcov(m)).df[1] == Inf
+        @test sd_fun.df[1] == dof_residual(lmod) == pm.inference.df
+        @test second_differences(lmod, df, :x, :w; vcov = m -> GLM.vcov(m)).df[1] == dof_residual(lmod)
         # the matrix equal to vcov(model) is model-based
         @test second_differences(lmod, df, :x, :z; vcov = Matrix(GLM.vcov(lmod))).df[1] == dof_residual(lmod)
     end
@@ -88,13 +88,13 @@ using Random
         @test_logs (:warn, r"treated as :binary") second_differences(ames, :cg, :k)
     end
 
-    @testset "result-level form accepts vcov as a keyword" begin
+    @testset "result-level form: a different vcov is passed to the entry point" begin
         ames = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects)
         V = 4 .* Matrix(vcov(lg))
-        a = second_differences(ames, :x, :z; vcov = V)
-        b = second_differences(ames, :x, :z, V)
-        @test a.se == b.se
-        @test a.se[1] ≈ 2 * second_differences(ames, :x, :z).se[1]
+        ames4 = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects, vcov = V)
+        @test second_differences(ames4, :x, :z).se[1] ≈ 2 * second_differences(ames, :x, :z).se[1]
+        @test_throws ArgumentError second_differences(ames, :x, :z; vcov = V)
+        @test_throws ArgumentError second_differences(ames, :x, :z, V)
     end
 
     @testset "weights" begin
@@ -154,17 +154,17 @@ using Random
 
     @testset "alpha is the one name for the significance level" begin
         r = population_margins(lg, df; vars = :x, alpha = 0.10)
-        @test r.metadata[:alpha] == 0.10
+        @test r.inference.alpha == 0.10
         @test all(DataFrame(r).ci_upper .- DataFrame(r).estimate .≈ Margins._critical_value(0.10) .* r.standard_errors)
-        @test profile_margins(lg, df, DataFrame(z = [0.0]); vars = :x, alpha = 0.2).metadata[:alpha] == 0.2
+        @test profile_margins(lg, df, DataFrame(z = [0.0]); vars = :x, alpha = 0.2).inference.alpha == 0.2
         # the 2.x keyword names the new one
         err = try population_margins(lg, df; vars = :x, ci_alpha = 0.1) catch e; sprint(showerror, e) end
         @test occursin("renamed `alpha`", err)
         @test_throws ArgumentError profile_margins(lg, df, DataFrame(z = [0.0]); vars = :x, ci_alpha = 0.1)
         # contrast takes `alpha`, not α
         res = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects)
-        c90 = Margins.contrast(res, 1, 2, vcov(lg); alpha = 0.10)
-        c95 = Margins.contrast(res, 1, 2, vcov(lg))
+        c90 = Margins.contrast(res, 1, 2; alpha = 0.10)
+        c95 = Margins.contrast(res, 1, 2)
         @test c90.metadata[:alpha] == 0.10 && (c90.ci_upper - c90.ci_lower) < (c95.ci_upper - c95.ci_lower)
         # second_differences inherits the result's alpha, and an explicit one wins
         @test second_differences(res, :x, :z).ci_lower[1] ≈ second_differences(res, :x, :z; alpha = 0.05).ci_lower[1]

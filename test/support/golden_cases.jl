@@ -17,7 +17,7 @@
 module MarginsGolden
 
 using DataFrames, CategoricalArrays, GLM, StatsModels, Statistics
-using CovarianceMatrices, MixedModels
+using CovarianceMatrices, MixedModels, FixedEffectModels
 using Margins
 using FormulaCompiler: CategoricalMixture
 
@@ -179,18 +179,20 @@ function cases()
                                              scenarios=(dist_inv=[1/6],), backend)))
     end
     _coverage_cases!(out)
+    _model_interface_cases!(out)
     return out
 end
 
 const FM = @formula(y ~ x * z + x * g + b + (1 | h))
+const FFE = @formula(y ~ x * z + x * g + b + fe(h))
+const FFE_S = @formula(y ~ x * z + x * g + b + fe(hs))
 const ALLV = [:x, :z, :g, :b]
 
 # Paths the 3.0 release changes that the matrix above does not reach (added 2026-10-19,
 # before cache removal and the request/model-class refactors): models fitted with
 # estimation weights (the `weights=:model` default), CovarianceMatrices estimators, more
 # group/scenario forms, and mixed models with and without weights. Offset and
-# FixedEffectModels cases are added only after those paths are fixed (their current output
-# is wrong).
+# FixedEffectModels cases are in `_model_interface_cases!` (added in step 5, with the fixes).
 function _coverage_cases!(out)
     push_pop!(id, m, d; kw...) = begin
         # a variable set by a scenario or used by groups cannot also be a focal variable
@@ -264,6 +266,71 @@ function _coverage_cases!(out)
     return out
 end
 
+# Offsets and FixedEffectModels (added in step 5 of the 3.0 plan, after the fixes: offsets now
+# enter η everywhere, and FixedEffectModels goes through the shared request path with its
+# absorbed fixed effects as a per-row offset and its `esample`).
+function _model_interface_cases!(out)
+    push_pop!(id, m, d; vars=ALLV, kw...) = begin
+        haskey(kw, :scenarios) && (vars = setdiff(vars, keys(kw[:scenarios])))
+        haskey(kw, :groups) && (vars = setdiff(vars, Margins._extract_group_variables(kw[:groups])))
+        push!(out, ("$id/effect/ad", "population_effects",
+                    () -> population_margins(m, d; type=:effects, vars, kw...)))
+        push!(out, ("$id/predictions", "population_predictions",
+                    () -> population_margins(m, d; type=:predictions, kw...)))
+    end
+
+    # Poisson with an exposure offset (oracle: AAP = mean(predict(m)) = mean(y))
+    d = matrix_data("log")
+    i = 1:nrow(d)
+    d.e = 0.5 .+ 2 .* _frac.(i .* 0.3819660112501051)
+    off = log.(d.e)
+    m = glm(F, d, Poisson(), LogLink(); offset=off)
+    for scale in (:response, :link)
+        for (pname, pkw) in (("population", (;)), ("groups=h", (; groups=:h)),
+                             ("scenarios z=0.5", (; scenarios=(z=0.5,))), ("w", (; weights=:w)))
+            push_pop!("offset:poisson/$scale/$pname", m, d; scale, pkw...)
+        end
+        for measure in (:elasticity, :semielasticity_eydx)
+            push!(out, ("offset:poisson/$scale/population/$measure/ad", "population_effects",
+                        () -> population_margins(m, d; type=:effects, vars=[:x, :z], scale, measure)))
+        end
+        push!(out, ("offset:poisson/$scale/profile:means_grid/effect/ad", "profile_effects",
+                    () -> profile_margins(m, d, means_grid(d); type=:effects, vars=ALLV, scale, offset=log(2.0))))
+        push!(out, ("offset:poisson/$scale/profile:cartesian_grid/predictions", "profile_predictions",
+                    () -> profile_margins(m, d, cartesian_grid(x=[1.0, 2.0], g=["a", "c"]);
+                                          type=:predictions, scale, offset=[0.0, 0.1, 0.2, 0.3])))
+    end
+
+    # GLMM (Poisson) with an offset
+    gm = fit(MixedModel, FM, d, Poisson(); offset=off, progress=false)
+    push_pop!("offset:glmm-poisson/population", gm, d)
+    push_pop!("offset:glmm-poisson/groups=g", gm, d; groups=:g)
+    push!(out, ("offset:glmm-poisson/profile:means_grid/predictions", "profile_predictions",
+                () -> profile_margins(gm, d, means_grid(d); type=:predictions, offset=log(2.0))))
+
+    # FixedEffectModels: the identity-link data with h absorbed; clustered on h
+    d = matrix_data("identity")
+    fm = reg(d, FFE, Vcov.cluster(:h); save=:fe)
+    for (pname, pkw) in (("population", (; weights=:none)), ("groups=g", (; groups=:g, weights=:none)),
+                         ("groups=(z,3)", (; groups=(:z, 3), weights=:none)),
+                         ("scenarios z=0.5", (; scenarios=(z=0.5,), weights=:none)), ("w", (; weights=:w)))
+        push_pop!("fem/$pname", fm, d; vars=[:x, :z, :g, :b], pkw...)
+    end
+    push!(out, ("fem/profile:means_grid/effect/ad", "profile_effects",
+                () -> profile_margins(fm, d, means_grid(d); type=:effects, vars=[:x, :z, :g, :b])))
+    push!(out, ("fem/profile:cartesian_grid/predictions", "profile_predictions",
+                () -> profile_margins(fm, d, cartesian_grid(x=[1.0, 2.0], h=["p", "r"]); type=:predictions)))
+
+    # An esample-dropping fit: a singleton level of the absorbed fixed effect
+    ds = copy(d)
+    ds.hs = string.(ds.h); ds.hs[1] = "singleton"
+    fs = reg(ds, FFE_S; save=:fe)
+    sum(fs.esample) == nrow(ds) - 1 || error("golden case: expected one singleton dropped")
+    push_pop!("fem-esample/population", fs, ds; vars=[:x, :z, :g, :b], weights=:none)
+    push_pop!("fem-esample/groups=g", fs, ds; vars=[:x, :z, :b], groups=:g, weights=:none)
+    return out
+end
+
 # ---------------------------------------------------------------------------------------
 # Schema-robust row keys
 # ---------------------------------------------------------------------------------------
@@ -287,7 +354,9 @@ _fmt(v) = string(v)
 
 _normcontrast(c) = c in ("dy/dx", "derivative") ? "d" : strip(String(c))
 
-"""DataFrame(case_id, operation, key, estimate, se) for one result."""
+"""DataFrame(case_id, operation, key, estimate, se, df) for one result (`df`: the inference
+degrees of freedom, `Inf` for z; recorded since step 5 of the 3.0 plan, when df became a
+property of the model class)."""
 function rows(case_id, operation, result)
     df = DataFrame(result)
     ctx = sort([c for c in names(df) if !(c in STAT_COLS)]; by=_normname)
@@ -300,12 +369,13 @@ function rows(case_id, operation, result)
     end
     allunique(keys) || error("duplicate keys in case $case_id: $(keys[findall(k -> count(==(k), keys) > 1, keys)])")
     return DataFrame(case_id=fill(case_id, nrow(df)), operation=fill(operation, nrow(df)),
-                     key=keys, estimate=Float64.(df.estimate), se=Float64.(df.se))
+                     key=keys, estimate=Float64.(df.estimate), se=Float64.(df.se),
+                     df=Float64.(df.df))
 end
 
 """Run every case and return the stacked rows."""
 function run_all()
-    out = DataFrame(case_id=String[], operation=String[], key=String[], estimate=Float64[], se=Float64[])
+    out = DataFrame(case_id=String[], operation=String[], key=String[], estimate=Float64[], se=Float64[], df=Float64[])
     for (cid, op, f) in cases()
         append!(out, rows(cid, op, f()))
     end
@@ -320,7 +390,7 @@ summation order (e.g. the means in `means_grid`) at the ulp level.
 """
 function fingerprint()
     vers = join(["$(nameof(M))=$(pkgversion(M))" for M in (GLM, StatsModels, CategoricalArrays,
-                                                         MixedModels, CovarianceMatrices)], ";")
+                                                         MixedModels, CovarianceMatrices, FixedEffectModels)], ";")
     return vers * ";check_bounds=" * string(Base.JLOptions().check_bounds)
 end
 

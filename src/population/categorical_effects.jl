@@ -103,7 +103,7 @@ function _compute_categorical_contrasts!(
         view(gradient_matrix, 1:n_contrasts, :),
         engine.contrast_buf, engine.contrast, var, contrast_pairs,
         engine.β, engine.Σ, predscale(scale, engine.link),
-        rows, weights
+        rows, weights, engine.offset
     )
 
     return n_contrasts, contrast_pairs

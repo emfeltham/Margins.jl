@@ -20,13 +20,12 @@ and standard errors are unchanged; p-values and confidence intervals change for 
 1. **`t_stat` is replaced by `statistic` and `df`.** The old column was always a z statistic
    (p-values and CIs used the Normal) despite its name. Now `statistic = estimate / se`, and `df`
    is the degrees of freedom of its reference distribution: **t with `dof_residual(model)` for a
-   linear model** (`lm`, or `glm(…, Normal(), IdentityLink())`) with the default `vcov`, and
-   **z (`df = Inf`)** for every other model (other GLMs, mixed models, FixedEffectModels) and for
-   any robust, clustered or custom `vcov` (`HC1()`, `CR1(cl)`, a function, or a matrix other than
-   `vcov(model)`), which does not carry the df Stata would use. `p_value`, `ci_lower`/`ci_upper`
-   and the printed intervals use t(`df`). The rule is defined once
-   (`Margins._inference_df(model, vcov)`), stored in `result.metadata[:df]`, and
-   inherited by `contrast(...)`; second differences apply the same rule to the covariance matrix they use. `ContrastResult`'s
+   linear model** (`lm`, or `glm(…, Normal(), IdentityLink())`) with any `vcov`, and for a
+   FixedEffectModels fit (its own, cluster-adjusted value), and **z (`df = Inf`)** for every other
+   model (other GLMs, mixed models). `df=` overrides it (see "Model-class interface" below).
+   `p_value`, `ci_lower`/`ci_upper` and the printed intervals use t(`df`). The rule is defined once
+   (`Margins._inference_df(model)`), stored in `result.inference.df`, and inherited by
+   `contrast(...)` and second differences. `ContrastResult`'s
    `t_stat` field is now `statistic` plus `df`, and its `show` prints `t (df = …)` or `z`.
    Profile effects (`format=:profile`, the default for `profile_margins` effects) now also include
    `statistic`, `df` and `p_value`. `format=:stata` labels the statistic `t`/`P_t` for t inference
@@ -34,7 +33,7 @@ and standard errors are unchanged; p-values and confidence intervals change for 
    the t quantile, matching R's `predict(lm, interval = "prediction")`.
 2. **Group columns get an `over_` prefix** (`groups=:g` gives column `over_g`, as in Stata's
    `over()`), matching the `at_` prefix of scenario columns. This applies to categorical, binned
-   and nested groups, to the printed table, and to `contrast(df, (over_g = …,), …)` row lookups.
+   and nested groups, to the printed table, and to `contrast(result, (over_g = …,), …)` row lookups.
    Profile (reference-grid) columns keep their bare names; `context_columns(result)` still returns
    raw variable names.
 3. **Second differences have one entry point and one schema.** See "Second differences" below.
@@ -50,12 +49,12 @@ and standard errors are unchanged; p-values and confidence intervals change for 
 | `contrast(…; α=0.1)` | `contrast(…; alpha=0.1)` |
 | `cr.t_stat` (`ContrastResult`) | `cr.statistic`, `cr.df` |
 | `df.g` (group column from `groups=:g`) | `df.over_g` |
-| `contrast(df, (g = "b",), (g = "a",), Σ)` | `contrast(df, (over_g = "b",), (over_g = "a",), Σ)` |
+| `contrast(df, (g = "b",), (g = "a",), Σ)` | `contrast(result, (over_g = "b",), (over_g = "a",))` (see "Typed results" below) |
 | second differences `sd.z_stat` | `sd.statistic` (and `sd.df`) |
 | `second_differences_at(...).derivative` | `.second_diff` |
 | `second_difference(...).z_stat` | `.statistic` |
 | profile effects `df.lower`, `df.upper` | `df.ci_lower`, `df.ci_upper` |
-| `DataFrame(r; format=:stata).t` (always) | `.t` for linear models with the default `vcov`, `.z` otherwise |
+| `DataFrame(r; format=:stata).t` (always) | `.t` for linear models (any `vcov`) and FixedEffectModels, `.z` otherwise |
 | weighted models (`glm(…; wts=w)`, `fit(MixedModel, …; wts=w)`): `population_margins(m, data)` was unweighted | results are now weighted by the model's weights by default; pass `weights=:none` for the 2.x behaviour |
 
 ```julia
@@ -68,8 +67,8 @@ second_differences_at(m, data, :x, :z, vcov(m)).derivative
 # 3.0
 res = DataFrame(population_margins(m, data; groups = :g))
 res[res.over_g .== "b", :statistic]      # res.df: dof_residual(m) for lm, Inf otherwise
-sd = second_differences(ames, :x, :t, vcov(m)); sd.statistic
-second_differences_at(m, data, :x, :z, vcov(m)).second_diff
+sd = second_differences(ames, :x, :t); sd.statistic   # Σ from the result (ames.inference.vcov)
+second_differences(m, data, :x, :z; at = :mean).second_diff
 ```
 
 **Inference change for linear models.** For `lm` (and Gaussian identity GLMs) with the default
@@ -77,7 +76,8 @@ second_differences_at(m, data, :x, :z, vcov(m)).second_diff
 so they are slightly wider than before — noticeably so in small samples (at n − p = 20 the 95%
 critical value is 2.086 instead of 1.960, about 6% wider; at n − p = 1000 the difference is
 0.1%). This matches `GLM.coeftable`, Stata's `margins` after `regress` and R's `emmeans`.
-Results for GLMs with non-identity links, mixed models and robust/clustered `vcov` are unchanged.
+Results for GLMs with non-identity links and mixed models are unchanged. Robust/clustered `vcov` on a
+linear model also gives t (see "Model-class interface": this changed again late in 3.0 development).
 
 ### Second differences: one entry point, one schema (breaking)
 
@@ -95,10 +95,11 @@ between `levels`. Keywords: `levels`, `at`, `modifier_type`, `profile` (strata),
 `contrasts`, `vcov` (a function, a matrix or a CovarianceMatrices estimator such as `HC1()`), `alpha`,
 `p_adjust`, `include_gradients`.
 
-**`second_differences(result, variables, modifier[, vcov]; …)`** does the same on an `EffectsResult` you
-already hold, from `population_margins` or `profile_margins`. `vcov` is optional: results record the
-covariance they were computed with (`metadata[:vcov]`), so the standard errors agree with those of the
-effects. Keywords: `contrast`, `modifier_type`, `alpha`, `p_adjust`, `include_gradients`.
+**`second_differences(result, variables, modifier; …)`** does the same on an `EffectsResult` you
+already hold, from `population_margins` or `profile_margins`. It uses the covariance matrix and df the
+result was computed with (`result.inference`), so the standard errors agree with those of the effects;
+for another estimator, compute the result with `vcov=…`. Keywords: `contrast`, `modifier_type`, `alpha`,
+`p_adjust`, `include_gradients`.
 
 | Removed (2.x) | Use instead |
 |:--|:--|
@@ -129,11 +130,11 @@ every `profile` variable adds a column.
 - **Level order.** Numeric (and Bool) modifier levels are sorted ascending, so `modifier_level1 <
   modifier_level2` and the sign of `second_diff` no longer depend on scenario order or on which function was
   called. Categorical levels keep scenario order.
-- **Inference df follows the covariance you pass**, by the package-wide rule (`_inference_df`): the residual df
-  only for the default `vcov` or a matrix equal to a linear model's own covariance; z for any other matrix, any
-  function (even one returning `vcov(model)`), robust estimators and other models. Before, the discrete functions took `df` from the effects result and ignored
-  `vcov` (a robust Σ with a default-`lm` result still used t). Results record `metadata[:model_vcov]` and
-  `metadata[:model_df]` for this.
+- **Inference df is the result's** (the model class's df, or the `df=` given): a second difference of a linear
+  model uses t with the residual df whatever covariance it is computed with, as the effects do. Before, the
+  discrete functions took `df` from the effects result and ignored `vcov`; during 3.0 development the df briefly
+  followed the covariance passed (z for any matrix other than the model's own), which the model-class df rule
+  replaced (see "Model-class interface").
 - **Second differences the model cannot support are flagged.** When the gradient of the difference is
   identically zero (no interaction in an identity-link model, or the modifier is not in the model) the
   second difference is zero by construction. Such rows report `second_diff = 0`, `se = 0`,
@@ -167,7 +168,7 @@ every `profile` variable adds a column.
 - **The default for a continuous modifier is now `at=:observed`** (was the derivative at the modifier's mean). The average derivative over the observed values is the quantity the rest of the package reports (an average over the sample, as an AME is), and it equals the derivative at any point whenever the AME is linear in the modifier. In a nonlinear model results change; `at=:mean` restores the old default. Rows from the default report `eval_point = NaN`.
 - **`at=:observed`**: the average derivative over the observed modifier values. The modifier column is shifted by ±δ for every row (each row keeps its other values), so the result is the mean over observations of ∂²ŷᵢ/∂x∂m, the average interaction effect, from two `population_margins` calls regardless of sample size. `at=:mean` and numeric `at` set the modifier to one value for everyone, which differs in nonlinear models. Rows report `eval_point = NaN`, `modifier_level1/2 = NaN` and `delta_used`.
 - **Result metadata has a documented contract.** `Margins.result_metadata_keys()` lists the keys every `EffectsResult`/`PredictionsResult` carries and their types, typed accessors replace the scattered `get(md, :k, default)` reads (one default each), and a test checks every producer. This fixed three inconsistencies: `:weighted` was missing on `scenarios=`/`groups=` results (it is now always set, `true` when weights were used), `:groups_vars`/`:scenarios_vars` were missing when there were no contexts (now empty vectors), and `:model_type` was always the string `"DataType"` (now the model's type).
-- **One name for the significance level: `alpha`.** `population_margins` and `profile_margins` took `ci_alpha`, `contrast` took `α`, and second differences took neither consistently; all four now take `alpha` (confidence level `1 − alpha`; in `second_differences` it also sets `significant`). Migration: `ci_alpha=0.1` → `alpha=0.1`, `contrast(…; α=0.1)` → `alpha=0.1`. Passing `ci_alpha` to `population_margins`/`profile_margins` raises an error naming `alpha`. Result `metadata[:alpha]` is unchanged.
+- **One name for the significance level: `alpha`.** `population_margins` and `profile_margins` took `ci_alpha`, `contrast` took `α`, and second differences took neither consistently; all four now take `alpha` (confidence level `1 − alpha`; in `second_differences` it also sets `significant`). Migration: `ci_alpha=0.1` → `alpha=0.1`, `contrast(…; α=0.1)` → `alpha=0.1`. Passing `ci_alpha` to `population_margins`/`profile_margins` raises an error naming `alpha`. The result's `alpha` is `result.inference.alpha` (it was `metadata[:alpha]`).
 - **`contrast=` selects one contrast in both forms; `all_contrasts` is removed.** The result-level form had `contrast::String="dy/dx"` plus `all_contrasts::Bool`, and the model-level form had `contrasts::Symbol`, which read as the same thing. Now `contrast=nothing` (default) keeps every contrast and `contrast="label"` keeps one (`"derivative"` is an alias of `"dy/dx"`), in the result-level and the model-level form alike. Plural `contrasts=` (model-level, as in `population_margins`) still chooses how contrasts are built, `:baseline` or `:pairwise`. Migration: `all_contrasts=false, contrast="x"` → `contrast="x"`; `all_contrasts=true` → omit. Passing `all_contrasts` raises an error saying so.
 - **`measure=`** in the model-level `second_differences` (`:effect`, `:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx`): the change in an elasticity or semielasticity across the modifier. Result-level calls already worked on such results.
 - **Validated against R `marginaleffects` 1.0.0** (`test/validation/test_second_differences_r_oracle.jl`, reference values from `test/r_compare_marginaleffects/second_differences/`): 72 cases (logit and Poisson; response and link scale; with and without weights; binary, categorical and continuous modifiers; all four measures) agree to 3e-6 in the estimate and 5e-4 in the SE (R's numerical Jacobian limits the SE comparison; where the answer is exact, Margins matches it to rounding, and a closed-form oracle checks the local derivative of an elasticity). Rows that are zero by construction have no SE in R and a zero with NaN inference here.
@@ -202,7 +203,7 @@ None of these names was exported. Using one gives an `UndefVarError` whose hint 
 
 `population_margins`, `profile_margins` and the model-level `second_differences` now turn their keywords into one internal `MarginsRequest` (`Margins._normalize_request`, `src/core/request.jl`): every validator runs there once per call, in one order, and `vcov` is evaluated there once (Σ and the vcov source travel in the request, so `_PrecomputedVcov` is gone). The public functions are thin wrappers around `_run(req)`. The model-level `second_differences` builds one request for the whole call and runs each profile point, evaluation point and ±δ shift from it, with no re-entry through `population_margins`' keyword parsing; its modifier, profile and variable checks run once (they ran twice on the local-derivative path). Estimates and SEs are bitwise unchanged (golden snapshot 9419/9419 without regeneration). Inputs that were accepted but invalid now raise errors:
 
-- **`alpha` is range-checked and accepts any `Real` (B8).** `population_margins`, `profile_margins` and `contrast` declared `alpha::Float64`, so `alpha=1//10` or `0.1f0` was a `TypeError`, while `alpha=1.5` (an inverted interval), `0`, negative values and `NaN` were accepted. Now any real number in (0, 1) is accepted and stored as `Float64` (`metadata[:alpha]`), and anything else is an `ArgumentError` (`alpha must be in (0, 1), got 1.5`). The model-level `second_differences` already took a `Real` and range-checked it; it keeps its `ErrorException`, which its tests pin.
+- **`alpha` is range-checked and accepts any `Real` (B8).** `population_margins`, `profile_margins` and `contrast` declared `alpha::Float64`, so `alpha=1//10` or `0.1f0` was a `TypeError`, while `alpha=1.5` (an inverted interval), `0`, negative values and `NaN` were accepted. Now any real number in (0, 1) is accepted and stored as `Float64` (`result.inference.alpha`), and anything else is an `ArgumentError` (`alpha must be in (0, 1), got 1.5`). The model-level `second_differences` already took a `Real` and range-checked it; it keeps its `ErrorException`, which its tests pin.
 - **`contrasts` is validated on every call (B12).** `contrasts=:foo` was silently accepted when no categorical variable was requested (`population_margins(m, d; vars=[:x], contrasts=:foo)`, and the discrete-modifier `second_differences`), and the continuous-modifier `second_differences` raised a bare `ErrorException`. Every entry point now raises `ArgumentError("contrasts must be :baseline or :pairwise, got :foo")`.
 - **FixedEffectModels results go through the same validators (B7).** The extension's `population_margins`/`profile_margins` skipped the measure filter (a categorical's contrasts were reported as "elasticity" rows), the vars/groups overlap, the scenarios/groups conflict, the scenario-variable and reference-grid predictor checks, and the grouping-column checks. They now normalize the request like every other model; the absorbed fixed effects count as predictors (a grid may set them for prediction), and the FE-specific checks (`save=:fe` for predictions, no absorbed FE in `vars` or in prediction `scenarios`) are model-class hooks (`Margins._validate_focal_vars`, `Margins._validate_request`). The FE offsets themselves are unchanged in this release step (see B4–B6). `profile_margins` on a `FixedEffectModel` also takes `interval` now (`:prediction` is an `ArgumentError`, as for any non-linear-Gaussian model).
 - **Model-level `second_differences` on any Tables.jl table (ISSUES #4).** It indexed `data[!, modifier]` and called `names(data)`, so a `NamedTuple` of columns or a row table failed with a `MethodError`; it now reads `Tables.columntable(data)` once. `profile_margins` on a non-`DataFrame` table failed the same way (`process_reference_grid` had only a `DataFrame` method) and works too.
@@ -211,6 +212,99 @@ None of these names was exported. Using one gives an `UndefVarError` whose hint 
 - **Error order.** Because every check now runs in one place, a call with several invalid options may report a different one first than before (scalar options, then `scenarios`/`groups`, data, weights, variables, grid, `vcov`, model class).
 - **Cost.** Warm calls are unchanged within noise (n = 5,000, the paper-style logit, `vcov = V`: APM, AAP, MEM, AME (all), AME (one variable), AME (scenario) and both second-difference forms within ±4%; about 1 KB and 10–30 allocations more per call for the request). First-call latency (fresh process, median of 3): AME 3.64 → 3.70 s, AME with `scenarios` 4.11 → 3.83 s, MEM with `means_grid` 4.98 → 5.03 s, model-level `second_differences` 5.88 → 5.44 s (discrete modifier) and 5.31 → 5.09 s (`at=:observed`).
 - Tests: `test/core/test_request_layer.jl`, and a "Shared validation" testset in `test/features/test_fixed_effect_models.jl`. `test/test_second_differences_at.jl` now expects the `ArgumentError` for `contrasts=:invalid`.
+
+### Model-class interface: df, offsets, FixedEffectModels (numbers change)
+
+What Margins needs to know about a fitted model beyond its formula is now one set of internal generics (`src/core/model_interface.jl`), with GLM.jl methods in core and MixedModels/FixedEffectModels methods in the extensions: `_link`, `_coef`, `_default_vcov`, `_response_name`, `_inference_df`, `_model_weights`, `_has_offset`/`_offset`/`_grid_offset`, `_estimation_rows`, `_validate_request`. The scattered `isa`/`hasfield` checks are gone, and **the FixedEffectModels copies of `population_margins` and `profile_margins` are deleted**: a `FixedEffectModel` goes through the shared request path, so scenarios, groups, weights, inference and every validator apply to it as to any model. Several results change:
+
+- **df is a property of the model class (decision D1; E8).** t with `dof_residual(model)` for `lm` and Gaussian identity-link `glm` **whatever `vcov` is passed**, including `HC1()`, `CR1(cl)`, a function or a matrix (as Stata's `regress, vce(robust)` + `margins` and R's `coeftest(m, vcovHC(m))`); before, any `vcov` other than `GLM.vcov` (or a matrix equal to `vcov(model)`) gave z. FixedEffectModels: `dof_residual(model)`, which FixedEffectModels already adjusts for clustering (G − 1 with `Vcov.cluster`) and uses in its own `coeftable`; before, z. Other GLMs and mixed models: z, unchanged. Estimates and SEs do not change; `df`, `p_value` and the intervals do (slightly wider).
+- **New `df=` keyword** on `population_margins`, `profile_margins` and the model-level `second_differences`: a positive number, or `Inf` for z (e.g. `df = G - 1` with a clustered `vcov` on an `lm`, Stata's `vce(cluster)` convention). Recorded in `result.inference.df` and inherited by contrasts and second differences.
+- **Second differences use the result's df** whatever covariance matrix they are given (the `Σ == vcov(model)` test is deleted), and results no longer record `metadata[:model_vcov]`/`[:model_df]`.
+- **Offsets are honoured (B3).** A GLM `offset=` (`glm(f, d, Poisson(); offset=log.(exposure))`) and a GLMM `offset=` enter η = x′β + offset in every kernel that forms η: predictions, the continuous-effects accumulator, the categorical contrast kernel and profile evaluation, so ŷ and the link derivatives are taken at η + offset. Before, offsets were ignored: AAP, response-scale effects and elasticities of an offset model were computed at the wrong η (AAP 0.153 instead of 0.920 in the review's probe). For a Poisson model with an intercept the AAP now equals `mean(predict(m)) = mean(y)`. Population margins use each row's offset (row-aligned under the same length check as `weights=:model`), held at its observed value under `scenarios`. Link-scale and identity-link `:effect` results never depended on the offset and are unchanged.
+- **New `offset=` keyword on `profile_margins`, and a new error (decision D3).** A grid row has no offset of its own, so for a model with one, `profile_margins` requires `offset=` (a number or one value per grid row, GLM's `predict(m, newdata; offset=)` convention) or an `offset` column in the grid, whenever the result depends on it (predictions; response-scale effects of a non-identity link; `:elasticity`, `:semielasticity_eydx`). Otherwise it raises an `ArgumentError`; the offset is never silently 0 (for an exposure model that is the rate per unit of exposure).
+- **FixedEffectModels predictions are right within groups and under scenarios (B4).** The absorbed fixed effects are a per-row offset, Σₖ feₖ, so each row keeps its own fixed effects; `groups=` no longer adds the sample-average fixed effect to every group, and the results equal averages of FixedEffectModels' `predict` over the group's rows.
+- **FixedEffectModels uses its estimation sample (B5).** Only the rows in `esample` are used (rows with missing values, non-positive weights or singleton fixed-effect groups are dropped by `reg`): averages, `groups`, weights and fixed effects refer to them, and `metadata[:n_obs]` is `nobs(model)`. Before, every data row was averaged, with a missing fixed effect counted as 0. The data is subset once, when the request is built; a weight vector for every row of `data` is subset the same way.
+- **FixedEffectModels data must be the table given to `reg` (new error).** `data` must have one row per entry of `model.esample` (the original table); Margins subsets it to the estimation rows. Any other number of rows is an `ArgumentError` saying to pass the table given to `reg()`. A table with exactly `nobs(model)` rows used to be taken as already being the estimation sample, a heuristic under which a different table of that length (or the right rows in another order) was misaligned silently; a table subset to `esample` by hand is now rejected too. Fits that drop no rows (`nobs == length(esample)`) are unaffected. This applies to `population_margins`, `profile_margins` and `second_differences(model, data, …)`.
+- **FixedEffectModels results carry their inference (B6)** (`result.inference`), so `second_differences(result, …)` works on them, and they get the measure filter and the groups/scenarios validators (B7) and `second_differences(model, data, …)`.
+- **FixedEffectModels profile predictions need the fixed effects of each grid row (new error).** Give every fixed-effect variable in the grid (the estimates of those levels are looked up, as FixedEffectModels' `predict` does), or `offset=` / an `offset` column. Before, a fixed-effect variable missing from the grid was silently replaced by its sample average; now it is an `ArgumentError`, as is a level without an estimate. Effects that do not depend on ŷ (`:effect` on an identity link) need neither `save=:fe` nor grid fixed effects, as before. Predictions for a model with a fixed effect interacted with a continuous variable (`fe(g)&x`) raise an error (FixedEffectModels' `predict` does not support them either).
+- **FixedEffectModels elasticities include the fixed effects in ŷ.** `:elasticity` and `:semielasticity_eydx` divide by ŷ, which for a `FixedEffectModel` is x′β + Σₖ feₖ; they were computed at x′β alone (wrong unless every fixed effect is 0). They now use each row's fixed effects, and so need `save=:fe` (else the `save=:fe` error).
+- **Fixed-effect grid columns are shown.** A FixedEffectModels reference grid that sets fixed-effect variables now labels its output rows with them (they used to be dropped from the profile columns, so two grid rows differing only in the fixed effect looked identical).
+- **`weights=:model` on a FixedEffectModels fit warns (decision D2; B11).** A `FixedEffectModel` stores no weights, so whether `reg` was weighted is unknown. `weights=:model` (the default) averages without weights, as before, and now logs a warning once per session saying so and to pass `weights=` explicitly (or `weights=:none` to silence it). Explicit `weights=` and `weights=:none` do not warn. `_model_weights` returns `Margins.UnknownWeights` for these models.
+- **Cost.** Without an offset the kernels are compiled without one (`MarginsEngine{L,U,C,E,CE,O}`, `O = Nothing`), so results are bitwise unchanged and the hot loops still allocate nothing (also with an offset). First-call latency (fresh process, the paper-style logit at n = 5,000, median of 3 after vs 6 before): AME 4.08 → 3.86 s, AAP 2.48 → 2.43 s, AME with `scenarios` 4.23 → 4.07 s (all within run-to-run noise), MEM with `means_grid` 5.56 → 5.78 s (+4%, the profile path's offset and grid-column handling compiled on first use). The golden snapshot gained a `df` column and cases for Poisson and GLMM offsets and FixedEffectModels (groups, scenarios, weights, an `esample`-dropping fit).
+
+| before | 3.0 |
+|:--|:--|
+| `population_margins(lm_model, d; vcov=HC1())` reported z (`df = Inf`) | t with `dof_residual(model)`; `df=Inf` restores z |
+| a clustered `lm` with Stata's G − 1 df: compute p-values by hand | `population_margins(m, d; vcov=CR1(d.c), df=G - 1)` |
+| FixedEffectModels results: z | t with `dof_residual(model)` (cluster-adjusted); `df=Inf` restores z |
+| offset models: offsets ignored | offsets used; `profile_margins` needs `offset=` or an `offset` grid column for predictions and response-scale effects |
+| `profile_margins(fe_model, d, cartesian_grid(x=[0, 1]); type=:predictions)` (average FE) | add every FE variable to the grid, pass `offset=`, or use `population_margins(fe_model, d; type=:predictions, scenarios=(x=[0, 1],))` |
+| FixedEffectModels averaged over all data rows | averages over `esample` |
+| FixedEffectModels: `population_margins(fe_model, data[fe_model.esample, :])` (pre-subset data) | `population_margins(fe_model, data)` (the table given to `reg`; pre-subset data is an `ArgumentError`) |
+| `weights=:model` on a weighted `reg`: silently unweighted | still unweighted, with a once-per-session warning; pass `weights=:w` |
+
+Tests: `test/core/test_model_interface.jl` (df rule and `df=`, offsets in every kernel and under scenarios, D3, GLMM offsets, FixedEffectModels inference/esample/groups/scenarios/weights/profile predictions, the D2 warning), offset cases in the zero-allocation tests, and the updated `test/features/test_fixed_effect_models.jl`, `test/core/test_output_schema.jl`, `test/core/test_model_weights.jl`.
+
+### Typed results: inference and context (breaking)
+
+A result now carries two typed fields in place of `profile_values`/`group_values` and the
+inference entries of `metadata`, and everything computed from a result reads them:
+
+- **`result.inference::Inference(vcov, df, alpha)`** (new exported type): the parameter covariance
+  matrix Σ the delta method used (from `vcov=`), the df of the reference distribution (t(`df`), `Inf`
+  = z) and `alpha`. `DataFrame(result)`, `show`, `contrast` and `second_differences(result, …)` read
+  it, so they cannot disagree with the result. With `gᵢ = result.gradients[i, :]`, row `i` has
+  standard error `√(gᵢ'Σgᵢ)`.
+- **`result.context::Union{Nothing,ResultContext}`** (new exported type): the per-row context columns
+  as an ordered `NamedTuple` (`context.columns`) with the kind of each column (`context.kinds`:
+  `:grid`, `:group` or `:scenario`); `nothing` for a plain AME/AAP. `keys(ctx)`, `ctx[name]` and
+  `pairs(ctx)` read it. `group_values` (always `nothing`) is gone.
+- **`metadata` keeps provenance only.** `metadata[:vcov]`, `metadata[:df]` and `metadata[:alpha]` are
+  removed (and from `Margins.result_metadata_keys()`).
+- **`contrast` reads Σ, df and alpha from the result (B9; ISSUES #7).**
+  `contrast(result, row1, row2; alpha=result.inference.alpha)` and the new
+  `contrast(result, spec1, spec2)`, which picks each row by its `DataFrame(result)` column values
+  (`(x=1,)`, `(variable="x1", at_age=60)`, `(over_g="b",)`). Before, `contrast(result, i, j, Σ)` took
+  any Σ but always the result's df (a t df paired with an arbitrary covariance), rejected a
+  `Symmetric` matrix, and defaulted `alpha` to 0.05 whatever the result's was. The positional-Σ
+  methods and the `DataFrame` methods (`contrast(df, i, j, Σ)`, `contrast(df, spec1, spec2, Σ)`) are
+  removed; calling one raises an `ArgumentError` naming the replacement. `ContrastResult`'s
+  `metadata[:source]` is `:result_object` or `:result_namedtuple`.
+- **`second_differences(result, variables, modifier)` loses its positional Σ and its `vcov` keyword.**
+  It uses `result.inference`; a matrix argument or `vcov=` raises an `ArgumentError`. For a different
+  covariance estimator, compute the result with `vcov=…`, or call
+  `second_differences(model, data, …; vcov=…)`.
+- **Context columns in grid and user order (B10).** `DataFrame(result)` and `show` list a profile
+  result's grid columns in the reference grid's column order (they came out in `Dict` hash order), and a
+  population result's `over_` columns, then its `at_` columns, each in the order given in `groups` /
+  `scenarios` (the `DataFrame` reversed them before, while `show` did not). Rows, values and
+  every other column are unchanged. Note that the grid builders (`means_grid`, `cartesian_grid`, …)
+  produce alphabetically ordered columns, so their results now list the grid columns alphabetically;
+  a hand-written grid keeps its own column order.
+- Estimates, standard errors and df are bitwise unchanged (golden snapshot 9605/9605 rows). The kernels
+  still allocate nothing. First-call latency (fresh process, paper-style logit at n = 5,000, median,
+  before → after): AME 4.21 → 4.18 s, AME of one variable 3.61 → 3.50 s, MEM 5.94 → 5.99 s, AAP 2.74 →
+  2.72 s (within run-to-run noise).
+
+| before (≤ 2.x / early 3.0) | 3.0 |
+|:--|:--|
+| `result.profile_values` | `result.context.columns` (`result.context[name]`; `result.context.kinds` says which are grid, group and scenario columns) |
+| `result.group_values` (always `nothing`) | removed; group columns are `result.context` columns of kind `:group` |
+| `result.metadata[:vcov]` | `result.inference.vcov` |
+| `result.metadata[:df]` | `result.inference.df` |
+| `result.metadata[:alpha]` | `result.inference.alpha` |
+| `contrast(result, i, j, Σ)` | `contrast(result, i, j)` (Σ is `result.inference.vcov`); another Σ: recompute the result with `vcov=Σ` |
+| `contrast(result, i, j, Σ; alpha=0.05)` on a result computed at `alpha=0.1` (gave 95%) | `contrast(result, i, j)` gives 90%; `alpha=0.05` for 95% |
+| `contrast(DataFrame(result; include_gradients=true), i, j, Σ)` | `contrast(result, i, j)` |
+| `contrast(DataFrame(result; include_gradients=true), (x=1,), (x=0,), Σ)` | `contrast(result, (x=1,), (x=0,))` (same column names) |
+| `second_differences(result, vars, mod, Σ)` / `…; vcov=Σ)` | `second_differences(result, vars, mod)`; another Σ: `population_margins(…; vcov=Σ)` first, or `second_differences(model, data, vars, mod; vcov=Σ)` |
+| `EffectsResult(est, se, vars, terms, profile_values, group_values, G, md)` | `EffectsResult(est, se, vars, terms, context, G, inference, md)` |
+| `PredictionsResult(est, se, profile_values, group_values, G, md)` | `PredictionsResult(est, se, context, G, inference, md)` |
+
+Tests: `test/core/test_typed_results.jl` (B9: contrast Σ/df/alpha against a hand computation from
+`inference`; B10: grid, groups and scenarios order where `Dict` order differs; `Inference` for lm, glm
+t and z, HC1 lm, `df=` overrides), and the updated contrast, metadata-contract and second-difference
+tests.
 
 ### Breaking / behaviour change
 

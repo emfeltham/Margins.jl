@@ -18,7 +18,7 @@ using Random
 
     @testset "Contrast from MarginsResult" begin
         result = profile_margins(model, df, cartesian_grid(x=[0, 1]); type=:predictions)
-        contrast_result = contrast(result, 1, 2, vcov(model))
+        contrast_result = contrast(result, 1, 2)
 
         # Test basic DataFrame conversion
         df_contrast = DataFrame(contrast_result)
@@ -37,11 +37,10 @@ using Random
         @test !("gradient" in names(df_contrast))
     end
 
-    @testset "Contrast from DataFrame with integer indices" begin
+    @testset "Contrast with integer indices" begin
         result = profile_margins(model, df, cartesian_grid(treatment=[0, 1]); type=:predictions)
-        df_pred = DataFrame(result; include_gradients=true)
 
-        contrast_result = contrast(df_pred, 1, 2, vcov(model))
+        contrast_result = contrast(result, 1, 2)
 
         # Convert without gradient
         df_contrast = DataFrame(contrast_result)
@@ -56,13 +55,12 @@ using Random
         @test df_contrast_grad.gradient[1] ≈ contrast_result.gradient
     end
 
-    @testset "Contrast from DataFrame with NamedTuple specification" begin
+    @testset "Contrast with NamedTuple specification" begin
         result = profile_margins(model, df, cartesian_grid(x=[0, 1], treatment=[0, 1]);
                                 type=:predictions)
-        df_pred = DataFrame(result; include_gradients=true)
 
         # Contrast at treatment=1 across x values
-        contrast_result = contrast(df_pred, (x=1, treatment=1), (x=0, treatment=1), vcov(model))
+        contrast_result = contrast(result, (x=1, treatment=1), (x=0, treatment=1))
 
         df_contrast = DataFrame(contrast_result)
         @test size(df_contrast, 1) == 1
@@ -80,9 +78,7 @@ using Random
         # Test with effects instead of predictions
         result = profile_margins(model, df, cartesian_grid(treatment=[0, 1]);
                                 type=:effects, vars=[:x])
-        df_eff = DataFrame(result; include_gradients=true)
-
-        contrast_result = contrast(df_eff, (treatment=1,), (treatment=0,), vcov(model))
+        contrast_result = contrast(result, (treatment=1,), (treatment=0,))
         df_contrast = DataFrame(contrast_result)
 
         @test size(df_contrast, 1) == 1
@@ -93,7 +89,7 @@ using Random
     @testset "Statistical content validation" begin
         # Verify statistical content is preserved correctly
         result = profile_margins(model, df, cartesian_grid(x=[-1, 0, 1]); type=:predictions)
-        contrast_result = contrast(result, 1, 3, vcov(model))
+        contrast_result = contrast(result, 1, 3)
         df_contrast = DataFrame(contrast_result)
 
         # Check confidence interval consistency
@@ -113,10 +109,8 @@ using Random
     @testset "Edge cases" begin
         # Test with all available fields
         result = profile_margins(model, df, cartesian_grid(x=[0, 1]); type=:predictions)
-        df_pred = DataFrame(result; include_gradients=true)
-
         # Use NamedTuple spec to get row1, row2, and gradient
-        contrast_result = contrast(df_pred, (x=1,), (x=0,), vcov(model))
+        contrast_result = contrast(result, (x=1,), (x=0,))
         df_full = DataFrame(contrast_result; include_gradient=true)
 
         # Should have all possible columns
@@ -124,5 +118,20 @@ using Random
                         "estimate1", "estimate2", "row1", "row2", "gradient"]
         @test all(col in names(df_full) for col in expected_cols)
         @test size(df_full) == (1, length(expected_cols))
+
+        # a spec that matches no row, or several, is an error
+        @test_throws ArgumentError contrast(result, (x=7,), (x=0,))
+        @test_throws ArgumentError contrast(result, (type="APM",), (x=0,))
+        @test_throws ArgumentError contrast(result, (nope=1,), (x=0,))
+    end
+
+    @testset "Margins 2.x forms are removed, with a pointer to the new ones" begin
+        result = profile_margins(model, df, cartesian_grid(x=[0, 1]); type=:predictions)
+        err = try contrast(result, 1, 2, vcov(model)); nothing catch e; e end
+        @test err isa ArgumentError && occursin("contrast(result, row1, row2)", err.msg)
+        @test_throws ArgumentError contrast(result, (x=1,), (x=0,), vcov(model))
+        err = try contrast(DataFrame(result; include_gradients=true), 1, 2, vcov(model)); nothing catch e; e end
+        @test err isa ArgumentError && occursin("contrast the result itself", err.msg)
+        @test_throws ArgumentError contrast(DataFrame(result; include_gradients=true), (x=1,), (x=0,), vcov(model))
     end
 end

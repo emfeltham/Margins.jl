@@ -134,10 +134,11 @@ In GLMs with non-identity links, profile elasticity ≠ average elasticity, foll
 
 Every estimate θ̂ (a marginal effect, an adjusted prediction, a contrast or a second difference) has a delta-method standard error SE(θ̂) = √(g′Σg), with g = ∂θ̂/∂β and Σ the parameter covariance. Margins reports the test statistic `statistic` = θ̂ / SE(θ̂) for H₀: θ = 0 and refers it to t with `df` degrees of freedom; p-values are 2·P(T_df > |statistic|) and confidence intervals are θ̂ ± t_{df, 1−α/2}·SE(θ̂). `df = Inf` is the standard Normal (z).
 
-- **Linear models** (`lm`, or a Gaussian `glm` with identity link) **with the model-based covariance**: θ̂ = c′β̂ for a fixed vector c, so under the classical linear-model assumptions θ̂/SE(θ̂) has an exact t distribution with the residual degrees of freedom n − p. Margins uses `df = dof_residual(model)`, as Stata's `margins` does after `regress` and as `GLM.coeftable` does for `lm`. With an identity link the link and response scales coincide.
-- **All other cases** — non-identity links, mixed models, FixedEffectModels, and robust, clustered or custom covariance estimators — use z (`df = Inf`): the delta-method standard errors (or the sandwich covariance) are justified asymptotically.
+- **Linear models** (`lm`, or a Gaussian `glm` with identity link), **with any covariance estimator**: θ̂ = c′β̂ for a fixed vector c, so under the classical linear-model assumptions θ̂/SE(θ̂) has an exact t distribution with the residual degrees of freedom n − p. Margins uses `df = dof_residual(model)`, as Stata's `margins` does after `regress` (also with `vce(robust)`) and as `GLM.coeftable` does for `lm`. With an identity link the link and response scales coincide.
+- **FixedEffectModels**: `df = dof_residual(model)`, the value FixedEffectModels uses for its own t tests (net of the absorbed fixed effects, and G − 1 with a cluster covariance).
+- **All other cases** — non-identity links and mixed models — use z (`df = Inf`): the delta-method standard errors are justified asymptotically.
 
-Contrasts are linear combinations of the same estimates and use the same `df` as the result they are computed from; second differences use the same rule applied to the covariance matrix they are computed with (t for a linear model's own covariance, z otherwise). The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+The rule is a property of the model class; the `df` keyword overrides it. Contrasts are linear combinations of the same estimates and use the same `df` as the result they are computed from, and so do second differences, whatever covariance matrix they are computed with. The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
 
 ## Implementation in Margins.jl
 

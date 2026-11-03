@@ -106,43 +106,45 @@ result = population_margins(model, df; type=:predictions)
 DataFrame(result)
 ```
 
-The predicted value for each observation is ``X_i \hat{\beta} + \sum_k \hat{\alpha}_{k,g_k(i)}``, averaged across the sample. Standard errors reflect uncertainty in ``\hat{\beta}`` only, not in the FE estimates — this is standard practice.
+The predicted value for each observation is ``X_i \hat{\beta} + \sum_k \hat{\alpha}_{k,g_k(i)}``, averaged across the sample. The absorbed fixed effects enter as a per-row offset of the linear predictor, so every path computes with each row's own fixed effects:
+
+```julia
+# By group: each group's rows keep their own fixed effects
+population_margins(model, df; type=:predictions, groups=:region)
+
+# Counterfactual: x1 set for everyone, fixed effects at each row's observed values
+population_margins(model, df; type=:predictions, scenarios=(x1=[0.0, 1.0],))
+```
+
+These agree with averaging FixedEffectModels' `predict(model, df)` over the corresponding rows. (Before Margins 3.0 a single sample-average fixed effect was added to every group's prediction.) Standard errors reflect uncertainty in ``\hat{\beta}`` only, not in the FE estimates — this is standard practice.
 
 ### Profile Predictions (APM)
 
-Profile predictions evaluate the model at specific covariate combinations. Fixed-effect variables can be included in the reference grid to select specific FE levels:
+At a reference-grid row the prediction needs the fixed effects of that row. Give them by including **every** fixed-effect variable in the grid (the estimate for each level is looked up), or pass the sum of the fixed effects with `offset=` (or an `offset` grid column):
 
 ```julia
-# Predictions at specific covariate values (FE averaged across sample)
-grid = cartesian_grid(x1=[0.0, 1.0, 2.0], x2=[0.0])
-result = profile_margins(model, df, grid; type=:predictions)
-
 # Predictions at specific FE levels
-grid = DataFrame(x1=[0.0, 0.0], x2=[0.0, 0.0], state=["CA", "NY"])
+grid = DataFrame(x1=[0.0, 0.0], x2=[0.0, 0.0], state=["CA", "NY"], year=[2020, 2020])
 result = profile_margins(model, df, grid; type=:predictions)
+
+# Or the fixed effects' sum given directly
+grid = cartesian_grid(x1=[0.0, 1.0, 2.0], x2=[0.0])
+result = profile_margins(model, df, grid; type=:predictions, offset=0.0)
 ```
 
-When FE variables are **in the reference grid**, the corresponding FE estimate for that level is used. When FE variables are **not in the reference grid**, their population-average FE value is used.
+A grid without them is an error. (Before Margins 3.0 the sample-average fixed effect was used for a fixed-effect variable missing from the grid, silently.) For predictions averaged over the sample at given covariate values, use `population_margins` with `scenarios=` instead.
 
-### Multiple Fixed Effects
+## Estimation Sample
 
-Models with multiple absorbed FE sets work as expected:
+`reg` drops rows with missing values, with non-positive weights and in singleton fixed-effect groups (its `esample`). Margins uses the same rows: `data` must be the table passed to `reg`, unsubset (one row per entry of `esample`), and Margins selects the estimation rows from it; averages, `groups`, weights and the fixed effects all refer to the estimation sample (`metadata[:n_obs]` is `nobs(model)`). Data with any other number of rows is an `ArgumentError`, including a table subset to the estimation sample by hand: a table that merely has `nobs(model)` rows cannot be told apart from a different one, whose rows would be misaligned silently. A weight vector may be given for every row of `data`.
 
-```julia
-model = reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)); save=:fe)
+## Inference
 
-# Average all FEs
-grid = cartesian_grid(x1=[0.0, 1.0])
-result = profile_margins(model, df, grid; type=:predictions)
+The reference distribution is t with `dof_residual(model)` degrees of freedom: FixedEffectModels' own value, net of the absorbed fixed effects and, with a cluster covariance (`Vcov.cluster(:state)`), G − 1, as `coeftable(model)` uses. So the AME of a variable entering additively reproduces `coeftable`'s estimate, standard error and confidence interval. Pass `df=` to use another reference distribution.
 
-# Specify state, average year
-grid = DataFrame(x1=[0.0], x2=[0.0], state=["CA"])
-result = profile_margins(model, df, grid; type=:predictions)
+## Weights
 
-# Specify both
-grid = DataFrame(x1=[0.0], x2=[0.0], state=["CA"], year=[2020])
-result = profile_margins(model, df, grid; type=:predictions)
-```
+A `FixedEffectModel` does not store the weights it was fit with, so the default `weights=:model` cannot read them: it averages without weights and logs a warning once per session. For a weighted `reg(...; weights=:w)` pass `weights=:w` to Margins; for an unweighted fit pass `weights=:none` to silence the warning.
 
 ## Instrumental Variables
 
@@ -191,6 +193,6 @@ Standard errors for predictions reflect uncertainty in ``\hat{\beta}`` only. The
 | `reghdfe y x1 x2, absorb(state year)` | `reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)))` |
 | `margins, dydx(*)` | `population_margins(model, df; type=:effects)` |
 | `margins, dydx(x1)` | `population_margins(model, df; type=:effects, vars=[:x1])` |
-| `margins, at(x1=(0 1 2))` | `profile_margins(model, df, cartesian_grid(x1=[0,1,2]); type=:predictions)` |
+| `margins, at(x1=(0 1 2))` | `population_margins(model, df; type=:predictions, scenarios=(x1=[0, 1, 2],))` |
 | `margins, at(means) dydx(*)` | `profile_margins(model, df, means_grid(df); type=:effects)` |
 | `ivregress 2sls y x2 (x1=z), absorb(state)` | `reg(df, @formula(y ~ x2 + (x1 ~ z) + fe(state)))` |

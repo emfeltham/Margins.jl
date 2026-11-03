@@ -187,18 +187,24 @@ using CategoricalArrays
         @test df_r.se[1] > 0
     end
 
+    # 3.0 (step 5, decision D3): a grid row's fixed effects are never filled in silently. Before,
+    # the sample-average fixed effect was used; now the grid must set every FE variable, or the
+    # sum of the fixed effects must be given as `offset=` (or an `offset` grid column).
     @testset "Profile predictions without FE in grid" begin
         grid = DataFrame(x1=[0.0, 1.0], x2=[0.0, 0.0], x3=[0.0, 0.0])
-        result = profile_margins(m_fe, df, grid; type=:predictions)
-        df_r = DataFrame(result)
-
-        @test nrow(df_r) == 2
+        err = try profile_margins(m_fe, df, grid; type=:predictions); nothing catch e; e end
+        @test err isa ArgumentError
+        @test occursin(":state", sprint(showerror, err)) && occursin("offset=", sprint(showerror, err))
 
         β = coef(m_fe)
         avg_fe = mean(m_fe.fe.fe_state .+ m_fe.fe.fe_year)
-
+        df_r = DataFrame(profile_margins(m_fe, df, grid; type=:predictions, offset=avg_fe))
+        @test nrow(df_r) == 2
         @test abs(df_r.estimate[1] - (0.0 + avg_fe)) < 1e-10
         @test abs(df_r.estimate[2] - (β[1] + avg_fe)) < 1e-10
+        gcol = copy(grid); gcol.offset = [avg_fe, 0.0]
+        df_c = DataFrame(profile_margins(m_fe, df, gcol; type=:predictions))
+        @test df_c.estimate ≈ [avg_fe, β[1]] atol = 1e-10
     end
 
     @testset "Profile predictions with FE in grid" begin
@@ -212,14 +218,9 @@ using CategoricalArrays
 
         β = coef(m_fe)
 
-        # State only in grid (year averaged)
+        # State only in grid: the year fixed effect is missing (it used to be averaged silently)
         grid = DataFrame(x1=[0.0, 0.0], x2=[0.0, 0.0], x3=[0.0, 0.0], state=["CA", "NY"])
-        result = profile_margins(m_fe, df, grid; type=:predictions)
-        df_r = DataFrame(result)
-
-        avg_year = mean(skipmissing(m_fe.fe.fe_year))
-        @test abs(df_r.estimate[1] - (fe_state_lookup["CA"] + avg_year)) < 1e-10
-        @test abs(df_r.estimate[2] - (fe_state_lookup["NY"] + avg_year)) < 1e-10
+        @test_throws ArgumentError profile_margins(m_fe, df, grid; type=:predictions)
 
         # Both FEs in grid
         grid2 = DataFrame(x1=[1.0, -1.0], x2=[0.0, 0.0], x3=[0.0, 0.0],
@@ -231,6 +232,9 @@ using CategoricalArrays
         manual2 = β[1]*(-1.0) + fe_state_lookup["TX"] + fe_year_lookup[2024]
         @test abs(df_r2.estimate[1] - manual1) < 1e-10
         @test abs(df_r2.estimate[2] - manual2) < 1e-10
+        # (FixedEffectModels' own `predict` joins on the observed combination of all fixed-effect
+        # levels, so it returns `missing` for (TX, 2024), which this data never pairs; Margins
+        # looks each fixed effect up separately, as the additive model implies.)
     end
 
     @testset "Predictions have correct SEs" begin
@@ -242,7 +246,7 @@ using CategoricalArrays
         @test isfinite(df_r.se[1])
 
         # Profile SEs at non-zero covariate values
-        grid = DataFrame(x1=[0.5, 1.0], x2=[0.3, -0.2], x3=[0.1, 0.5])
+        grid = DataFrame(x1=[0.5, 1.0], x2=[0.3, -0.2], x3=[0.1, 0.5], state=["CA", "TX"], year=[2021, 2022])
         result2 = profile_margins(m_fe, df, grid; type=:predictions)
         df_r2 = DataFrame(result2)
 
@@ -260,7 +264,8 @@ using CategoricalArrays
         df_c = copy(df)
         df_c.c = categorical(ifelse.(df_c.x3 .> 0, "hi", "lo"))
         df_c.y .+= 0.3 .* (df_c.c .== "hi")
-        mc = reg(df_c, @formula(y ~ x1 + x2 + c + fe(state)))
+        # (save=:fe: elasticities divide by ŷ, which includes the absorbed fixed effects)
+        mc = reg(df_c, @formula(y ~ x1 + x2 + c + fe(state)); save=:fe)
         # measure filter: a categorical's contrasts get no "elasticity" rows
         r = @test_logs (:info, r"Skipping measure=:elasticity") match_mode=:any population_margins(mc, df_c; measure=:elasticity)
         @test Set(DataFrame(r).variable) == Set(["x1", "x2"])
@@ -275,7 +280,7 @@ using CategoricalArrays
         @test_throws ArgumentError population_margins(m, df; vars=[:x1], alpha=1.5)
         @test_throws ArgumentError profile_margins(m, df, DataFrame(x1=[0.0]); vars=[:x2], alpha=0.0)
         @test_throws ArgumentError population_margins(m, df; vars=[:x1], contrasts=:foo)
-        @test population_margins(m, df; vars=[:x1], alpha=1//10).metadata[:alpha] == 0.1
+        @test population_margins(m, df; vars=[:x1], alpha=1//10).inference.alpha == 0.1
         # a varying grid column that is not a predictor (FE columns are)
         @test_throws ArgumentError profile_margins(m_fe, df, DataFrame(x1=[0.0, 0.0], y=[0.0, 1.0]); type=:predictions)
         # an absorbed FE named in vars gets the FE message, also for a String column
@@ -284,7 +289,7 @@ using CategoricalArrays
     end
 
     @testset "profile_margins interval keyword" begin
-        grid = DataFrame(x1=[0.0, 1.0], x2=[0.0, 0.0], x3=[0.0, 0.0])
+        grid = DataFrame(x1=[0.0, 1.0], x2=[0.0, 0.0], x3=[0.0, 0.0], state=["CA", "CA"], year=[2020, 2020])
         a = profile_margins(m_fe, df, grid; type=:predictions)
         b = profile_margins(m_fe, df, grid; type=:predictions, interval=:confidence)
         @test DataFrame(a) == DataFrame(b)

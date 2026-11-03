@@ -157,7 +157,7 @@ end
 
 ### Result Types
 
-**`EffectsResult`**: Marginal effects (AME, MEM) — includes `variables`, `terms`, `gradients`, `profile_values`, `group_values`
+**`EffectsResult`**: Marginal effects (AME, MEM) — includes `variables`, `terms`, `gradients`, `context` (`ResultContext`: grid/group/scenario columns in output order), `inference` (`Inference`: Σ, df, alpha)
 **`PredictionsResult`**: Adjusted predictions (AAP, APM) — streamlined without variable/contrast fields
 **`ContrastResult`**: Categorical contrasts with structured output
 
@@ -219,11 +219,11 @@ second_differences(model, data, :x, :z; levels=, at=, profile=, vcov=)     # mod
     │  (_normalize_request with scenario_vars = modifier ∪ profile: validated once, Σ once)
     ├─ discrete modifier, or continuous with `levels`:
     │    _run(_with_scenarios(req, (z=levels, profile_point...)))   # per profile stratum
-    │        → EffectsResult (AMEs + gradients + metadata[:vcov])
+    │        → EffectsResult (AMEs + gradients + inference: Σ, df, alpha)
     │            → _effect_index (the one place string labels are read) → _modifier_rows
     │              (select rows; reject other varying scenario/group columns;
     │              order numeric levels) → pairwise differences, delta-method SE from gradient
-    │              differences: sqrt((g₂-g₁)' Σ (g₂-g₁)); df from the Σ used (_second_difference_dof)
+    │              differences: sqrt((g₂-g₁)' Σ (g₂-g₁)); Σ and df from result.inference
     └─ continuous modifier (default):
          _local_derivatives(req, ...)  → AMEs at at±δ (_with_scenarios; at=:observed shifts the
          modifier column, _with_data) → (AME₊ - AME₋)/2δ via the pairwise engine

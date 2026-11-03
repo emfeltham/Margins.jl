@@ -246,7 +246,7 @@ using CategoricalArrays
 
         # Using second_differences with same points
         ames = population_margins(model, df; scenarios=(age=[40.0, 50.0],), type=:effects)
-        sd_discrete = second_differences(ames, :x1, :age, Σ; modifier_type=:continuous)
+        sd_discrete = second_differences(ames, :x1, :age; modifier_type=:continuous)
 
         # The slopes should be similar (but not identical due to different delta)
         # second_differences uses (50-40)=10 as delta

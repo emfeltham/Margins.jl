@@ -39,7 +39,7 @@ Used by `profile_margins()` function.
 struct ProfileUsage <: MarginsUsage end
 
 """
-    MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled, E, CE}
+    MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled, E, CE, O}
 
 Zero-allocation engine for marginal effects computation, optimized for specific usage patterns.
 
@@ -56,6 +56,8 @@ Type Parameters:
   no derivative evaluator (no continuous variable requested, profile engines, scenarios/groups)
 - `CE<:Union{Nothing, ContrastEvaluator}`: Type of `contrast`; `Nothing` when the engine has no
   contrast evaluator (no categorical variable requested, profile engines, scenarios/groups)
+- `O<:Union{Nothing, Vector{Float64}}`: Type of `offset`; `Nothing` without an η offset, so the
+  kernels of a model without one are compiled without it
 
 Fields:
 - `compiled::C`: Pre-compiled FormulaCompiler formula
@@ -73,6 +75,8 @@ Fields:
 - `link::L`: GLM link function
 - `vars::Vector{Symbol}`: Variables for analysis
 - `data_nt::NamedTuple`: Reference data for scenarios/refgrids
+- `offset::O`: The η offset at each row of `data_nt` (`_offset`), or `nothing`. Population engines
+  only; profile engines get `nothing` and their offset at the grid rows is passed to the kernels
 
 `model` and `data_nt` stay abstractly typed: they are read once per call or per variable,
 never per row, and parameterizing on them would only multiply compiled specializations.
@@ -97,7 +101,8 @@ engine = build_engine(ProfileUsage, model, data_nt, [:category], Σ, :ad)
 """
 struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
                      E<:Union{Nothing, AbstractDerivativeEvaluator},
-                     CE<:Union{Nothing, ContrastEvaluator}}
+                     CE<:Union{Nothing, ContrastEvaluator},
+                     O<:Union{Nothing, Vector{Float64}}}
     # FormulaCompiler components (pre-compiled)
     compiled::C
     de::E
@@ -139,11 +144,12 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
     link::L
     vars::Vector{Symbol}
     data_nt::NamedTuple # Reference for scenarios/refgrids
+    offset::O           # η offset per row of data_nt, or nothing
 end
 
 """
     build_engine(usage::Type{U}, model, data_nt, vars, vcov, backend;
-                 evaluators::Bool = U <: PopulationUsage) where {U<:MarginsUsage} -> MarginsEngine
+                 evaluators::Bool = U <: PopulationUsage, offset = nothing) where {U<:MarginsUsage} -> MarginsEngine
 
 Construct zero-allocation margins engine with usage-specific optimization.
 
@@ -160,10 +166,12 @@ Construct zero-allocation margins engine with usage-specific optimization.
   data rows. Default `true` for `PopulationUsage` only: profile engines evaluate on the
   reference grid with evaluators of their own, and the scenarios/groups path passes `false`
   because it builds its own per context. Without them `de` and `contrast` are `nothing`.
+- `offset`: The η offset at each row of `data_nt` (`nothing` or a `Vector{Float64}` of that
+  length), read by the population kernels.
 
 # Returns
-- `MarginsEngine{L, U, C, E, CE}`: Pre-compiled engine whose type records the exact
-  evaluator types (`E`, `CE`)
+- `MarginsEngine{L, U, C, E, CE, O}`: Pre-compiled engine whose type records the exact
+  evaluator types (`E`, `CE`) and whether there is an offset (`O`)
 
 # Usage-Specific Buffer Sizing Strategy
 - **PopulationUsage**: Minimal g_buf sized for FormulaCompiler continuous variables only
@@ -207,9 +215,12 @@ engine = build_engine(ProfileUsage, model, data_nt, [:x1, :category], Σ, :ad)
 ```
 """
 function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov, backend::Symbol;
-                      evaluators::Bool = U <: PopulationUsage) where {U<:MarginsUsage}
+                      evaluators::Bool = U <: PopulationUsage,
+                      offset::Union{Nothing, Vector{Float64}} = nothing) where {U<:MarginsUsage}
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
+    isnothing(offset) || length(offset) == length(first(data_nt)) ||
+        throw(DimensionMismatch("offset has $(length(offset)) entries, data has $(length(first(data_nt))) rows"))
 
     # Compiled formula with a private scratch buffer (cached ops; see `_private_compiled`),
     # so engines never share mutable evaluation state
@@ -306,8 +317,8 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
     covariance_matrix = _covariance_matrix(model, vcov)
 
     # Create engine instance, with the evaluator types as explicit parameters
-    link = _auto_link(model)
-    return MarginsEngine{typeof(link), U, typeof(compiled), typeof(de), typeof(contrast)}(
+    link = _link(model)
+    return MarginsEngine{typeof(link), U, typeof(compiled), typeof(de), typeof(contrast), typeof(offset)}(
         compiled, de, var_index_map, contrast, g_buf, gβ_accumulator, row_buf,
         batch_ame_values, batch_gradients,
         Vector{Int}(undef, max(n_continuous, 1)),  # cont_var_indices_buf
@@ -315,7 +326,7 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
         me_ws,
         contrast_buf,  # Categorical contrast buffer
         copy(continuous_vars), copy(categorical_vars),
-        model, coef(model), covariance_matrix, link, vars, data_nt
+        model, _coef(model), covariance_matrix, link, vars, data_nt, offset
     )
 end
 
@@ -336,69 +347,6 @@ function clear_engine_cache!()
     FormulaCompiler.clear_compiled_cache!()
     return nothing
 end
-
-"""
-    _mixedmodel_link(model) -> Union{GLM.Link, Nothing}
-
-Link function of a MixedModels.jl model, or `nothing` for any other model. Methods for
-`LinearMixedModel` and `GeneralizedLinearMixedModel` are added by `MixedModelsExt`.
-"""
-_mixedmodel_link(model) = nothing
-
-"""
-    _auto_link(model) -> GLM.Link
-
-Automatically determine link function from model.
-
-Supports GLM.jl models and provides sensible fallbacks for other model types.
-
-# Arguments
-- `model`: Fitted statistical model
-
-# Returns
-- `GLM.Link`: Link function (IdentityLink for non-GLM models)
-
-# Examples
-```julia
-link = _auto_link(glm_model)  # Returns actual link (LogitLink, etc.)
-link = _auto_link(other_model)  # Returns IdentityLink() fallback
-```
-"""
-function _auto_link(model)
-    # Try to extract link from GLM.jl and MixedModels.jl using official APIs
-    try
-        # Use GLM.Link() function for proper link extraction
-        if hasmethod(GLM.Link, (typeof(model),))
-            return GLM.Link(model)
-        elseif hasfield(typeof(model), :model) && hasmethod(GLM.Link, (typeof(model.model),))
-            # Handle wrapped models (TableRegressionModel)
-            return GLM.Link(model.model)
-        end
-    catch e
-        error("Failed to extract link function from model: $e. " *
-              "Statistical correctness cannot be guaranteed without proper link function.")
-    end
-    
-    # Handle MixedModels.jl models. The methods live in ext/MixedModelsExt.jl and dispatch
-    # on the model type, so this does not depend on how (or whether) the user bound
-    # `MixedModels` in `Main`.
-    mm_link = _mixedmodel_link(model)
-    isnothing(mm_link) || return mm_link
-
-    # Check for linear models (IdentityLink is correct for these)
-    if hasfield(typeof(model), :model) && hasfield(typeof(model.model), :rr)
-        # Linear models (LmResp) don't have a distribution, only GLM models do
-        if typeof(model.model.rr) <: GLM.LmResp
-            return GLM.IdentityLink()  # Linear models use identity link
-        end
-    end
-    
-    # Error for unknown model types - statistical correctness first
-    error("Cannot determine link function for model type $(typeof(model)). " *
-          "Statistical correctness cannot be guaranteed without proper link function. " *
-          "Supported: GLM.jl models (lm, glm) and MixedModels.jl (LinearMixedModel, GeneralizedLinearMixedModel).")
-end
-
 
 # Core validation functions
 """

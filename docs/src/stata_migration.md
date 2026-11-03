@@ -167,10 +167,10 @@ DataFrame(res)  # Shows dydx(x) by Q1..Q4
 | `at(x=…)` rows | `at_x` (population scenarios) or bare `x` (profile grids) |
 
 As in Stata, t is used after a linear regression and z otherwise: for `lm` (Stata `regress`)
-with the default covariance, `df = dof_residual(model)` (Stata's `e(df_r)`); for `glm` with a
-non-identity link (`logit`, `probit`, `poisson`, …) and mixed models, `df = Inf`. One
-difference: after `regress, vce(robust)` Stata keeps `e(df_r)` and after `vce(cluster c)` it
-uses `n_clusters − 1`, while Margins uses z (`df = Inf`) for any robust or clustered `vcov`.
+with any covariance, `df = dof_residual(model)` (Stata's `e(df_r)`, kept after `vce(robust)`);
+after `reghdfe`/`reg`, FixedEffectModels' own residual df (G − 1 with clustering, as `reghdfe`);
+for `glm` with a non-identity link (`logit`, `probit`, `poisson`, …) and mixed models, `df = Inf`.
+After `regress, vce(cluster c)` Stata uses `n_clusters − 1`; pass `df = G - 1` to match it.
 `DataFrame(result; format=:stata)` uses Stata's labels (`margin, std_err, t, P_t` or
 `margin, std_err, z, P_z`). See [Output Columns and Inference](api.md#Output-Columns-and-Inference).
 
@@ -196,8 +196,8 @@ model = reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)); save=:fe)
 | Stata Command | Margins.jl Equivalent | Notes |
 |---|---|---|
 | `margins` (after reghdfe) | `population_margins(model, df; type=:predictions)` | Requires `save=:fe` |
-| `margins, at(x1=(0 1 2))` | `profile_margins(model, df, cartesian_grid(x1=[0,1,2]); type=:predictions)` | FEs averaged |
-| (predict at specific FE level) | `profile_margins(model, df, DataFrame(x1=[0.0], state=["CA"]); type=:predictions)` | FE level specified in grid |
+| `margins, at(x1=(0 1 2))` | `population_margins(model, df; type=:predictions, scenarios=(x1=[0, 1, 2],))` | Each row keeps its own FEs |
+| (predict at specific FE levels) | `profile_margins(model, df, DataFrame(x1=[0.0], state=["CA"], year=[2020]); type=:predictions)` | Every FE variable in the grid (or `offset=`) |
 
 ### Instrumental Variables
 

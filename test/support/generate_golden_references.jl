@@ -8,7 +8,7 @@
 # positive weights, weights with zeros} × {4 measures} × {:ad, :fd} × 7 links, plus the six
 # benchmark operations on a mid-size synthetic logit model — and writes
 #
-#   test/support/golden/margins_golden.csv           case_id, operation, key, estimate, se
+#   test/support/golden/margins_golden.csv           case_id, operation, key, estimate, se, df
 #   test/support/golden/margins_golden_versions.txt  versions the snapshot was made with
 #
 # test/validation/test_golden_equivalence.jl reruns the calls and requires a relative

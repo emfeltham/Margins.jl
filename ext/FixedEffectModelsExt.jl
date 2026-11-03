@@ -1,29 +1,37 @@
 """
     FixedEffectModelsExt
 
-Package extension enabling Margins.jl support for FixedEffectModels.jl.
+Package extension supplying the FixedEffectModels.jl methods of Margins' model-class interface
+(`src/core/model_interface.jl`). `population_margins`, `profile_margins` and
+`second_differences` are the shared ones: scenarios, groups, weights, inference and every
+validator apply as for any other model. What is specific to a `FixedEffectModel`:
 
-Supports marginal effects (AME, MEM) and predictions (AAP, APM) for
-fixed-effect models, including IV models. Predictions require `save=:fe`
-at model fit time.
-
-# Supported
-- `population_margins(model, data; type=:effects, ...)` — AME
-- `profile_margins(model, data, grid; type=:effects, ...)` — MEM
-- `population_margins(model, data; type=:predictions, ...)` — AAP (requires save=:fe)
-- `profile_margins(model, data, grid; type=:predictions, ...)` — APM (requires save=:fe)
-- IV models — supported with informational note about structural coefficients
+- **Offset:** the absorbed fixed effects enter η as a per-row offset, Σₖ feₖ (their estimates,
+  which need `reg(...; save=:fe)`), so predictions are right at every row, within `groups` and
+  under `scenarios` (each row keeps its own fixed effects). At reference-grid rows the offset is
+  the `offset=` keyword, an `offset` grid column, or the estimates of the fixed-effect levels the
+  grid sets.
+- **Estimation rows:** only the rows in `esample` (rows with missing values, non-positive
+  weights or singleton fixed-effect groups are dropped by `reg`). The data must be the table
+  given to `reg`, with one row per entry of `esample`; it is subset here.
+- **Inference df:** `dof_residual(model)`, which FixedEffectModels adjusts for clustering, as
+  its own `coeftable` uses.
+- **Weights:** `reg` does not store its weights, so `weights=:model` cannot read them; it
+  averages without weights and warns once per session.
+- **Link:** identity; IV models use the structural (second-stage) coefficients.
 
 # Blocked (with informative errors)
-- Predictions without `save=:fe` — absorbed FE estimates needed
-- Counterfactual scenarios on FE variables for predictions
+- Predictions (or effects that depend on the level of ŷ) without `save=:fe`
+- Predictions with a fixed effect interacted with a continuous variable (`fe(g)&x`)
+- Counterfactual scenarios on fixed-effect variables for predictions
+- Marginal effects of absorbed fixed-effect variables
 """
 module FixedEffectModelsExt
 
 using Margins
-using Margins: _auto_link, validate_model_methods, MarginsError,
-               PredictionsResult, EffectsResult, MarginsRequest,
-               _normalize_request, _population_result, _profile_result, _formula_predictor_names
+using Margins: validate_model_methods, MarginsError, MarginsRequest, UnknownWeights,
+               _formula_predictor_names
+import FixedEffectModels
 using FixedEffectModels: FixedEffectModel
 using GLM
 using GLM: IdentityLink
@@ -31,23 +39,122 @@ import FormulaCompiler
 using StatsModels: formula
 using DataFrames: DataFrame, nrow, ncol, names
 using Tables
-using Statistics: mean
+using GLM: dof_residual
 
 # ---------------------------------------------------------------------------
-# _auto_link: FixedEffectModels always use identity link (linear models only)
+# Link, response, inference df, weights
 # ---------------------------------------------------------------------------
-function Margins._auto_link(model::FixedEffectModel)
+# FixedEffectModels are linear (identity link)
+function Margins._link(model::FixedEffectModel)
     _warn_if_iv(model)
     return IdentityLink()
 end
 
+Margins._response_name(model::FixedEffectModel) = Symbol(model.responsename)
+
+# The residual df FixedEffectModels uses for its own t tests (`coeftable`, `confint`): already
+# adjusted for clustering (min number of clusters − 1 with a cluster vcov), and net of the
+# absorbed fixed effects otherwise. Decision D1: a property of the model, whatever `vcov` is passed.
+Margins._inference_df(model::FixedEffectModel) = Margins._finite_df(dof_residual(model))
+
+# A FixedEffectModel keeps neither the `weights=` column name nor the weight vector
+# (FixedEffectModels 1.13), so whether `reg` was weighted cannot be known: `weights=:model`
+# averages without weights and warns once per session (decision D2).
+Margins._model_weights(::FixedEffectModel) = UnknownWeights(
+    "a FixedEffectModels fit does not store the weights it was estimated with " *
+    "(reg(...; weights=:w)), so they cannot be read.")
+
 # ---------------------------------------------------------------------------
-# _model_weights: a FixedEffectModel keeps neither the `weights=` column name nor the weight
-# vector (FixedEffectModels 1.13), so `weights=:model` cannot recover them and resolves to no
-# weights; a weighted `reg` needs `weights=:w` passed to Margins explicitly. Same as the generic
-# fallback, spelled out so the reason is on record.
+# Estimation rows: `esample`
 # ---------------------------------------------------------------------------
-Margins._model_weights(::FixedEffectModel) = nothing
+# The data must be the table given to `reg` (one row per entry of `esample`); it is subset here.
+# Any other row count is an error: a table that merely has `nobs` rows (e.g. one subset by hand)
+# cannot be told apart from a different table of that length, which would misalign silently.
+function Margins._estimation_rows(model::FixedEffectModel, n::Int)
+    es = model.esample
+    n == length(es) && return all(es) ? nothing : findall(es)
+    throw(ArgumentError(
+        "The data has $n rows, but the model was fit to a table with $(length(es)) rows " *
+        "($(model.nobs) of them in its estimation sample). Pass the table given to reg(), " *
+        "unsubset: Margins selects the estimation rows from it (model.esample)."))
+end
+
+# ---------------------------------------------------------------------------
+# Offset: the absorbed fixed effects, Σₖ feₖ, at each estimation row
+# ---------------------------------------------------------------------------
+Margins._has_offset(model::FixedEffectModel) = !isempty(model.fekeys)
+
+# The columns of `model.fe` holding fixed-effect estimates (the others are the fekeys)
+_fe_value_columns(model::FixedEffectModel) = [c for c in names(model.fe) if !(Symbol(c) in model.fekeys)]
+
+function Margins._offset(model::FixedEffectModel, data_nt::NamedTuple)
+    _validate_fe_offset_available(model)
+    n = length(first(data_nt))
+    n == model.nobs || throw(ArgumentError(
+        "The data has $n rows but the model's estimation sample has $(model.nobs); the fixed " *
+        "effects cannot be matched to rows. Pass the table given to reg()."))
+    rows = findall(model.esample)
+    off = zeros(Float64, n)
+    for c in _fe_value_columns(model)
+        vals = model.fe[!, c]
+        for (i, r) in enumerate(rows)
+            v = vals[r]
+            ismissing(v) && throw(ArgumentError(
+                "The fixed-effect estimate $c is missing at estimation row $r"))
+            off[i] += Float64(v)
+        end
+    end
+    return off
+end
+
+# At reference-grid rows: the estimates of the fixed-effect levels the grid sets (FixedEffectModels'
+# `predict` convention). Consulted only when there is neither `offset=` nor an `offset` grid column.
+function Margins._grid_offset(model::FixedEffectModel, grid::DataFrame)
+    _validate_fe_offset_available(model)
+    given = [k for k in model.fekeys if string(k) in names(grid)]
+    if length(given) != length(model.fekeys)
+        missing_keys = setdiff(model.fekeys, given)
+        throw(ArgumentError(
+            "The prediction at a reference-grid row includes the absorbed fixed effects, so " *
+            "profile_margins needs their value at each row: add the fixed-effect variable(s) " *
+            "$(join(string.(":", missing_keys), ", ")) to the grid (their estimated fixed effects are " *
+            "looked up), or pass offset=<number or one value per grid row> (the sum of the fixed " *
+            "effects), or add an `offset` column to the grid. (Before Margins 3.0 the average fixed " *
+            "effect was used silently.)"))
+    end
+    out = zeros(Float64, nrow(grid))
+    for (k, c) in zip(model.fekeys, _fe_value_columns(model))
+        lookup = _build_fe_lookup(model.fe, k, Symbol(c))
+        for (i, level) in enumerate(grid[!, string(k)])
+            key = _fe_key(level)
+            haskey(lookup, key) || throw(ArgumentError(
+                "Reference grid: :$k = $(repr(key)) has no estimated fixed effect in the model " *
+                "(not a level of the estimation sample)."))
+            out[i] += lookup[key]
+        end
+    end
+    return out
+end
+
+_fe_key(v) = Margins.CategoricalArrays.unwrap(v)
+
+"""
+    _build_fe_lookup(fe_df, key_col, value_col) -> Dict
+
+Fixed-effect level → estimate, over the estimation rows of `fe_df`.
+"""
+function _build_fe_lookup(fe_df::DataFrame, key_col::Symbol, value_col::Symbol)
+    keys_data = fe_df[!, key_col]
+    vals_data = fe_df[!, value_col]
+    lookup = Dict{Any, Float64}()
+    for i in eachindex(keys_data)
+        v = vals_data[i]
+        ismissing(v) && continue
+        k = _fe_key(keys_data[i])
+        haskey(lookup, k) || (lookup[k] = Float64(v))
+    end
+    return lookup
+end
 
 # ---------------------------------------------------------------------------
 # fixed_effects_form (FormulaCompiler's public model-class hook): return clean formula
@@ -82,12 +189,8 @@ Margins._predictor_names(model::FixedEffectModel) =
 # vars/groups and scenarios/groups checks and the Σ handling of every other model)
 # ---------------------------------------------------------------------------
 function Margins._validate_request(model::FixedEffectModel, req::MarginsRequest)
-    # For predictions: require save=:fe
-    if req.type === :predictions
-        _validate_fe_available(model)
-    end
-
-    # Block scenarios on FE variables for predictions
+    # Block scenarios on FE variables for predictions (`save=:fe` is checked where the
+    # fixed-effect offset is read, `_offset` / `_grid_offset`)
     if req.type === :predictions
         _validate_no_fe_scenarios(model, req.scenarios)
     end
@@ -108,179 +211,6 @@ function Margins._validate_focal_vars(model::FixedEffectModel, vars)
         end
     end
     return nothing
-end
-
-# ---------------------------------------------------------------------------
-# population_margins: override for FixedEffectModel to add FE offsets. The request is
-# normalized as for every model; only the offsets are FE-specific. (Step 5 of the 3.0 plan
-# replaces these overrides with a per-row offset hook.)
-# ---------------------------------------------------------------------------
-function Margins.population_margins(
-    model::FixedEffectModel, data;
-    type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
-    backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
-    contrasts::Symbol=:baseline,
-    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
-)
-    Margins._reject_ci_alpha(ci_alpha)
-    # Shared validation, data preparation, weights (`:model` resolves to none here: see
-    # _model_weights above) and the one evaluation of `vcov` for this call
-    req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
-                             measure, contrasts, alpha, vcov, weights)
-    (result, _) = _population_result(req)
-
-    # Add FE offset to prediction estimates (SEs unchanged — FE offset is constant w.r.t. β)
-    if type === :predictions
-        return _adjust_population_result_with_fe(result, model, data, req.weights)
-    end
-    return result
-end
-
-# ---------------------------------------------------------------------------
-# profile_margins: override for FixedEffectModel to add FE offsets
-# ---------------------------------------------------------------------------
-function Margins.profile_margins(
-    model::FixedEffectModel, data, reference_grid::DataFrame;
-    type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
-    backend::Symbol=:ad, measure::Symbol=:effect,
-    contrasts::Symbol=:baseline,
-    alpha::Real=0.05, vcov=GLM.vcov, interval::Symbol=:confidence, ci_alpha=nothing,
-)
-    Margins._reject_ci_alpha(ci_alpha)
-    # Shared validation of the options and the reference grid; one evaluation of `vcov`
-    req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
-                             contrasts, alpha, vcov, weights=:none, interval)
-    result = _profile_result(req)
-
-    # Add FE offset for predictions
-    if type === :predictions
-        return _adjust_profile_result_with_fe(result, model, data, req.reference_grid)
-    end
-
-    return result
-end
-
-# ---------------------------------------------------------------------------
-# FE offset computation
-# ---------------------------------------------------------------------------
-
-"""
-    _compute_population_fe_offset(model, data, weights) -> Float64
-
-Compute the (weighted) average FE offset across the sample.
-For identity link: ŷ = Xβ + Σ_k fe_k, so the offset is mean(Σ_k fe_k).
-"""
-function _compute_population_fe_offset(model::FixedEffectModel, data, weights)
-    fe_df = model.fe
-    fekeys = model.fekeys
-
-    # Compute total FE offset per observation
-    n = nrow(fe_df)
-    total_offset = zeros(n)
-    for k in fekeys
-        fe_col = Symbol("fe_", k)
-        vals = fe_df[!, fe_col]
-        for i in 1:n
-            v = vals[i]
-            total_offset[i] += ismissing(v) ? 0.0 : Float64(v)
-        end
-    end
-
-    # (Weighted) average
-    if isnothing(weights)
-        return mean(total_offset)
-    else
-        # Use same weight vector (aligned to esample if needed)
-        w = weights
-        return sum(w .* total_offset) / sum(w)
-    end
-end
-
-"""
-    _compute_profile_fe_offsets(model, data, reference_grid) -> Vector{Float64}
-
-Compute FE offsets for each profile row.
-
-For FE variables present in the reference grid: look up FE estimates for that level.
-For FE variables NOT in the reference grid: use population-average FE offset for that variable.
-"""
-function _compute_profile_fe_offsets(model::FixedEffectModel, data, reference_grid::DataFrame)
-    fe_df = model.fe
-    fekeys = model.fekeys
-    n_profiles = nrow(reference_grid)
-    offsets = zeros(n_profiles)
-
-    for k in fekeys
-        fe_col = Symbol("fe_", k)
-        fe_vals = fe_df[!, fe_col]
-
-        if string(k) in names(reference_grid)
-            # FE variable is in reference grid — look up FE estimate per row
-            grid_levels = reference_grid[!, string(k)]
-            lookup = _build_fe_lookup(fe_df, k, fe_col)
-
-            for i in 1:n_profiles
-                level = grid_levels[i]
-                offset = get(lookup, level, 0.0)
-                offsets[i] += offset
-            end
-        else
-            # FE variable NOT in reference grid — use population average for this FE
-            avg = mean(skipmissing(fe_vals))
-            for i in 1:n_profiles
-                offsets[i] += avg
-            end
-        end
-    end
-
-    return offsets
-end
-
-"""
-    _build_fe_lookup(fe_df, key_col, value_col) -> Dict
-
-Build a lookup table from FE level → FE estimate.
-Handles both string and numeric FE variables.
-"""
-function _build_fe_lookup(fe_df::DataFrame, key_col::Symbol, value_col::Symbol)
-    keys_data = fe_df[!, key_col]
-    vals_data = fe_df[!, value_col]
-    lookup = Dict{Any, Float64}()
-    for i in eachindex(keys_data)
-        k = keys_data[i]
-        v = vals_data[i]
-        if !ismissing(v) && !haskey(lookup, k)
-            lookup[k] = Float64(v)
-        end
-    end
-    return lookup
-end
-
-"""
-    _adjust_population_result_with_fe(result, model, data, weights) -> result
-
-Adjust a population PredictionsResult by adding FE offsets.
-"""
-function _adjust_population_result_with_fe(result::PredictionsResult, model::FixedEffectModel, data, weights)
-    fe_offset = _compute_population_fe_offset(model, data, weights)
-    adjusted_estimates = result.estimates .+ fe_offset
-    return PredictionsResult(adjusted_estimates, result.standard_errors,
-                            result.profile_values, result.group_values, result.gradients, result.metadata)
-end
-
-# Non-prediction results pass through unchanged
-_adjust_population_result_with_fe(result, model, data, weights) = result
-
-"""
-    _adjust_profile_result_with_fe(result, model, data, reference_grid) -> result
-
-Adjust a profile PredictionsResult by adding FE offsets per profile row.
-"""
-function _adjust_profile_result_with_fe(result::PredictionsResult, model::FixedEffectModel, data, reference_grid::DataFrame)
-    offsets = _compute_profile_fe_offsets(model, data, reference_grid)
-    adjusted_estimates = result.estimates .+ offsets
-    return PredictionsResult(adjusted_estimates, result.standard_errors,
-                            result.profile_values, result.group_values, result.gradients, result.metadata)
 end
 
 # ---------------------------------------------------------------------------
@@ -307,14 +237,23 @@ function _warn_if_iv(model::FixedEffectModel)
 end
 
 """
-    _validate_fe_available(model::FixedEffectModel)
+    _validate_fe_offset_available(model::FixedEffectModel)
 
-Error if FE estimates are not saved (model.fe is empty).
+Error if the fixed-effect estimates are not saved (model.fe is empty), or if a fixed effect is
+interacted with a continuous variable (`fe(g)&x`: its contribution is a slope, not an offset).
 """
-function _validate_fe_available(model::FixedEffectModel)
+function _validate_fe_offset_available(model::FixedEffectModel)
+    if isdefined(FixedEffectModels, :has_cont_fe_interaction) &&
+       FixedEffectModels.has_cont_fe_interaction(model.formula)
+        throw(MarginsError(
+            "The model interacts a fixed effect with a continuous variable (fe(g)&x), so the " *
+            "absorbed fixed effects are not an additive offset; predictions (and effects that " *
+            "depend on the level of ŷ) are not supported for it."))
+    end
     if nrow(model.fe) == 0
         throw(MarginsError(
-            "Predictions require absorbed fixed-effect estimates, but none were saved.\n\n" *
+            "Predictions require absorbed fixed-effect estimates, but none were saved. (So do " *
+            "effects that depend on the level of ŷ: elasticities, :semielasticity_eydx.)\n\n" *
             "Re-fit the model with `save=:fe` to save FE estimates:\n" *
             "  model = reg(data, @formula(y ~ x1 + x2 + fe(group)); save=:fe)\n\n" *
             "Then call population_margins(model, data; type=:predictions)."

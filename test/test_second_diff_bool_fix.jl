@@ -48,7 +48,7 @@ using CategoricalArrays
         @test contrasts[1] != "dy/dx"  # Should be "true - false" or similar
 
         # This should now work with the fix (auto-detects the contrast)
-        sd = second_differences(ames, :treated_cat, :region, Σ; warn=false)
+        sd = second_differences(ames, :treated_cat, :region; warn=false)
 
         # Should have 3 pairwise region comparisons
         @test nrow(sd) == 3
@@ -78,7 +78,7 @@ using CategoricalArrays
 
         # Explicit specification should also work
         sd_explicit = second_differences(
-            ames, :treated_cat, :region, Σ;
+            ames, :treated_cat, :region;
             contrast=actual_contrast
         )
 
