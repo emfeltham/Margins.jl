@@ -362,6 +362,19 @@ tests.
   with `warn=false`). It is called through `invokelatest` and its checks are precompiled, so it adds
   little to a first call: fresh-process medians of 6 (before → after) AME (all) 4.13 → 4.08 s, AME (one
   variable) 3.27 → 3.42 s, MEM 5.68 → 5.83 s, AAP 2.58 → 2.46 s.
+  With many variables at once it was not cheap: an MEM or AME over all 27 variables of the paper's
+  65-coefficient logit makes 27 × 26 pairs, each tried against 8 transforms, the affine rule and a
+  product with each of the other 25 columns, through dynamically dispatched calls on the columns, and
+  the affine rule rescanned its 2,048-row sample for every pair: 2.3 ms per call (2.7 ms of MEM's
+  3.5 ms at n = 5,000). The candidates are now screened on a Float64 matrix of the screen rows of
+  every numeric model column, built once per call, in type-stable loops, with the affine anchor rows
+  found once per variable; a candidate that passes gets the same exact check as before, so what is
+  detected is unchanged (checked against the previous implementation on 2,000 random tables and on
+  the paper data; a new test runs every rule with many variables at once on both paths). The
+  detector also reads only the predictors' columns, and the predictor names are found by walking the
+  formula's terms without specializing on its term tuple (`_get_model_formula_variables`: 25 → 6 μs on
+  the paper formula, same set). Detector cost on the paper model, 5,000 or 50,000 rows: 27 variables
+  2.3–2.5 → 0.12 ms, the paper grid's 7 set variables (APM) 0.18 → 0.03 ms.
 - Tests: `test/core/test_derived_columns.jl` (the mechanism; positive cases x², log, standardized copy,
   precomputed interaction from either factor; negative cases formula transforms, independent
   covariates, categorical predictors, constant columns, consistent settings, a lookup column on a
@@ -750,11 +763,12 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
 - **Against 2.2.0 at the freeze** (the paper's 65-coefficient logit, Julia 1.13.0, warm medians, 2.2.0 with its
   engine cache warm). AME (all), AME of one variable and AAP are 5–23% faster at n = 5,000 and 50,000 with
   `GLM.vcov`, `HC1()` and `CR1` (AME (all) at 50,000: 243 → 204 ms; with `vcov = V`, a precomputed matrix, 193 ms).
-  AME with `scenarios` is within ±10% except +12–20% at n = 5,000 (about +0.3 ms). Profile calls are slower
-  only because of the derived-column check, which screens every variable the grid sets against every
-  numeric model column: on the paper grid (7 set columns) it costs about 2.7 ms per call, so MEM takes
-  3.5 ms instead of 1.96 ms in 2.2.0 and APM 0.71 instead of 0.45 ms at n = 5,000; with `warn = false` MEM
-  takes 0.77 ms and APM 0.39 ms (2.5× and 1.15× faster than 2.2.0). First calls (fresh process, medians of 5) are +1.4% for MEM, +1.3% for AME with `scenarios`, +6.7% for AME (all)
+  AME with `scenarios` is within ±10% except +12–20% at n = 5,000 (about +0.3 ms). Profile calls were
+  slower at the freeze only because of the derived-column check (2.7 ms per MEM call on the paper grid:
+  MEM 3.5 vs 1.96 ms in 2.2.0, APM 0.71 vs 0.45 ms at n = 5,000). After the detector fix (see "Derived
+  columns" above) they are faster than 2.2.0 with the default `warn = true` (Julia 1.13.0): at
+  n = 5,000 MEM 1.88 → 0.86 ms and APM 0.45 → 0.38 ms, at n = 50,000 MEM 2.06 → 0.97 ms and APM
+  0.57 → 0.49 ms (with `warn = false`: 0.73, 0.35, 0.86, 0.45 ms). First calls (fresh process, medians of 5) are +1.4% for MEM, +1.3% for AME with `scenarios`, +6.7% for AME (all)
   (3.96 → 4.23 s) and +10% for AAP and AME of one variable (about +0.2–0.3 s, accumulated over the 3.0 steps;
   for AAP mostly the rank-deficiency handling). AME (all) had been +17% (+0.6 s), most of it (0.45 s) from compiling the formula walk that finds a categorical variable's
   reference level (`_model_baseline_level`, added for interaction-only categoricals), which iterated the

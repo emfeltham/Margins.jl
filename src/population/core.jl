@@ -320,8 +320,25 @@ function _get_model_formula_variables(model)
     # Extract all terms from the model formula RHS, handling mixed models properly
     # Use FormulaCompiler's fixed_effects_form to get only fixed effects for mixed models
     fixed_effects_formula = fixed_effects_form(model)
-    formula_terms = StatsModels.termvars(fixed_effects_formula.rhs)
-    return Set{Symbol}(formula_terms)
+    return _termvars!(Set{Symbol}(), fixed_effects_formula.rhs)
+end
+
+# `StatsModels.termvars(t)` as a set, added to `s`: the same variables, but a matrix or tuple of
+# terms is walked term by term without specializing on its (long) tuple type. `termvars` of the
+# whole tuple is a `mapreduce(termvars, union, …)` over it: about 25 μs on the paper's 55-term
+# formula, on every call that asks for the predictors (the derived-column detector does); this
+# takes about 6 μs.
+function _termvars!(s::Set{Symbol}, @nospecialize(t))
+    if t isa StatsModels.MatrixTerm
+        _termvars!(s, t.terms)
+    elseif t isa Tuple
+        for x in t
+            _termvars!(s, x)
+        end
+    else
+        union!(s, StatsModels.termvars(t))
+    end
+    return s
 end
 
 """

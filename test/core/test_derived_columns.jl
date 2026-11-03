@@ -136,6 +136,28 @@ end
         @test isempty(_detector_warnings(() -> population_margins(lm(@formula(y ~ v + b), small), small; vars = [:v])))
     end
 
+    # Many sources and columns at once (an AME or MEM over every variable): every rule, found in
+    # the same order, and the same warning from the population and the profile path
+    @testset "many sources, both paths" begin
+        mm = lm(@formula(y ~ x + x2 + logx + xs & z + z + xz + u + t + zt + age + band + year + gdp + g), df)
+        srcs = [:x, :x2, :logx, :xs, :z, :xz, :u, :t, :zt, :age, :band, :year, :gdp, :g, :c0]
+        found = Margins._derived_columns(mm, Margins._prepare_margins_data(Tables.columntable(df), mm), srcs)
+        @test [(d.source, d.derived, d.relation) for d in found] == [
+            (:x, :logx, "log(x)"), (:x, :x2, "x^2"),
+            (:x, :xs, "a linear rescaling of x (a standardized or rescaled copy)"),
+            (:x, :xz, "x * z (a precomputed interaction)"), (:z, :xz, "z * x (a precomputed interaction)"),
+            (:z, :zt, "z * t (a precomputed interaction)"), (:t, :zt, "t * z (a precomputed interaction)")]
+        wp = _detector_warnings(() -> population_margins(mm, df))
+        wg = _detector_warnings(() -> profile_margins(mm, df, means_grid(df)))
+        @test length(wp) == 1 && wp == wg
+        @test count("\n  - `", wp[1]) == 7
+        # sources the call changes only through the grid
+        wc = _detector_warnings(() -> profile_margins(mm, df, cartesian_grid(x = [1.0, 2.0], t = [false, true]); vars = [:u]))
+        wc2 = _detector_warnings(() -> population_margins(mm, df; vars = [:u], scenarios = (x = [1.0, 2.0], t = [false, true])))
+        @test length(wc) == 1 && wc == wc2
+        @test occursin("`x2` is x^2", wc[1]) && occursin("`zt` is t * z", wc[1]) && !occursin("`xz` is z", wc[1])
+    end
+
     @testset "a group-level contextual covariate is not reported" begin
         mc = lm(@formula(y ~ year + gdp + z), df)
         @test isempty(_detector_warnings(() -> population_margins(mc, df; vars = [:z], scenarios = (year = 2005,))))

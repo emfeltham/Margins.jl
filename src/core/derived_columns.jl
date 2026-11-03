@@ -113,22 +113,33 @@ The numeric model columns that are, in `data_nt`, an exact function of one of th
 is reported once.
 """
 function _derived_columns(model, @nospecialize(data_nt::NamedTuple), sources::Vector{Symbol})
-    # The columns in an untyped Dict, so nothing below is compiled for the data table's type (only
-    # for each column type, behind the calls); a categorical column is read through its codes.
-    raw = Dict{Symbol,AbstractVector}()
-    for k in keys(data_nt)
-        raw[k] = getfield(data_nt, k)
-    end
     predictors = try
         _formula_predictor_names(model)
     catch
         return _DerivedColumn[]
     end
+    # The predictors' columns (nothing else is read) in an untyped Dict, so nothing below is
+    # compiled for the data table's type (only for each column type, behind the calls); a
+    # categorical column is read through its codes.
+    raw = Dict{Symbol,AbstractVector}()
+    data_cols = keys(data_nt)
+    for k in predictors
+        k in data_cols && (raw[k] = getfield(data_nt, k))
+    end
     response = _response_name(model)
     return _derived_columns(raw, Vector{Symbol}(predictors), response, sources)
 end
 
-# The detector proper, independent of the model's type (precompiled below)
+# The detector proper, independent of the model's type (precompiled below).
+#
+# Cost: every (source, column) pair is tried against 8 transforms, the affine rule and a product
+# with each other numeric column, so a call with many focal variables (an MEM or an AME over every
+# variable) makes |sources| × |numeric|² candidate checks. Each candidate is first screened on a
+# Float64 matrix of the screen rows of every numeric column (`_DetectorScreen`), built once per
+# call, in type-stable loops; only a candidate that passes the screen reaches the exact check on
+# the columns themselves (`_matches_transform`, `_affine_relation`, `_matches_product`), which
+# checks the screen rows again and then every row. The screen is a necessary condition of each
+# exact check, so it changes only how fast a candidate is rejected, never the result.
 function _derived_columns(raw::Dict{Symbol,AbstractVector}, predictors::Vector{Symbol},
                           response::Union{Nothing,Symbol}, sources::Vector{Symbol})
     found = _DerivedColumn[]
@@ -140,23 +151,124 @@ function _derived_columns(raw::Dict{Symbol,AbstractVector}, predictors::Vector{S
     n >= 3 || return found
     sample = _spaced_rows(n, _DERIVED_SAMPLE)
     screen = _spaced_rows(n, _DERIVED_SCREEN)
-    pair_seen = Set{Tuple{Symbol,Symbol}}()
+    # The sources that can have a derived column: numeric and not constant, i.e. in `numeric` (a
+    # categorical or constant source has none: every rule below needs a numeric, varying source).
+    # For a continuous one, the rows of the affine fit (`_affine_anchors`), found on its own column.
+    checked = Tuple{Symbol,Bool,Int,Int}[]      # (source, continuous, lo row, hi row)
     for v in sources
-        (v in model_cols) || continue
+        (v in numeric) || continue
         vcol = cols[v]
-        _is_constant(vcol) && continue
-        v_numeric = _is_numeric_column(raw[v])
-        v_continuous = v_numeric && !(eltype(vcol) <: Bool) && _n_distinct(vcol, screen) >= 3
-        for c in numeric
+        v_continuous = !(eltype(vcol) <: Bool) && _n_distinct(vcol, screen) >= 3
+        (lo, hi) = v_continuous ? _affine_anchors(vcol, sample) : (0, 0)
+        push!(checked, (v, v_continuous, lo, hi))
+    end
+    isempty(checked) && return found
+    S = _DetectorScreen(cols, numeric, screen, checked)
+    pair_seen = Set{Tuple{Symbol,Symbol}}()
+    for (iv, (v, v_continuous, lo, hi)) in enumerate(checked)
+        vcol = cols[v]
+        # the affine rule has no fit when v is equal at its anchor rows (the comparison on the
+        # column's own type, as `_affine_relation` makes it)
+        affine_fit = v_continuous && !_equal_at(vcol, lo, hi)
+        jv = S.index[v]
+        for (jc, c) in enumerate(numeric)
             c == v && continue
             (minmax(v, c) in pair_seen) && continue
-            d = _relation(v, c, cols, numeric, sample, screen, v_numeric, v_continuous)
+            d = _relation(v, c, cols, numeric, sample, screen, v_continuous, affine_fit, S, iv, jv, jc)
             isnothing(d) && continue
             push!(found, d)
             push!(pair_seen, minmax(v, c))
         end
     end
     return found
+end
+
+# The screen rows of every numeric column as Float64, one column each (`index`), and after them the
+# two affine anchor rows of each checked source (rows `ns + 2iv - 1` and `ns + 2iv` for the
+# `iv`-th source; unused for a non-continuous one)
+struct _DetectorScreen
+    values::Matrix{Float64}
+    ns::Int
+    index::Dict{Symbol,Int}
+end
+
+function _DetectorScreen(cols::Dict{Symbol,AbstractVector}, numeric::Vector{Symbol},
+                         screen::Vector{Int}, checked::Vector{Tuple{Symbol,Bool,Int,Int}})
+    rows = copy(screen)
+    for (_, cont, lo, hi) in checked
+        push!(rows, cont ? lo : first(screen), cont ? hi : first(screen))
+    end
+    values = Matrix{Float64}(undef, length(rows), length(numeric))
+    for (j, s) in enumerate(numeric)
+        _fill_screen!(values, j, cols[s], rows)
+    end
+    return _DetectorScreen(values, length(screen), Dict(s => j for (j, s) in enumerate(numeric)))
+end
+
+function _fill_screen!(values::Matrix{Float64}, j::Int, col::AbstractVector, rows::Vector{Int})
+    for (r, i) in enumerate(rows)
+        values[r, j] = Float64(col[i])
+    end
+    return values
+end
+
+# The rows of `sample` where `v` is smallest and largest (first of ties), as `_affine_relation`
+# chooses them
+function _affine_anchors(v::AbstractVector, sample::Vector{Int})
+    checkbounds(v, sample)
+    lo = hi = first(sample)
+    vlo = vhi = v[lo]
+    @inbounds for i in sample     # branch-free: lo moves on v[i] < v[lo], hi on v[i] > v[hi]
+        x = v[i]
+        below, above = x < vlo, x > vhi
+        lo, vlo = ifelse(below, i, lo), ifelse(below, x, vlo)
+        hi, vhi = ifelse(above, i, hi), ifelse(above, x, vhi)
+    end
+    return (lo, hi)
+end
+
+_equal_at(v::AbstractVector, lo::Int, hi::Int) = v[lo] == v[hi]
+
+# Screens: the exact checks below, on the screen rows only (necessary conditions)
+function _screen_transform(k::Int, S::_DetectorScreen, jv::Int, jc::Int)
+    X = S.values
+    @inbounds for r in 1:S.ns
+        _close(X[r, jc], _transform(k, X[r, jv])) || return false
+    end
+    return true
+end
+
+# The first column `ju` after `after` (other than `jv` and `jc`) whose product with `jv` passes the
+# screen as `jc`, or 0: the candidates of the product rule, in column order
+function _next_product(S::_DetectorScreen, jv::Int, jc::Int, after::Int)
+    X = S.values
+    for ju in after+1:size(X, 2)
+        (ju == jv || ju == jc) && continue
+        _screen_product(X, S.ns, jv, ju, jc) && return ju
+    end
+    return 0
+end
+
+@inline function _screen_product(X::Matrix{Float64}, ns::Int, jv::Int, ju::Int, jc::Int)
+    @inbounds for r in 1:ns
+        _close(X[r, jc], X[r, jv] * X[r, ju]) || return false
+    end
+    return true
+end
+
+# The affine fit `_affine_relation` makes (from the anchor rows of the `iv`-th source), checked on
+# the screen rows
+function _screen_affine(S::_DetectorScreen, iv::Int, jv::Int, jc::Int)
+    X = S.values
+    plo, phi = S.ns + 2iv - 1, S.ns + 2iv
+    a = (X[phi, jc] - X[plo, jc]) / (X[phi, jv] - X[plo, jv])
+    (a == 0 || !isfinite(a)) && return false
+    b = X[plo, jc] - a * X[plo, jv]
+    @inbounds for r in 1:S.ns
+        p = a * X[r, jv] + b
+        abs(X[r, jc] - p) <= _DERIVED_RTOL * (abs(X[r, jc]) + abs(a * X[r, jv]) + abs(b)) || return false
+    end
+    return true
 end
 
 _detector_column(col::CategoricalArray) = CategoricalArrays.refs(col)
@@ -172,28 +284,30 @@ function _n_distinct(col::AbstractVector, rows::Vector{Int})
     return length(seen)
 end
 
+# The first rule `c` satisfies as a function of the numeric source `v` (`v` and `c` are columns
+# `jv` and `jc` of the screen, `v` its `iv`-th source), in order: the transforms, the affine
+# rescaling (both for a continuous `v`), a product with another numeric column
 function _relation(v::Symbol, c::Symbol, cols::Dict{Symbol,AbstractVector}, numeric::Vector{Symbol},
-                   sample::Vector{Int}, screen::Vector{Int}, v_numeric::Bool, v_continuous::Bool)
-    vcol = cols[v]
-    ccol = cols[c]
+                   sample::Vector{Int}, screen::Vector{Int}, v_continuous::Bool, affine_fit::Bool,
+                   S::_DetectorScreen, iv::Int, jv::Int, jc::Int)
     if v_continuous
         for k in eachindex(_DERIVED_TRANSFORM_LABELS)
-            _matches_transform(k, vcol, ccol, screen) &&
+            _screen_transform(k, S, jv, jc) && _matches_transform(k, cols[v], cols[c], screen) &&
                 return _DerivedColumn(v, c, _transform_label(k, v), :transform, k)
         end
-        ab = _affine_relation(vcol, ccol, sample)
+        ab = affine_fit && _screen_affine(S, iv, jv, jc) ? _affine_relation(cols[v], cols[c], sample) : nothing
         if !isnothing(ab)
             (a, b) = ab
             label = a == 1 && b == 0 ? "a copy of $v" : "a linear rescaling of $v (a standardized or rescaled copy)"
             return _DerivedColumn(v, c, label, :affine, ab)
         end
     end
-    if v_numeric
-        for u in numeric
-            (u == v || u == c) && continue
-            _matches_product(vcol, cols[u], ccol, screen) &&
-                return _DerivedColumn(v, c, "$v * $u (a precomputed interaction)", :product, u)
-        end
+    ju = _next_product(S, jv, jc, 0)
+    while ju != 0
+        u = numeric[ju]
+        _matches_product(cols[v], cols[u], cols[c], screen) &&
+            return _DerivedColumn(v, c, "$v * $u (a precomputed interaction)", :product, u)
+        ju = _next_product(S, jv, jc, ju)
     end
     return nothing
 end
@@ -285,13 +399,21 @@ end
 for V in (Vector{Float64}, Vector{Bool}, BitVector, Vector{UInt32}), C in (Vector{Float64}, Vector{Bool}, BitVector)
     precompile(_n_distinct, (V, Vector{Int}))
     precompile(_is_constant, (V,))
+    precompile(_fill_screen!, (Matrix{Float64}, Int, V, Vector{Int}))
+    precompile(_affine_anchors, (V, Vector{Int}))
+    precompile(_equal_at, (V, Int, Int))
     precompile(_matches_transform, (Int, V, C, Vector{Int}))
     precompile(_affine_relation, (V, C, Vector{Int}))
     for U in (Vector{Float64}, Vector{Bool}, BitVector)
         precompile(_matches_product, (V, U, C, Vector{Int}))
     end
 end
-precompile(_relation, (Symbol, Symbol, Dict{Symbol,AbstractVector}, Vector{Symbol}, Vector{Int}, Vector{Int}, Bool, Bool))
+precompile(_relation, (Symbol, Symbol, Dict{Symbol,AbstractVector}, Vector{Symbol}, Vector{Int}, Vector{Int},
+                       Bool, Bool, _DetectorScreen, Int, Int, Int))
+precompile(_DetectorScreen, (Dict{Symbol,AbstractVector}, Vector{Symbol}, Vector{Int}, Vector{Tuple{Symbol,Bool,Int,Int}}))
+precompile(_screen_transform, (Int, _DetectorScreen, Int, Int))
+precompile(_next_product, (_DetectorScreen, Int, Int, Int))
+precompile(_screen_affine, (_DetectorScreen, Int, Int, Int))
 precompile(_spaced_rows, (Int, Int))
 for S in (Nothing, Vector{Dict{Symbol,Any}}, Vector{Dict}, DataFrame)
     precompile(_report_derived_columns, (Vector{_DerivedColumn}, Vector{Symbol}, Vector{Symbol}, S))
