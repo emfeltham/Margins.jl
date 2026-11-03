@@ -39,10 +39,14 @@ function same_rows(a::DataFrame, b::DataFrame; skip = "z", rtol = 1e-12)
         c in ("gradient",) && continue
         x, y = a[!, c], b[!, c]
         if eltype(x) <: Union{Missing, Real} && !(eltype(x) <: Bool)
-            ok &= all(isapprox.(x, y; rtol, atol = 1e-14) .| (isnan.(x) .& isnan.(y)))
+            # Independent fits can differ at BLAS rounding precision, especially at a
+            # structural zero. Keep a tight absolute bound as well as relative agreement.
+            matches = all(isapprox.(x, y; rtol, atol = 1e-12) .| (isnan.(x) .& isnan.(y)))
         else
-            ok &= isequal(x, y)
+            matches = isequal(x, y)
         end
+        matches || @error "Rank-deficient fit differs from refit" column=c actual=x reference=y rtol
+        ok &= matches
     end
     @test ok
     return ok
@@ -87,7 +91,7 @@ end
         @test res.inference.dropped == [jz]
         @test all(iszero, Σ[jz, :]) && all(iszero, Σ[:, jz])
         @test Σ[keep, keep] == vcov(m_lm)[keep, keep]
-        @test Σ[keep, keep] == vcov(r_lm)                                     # GLM.jl: the same numbers
+        @test Σ[keep, keep] ≈ vcov(r_lm) rtol = 1e-12 atol = 1e-14            # independent fits: BLAS rounding
         # full-rank fit: nothing dropped, no warning
         full = @test_logs population_margins(r_lm, d; vars = [:x])
         @test full.inference.dropped == Int[]
