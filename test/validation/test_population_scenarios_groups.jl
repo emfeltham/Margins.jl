@@ -344,8 +344,13 @@ end
         dfw.w = rand(n) .+ 0.1
         res = DataFrame(population_margins(m, dfw; type=:effects, vars=[:x], groups=(:x, 4), weights=:w))
         @test sum(res.n) == n
+        # Quantile bins are weighted quantiles when weights are given (weighted-quantile
+        # properties are tested in regression/test_group_binning.jl)
+        cuts = Margins._weighted_quantiles(df.x, dfw.w, [0, 0.25, 0.5, 0.75, 1.0])
         for i in 1:4
-            rows = bin_rows(i)
+            rows = i < 4 ? findall(v -> cuts[i] <= v < cuts[i+1], df.x) :
+                           findall(v -> cuts[4] <= v <= cuts[5], df.x)
+            @test res.n[i] == length(rows)
             num = sum(dfw.w[r] * GLM.mueta(LogitLink(), η[r]) * β[ix] for r in rows)
             manual = num / sum(dfw.w[r] for r in rows)
             @test res.estimate[i] ≈ manual atol=1e-10

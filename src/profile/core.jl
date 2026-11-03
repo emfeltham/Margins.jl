@@ -498,6 +498,21 @@ function profile_margins(
         end
     end
     
+    # A grid column that is not a model predictor and VARIES across the grid (a typo that
+    # happens to match a data column, the response, an unused column) changes nothing, so
+    # every profile would silently report the same value. Constant extra columns are
+    # harmless and common: means_grid(data) carries every data column.
+    varying = [Symbol(c) for c in names(processed_reference_grid)
+               if length(unique(processed_reference_grid[!, c])) > 1]
+    bad_cols = _nonpredictor_vars(model, varying)
+    if !isempty(bad_cols)
+        throw(ArgumentError(
+            "Reference grid variable(s) $(join(bad_cols, ", ")) vary across the grid but are " *
+            "not predictors in the model, so they would not change any estimate. Check for " *
+            "typos; model predictors are: $(join(_predictor_names(model), ", "))."
+        ))
+    end
+
     # Route to single implementation with processed reference grid
     return _attach_inference_df!(_profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, alpha, contrasts; interval=interval), model, vcov)
 end

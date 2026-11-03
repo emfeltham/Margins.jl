@@ -30,7 +30,7 @@ using CategoricalArrays
            0.01 .* df.x2 .* df.age .+
            randn(n) .* 0.5
 
-    model = lm(@formula(y ~ (x1 + x2 + x3) * age + income), df)
+    model = lm(@formula(y ~ (x1 + x2 + x3) * age + income + region), df)
     Σ = vcov(model)
 
     @testset "Basic Functionality - At Mean" begin

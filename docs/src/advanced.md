@@ -606,7 +606,7 @@ policy_analysis = population_margins(
     model, data;
     type = :effects,
     vars = [:outcome],
-    scenarios = (:policy => [0, 1])
+    scenarios = (policy=[0, 1],)
 )
 
 # Multi-variable scenarios
@@ -626,7 +626,7 @@ full_analysis = population_margins(
     type = :effects,
     vars = [:outcome],
     groups = [:education, :region],
-    scenarios = (:treatment => [0, 1])
+    scenarios = (treatment=[0, 1],)
 )
 ```
 
@@ -652,7 +652,7 @@ healthcare_analysis = population_margins(
     scenarios = (:policy_reform => [0, 1], :funding_level => [0.8, 1.2])
 )
 
-# Results: State × Urban/Rural × (Insurance×Income-Tertiles) × Policy×Funding scenarios
+# Results: State × Urban/Rural × (Insurance and Income-Tertiles, analyzed separately) × Policy×Funding scenarios
 ```
 
 ## Second Differences (Interaction Effects)

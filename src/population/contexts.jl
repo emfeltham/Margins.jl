@@ -9,6 +9,9 @@ using Statistics: quantile
 using LinearAlgebra: dot
 import GLM
 
+# Hard cap on scenarios × groups: each combination is a full pass over the data.
+const _MAX_CONTEXT_COMBINATIONS = 250
+
 """
     _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, alpha, measure)
 
@@ -22,16 +25,19 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
 
     # Parse specifications
     scenario_specs = isnothing(scenarios) ? [Dict()] : _parse_at_specification(scenarios)
-    group_specs = isnothing(groups) ? [Dict()] : _parse_groups_specification(groups, data_nt)
+    group_specs = isnothing(groups) ? [Dict()] : _parse_groups_specification(groups, data_nt; weights)
 
     # Create all combinations of contexts
     total_combinations = length(scenario_specs) * length(group_specs)
 
-    # Enforce hard limits
-    if total_combinations > 1000
-        throw(MarginsError("Combination explosion detected ($total_combinations combinations). Maximum recommended: 1000."))
-    elseif total_combinations > 250
-        throw(MarginsError("Large combination count detected ($total_combinations combinations). Maximum recommended: 250."))
+    # Enforce the hard limit (error-first policy): every combination is a full pass over the data
+    if total_combinations > _MAX_CONTEXT_COMBINATIONS
+        throw(MarginsError(
+            "Too many scenario/group combinations: $(length(scenario_specs)) scenarios × " *
+            "$(length(group_specs)) groups = $(total_combinations), above the limit of " *
+            "$(_MAX_CONTEXT_COMBINATIONS). Use fewer scenario values or coarser groups, or " *
+            "split the request into several calls."
+        ))
     end
 
     for scenario_spec in scenario_specs, group_spec in group_specs
@@ -167,6 +173,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
 
     # Add analysis_type for format auto-detection
     metadata[:analysis_type] = :population
+    metadata[:weighted] = !isnothing(weights)
 
     # Guard the empty frame: without this, `results.estimate` below throws an opaque
     # `ArgumentError: column name "estimate" not found ...` from DataFrames internals.
@@ -257,7 +264,7 @@ Only the grammar `_validate_groups_parameter` accepts is handled; it runs first,
 else has already been rejected. A variable reachable both ways -- `groups=[(:x, 4), :x]` --
 appears in both vectors, and callers should treat pinned as the stronger claim.
 """
-function _classify_group_variables(groups)
+function _classify_group_variables(groups; dedup::Bool=true)
     pinned = Symbol[]
     binned = Symbol[]
 
@@ -277,7 +284,7 @@ function _classify_group_variables(groups)
     end
     walk(groups)
 
-    return (unique(pinned), unique(binned))
+    return dedup ? (unique(pinned), unique(binned)) : (pinned, binned)
 end
 
 """
@@ -584,7 +591,7 @@ function _parse_at_specification(scenarios)
     var_values = [
         begin
             val = getproperty(scenarios_nt, name)
-            val isa AbstractVector ? collect(val) : [val]
+            val isa Union{AbstractVector, Tuple} ? collect(val) : [val]
         end for name in var_names
     ]
 
@@ -622,7 +629,7 @@ function _normalize_scenarios_to_namedtuple(scenarios)
     end
 end
 
-function _parse_groups_specification(groups, data_nt)
+function _parse_groups_specification(groups, data_nt; weights=nothing)
     # Simple categorical grouping: :education
     if groups isa Symbol
         return _parse_over_specification([groups], data_nt)
@@ -637,7 +644,7 @@ function _parse_groups_specification(groups, data_nt)
             # Mixed vector - handle each spec and create cross-product
             all_groups = []
             for spec in groups
-                spec_groups = _parse_groups_specification(spec, data_nt)
+                spec_groups = _parse_groups_specification(spec, data_nt; weights)
                 if isempty(all_groups)
                     all_groups = spec_groups
                 else
@@ -662,7 +669,7 @@ function _parse_groups_specification(groups, data_nt)
         if var isa Symbol
             # Quantile specification: (:income, 4)
             if spec isa Integer && spec > 0
-                return _create_quantile_groups(data_nt[var], var, spec)
+                return _create_quantile_groups(data_nt[var], var, spec; weights)
             end
             # Threshold specification: (:income, [25000, 50000])
             if spec isa AbstractVector && all(x -> x isa Real, spec)
@@ -675,7 +682,7 @@ function _parse_groups_specification(groups, data_nt)
     if groups isa Pair
         outer_spec = groups.first
         inner_spec = groups.second
-        return _create_nested_strata(outer_spec, inner_spec, data_nt)
+        return _create_nested_strata(outer_spec, inner_spec, data_nt; weights)
     end
 
     error("Invalid groups specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, Int), (Symbol, Vector), or outer => inner")
@@ -747,45 +754,90 @@ function _parse_over_specification(over, data_nt)
     end
 end
 
-function _create_nested_strata(outer_spec, inner_spec, data_nt)
-    # Parse outer specification
-    outer_groups = _parse_groups_specification(outer_spec, data_nt)
-
-    # Handle inner specification - can be single spec or Vector of specs
-    if inner_spec isa AbstractVector
-        # Multiple inner specifications - create parallel groups within each outer
-        nested_groups = []
-        for outer_group in outer_groups
-            for inner_single_spec in inner_spec
-                inner_groups = _parse_groups_specification(inner_single_spec, data_nt)
-                for inner_group in inner_groups
-                    # Merge outer and inner groups
-                    combined_group = merge(outer_group, inner_group)
-                    push!(nested_groups, combined_group)
-                end
-            end
+# Row indices selected by one parsed group (a Dict of var => level / bin spec), using the same
+# membership rules as the context filter in `_create_context_data_with_weights`.
+function _group_row_indices(group, data_nt)
+    idx = collect(1:length(first(data_nt)))
+    for (var, spec) in group
+        col = data_nt[var]
+        if spec isa NamedTuple && haskey(spec, :lower) && haskey(spec, :upper)
+            is_last_bin = !haskey(spec, :nbins) || spec.bin == spec.nbins
+            keep = is_last_bin ? findall(x -> spec.lower <= x <= spec.upper, col) :
+                                 findall(x -> spec.lower <= x < spec.upper, col)
+        elseif spec isa NamedTuple && haskey(spec, :indices)
+            keep = collect(spec.indices)
+        else
+            keep = findall(==(spec), col)
         end
-        return nested_groups
-    else
-        # Single inner specification
-        inner_groups = _parse_groups_specification(inner_spec, data_nt)
+        idx = intersect(idx, keep)
+    end
+    return idx
+end
 
-        # Create nested combinations: outer => inner means inner within each outer
-        nested_groups = []
-        for outer_group in outer_groups
+# `outer => inner` means inner WITHIN each outer group: bins for the inner spec (quantiles,
+# thresholds, or levels actually observed) are computed on that group's rows only, so
+# `:region => (:income, 4)` gives income quartiles of each region. Use a top-level vector,
+# `[:region, (:income, 4)]`, for sample-wide cutpoints crossed with region.
+function _create_nested_strata(outer_spec, inner_spec, data_nt; weights=nothing)
+    outer_groups = _parse_groups_specification(outer_spec, data_nt; weights)
+    inner_specs = inner_spec isa AbstractVector ? inner_spec : [inner_spec]
+
+    nested_groups = []
+    for outer_group in outer_groups
+        idx = _group_row_indices(outer_group, data_nt)
+        isempty(idx) && continue
+        subset_nt = map(col -> col[idx], data_nt)
+        subset_w = isnothing(weights) ? nothing : weights[idx]
+        for inner_single_spec in inner_specs
+            inner_groups = try
+                _parse_groups_specification(inner_single_spec, subset_nt; weights=subset_w)
+            catch err
+                err isa MarginsError || rethrow()
+                outer_desc = join(("$(k)=$(v isa NamedTuple && haskey(v, :label) ? v.label : v)"
+                                   for (k, v) in outer_group), ", ")
+                throw(MarginsError("Within group ($(outer_desc)): " * err.msg))
+            end
             for inner_group in inner_groups
-                # Merge outer and inner groups
-                combined_group = merge(outer_group, inner_group)
-                push!(nested_groups, combined_group)
+                push!(nested_groups, merge(outer_group, inner_group))
             end
         end
+    end
+    return nested_groups
+end
 
-        return nested_groups
+# Weighted analogue of the Hyndman-Fan type 7 quantile (the one `Statistics.quantile` uses):
+# row i counts in proportion to `w[i]`, and unit weights reproduce `quantile(x, p)` exactly.
+# Weights are rescaled to sum to the number of positively weighted rows, which makes the
+# result invariant to the weights' scale (sampling weights are often normalised to sum to 1
+# or to n). This is NOT exactly the quantile of the sample with each row repeated w times
+# (that would need the unscaled total weight); the two differ by O(1/n). Zero-weight rows
+# never count.
+function _weighted_quantiles(x, w, probs)
+    pos = findall(>(0), w)
+    isempty(pos) && throw(MarginsError("Cannot form quantile bins: every weight is zero."))
+    order = pos[sortperm(x[pos])]
+    xs = x[order]
+    ws = w[order] .* (length(pos) / sum(w[order]))
+    cw = cumsum(ws)
+    N = cw[end]                       # == length(pos), up to rounding
+    at(k) = xs[min(searchsortedfirst(cw, k - 1e-9), length(xs))]
+    return map(probs) do p
+        # The extremes are the smallest and largest positively weighted values: the bins
+        # must still cover every row, and a row weighted below one copy can otherwise sit
+        # below the "first" order statistic.
+        p <= 0 && return xs[1]
+        p >= 1 && return xs[end]
+        h = 1 + (N - 1) * p
+        hi = min(ceil(h - 1e-9), N)
+        lo = min(floor(h + 1e-9), hi)
+        at(lo) + (h - lo) * (at(hi) - at(lo))
     end
 end
 
-function _create_quantile_groups(col, var, n_quantiles)
-    quantiles = [quantile(col, i/n_quantiles) for i in 0:n_quantiles]
+function _create_quantile_groups(col, var, n_quantiles; weights=nothing)
+    probs = [i / n_quantiles for i in 0:n_quantiles]
+    quantiles = isnothing(weights) ? [quantile(col, p) for p in probs] :
+                                     _weighted_quantiles(col, weights, probs)
 
     # Tied values can make consecutive quantile boundaries identical, which leaves the bin
     # between them with no rows. Reporting such a bin as 0.0 +/- 0.0 reads as a precisely
@@ -825,6 +877,15 @@ function _create_quantile_groups(col, var, n_quantiles)
 end
 
 function _create_threshold_groups(col, var, thresholds)
+    # Bins are built from consecutive thresholds, so unsorted or repeated cutpoints give
+    # overlapping or empty bins that no longer partition the column.
+    if !issorted(thresholds; lt=<=)
+        throw(MarginsError(
+            "Thresholds for '$(var)' must be strictly increasing, got $(thresholds). " *
+            "Use groups=($(repr(var)), $(sort(unique(thresholds))))."
+        ))
+    end
+
     groups = []
     n_groups = length(thresholds) + 1
 

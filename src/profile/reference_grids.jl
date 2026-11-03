@@ -52,9 +52,15 @@ end
 Parse numlist notation like "-2(2)2" into vector [-2, 0, 2].
 Format: start(step)end where step is the increment.
 """
+const _NUMLIST_RE = r"^(-?\d*\.?\d+)\((-?\d*\.?\d+)\)(-?\d*\.?\d+)$"
+
+# Single source of truth for "is this string a numlist": the callers' gate and the parser
+# must agree, or a valid numlist (e.g. a decimal step) falls through as a literal String.
+_is_numlist(str::AbstractString) = occursin(_NUMLIST_RE, str)
+
 function _parse_numlist(str::String)
     # Match pattern like "-2(2)2" or "1(0.5)3"
-    m = match(r"^(-?\d*\.?\d+)\((-?\d*\.?\d+)\)(-?\d*\.?\d+)$", str)
+    m = match(_NUMLIST_RE, str)
     if isnothing(m)
         throw(ArgumentError("Invalid numlist format: $str. Expected format: start(step)end"))
     end
@@ -68,22 +74,11 @@ function _parse_numlist(str::String)
         throw(ArgumentError("Step size cannot be zero in numlist: $str"))
     end
     
-    # Handle both positive and negative steps
-    result = Float64[]
-    current = start_val
-    if step_val > 0
-        while current <= end_val + 1e-10  # Small tolerance for floating point
-            push!(result, current)
-            current += step_val
-        end
-    else
-        while current >= end_val - 1e-10  # Small tolerance for floating point
-            push!(result, current)
-            current += step_val
-        end
-    end
-    
-    return result
+    # Compute each point as start + k*step rather than accumulating, so rounding error
+    # does not grow with sequence length. Works for positive and negative steps; the
+    # tolerance admits an endpoint that is off by floating-point noise.
+    nsteps = floor(Int, (end_val - start_val) / step_val + 1e-10 / abs(step_val))
+    return [start_val + k * step_val for k in 0:nsteps]  # empty if the range is backwards
 end
 
 """
@@ -185,7 +180,7 @@ function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple, typical)
     for (i, var) in enumerate(var_names)
         vals = at_spec[var]
         # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
-        if vals isa String && occursin(r"^-?\d+\(\d+\)-?\d+$", vals)
+        if vals isa String && _is_numlist(vals)
             vals = _parse_numlist(vals)
         end
         var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
@@ -1592,7 +1587,7 @@ function _cartesian_grid_impl(at_spec::Dict{Symbol, Any})
     for (i, var) in enumerate(var_names)
         vals = at_spec[var]
         # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
-        if vals isa String && occursin(r"^-?\d+\(\d+\)-?\d+$", vals)
+        if vals isa String && _is_numlist(vals)
             vals = _parse_numlist(vals)
         end
         var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector

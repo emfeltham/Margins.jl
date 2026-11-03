@@ -357,9 +357,16 @@ end
         allrows = collect(1:N)
         cm_base = CtxMats(om, d)
         hrows = Dict(l => findall(==(l), string.(d.h)) for l in ("p", "q", "r"))
-        qz = quantile(d.z, [0, 1/3, 2/3, 1])
-        zrows = Dict("T$i" => findall(z -> (i == 3 ? qz[i] <= z <= qz[i+1] : qz[i] <= z < qz[i+1]), d.z)
-                     for i in 1:3)
+        # Tercile bins of z: with weights, the cutpoints are weighted quantiles (each bin
+        # carries about 1/3 of the weight); the weighted-quantile definition itself is
+        # tested in regression/test_group_binning.jl
+        function zrows_of(w)
+            qz = isnothing(w) ? quantile(d.z, [0, 1/3, 2/3, 1]) :
+                                Margins._weighted_quantiles(d.z, w, [0, 1/3, 2/3, 1])
+            Dict("T$i" => findall(z -> (i == 3 ? qz[i] <= z <= qz[i+1] : qz[i] <= z < qz[i+1]), d.z)
+                 for i in 1:3)
+        end
+        zrows = zrows_of(nothing)
         cm_z = CtxMats(om, _with(d, :z, 0.5))
         cm_g = CtxMats(om, _with(d, :g, "b"))
 
@@ -374,6 +381,7 @@ end
 
         for scale in (:response, :link), (wname, wcol) in (("none", nothing), ("w", :w), ("w0", :w0))
             w = isnothing(wcol) ? nothing : d[!, wcol]
+            zrows = zrows_of(w)
             wkw = isnothing(wcol) ? (;) : (; weights=wcol)
             @testset "$linkname scale=$scale weights=$wname" begin
                 for (pname, pkw, ctxname, rows_of, cm_of, pvars) in paths

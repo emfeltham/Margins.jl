@@ -98,7 +98,9 @@ organizational = population_margins(model, data;
 Complex patterns combining hierarchical and cross-tabulated structures:
 
 ```julia
-# Region first, then education×gender cross-tab within each region
+# Region first, then education and gender as separate (parallel) analyses within each
+# region. A vector on the right of `=>` is NOT crossed; to cross-tabulate, use a top-level
+# vector: groups=[:region, :education, :gender]
 parallel_nested = population_margins(model, data;
                                    type=:effects,
                                    groups=(:region => [:education, :gender]))
@@ -108,6 +110,10 @@ mixed_parallel = population_margins(model, data;
                                   type=:effects,
                                   groups=(:region => [:education, (:income, 4)]))
 ```
+
+A binned right side is binned **within** each left-side group: `:region => (:income, 4)` gives
+the income quartiles of each region, using that region's own cutpoints. For sample-wide cutpoints
+crossed with region, use a top-level vector: `[:region, (:income, 4)]`.
 
 ## Continuous Variable Binning
 
@@ -131,6 +137,16 @@ wealth_quintiles = population_margins(model, data;
                                     type=:effects,
                                     groups=(:wealth, 5))
 ```
+
+!!! note "Weights and bin definitions"
+    With `weights`, quantile cutpoints are **weighted quantiles**: each row counts in proportion
+    to its weight, so every bin carries about `1/k` of the total weight (not of the rows).
+    Unit weights reproduce the unweighted bins exactly, and rescaling the weights changes
+    nothing. For frequency weights this approximates repeating each row `w` times (the
+    difference is of order `1/n`). Rows with zero weight are ignored when placing cutpoints, so
+    a zero-weight row outside the range of the positively weighted data belongs to no bin. Nested
+    bins (`:region => (:income, 4)`) use each region's own weights. The `n` column always counts
+    rows, including rows with zero weight.
 
 ### Custom Threshold Binning
 
@@ -231,12 +247,12 @@ The `scenarios` parameter modifies variable values for the entire population, cr
 # Binary treatment analysis
 treatment_effects = population_margins(model, data;
                                      type=:effects,
-                                     scenarios=(:treatment = [0, 1]))
+                                     scenarios=(treatment=[0, 1],))
 
 # Multi-level policy scenarios
 policy_scenarios = population_margins(model, data;
                                     type=:effects,
-                                    scenarios=(:policy_level = ["none", "moderate", "aggressive"]))
+                                    scenarios=(policy_level=["none", "moderate", "aggressive"],))
 ```
 
 ### Multi-Variable Scenarios
@@ -247,17 +263,17 @@ Cartesian product expansion for complex policy analysis:
 # Treatment × policy combinations
 comprehensive_policy = population_margins(model, data;
                                         type=:effects,
-                                        scenarios=(:treatment = [0, 1], 
-                                                      :policy = ["current", "reform"]))
+                                        scenarios=(treatment=[0, 1], 
+                                                      policy=["current", "reform"]))
 
 # Results: 4 scenarios (2×2 combinations)
 
 # Three-dimensional policy space
 complex_scenarios = population_margins(model, data;
                                      type=:effects,
-                                     scenarios=(:treatment = [0, 1],
-                                                   :funding = [0.8, 1.0, 1.2],
-                                                   :regulation = ["light", "standard", "strict"]))
+                                     scenarios=(treatment=[0, 1],
+                                                   funding=[0.8, 1.0, 1.2],
+                                                   regulation=["light", "standard", "strict"]))
 
 # Results: 18 scenarios (2×3×3 combinations)
 ```
@@ -273,7 +289,7 @@ Groups and scenarios combine multiplicatively for complete analytical coverage:
 full_analysis = population_margins(model, data;
                                  type=:effects,
                                  groups=[:education, :region],
-                                 scenarios=(:treatment = [0, 1]))
+                                 scenarios=(treatment=[0, 1],))
 
 # Results: Each education×region combination under both treatment scenarios
 ```
@@ -285,10 +301,10 @@ full_analysis = population_margins(model, data;
 healthcare_comprehensive = population_margins(health_model, health_data;
     type=:effects,
     groups=(:state => (:urban_rural => [:insurance_type, (:income, 3)])),
-    scenarios=(:aca_expansion = [0, 1], :medicaid_funding = [0.8, 1.2])
+    scenarios=(aca_expansion=[0, 1], medicaid_funding=[0.8, 1.2])
 )
 
-# Results: State × Urban/Rural × (Insurance×Income-Tertiles) × ACA×Medicaid scenarios
+# Results: State × Urban/Rural × (Insurance and Income-Tertiles, analyzed separately) × ACA×Medicaid scenarios
 # Total combinations: 4 states × 2 urban/rural × 12 insurance×income × 4 policy scenarios = 384 results
 ```
 
@@ -323,9 +339,10 @@ population_margins(model, data; type=:effects, vars=[:income], groups=(:income, 
 The last line is the direct translation of Stata's `margins, dydx(income) over(incomebin)`:
 the average marginal effect of income, computed within each quartile of income.
 
-A variable cannot be binned by `groups` and overridden by `scenarios` at the same time — the
-bins are built from the observed values that the override then discards — so that combination
-is rejected as well.
+A variable cannot be used by `groups` (binned or by level) and overridden by `scenarios` at the
+same time — the groups are built from the observed values that the override then discards, and
+the scenario and group labels would share one column — so that combination is rejected as well.
+Likewise, a variable may appear only once in `groups`.
 
 `population_margins()` **rejects** an explicit `vars` entry that is pinned by `groups` or
 `scenarios`, with an error explaining what to request instead.
@@ -417,11 +434,11 @@ result = population_margins(model, data;
 If you want to see how outcomes change as x varies, use **predictions with scenarios**:
 
 ```julia
-# Instead of: population_margins(model, data; vars=[:x], scenarios=(:x = [...]))
+# Instead of: population_margins(model, data; vars=[:x], scenarios=(x=[...],))
 # Use predictions:
 result = population_margins(model, data;
     type=:predictions,         # Not effects!
-    scenarios=(:x = [10, 20, 30, 40])
+    scenarios=(x=[10, 20, 30, 40],)
 )
 # Shows predicted outcomes at each value of x
 ```
@@ -465,7 +482,7 @@ using BenchmarkTools
 @btime population_margins($model, $data; groups=(:region => (:education => :gender)))
 
 # With scenarios: same O(n/k) complexity repeated for each scenario
-@btime population_margins($model, $data; groups=:education, scenarios=(:treatment = [0, 1]))
+@btime population_margins($model, $data; groups=:education, scenarios=(treatment=[0, 1],))
 ```
 
 ### Memory Efficiency
@@ -542,12 +559,12 @@ See the dedicated section **"Important: Conflict Rule for Statistical Validity"*
 # For presentation, consider simpler patterns:
 presentation_analysis = population_margins(model, data;
                                          groups=:education,
-                                         scenarios=(:policy = [0, 1]))
+                                         scenarios=(policy=[0, 1],))
 
 # For comprehensive analysis, use full complexity:
 research_analysis = population_margins(model, data;
                                      groups=(:region => [:education, (:income, 4)]),
-                                     scenarios=(:policy = [0, 1], :funding = [0.8, 1.2]))
+                                     scenarios=(policy=[0, 1], funding=[0.8, 1.2]))
 ```
 
 ---

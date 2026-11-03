@@ -17,6 +17,7 @@
 module MarginsGolden
 
 using DataFrames, CategoricalArrays, GLM, StatsModels, Statistics
+using CovarianceMatrices, MixedModels
 using Margins
 using FormulaCompiler: CategoricalMixture
 
@@ -69,14 +70,14 @@ end
 
 const F = @formula(y ~ x * z + x * g + b)
 
-function fit_matrix_model(linkname, d)
-    linkname == "identity" && return lm(F, d)
-    linkname == "logit"    && return glm(F, d, Binomial(), LogitLink())
-    linkname == "probit"   && return glm(F, d, Binomial(), ProbitLink())
-    linkname == "cloglog"  && return glm(F, d, Binomial(), CloglogLink())
-    linkname == "log"      && return glm(F, d, Poisson(), LogLink())
-    linkname == "inverse"  && return glm(F, d, Gamma(), InverseLink())
-    linkname == "negbin"   && return glm(F, d, NegativeBinomial(2.0), NegativeBinomialLink(2.0))
+function fit_matrix_model(linkname, d; kw...)
+    linkname == "identity" && return lm(F, d; kw...)
+    linkname == "logit"    && return glm(F, d, Binomial(), LogitLink(); kw...)
+    linkname == "probit"   && return glm(F, d, Binomial(), ProbitLink(); kw...)
+    linkname == "cloglog"  && return glm(F, d, Binomial(), CloglogLink(); kw...)
+    linkname == "log"      && return glm(F, d, Poisson(), LogLink(); kw...)
+    linkname == "inverse"  && return glm(F, d, Gamma(), InverseLink(); kw...)
+    linkname == "negbin"   && return glm(F, d, NegativeBinomial(2.0), NegativeBinomialLink(2.0); kw...)
     error("unknown link $linkname")
 end
 
@@ -177,6 +178,89 @@ function cases()
                     () -> population_margins(mb, db; type=:effects, vars=[:wealth_p, :wealth_h],
                                              scenarios=(dist_inv=[1/6],), backend)))
     end
+    _coverage_cases!(out)
+    return out
+end
+
+const FM = @formula(y ~ x * z + x * g + b + (1 | h))
+const ALLV = [:x, :z, :g, :b]
+
+# Paths the 3.0 release changes that the matrix above does not reach (added 2026-10-19,
+# before cache removal and the request/model-class refactors): models fitted with
+# estimation weights (the `weights=:model` default), CovarianceMatrices estimators, more
+# group/scenario forms, and mixed models with and without weights. Offset and
+# FixedEffectModels cases are added only after those paths are fixed (their current output
+# is wrong).
+function _coverage_cases!(out)
+    push_pop!(id, m, d; kw...) = begin
+        # a variable set by a scenario or used by groups cannot also be a focal variable
+        vars = ALLV
+        haskey(kw, :scenarios) && (vars = setdiff(vars, keys(kw[:scenarios])))
+        haskey(kw, :groups) && (vars = setdiff(vars, Margins._extract_group_variables(kw[:groups])))
+        push!(out, ("$id/effect/ad", "population_effects",
+                    () -> population_margins(m, d; type=:effects, vars, kw...)))
+        push!(out, ("$id/predictions", "population_predictions",
+                    () -> population_margins(m, d; type=:predictions, kw...)))
+    end
+    push_prof!(id, m, d; kw...) = begin
+        push!(out, ("$id/profile:means_grid/effect/ad", "profile_effects",
+                    () -> profile_margins(m, d, means_grid(d); type=:effects, vars=ALLV, kw...)))
+        push!(out, ("$id/profile:means_grid/predictions", "profile_predictions",
+                    () -> profile_margins(m, d, means_grid(d); type=:predictions, kw...)))
+    end
+
+    # Estimation weights: the default averages with them; :none is the 2.x behaviour
+    for linkname in ("identity", "logit", "log")
+        d = matrix_data(linkname)
+        m = fit_matrix_model(linkname, d; wts=d.w)
+        for (wname, wkw) in (("model", (;)), ("none", (; weights=:none)))
+            for (pname, pkw) in (("population", (;)), ("groups=h", (; groups=:h)),
+                                 ("groups=(z,3)", (; groups=(:z, 3))),
+                                 ("scenarios z=0.5", (; scenarios=(z=0.5,))))
+                push_pop!("wts:$linkname/$wname/$pname", m, d; pkw..., wkw...)
+            end
+        end
+        push_prof!("wts:$linkname", m, d)
+    end
+
+    # CovarianceMatrices estimators: heteroskedasticity-robust and clustered
+    for linkname in ("identity", "logit")
+        d = matrix_data(linkname)
+        m = fit_matrix_model(linkname, d)
+        for (vname, V) in (("HC1", HC1()), ("CR1(h)", CR1(d.h)))
+            for (pname, pkw) in (("population", (;)), ("groups=h", (; groups=:h)),
+                                 ("scenarios z=0.5", (; scenarios=(z=0.5,))))
+                push_pop!("vcov:$linkname/$vname/$pname", m, d; vcov=V, pkw...)
+            end
+            push_prof!("vcov:$linkname/$vname", m, d; vcov=V)
+        end
+    end
+
+    # More group and scenario forms, unweighted and weighted
+    d = matrix_data("logit")
+    m = fit_matrix_model("logit", d)
+    for (wname, wkw) in (("none", (;)), ("w", (; weights=:w)))
+        for (pname, pkw) in (("groups=h+scenarios z=0.5", (; groups=:h, scenarios=(z=0.5,))),
+                             ("groups=h=>(x,2)", (; groups=:h => (:x, 2))),
+                             ("groups=(x,[1,2])", (; groups=(:x, [1.0, 2.0]))),
+                             ("groups=[h,(x,2)]", (; groups=[:h, (:x, 2)])),
+                             ("scenarios z×b", (; scenarios=(z=[0.0, 0.5], b=[false, true]))))
+            push_pop!("ctx:logit/$wname/$pname", m, d; pkw..., wkw...)
+        end
+    end
+
+    # Mixed models (fixed effects of FM), with and without estimation weights
+    for (mname, fitf) in (
+            ("lmm", (d; kw...) -> fit(MixedModel, FM, d; progress=false, kw...)),
+            ("glmm-logit", (d; kw...) -> fit(MixedModel, FM, d, Bernoulli(); progress=false, kw...)))
+        d = matrix_data(mname == "lmm" ? "identity" : "logit")
+        for (wname, fkw) in (("unweighted", (;)), ("wts", (; wts=d.w)))
+            m = fitf(d; fkw...)
+            push_pop!("mixed:$mname/$wname/population", m, d)
+            push_pop!("mixed:$mname/$wname/groups=g", m, d; groups=:g)
+            push_prof!("mixed:$mname/$wname", m, d)
+        end
+    end
     return out
 end
 
@@ -235,7 +319,8 @@ with `--check-bounds=yes`, which disables `@inbounds`/SIMD reductions and so cha
 summation order (e.g. the means in `means_grid`) at the ulp level.
 """
 function fingerprint()
-    vers = join(["$(nameof(M))=$(pkgversion(M))" for M in (GLM, StatsModels, CategoricalArrays)], ";")
+    vers = join(["$(nameof(M))=$(pkgversion(M))" for M in (GLM, StatsModels, CategoricalArrays,
+                                                         MixedModels, CovarianceMatrices)], ";")
     return vers * ";check_bounds=" * string(Base.JLOptions().check_bounds)
 end
 

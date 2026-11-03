@@ -165,6 +165,7 @@ function population_margins(
     # Population-specific validation
     if !isnothing(scenarios)
         _validate_scenarios_specific(scenarios, vars, type)
+        _validate_scenarios_are_predictors(model, scenarios)
     end
     if !isnothing(groups)
         _validate_groups_parameter(groups)
@@ -204,6 +205,10 @@ function population_margins(
         vars = nothing  # Not needed for predictions
     end
     
+    if !isnothing(groups)
+        _validate_group_columns_complete(groups, data_nt)
+    end
+
     # Build zero-allocation engine with PopulationUsage optimization (including vcov function)
     # Determine derivative support based on type and vars
     deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
@@ -515,31 +520,117 @@ end
 """
     _validate_scenarios_groups_conflict(scenarios, groups)
 
-Reject a variable that is simultaneously overridden by `scenarios` and binned by `groups`.
+Reject a variable that is simultaneously overridden by `scenarios` and used by `groups`.
 
-Such a request is silently misleading: `_create_context_data_with_weights` selects each bin's
-rows using the variable's REAL values, then the scenario override replaces those values for
-every row, while the result still carries the bin label. The reported subgroup is defined by
-data that no longer exists in the context it labels.
+Such a request is silently misleading: `_create_context_data_with_weights` selects each
+group's rows using the variable's REAL values, then the scenario override replaces those
+values for every row, while the result still carries the group label. The reported subgroup
+is defined by data that no longer exists in the context it labels. For a categorical group
+the scenario and group values also share one `at_<var>` column, so the scenario label is
+overwritten and the scenarios cannot be told apart.
 """
 function _validate_scenarios_groups_conflict(scenarios, groups)
     scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
-    (_, binned_vars) = _classify_group_variables(groups)
-    conflicting = intersect(Set(keys(scenarios_nt)), Set(binned_vars))
+    (pinned_vars, binned_vars) = _classify_group_variables(groups)
+    conflicting = intersect(Set(keys(scenarios_nt)), Set(vcat(pinned_vars, binned_vars)))
 
     if !isempty(conflicting)
-        conflicting_list = join(conflicting, ", ")
-        v = first(conflicting)
+        conflicting_list = join(sort!(collect(conflicting)), ", ")
+        v = first(sort!(collect(conflicting)))
         throw(ArgumentError("""
-        Invalid parameter combination: Variables $(conflicting_list) are binned by 'groups' and also overridden by 'scenarios'.
+        Invalid parameter combination: Variables $(conflicting_list) are used by 'groups' and also overridden by 'scenarios'.
 
-        The bins are formed from the observed values of $(conflicting_list), but the scenario then
-        replaces those values for every row. Each subgroup would be labelled by a range its rows
-        no longer occupy.
+        Groups are formed from the observed values of $(conflicting_list), but the scenario then
+        replaces those values for every row. Each subgroup would be labelled by a value its rows
+        no longer carry, and the scenario and group labels would collide.
 
-        Bin by one variable and set a scenario on another:
-           population_margins(model, data; vars=[:x], groups=($(v), 4), scenarios=(other_var=[0, 1],))
+        Group by one variable and set a scenario on another:
+           population_margins(model, data; groups=$(repr(v)), scenarios=(other_var=[0, 1],))
         """))
+    end
+end
+
+"""
+    _validate_scenarios_are_predictors(model, scenarios)
+
+Reject a scenario variable that is not a predictor in the model's formula.
+
+Overriding such a column (a typo, the response, the weights column, or any unused column)
+changes nothing, so every scenario would silently report the baseline estimate under an
+`at_<var>` label that looks like a "no effect" result.
+"""
+function _validate_scenarios_are_predictors(model, scenarios)
+    bad = _nonpredictor_vars(model, keys(_normalize_scenarios_to_namedtuple(scenarios)))
+    if !isempty(bad)
+        throw(ArgumentError(
+            "Scenario variable(s) $(join(bad, ", ")) are not predictors in the model, so " *
+            "overriding them would not change any estimate. Check for typos; model " *
+            "predictors are: $(join(_predictor_names(model), ", "))."
+        ))
+    end
+end
+
+"""
+    _predictor_names(model) -> Vector{Symbol}
+
+Sorted names of the model's predictors: formula variables other than the response.
+"""
+function _predictor_names(model)
+    predictors = _get_model_formula_variables(model)
+    response = try
+        Set{Symbol}(StatsModels.termvars(StatsModels.formula(model).lhs))
+    catch
+        Set{Symbol}()
+    end
+    return sort!(collect(setdiff(predictors, response)))
+end
+
+"""
+    _nonpredictor_vars(model, vars) -> Vector{Symbol}
+
+The entries of `vars` that are not predictors of `model` (typos, unused columns, the response).
+"""
+function _nonpredictor_vars(model, vars)
+    predictors = Set(_predictor_names(model))
+    return [Symbol(v) for v in vars if !(Symbol(v) in predictors)]
+end
+
+"""
+    _validate_group_columns_complete(groups, data_nt)
+
+Reject a grouping variable that contains `missing`. Group membership is decided by comparing
+values, which is undefined for `missing`; failing here gives a clear message instead of a
+`TypeError` from deep inside context construction.
+"""
+function _validate_group_columns_complete(groups, data_nt)
+    for var in _extract_group_variables(groups)
+        haskey(data_nt, var) || continue
+        if any(ismissing, data_nt[var])
+            throw(ArgumentError(
+                "Grouping variable '$(var)' contains missing values, so group membership is " *
+                "undefined for those rows. Drop them first, e.g. " *
+                "dropmissing(data, $(repr(var))), or recode them to an explicit level."
+            ))
+        end
+    end
+end
+
+"""
+    _validate_no_duplicate_group_vars(groups)
+
+Reject a variable that appears more than once in `groups`. Each group spec writes its own
+value under the variable's name, so a repeat either duplicates every row or silently
+overwrites the earlier spec.
+"""
+function _validate_no_duplicate_group_vars(groups)
+    (pinned, binned) = _classify_group_variables(groups; dedup=false)
+    all_vars = vcat(pinned, binned)
+    dups = unique(v for v in all_vars if count(==(v), all_vars) > 1)
+    if !isempty(dups)
+        throw(ArgumentError(
+            "Grouping variable(s) $(join(dups, ", ")) appear more than once in 'groups'. " *
+            "List each variable once, e.g. groups=[:g, (:x, 4)]."
+        ))
     end
 end
 
@@ -549,6 +640,7 @@ end
 Validate the unified groups parameter for population margins.
 """
 function _validate_groups_parameter(groups)
+    _validate_no_duplicate_group_vars(groups)
     # Simple categorical grouping: :education or [:region, :gender]
     if groups isa Symbol 
         return
@@ -714,23 +806,39 @@ function _validate_weights_parameter(weights, data)
         if !Tables.columnaccess(data) || !haskey(Tables.columntable(data), weights)
             throw(ArgumentError("weights column :$weights not found in data"))
         end
+        # A column gets the same value checks as a vector: negative, NaN, Inf, missing or
+        # all-zero weights otherwise flow into different normalizers and skip rules on
+        # different code paths and give silently different answers.
+        _check_weight_values(Tables.getcolumn(Tables.columns(data), weights), "weights column :$weights")
     elseif weights isa AbstractVector
         # Check that weights vector has right length
         n_data = Tables.rowaccess(data) ? length(Tables.rows(data)) : length(first(Tables.columns(data)))
         if length(weights) != n_data
             throw(ArgumentError("weights vector length ($(length(weights))) must match number of observations ($n_data)"))
         end
-        
-        _validate_weight_values(weights)
+        _check_weight_values(weights, "weights vector")
     else
         throw(ArgumentError("weights must be :model, :none, a Symbol (column name) or a Vector{<:Real}"))
     end
 end
 
-# Weights must be non-negative with at least one positive
-function _validate_weight_values(weights)
-    all(w >= 0 for w in weights) || throw(ArgumentError("all weights must be non-negative"))
-    all(w == 0 for w in weights) && throw(ArgumentError("at least some weights must be positive"))
+# Weights must be real, finite, non-negative, and not all zero.
+function _check_weight_values(w, label)
+    if any(ismissing, w)
+        throw(ArgumentError("$label contains missing values; drop those rows or give them weight 0"))
+    end
+    if !(eltype(w) <: Real) && !all(x -> x isa Real, w)
+        throw(ArgumentError("$label must be numeric, got element type $(eltype(w))"))
+    end
+    if !all(isfinite, w)
+        throw(ArgumentError("$label contains NaN or Inf"))
+    end
+    if !all(x -> x >= 0, w)
+        throw(ArgumentError("all weights must be non-negative ($label has negative values)"))
+    end
+    if all(iszero, w)
+        throw(ArgumentError("at least some weights must be positive ($label is all zero)"))
+    end
     return nothing
 end
 

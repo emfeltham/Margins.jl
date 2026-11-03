@@ -62,7 +62,7 @@ function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data)
             "The model has $(length(w)) estimation weights but the data has $n rows, so the weights cannot be " *
             "matched to rows (the fit probably dropped rows with missing values). Pass the weights for these " *
             "rows explicitly with weights=<column or vector>, or weights=:none for an unweighted average."))
-        _validate_weight_values(w)
+        _check_weight_values(w, "model weights")
         return (w, :model, nothing)
     end
     _validate_weights_parameter(weights, data)

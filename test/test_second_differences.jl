@@ -24,7 +24,7 @@ using Random
            0.4 .* df.treated .+ 0.15 .* df.x .* df.treated .+ randn(n) .* 0.5
 
     # Model WITH interaction term to get non-zero second differences
-    model = lm(@formula(y ~ x * treated + z), df)
+    model = lm(@formula(y ~ x * treated + z + education + age), df)
     Σ = vcov(model)
 
     @testset "Binary Modifier (2 levels)" begin
@@ -139,7 +139,7 @@ end
     )
     df.y = 0.5 .+ 0.3 .* df.x .+ 0.2 .* df.z .+ randn(n) .* 0.3
 
-    model = lm(@formula(y ~ x + z), df)
+    model = lm(@formula(y ~ x + z + group), df)
     Σ = vcov(model)
 
     @testset "Error: insufficient modifier levels" begin
@@ -319,7 +319,7 @@ end
     df.y = 1.0 .+ 0.5 .* df.x .+ 0.3 .* df.treated .+
            0.2 .* df.x .* df.treated .+ randn(n) .* 0.4
 
-    model = lm(@formula(y ~ x * treated), df)
+    model = lm(@formula(y ~ x * treated + education + age), df)
     Σ = vcov(model)
 
     @testset "Wrapper routes to pairwise for continuous focal" begin
@@ -383,7 +383,7 @@ end
                0.05 .* df.x3 .* df.treated .+
                randn(n) .* 0.5
 
-        model = lm(@formula(y ~ (x1 + x2 + x3) * treated), df)
+        model = lm(@formula(y ~ (x1 + x2 + x3) * treated + education + age), df)
         Σ = vcov(model)
 
         @testset "Multiple Variables - Binary Modifier" begin

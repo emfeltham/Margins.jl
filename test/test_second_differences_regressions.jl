@@ -45,9 +45,9 @@ using Random
     end
 
     @testset "two non-0/1 numeric levels under :auto warn; explicit type does not" begin
-        b = population_margins(model, df; vars=:x, scenarios=(w=[0.0, 10.0],), type=:effects)
-        @test_logs (:warn, r"treated as :binary") Margins._second_differences_pairwise(b, :x, :w, Σ)
-        @test_logs Margins._second_differences_pairwise(b, :x, :w, Σ; modifier_type=:continuous)
+        b = population_margins(model, df; vars=:x, scenarios=(z=[0.0, 10.0],), type=:effects)
+        @test_logs (:warn, r"treated as :binary") Margins._second_differences_pairwise(b, :x, :z, Σ)
+        @test_logs Margins._second_differences_pairwise(b, :x, :z, Σ; modifier_type=:continuous)
         c = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
         @test_logs Margins._second_differences_pairwise(c, :x, :m, Σ)
     end

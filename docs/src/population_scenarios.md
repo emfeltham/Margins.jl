@@ -288,7 +288,7 @@ Key properties:
 
 - Group subsets are determined first (categorical crosses, quantile bins, thresholds).
 - Scenario evaluation occurs within each subset using the same overrides.
-- Large combination protection prevents explosion; invalid combinations error (error-first policy).
+- Large combination protection prevents explosion: more than 250 scenario × group combinations raises an error (error-first policy), since each combination is a full pass over the data.
 
 ## Weights
 
