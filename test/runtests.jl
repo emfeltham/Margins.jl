@@ -109,4 +109,7 @@ end
     include("validation/test_engine_cache_bound.jl")
     include("validation/test_concurrent_calls.jl")
     include("validation/test_profile_categorical_contrasts.jl")
+    # Step 0 of the R6/R7 refactor: independent oracle and golden-snapshot equivalence
+    include("validation/test_feature_matrix_oracle.jl")
+    include("validation/test_golden_equivalence.jl")
 end

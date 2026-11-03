@@ -1,306 +1,59 @@
-"""
-Golden Reference Generation for Margins Migration
+# test/support/generate_golden_references.jl
+#
+# Golden snapshot for the R6/R7 refactor (Margins 3.0, step 0 of R6_R7_DESIGN.md).
+#
+# Runs the fixed, deterministic set of Margins calls defined in golden_cases.jl — the
+# feature matrix {population, groups (categorical, binned), scenarios (continuous,
+# categorical), profile (means_grid, cartesian_grid)} × {:response, :link} × {no weights,
+# positive weights, weights with zeros} × {4 measures} × {:ad, :fd} × 7 links, plus the six
+# benchmark operations on a mid-size synthetic logit model — and writes
+#
+#   test/support/golden/margins_golden.csv           case_id, operation, key, estimate, se
+#   test/support/golden/margins_golden_versions.txt  versions the snapshot was made with
+#
+# test/validation/test_golden_equivalence.jl reruns the calls and requires a relative
+# difference ≤ 1e-12 on every estimate and SE.
+#
+# Regenerate ONLY from code whose results are trusted (before a refactor step, never to make
+# a failing equivalence test pass), with an environment in which Margins and its test
+# dependencies are available, e.g.
+#
+#   julia --check-bounds=yes \
+#         --project=<env with Margins dev'd, CSV, GLM, DataFrames, CategoricalArrays> \
+#         test/support/generate_golden_references.jl
+#
+# `--check-bounds=yes` matches `Pkg.test` (which forces it); bounds checking changes SIMD
+# summation order, so a snapshot made in the other mode differs at the ulp level and the
+# equivalence test would skip its value comparison (see MarginsGolden.fingerprint).
+#
+# (This replaces an older JLD2-based script written for the FormulaCompiler-primitives
+# migration, which activated a hard-coded project path.)
 
-This script generates reference outputs from the CURRENT Margins.jl implementation
-before migrating to FormulaCompiler primitives. These golden references will be
-used to validate correctness after the migration.
-
-Run this BEFORE making any changes to the Margins.jl codebase.
-
-Usage:
-    julia --project=/Users/emf/.julia/dev/Margins test/support/generate_golden_references.jl
-"""
-
-using Pkg
-Pkg.activate("/Users/emf/.julia/dev/Margins")
-
-using Test
-using Random
-using DataFrames, CategoricalArrays, GLM
+using CSV, DataFrames, Printf
 using Margins
-using JLD2
-using Statistics
 
-println("="^80)
-println("GOLDEN REFERENCE GENERATION")
-println("="^80)
-println()
-println("This script generates reference outputs from the CURRENT implementation")
-println("Run BEFORE migrating to FormulaCompiler primitives")
-println()
+include(joinpath(@__DIR__, "golden_cases.jl"))
+using .MarginsGolden
 
-# Create fixtures directory
-fixtures_dir = joinpath(@__DIR__, "fixtures")
-mkpath(fixtures_dir)
+const GOLDEN_DIR = joinpath(@__DIR__, "golden")
+mkpath(GOLDEN_DIR)
 
-# Set seed for reproducibility
-Random.seed!(42)
+t0 = time()
+Margins.clear_engine_cache!()
+golden = MarginsGolden.run_all()
+elapsed = time() - t0
 
-#=============================================================================
-Test Case 1: Simple Continuous Effects - OLS
-=============================================================================#
-println("Test 1: OLS - Simple continuous effects")
+@assert all(isfinite, golden.estimate) && all(isfinite, golden.se)
+CSV.write(joinpath(GOLDEN_DIR, "margins_golden.csv"), golden)
 
-n = 1000
-df1 = DataFrame(
-    y = randn(n),
-    x1 = randn(n),
-    x2 = randn(n),
-    x3 = randn(n)
-)
+open(joinpath(GOLDEN_DIR, "margins_golden_versions.txt"), "w") do io
+    println(io, "fingerprint: ", MarginsGolden.fingerprint())
+    println(io, "julia: ", VERSION)
+    println(io, "Margins: ", pkgversion(Margins))
+    println(io, "FormulaCompiler: ", pkgversion(Margins.FormulaCompiler))
+    fd = Base.root_module(Base.PkgId(Base.UUID("f6369f11-7733-5829-9624-2563aa707210"), "ForwardDiff"))
+    println(io, "ForwardDiff: ", pkgversion(fd))
+end
 
-model1 = lm(@formula(y ~ x1 + x2 + x3), df1)
-
-# Linear scale (identity link)
-result1_linear = population_margins(model1, df1; type=:effects, vars=[:x1, :x2], scale=:link)
-
-jldsave(joinpath(fixtures_dir, "golden_ols_simple.jld2");
-    estimates = result1_linear.estimates,
-    standard_errors = result1_linear.standard_errors,
-    vcov = result1_linear.vcov,
-    variables = result1_linear.variables
-)
-
-println("  ✓ Saved: golden_ols_simple.jld2")
-
-#=============================================================================
-Test Case 2: Continuous Effects with Interactions - OLS
-=============================================================================#
-println("Test 2: OLS - Interactions")
-
-df2 = DataFrame(
-    y = randn(n),
-    x1 = randn(n),
-    x2 = randn(n),
-    x3 = randn(n)
-)
-
-model2 = lm(@formula(y ~ x1 * x2 + x3), df2)
-
-result2_linear = population_margins(model2, df2; type=:effects, vars=[:x1, :x2], scale=:link)
-
-jldsave(joinpath(fixtures_dir, "golden_ols_interactions.jld2");
-    estimates = result2_linear.estimates,
-    standard_errors = result2_linear.standard_errors,
-    vcov = result2_linear.vcov,
-    variables = result2_linear.variables
-)
-
-println("  ✓ Saved: golden_ols_interactions.jld2")
-
-#=============================================================================
-Test Case 3: Logistic Regression - Link and Response Scales
-=============================================================================#
-println("Test 3: Logit - Link and response scales")
-
-df3 = DataFrame(
-    y = rand(Bool, n),
-    x1 = randn(n),
-    x2 = randn(n),
-    x3 = randn(n)
-)
-
-model3 = glm(@formula(y ~ x1 + x2 + x3), df3, Binomial(), LogitLink())
-
-result3_link = population_margins(model3, df3; type=:effects, vars=[:x1, :x2, :x3], scale=:link)
-result3_response = population_margins(model3, df3; type=:effects, vars=[:x1, :x2, :x3], scale=:response)
-
-jldsave(joinpath(fixtures_dir, "golden_logit_scales.jld2");
-    estimates_link = result3_link.estimates,
-    se_link = result3_link.standard_errors,
-    vcov_link = result3_link.vcov,
-    estimates_response = result3_response.estimates,
-    se_response = result3_response.standard_errors,
-    vcov_response = result3_response.vcov,
-    variables = result3_link.variables
-)
-
-println("  ✓ Saved: golden_logit_scales.jld2")
-
-#=============================================================================
-Test Case 4: Logistic Regression with Interactions
-=============================================================================#
-println("Test 4: Logit - Interactions")
-
-df4 = DataFrame(
-    y = rand(Bool, n),
-    x1 = randn(n),
-    x2 = randn(n),
-    z = randn(n)
-)
-
-model4 = glm(@formula(y ~ x1 * x2 + z), df4, Binomial(), LogitLink())
-
-result4_link = population_margins(model4, df4; type=:effects, vars=[:x1, :x2], scale=:link)
-result4_response = population_margins(model4, df4; type=:effects, vars=[:x1, :x2], scale=:response)
-
-jldsave(joinpath(fixtures_dir, "golden_logit_interactions.jld2");
-    estimates_link = result4_link.estimates,
-    se_link = result4_link.standard_errors,
-    vcov_link = result4_link.vcov,
-    estimates_response = result4_response.estimates,
-    se_response = result4_response.standard_errors,
-    vcov_response = result4_response.vcov,
-    variables = result4_link.variables
-)
-
-println("  ✓ Saved: golden_logit_interactions.jld2")
-
-#=============================================================================
-Test Case 5: Probit Model
-=============================================================================#
-println("Test 5: Probit - Link and response scales")
-
-df5 = DataFrame(
-    y = rand(Bool, n),
-    x1 = randn(n),
-    x2 = randn(n)
-)
-
-model5 = glm(@formula(y ~ x1 + x2), df5, Binomial(), ProbitLink())
-
-result5_link = population_margins(model5, df5; type=:effects, vars=[:x1, :x2], scale=:link)
-result5_response = population_margins(model5, df5; type=:effects, vars=[:x1, :x2], scale=:response)
-
-jldsave(joinpath(fixtures_dir, "golden_probit.jld2");
-    estimates_link = result5_link.estimates,
-    se_link = result5_link.standard_errors,
-    vcov_link = result5_link.vcov,
-    estimates_response = result5_response.estimates,
-    se_response = result5_response.standard_errors,
-    vcov_response = result5_response.vcov,
-    variables = result5_link.variables
-)
-
-println("  ✓ Saved: golden_probit.jld2")
-
-#=============================================================================
-Test Case 6: Weighted Regression
-=============================================================================#
-println("Test 6: OLS - Weighted regression")
-
-df6 = DataFrame(
-    y = randn(n),
-    x1 = randn(n),
-    x2 = randn(n),
-    wts = abs.(randn(n)) .+ 0.1
-)
-
-model6 = lm(@formula(y ~ x1 + x2), df6, weights=df6.wts)
-
-result6 = population_margins(model6, df6; type=:effects, vars=[:x1, :x2], scale=:link)
-
-jldsave(joinpath(fixtures_dir, "golden_weighted.jld2");
-    estimates = result6.estimates,
-    standard_errors = result6.standard_errors,
-    vcov = result6.vcov,
-    variables = result6.variables
-)
-
-println("  ✓ Saved: golden_weighted.jld2")
-
-#=============================================================================
-Test Case 7: Single Variable (edge case)
-=============================================================================#
-println("Test 7: Single variable edge case")
-
-df7 = DataFrame(
-    y = randn(n),
-    x = randn(n),
-    z = randn(n)
-)
-
-model7 = lm(@formula(y ~ x + z), df7)
-
-result7 = population_margins(model7, df7; type=:effects, vars=[:x], scale=:link)
-
-jldsave(joinpath(fixtures_dir, "golden_single_var.jld2");
-    estimates = result7.estimates,
-    standard_errors = result7.standard_errors,
-    vcov = result7.vcov,
-    variables = result7.variables
-)
-
-println("  ✓ Saved: golden_single_var.jld2")
-
-#=============================================================================
-Test Case 8: Complex Formula with Transformations
-=============================================================================#
-println("Test 8: Complex formula with transformations")
-
-df8 = DataFrame(
-    y = randn(n),
-    x1 = abs.(randn(n)) .+ 0.1,  # Positive for log
-    x2 = randn(n),
-    x3 = randn(n)
-)
-
-model8 = lm(@formula(y ~ log(x1) + x2 * x3), df8)
-
-result8 = population_margins(model8, df8; type=:effects, vars=[:x1, :x2], scale=:link)
-
-jldsave(joinpath(fixtures_dir, "golden_transformations.jld2");
-    estimates = result8.estimates,
-    standard_errors = result8.standard_errors,
-    vcov = result8.vcov,
-    variables = result8.variables
-)
-
-println("  ✓ Saved: golden_transformations.jld2")
-
-#=============================================================================
-Test Case 9: Large Dataset (performance validation)
-=============================================================================#
-println("Test 9: Large dataset (10K rows)")
-
-n_large = 10000
-df9 = DataFrame(
-    y = rand(Bool, n_large),
-    x1 = randn(n_large),
-    x2 = randn(n_large),
-    x3 = randn(n_large)
-)
-
-model9 = glm(@formula(y ~ x1 * x2 + x3), df9, Binomial(), LogitLink())
-
-result9_link = population_margins(model9, df9; type=:effects, vars=[:x1, :x2, :x3], scale=:link)
-result9_response = population_margins(model9, df9; type=:effects, vars=[:x1, :x2, :x3], scale=:response)
-
-jldsave(joinpath(fixtures_dir, "golden_large_dataset.jld2");
-    estimates_link = result9_link.estimates,
-    se_link = result9_link.standard_errors,
-    vcov_link = result9_link.vcov,
-    estimates_response = result9_response.estimates,
-    se_response = result9_response.standard_errors,
-    vcov_response = result9_response.vcov,
-    variables = result9_link.variables
-)
-
-println("  ✓ Saved: golden_large_dataset.jld2")
-
-#=============================================================================
-Summary
-=============================================================================#
-println()
-println("="^80)
-println("GOLDEN REFERENCE GENERATION COMPLETE")
-println("="^80)
-println()
-println("Generated 9 test cases covering:")
-println("  ✓ OLS (identity link)")
-println("  ✓ Logit (logistic link)")
-println("  ✓ Probit (probit link)")
-println("  ✓ Interactions")
-println("  ✓ Transformations")
-println("  ✓ Weighted regression")
-println("  ✓ Single variable edge case")
-println("  ✓ Large datasets (10K rows)")
-println("  ✓ Both link and response scales")
-println()
-println("Files saved to: $fixtures_dir")
-println()
-println("Next steps:")
-println("  1. Implement FormulaCompiler migration")
-println("  2. Run validation script: test/validate_golden_references.jl")
-println("  3. Verify rtol=1e-12 agreement")
-println()
+@printf("wrote %d rows from %d cases in %.1f s to %s\n", nrow(golden),
+        length(unique(golden.case_id)), elapsed, GOLDEN_DIR)

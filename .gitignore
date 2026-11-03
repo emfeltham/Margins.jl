@@ -37,6 +37,8 @@ docs/.DS_Store
 notes/
 package_manuals/
 *.csv
+# golden snapshot for the refactor-equivalence test (test/validation/test_golden_equivalence.jl)
+!test/support/golden/*.csv
 *.rds
 # development, internal
 CLAUDE.md

@@ -1,0 +1,242 @@
+# test/support/golden_cases.jl
+#
+# Shared definition of the golden-snapshot cases for the R6/R7 refactor (Margins 3.0):
+# a fixed, deterministic set of Margins calls and a schema-robust way of turning each result
+# into (key, estimate, se) rows. Included by
+#   test/support/generate_golden_references.jl   (writes test/support/golden/margins_golden.csv)
+#   test/validation/test_golden_equivalence.jl   (reruns the calls and compares)
+#
+# Data are built WITHOUT an RNG (Weyl sequences), so the snapshot does not depend on the
+# RNG streams of a particular Julia version.
+#
+# Row keys are built from the variable, the contrast and the context values only — never
+# from column positions or from `t_stat` — and context column names are normalized
+# (`over_g` and `at_g` both become `g`), so the keys survive the output-schema changes
+# planned for 3.0 (`t_stat` → `statistic` + `df`, `over_` group prefixes).
+
+module MarginsGolden
+
+using DataFrames, CategoricalArrays, GLM, StatsModels, Statistics
+using Margins
+using FormulaCompiler: CategoricalMixture
+
+const GLEVELS = ["a", "b", "c"]
+const MEASURES = (:effect, :elasticity, :semielasticity_dyex, :semielasticity_eydx)
+const CONTINUOUS = (:x, :z)
+const LINKS = ["identity", "logit", "probit", "cloglog", "log", "inverse", "negbin"]
+
+_frac(t) = t - floor(t)
+
+"""Inverse-CDF Poisson draw from a uniform `u`."""
+function _poisson_inv(u, λ)
+    k = 0; p = exp(-λ); c = p
+    while u > c && k < 1000
+        k += 1; p *= λ / k; c += p
+    end
+    return k
+end
+
+"""Deterministic data for one link (same structure as the feature-matrix oracle)."""
+function matrix_data(linkname; n=400)
+    i = 1:n
+    x = 0.5 .+ 2 .* _frac.(i .* 0.6180339887498949 .+ 0.1)
+    z = 2 .* _frac.(i .* 0.7548776662466927 .+ 0.3) .- 1
+    g = categorical(GLEVELS[1 .+ mod.(i .* 7 .+ div.(i, 5), 3)]; levels=GLEVELS)
+    b = _frac.(i .* 0.5698402909980532) .< 0.4
+    h = categorical(["p", "q", "r"][1 .+ mod.(i .* 11 .+ div.(i, 3), 3)]; levels=["p", "q", "r"])
+    w = 0.3 .+ _frac.(i .* 0.4142135623730951)
+    w0 = ifelse.(_frac.(i .* 0.3247179572447460) .< 0.15, 0.0, w)
+    u = _frac.(i .* i .* 0.1234567891234 .+ i .* 0.271828182845)
+    gb = Float64.(g .== "b"); gc = Float64.(g .== "c")
+    s(c0, k) = c0 .+ k .* (0.3 .* x .+ 0.2 .* z .+ 0.15 .* x .* z .+ 0.25 .* gb .- 0.15 .* x .* gc .+ 0.3 .* b)
+    y = if linkname == "identity"
+        s(5.0, 1.0) .+ (u .- 0.5)
+    elseif linkname == "logit"
+        Float64.(u .< 1 ./ (1 .+ exp.(-s(2.0, 1.0))))
+    elseif linkname == "probit"
+        Float64.(u .< GLM.linkinv.(Ref(ProbitLink()), s(1.3, 0.5)))
+    elseif linkname == "cloglog"
+        Float64.(u .< 1 .- exp.(-exp.(s(-1.6, 0.5))))
+    elseif linkname == "log"
+        Float64.(_poisson_inv.(u, exp.(s(1.3, 0.5))))
+    elseif linkname == "inverse"
+        (1 ./ s(0.25, 0.1)) .* (0.5 .+ u)
+    elseif linkname == "negbin"
+        Float64.(_poisson_inv.(u, exp.(s(1.3, 0.5)) .* (0.5 .+ _frac.(i .* 0.913))))
+    end
+    return DataFrame(y=y, x=x, z=z, g=g, b=b, h=h, w=w, w0=w0)
+end
+
+const F = @formula(y ~ x * z + x * g + b)
+
+function fit_matrix_model(linkname, d)
+    linkname == "identity" && return lm(F, d)
+    linkname == "logit"    && return glm(F, d, Binomial(), LogitLink())
+    linkname == "probit"   && return glm(F, d, Binomial(), ProbitLink())
+    linkname == "cloglog"  && return glm(F, d, Binomial(), CloglogLink())
+    linkname == "log"      && return glm(F, d, Poisson(), LogLink())
+    linkname == "inverse"  && return glm(F, d, Gamma(), InverseLink())
+    linkname == "negbin"   && return glm(F, d, NegativeBinomial(2.0), NegativeBinomialLink(2.0))
+    error("unknown link $linkname")
+end
+
+"""Mid-size synthetic model for the six benchmark-style operations."""
+function bench_data(; n=5000)
+    i = 1:n
+    rel_levels = ["family", "friend", "neighbor", "other"]
+    rel_g = ["Catholic", "Protestant", "None"]
+    d = DataFrame(
+        age_h = 20 .+ 50 .* _frac.(i .* 0.6180339887498949),
+        dist_inv = 1 ./ (1 .+ 5 .* _frac.(i .* 0.7548776662466927)),
+        wealth_p = _frac.(i .* 0.5698402909980532) .* 4,
+        wealth_h = _frac.(i .* 0.4142135623730951 .+ 0.2) .* 4,
+        socio = _frac.(i .* 0.3247179572447460) .< 0.45,
+        same_building = _frac.(i .* 0.2360679774997897) .< 0.2,
+        relation = categorical(rel_levels[1 .+ mod.(i .* 5 .+ div.(i, 7), 4)]; levels=rel_levels),
+        religion = categorical(rel_g[1 .+ mod.(i .* 13 .+ div.(i, 11), 3)]; levels=rel_g),
+    )
+    u = _frac.(i .* i .* 0.1234567891234 .+ i .* 0.271828182845)
+    η = -0.5 .+ 0.02 .* (d.age_h .- 45) .+ 0.8 .* d.dist_inv .+ 0.3 .* d.wealth_p .- 0.2 .* d.wealth_h .+
+        0.4 .* d.socio .+ 0.5 .* d.socio .* d.dist_inv .+ 0.3 .* (d.relation .== "family") .-
+        0.2 .* d.same_building .+ 0.1 .* (d.religion .== "None") .+ 0.01 .* d.age_h .* (d.relation .== "friend")
+    d.y = u .< 1 ./ (1 .+ exp.(-η))
+    return d
+end
+
+const FB = @formula(y ~ age_h * relation + dist_inv * socio + wealth_p + wealth_h + same_building + religion)
+
+fit_bench_model(d) = glm(FB, d, Binomial(), LogitLink())
+
+# ---------------------------------------------------------------------------------------
+# Cases
+# ---------------------------------------------------------------------------------------
+
+_vars_for(measure, candidates) = measure === :effect ? candidates : filter(in(CONTINUOUS), candidates)
+
+"""
+Vector of `(case_id, operation, thunk)`; each thunk returns a Margins result. Models are
+fitted once, here. Results must not depend on whether a cached engine is reused, so the
+cases do not clear the engine cache between calls.
+"""
+function cases()
+    out = Tuple{String, String, Function}[]
+    paths = [
+        ("population", (;), [:x, :z, :g, :b]),
+        ("groups=h", (; groups=:h), [:x, :z, :g, :b]),
+        ("groups=(z,3)", (; groups=(:z, 3)), [:x, :g, :b]),
+        ("scenarios z=0.5", (; scenarios=(z=0.5,)), [:x, :g, :b]),
+        ("scenarios g=b", (; scenarios=(g="b",)), [:x, :z, :b]),
+    ]
+    for linkname in LINKS
+        d = matrix_data(linkname)
+        m = fit_matrix_model(linkname, d)
+        for scale in (:response, :link), wcol in (nothing, :w, :w0)
+            wname = isnothing(wcol) ? "none" : string(wcol)
+            wkw = isnothing(wcol) ? (;) : (; weights=wcol)
+            for (pname, pkw, pvars) in paths
+                for measure in MEASURES, backend in (:ad, :fd)
+                    vars = _vars_for(measure, pvars)
+                    push!(out, ("$linkname/$scale/$wname/$pname/$measure/$backend", "population_effects",
+                                () -> population_margins(m, d; type=:effects, vars, scale, measure,
+                                                         backend, pkw..., wkw...)))
+                end
+                push!(out, ("$linkname/$scale/$wname/$pname/predictions", "population_predictions",
+                            () -> population_margins(m, d; type=:predictions, scale, pkw..., wkw...)))
+            end
+        end
+        for scale in (:response, :link)
+            for (gname, gridf) in (("means_grid", () -> means_grid(d)),
+                                   ("cartesian_grid", () -> cartesian_grid(x=[1.0, 2.0], g=["a", "c"])))
+                for measure in MEASURES, backend in (:ad, :fd)
+                    vars = _vars_for(measure, [:x, :z, :g, :b])
+                    push!(out, ("$linkname/$scale/profile:$gname/$measure/$backend", "profile_effects",
+                                () -> profile_margins(m, d, gridf(); type=:effects, vars, scale,
+                                                      measure, backend)))
+                end
+                push!(out, ("$linkname/$scale/profile:$gname/predictions", "profile_predictions",
+                            () -> profile_margins(m, d, gridf(); type=:predictions, scale)))
+            end
+        end
+    end
+
+    # The six benchmark operations (cf. ~/.julia/dev/_wt/review/verify_bench.jl), each on
+    # both backends where a backend applies.
+    db = bench_data()
+    mb = fit_bench_model(db)
+    cg = () -> cartesian_grid(socio=[false, true], dist_inv=[1.0, 1/6], relation=["family"],
+                              religion=["Catholic"], same_building=[false])
+    push!(out, ("bench/APM", "APM", () -> profile_margins(mb, db, cg(); type=:predictions)))
+    push!(out, ("bench/AAP", "AAP", () -> population_margins(mb, db; type=:predictions)))
+    for backend in (:ad, :fd)
+        push!(out, ("bench/MEM/$backend", "MEM", () -> profile_margins(mb, db, cg(); type=:effects, backend)))
+        push!(out, ("bench/AME (all)/$backend", "AME (all)",
+                    () -> population_margins(mb, db; type=:effects, backend)))
+        push!(out, ("bench/AME (age_h)/$backend", "AME (age_h)",
+                    () -> population_margins(mb, db; type=:effects, vars=[:age_h], backend)))
+        push!(out, ("bench/AME (scenario)/$backend", "AME (scenario)",
+                    () -> population_margins(mb, db; type=:effects, vars=[:wealth_p, :wealth_h],
+                                             scenarios=(dist_inv=[1/6],), backend)))
+    end
+    return out
+end
+
+# ---------------------------------------------------------------------------------------
+# Schema-robust row keys
+# ---------------------------------------------------------------------------------------
+
+# Columns that are statistics, not identifiers (current and planned 3.0 names)
+const STAT_COLS = Set(["type", "variable", "contrast", "estimate", "se", "t_stat", "statistic",
+                       "df", "p_value", "ci_lower", "ci_upper", "lower", "upper", "n"])
+
+_normname(c) = replace(replace(String(c), r"^over_" => ""), r"^at_" => "")
+
+# Numbers in keys are rounded to 10 significant digits: profile values such as means_grid
+# means can differ in the last ulp between environments (e.g. Statistics versions), and
+# a key only has to identify the row; the values themselves are compared at 1e-12.
+_fmt(v::Bool) = string(v)
+_fmt(v::Real) = string(round(Float64(v); sigdigits=10))
+_fmt(v::AbstractString) = String(v)
+_fmt(v::CategoricalValue) = string(unwrap(v))
+_fmt(v::CategoricalMixture) = "mix(" * join(["$(_fmt(l)):$(_fmt(w))" for (l, w) in
+                                             sort(collect(zip(v.levels, v.weights)); by=p -> string(p[1]))], ",") * ")"
+_fmt(v) = string(v)
+
+_normcontrast(c) = c in ("dy/dx", "derivative") ? "d" : strip(String(c))
+
+"""DataFrame(case_id, operation, key, estimate, se) for one result."""
+function rows(case_id, operation, result)
+    df = DataFrame(result)
+    ctx = sort([c for c in names(df) if !(c in STAT_COLS)]; by=_normname)
+    keys = map(1:nrow(df)) do k
+        parts = ["$(_normname(c))=$(_fmt(df[k, c]))" for c in ctx]
+        if hasproperty(df, :variable)
+            push!(parts, "var=$(df.variable[k])", "contrast=$(_normcontrast(df.contrast[k]))")
+        end
+        isempty(parts) ? "all" : join(parts, "|")
+    end
+    allunique(keys) || error("duplicate keys in case $case_id: $(keys[findall(k -> count(==(k), keys) > 1, keys)])")
+    return DataFrame(case_id=fill(case_id, nrow(df)), operation=fill(operation, nrow(df)),
+                     key=keys, estimate=Float64.(df.estimate), se=Float64.(df.se))
+end
+
+"""Run every case and return the stacked rows."""
+function run_all()
+    out = DataFrame(case_id=String[], operation=String[], key=String[], estimate=Float64[], se=Float64[])
+    for (cid, op, f) in cases()
+        append!(out, rows(cid, op, f()))
+    end
+    return out
+end
+
+"""
+What the snapshot's bits depend on besides Margins/FormulaCompiler: the versions that
+change the fitted β and the data handling, and the bounds-checking mode. `Pkg.test` runs
+with `--check-bounds=yes`, which disables `@inbounds`/SIMD reductions and so changes
+summation order (e.g. the means in `means_grid`) at the ulp level.
+"""
+function fingerprint()
+    vers = join(["$(nameof(M))=$(pkgversion(M))" for M in (GLM, StatsModels, CategoricalArrays)], ";")
+    return vers * ";check_bounds=" * string(Base.JLOptions().check_bounds)
+end
+
+end # module
