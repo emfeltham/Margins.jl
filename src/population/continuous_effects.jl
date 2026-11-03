@@ -150,7 +150,7 @@ function _process_continuous_variables!(
 end
 
 """
-    _total_weight(rows, weights) -> Float64
+    _total_weight(rows, weights, what="marginal effects") -> Float64
 
 Normalizer for averaging over `rows`: `length(rows)` when unweighted, otherwise the sum of
 the weights of `rows`.
@@ -160,14 +160,14 @@ Such a set of rows (typically a `groups` cell whose observations all have weight
 no weighted average; reporting `0.0 ± 0.0` for it would read as a precisely estimated null.
 Categorical effects and predictions raise the same error for the same situation.
 """
-function _total_weight(rows, weights)
+function _total_weight(rows, weights, what::AbstractString="marginal effects")
     isnothing(weights) && return Float64(length(rows))
     s = 0.0
     @inbounds for row in rows
         w = weights[row]
         w > 0 && (s += w)
     end
-    s > 0 || _throw_zero_weights()
+    s > 0 || _throw_zero_weights(what)
     return s
 end
 

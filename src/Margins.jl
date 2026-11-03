@@ -55,7 +55,8 @@ using FormulaCompiler:
     categorical_levels, categorical_variables,
     get_or_compile_formula,
     mix,
-    _dmu_deta, _d2mu_deta2  # Link function derivatives for marginal_effects_mu!
+    _dmu_deta, _d2mu_deta2,  # Link function derivatives (marginal_effects_mu! test oracle)
+    link_derivatives         # (μ, dμ/dη, d²μ/dη²) for the prediction kernel
 # Import (not using) to allow method extension
 import FormulaCompiler: _get_baseline_level
 using LinearAlgebra: dot, mul!, BLAS
@@ -103,7 +104,6 @@ include("core/validation.jl")
 include("core/margins_validation.jl")
 include("core/typical_values.jl")
 include("computation/scenarios.jl")  # ContrastPair and scenario utilities
-include("computation/marginal_effects.jl")  # Marginal effects computation kernels
 include("computation/predictions.jl")
 include("computation/statistics.jl")
 include("computation/result_formatting.jl")  # Result DataFrame builders

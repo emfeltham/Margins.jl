@@ -94,7 +94,6 @@ Fields:
 - `contrast::Union{ContrastEvaluator, Nothing}`: Categorical contrast evaluator for discrete effects
 - `g_buf::Vector{Float64}`: Usage-optimized buffer for marginal effects results
 - `gβ_accumulator::Vector{Float64}`: Pre-allocated buffer for AME gradient accumulation
-- `η_buf::Vector{Float64}`: Pre-allocated buffer for linear predictor computations
 - `row_buf::Vector{Float64}`: Pre-allocated buffer for model row (design matrix row) computations
 - `contrast_buf::Vector{Float64}`: Pre-allocated buffer for categorical contrast vectors (Phase 4)
 - `contrast_grad_buf::Vector{Float64}`: Pre-allocated buffer for per-row categorical gradients (Phase 4)
@@ -140,7 +139,6 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:Unif
     # Usage-optimized buffers (zero runtime allocation)
     g_buf::Vector{Float64}              # Usage-optimized marginal effects results buffer
     gβ_accumulator::Vector{Float64}     # AME gradient accumulation
-    η_buf::Vector{Float64}              # Linear predictor computation buffer
     row_buf::Vector{Float64}            # Model row (design matrix row) buffer
 
     # Batch operation buffers (for zero-allocation batch marginal effects)
@@ -214,10 +212,9 @@ Construct zero-allocation margins engine with usage-specific optimization and de
   - Type safety: compile-time error if derivative functions are called
 
 # Buffer Management
-Pre-allocates four key buffers with usage-specific optimization:
+Pre-allocates three key buffers with usage-specific optimization:
 - `g_buf`: Usage-optimized for marginal effects results
 - `gβ_accumulator`: For AME gradient accumulation (sized by coefficients)
-- `η_buf`: For linear predictor computations (sized by observations)
 - `row_buf`: For design matrix row computations (sized by model columns)
 
 When buffer size is insufficient, functions allocate additional memory
@@ -323,7 +320,6 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     # Pre-allocate buffers with usage-specific optimization
     n_continuous = length(continuous_vars)
     n_coef = length(compiled)
-    n_obs = length(first(data_nt))
     n_cols = length(compiled)  # Number of columns in design matrix
     
     # Usage-specific g_buf sizing strategy
@@ -348,7 +344,6 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     
     g_buf = Vector{Float64}(undef, g_buf_size)
     gβ_accumulator = Vector{Float64}(undef, n_coef)
-    η_buf = Vector{Float64}(undef, max(n_obs, 1))  # Buffer for linear predictor computations
     row_buf = Vector{Float64}(undef, n_cols)       # Buffer for design matrix rows
 
     # Initialize batch operation buffers
@@ -391,7 +386,7 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     
     # Create engine instance
     engine = MarginsEngine{typeof(_auto_link(model)), U, D, typeof(compiled)}(
-        compiled, de, var_index_map, contrast, g_buf, gβ_accumulator, η_buf, row_buf,
+        compiled, de, var_index_map, contrast, g_buf, gβ_accumulator, row_buf,
         batch_ame_values, batch_gradients, batch_var_indices, deta_dx_buf,
         Vector{Int}(undef, max(n_continuous, 1)),  # cont_var_indices_buf
         g_all_buf, Gβ_all_buf,
@@ -556,7 +551,7 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivati
     if needs_rebuild
         return MarginsEngine{L,U,HasDerivatives,C}(
             engine.compiled, new_de, engine.var_index_map, engine.contrast,
-            engine.g_buf, engine.gβ_accumulator, engine.η_buf, engine.row_buf,
+            engine.g_buf, engine.gβ_accumulator, engine.row_buf,
             engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
             engine.deta_dx_buf, engine.cont_var_indices_buf,
             engine.g_all_buf, engine.Gβ_all_buf,
@@ -608,7 +603,7 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivativ
     if needs_rebuild
         return MarginsEngine{L,U,NoDerivatives,C}(
             engine.compiled, engine.de, engine.var_index_map, engine.contrast,
-            engine.g_buf, engine.gβ_accumulator, engine.η_buf, engine.row_buf,
+            engine.g_buf, engine.gβ_accumulator, engine.row_buf,
             engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
             engine.deta_dx_buf, engine.cont_var_indices_buf,
             engine.g_all_buf, engine.Gβ_all_buf,

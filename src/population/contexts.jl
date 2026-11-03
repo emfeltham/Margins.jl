@@ -587,92 +587,14 @@ function _compute_population_prediction_in_context(
     weights::Union{Vector{Float64}, Nothing}
 ) where L
 
-    # Pre-allocate buffer for model matrix row
-    xrow_buf = Vector{Float64}(undef, length(engine.β))
-
-    if isnothing(weights)
-        # Unweighted case
-        pred_sum = 0.0
-        grad_sum = zeros(Float64, length(engine.β))
-
-        for row in context_indices
-            # Evaluate model matrix row: X[row, :]
-            engine.compiled(xrow_buf, context_data, row)
-
-            # Compute linear predictor: η = Xβ
-            η = dot(xrow_buf, engine.β)
-
-            if scale === :response
-                # Apply link inverse: μ = g⁻¹(η)
-                μ = GLM.linkinv(engine.link, η)
-                pred_sum += μ
-
-                # Gradient: ∂μ/∂β = g'(η) × X
-                g_prime = _dmu_deta(engine.link, η)
-                @inbounds for j in eachindex(engine.β)
-                    grad_sum[j] += g_prime * xrow_buf[j]
-                end
-            else
-                # η scale: prediction is η
-                pred_sum += η
-
-                # Gradient: ∂η/∂β = X
-                grad_sum .+= xrow_buf
-            end
-        end
-
-        # Average over observations
-        n = length(context_indices)
-        pred_val = pred_sum / n
-        gβ_avg = grad_sum ./ n
-
-    else
-        # Weighted case
-        pred_sum = 0.0
-        grad_sum = zeros(Float64, length(engine.β))
-        total_weight = 0.0
-
-        for (i, row) in enumerate(context_indices)
-            w = weights[row]
-            if w > 0
-                # Evaluate model matrix row: X[row, :]
-                engine.compiled(xrow_buf, context_data, row)
-
-                # Compute linear predictor: η = Xβ
-                η = dot(xrow_buf, engine.β)
-
-                if scale === :response
-                    # Apply link inverse: μ = g⁻¹(η)
-                    μ = GLM.linkinv(engine.link, η)
-                    pred_sum += w * μ
-
-                    # Weighted gradient: ∂μ/∂β = g'(η) × X
-                    g_prime = _dmu_deta(engine.link, η)
-                    @inbounds for j in eachindex(engine.β)
-                        grad_sum[j] += w * g_prime * xrow_buf[j]
-                    end
-                else
-                    # η scale: prediction is η
-                    pred_sum += w * η
-
-                    # Weighted gradient: ∂η/∂β = X
-                    @inbounds for j in eachindex(engine.β)
-                        grad_sum[j] += w * xrow_buf[j]
-                    end
-                end
-
-                total_weight += w
-            end
-        end
-
-        if total_weight <= 0
-            _throw_zero_weights("predictions")
-        end
-
-        # Weighted average
-        pred_val = pred_sum / total_weight
-        gβ_avg = grad_sum ./ total_weight
-    end
+    # Weighted averages are normalized by the weight of the context's rows (an error if
+    # every one of them has weight zero)
+    total_weight = _total_weight(context_indices, weights, "predictions")
+    gβ_avg = Vector{Float64}(undef, length(engine.β))
+    pred_val = average_prediction!(
+        gβ_avg, engine.row_buf, engine.compiled, context_data, engine.β,
+        predscale(scale, engine.link), context_indices, weights, total_weight
+    )
 
     # Compute standard error
     se = compute_se_only(gβ_avg, engine.Σ)

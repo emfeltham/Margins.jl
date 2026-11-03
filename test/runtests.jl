@@ -91,6 +91,7 @@ end
 @testset "Computational Primitives" begin
     include("primitives/test_derivatives.jl")
     include("primitives/test_links.jl")
+    include("primitives/test_prediction_kernel.jl")
     include("primitives/test_derivatives_log_profile_regression.jl")
     include("primitives/test_marginal_effects_allocations.jl")
     include("helpers/test_mixture_utilities.jl")

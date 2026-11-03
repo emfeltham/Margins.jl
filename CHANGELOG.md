@@ -76,6 +76,13 @@ The population-elasticity definition above supersedes the ratio-of-means normali
 #### Documentation
 - `docs/src/caching.md`: the pool, check-out/check-in, the bound and `set_engine_cache_capacity!`, the new thread-safety guarantee (replacing "Margins is not thread-safe" and its process-only parallelism advice), the memoized data conversions; removed the "bootstrap 1000 iterations" row and the stale `get_or_build_engine` backward-compatibility section. `docs/src/computational_architecture.md` and `docs/src/population_scenarios.md`: thread-safety notes updated.
 
+### Internal (R6/R7 refactor)
+
+No user-visible change; estimates and SEs agree with the pre-refactor golden snapshot (`test/support/golden/margins_golden.csv`) to relative difference ≤ 1e-12 (AD and backend-free rows) and ≤ 1e-9 (finite-difference rows).
+
+- **Prediction kernel** (`src/computation/predictions.jl`). The scale is a type, `PredScale` (`LinkScale()` / `ResponseScale(link)`, from `predscale(scale, link)`, resolved once before a function barrier); `yhat`/`yhat2` return ŷ and its first (and second) derivative in η, the latter from FormulaCompiler's `link_derivatives`. `predict_row!`, `average_prediction!` and `predict_rows!` serve every prediction path. `compute_linear_predictor` (unused) and `src/computation/marginal_effects.jl` are deleted. Tests: `test/primitives/test_prediction_kernel.jl`.
+- **Predictions use the kernel.** The population AAP (`_population_predictions`), the AAP within `scenarios`/`groups` contexts (`_compute_population_prediction_in_context`) and the profile APM (`_profile_predictions`) call `average_prediction!` / `predict_rows!`, replacing eight hand-copied scale × weights loop bodies and `compute_predictions_batch!`. The dead per-row stores into the engine's `η_buf`, and the `η_buf` field itself (an n-length buffer per engine), are removed, which cuts about 8n bytes from every engine build (0.4 MB at n = 50,000).
+
 ## v2.2.0 — 2026-10
 
 ### Dependencies

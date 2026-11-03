@@ -563,16 +563,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     n_profiles = nrow(reference_grid)
     n_params = length(engine.β)
     
-    # Reuse η_buf for predictions if possible (performance optimization)
-    # NOTE: Buffer fallback is intentional and harmless - engines are often created with
-    # minimal buffers (size=1) for flexibility, and gracefully allocate when needed.
-    # This is working as designed, not an error.
-    if length(engine.η_buf) >= n_profiles
-        predictions = view(engine.η_buf, 1:n_profiles)
-    else
-        @info "Buffer allocation fallback: η_buf too small for $n_profiles profiles (size=$(length(engine.η_buf)))"
-        predictions = Vector{Float64}(undef, n_profiles)
-    end
+    predictions = Vector{Float64}(undef, n_profiles)
     G = zeros(n_profiles, n_params)  # One row per profile
     
     # Compile with reference grid (like effects rework)
@@ -586,8 +577,9 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     # Single compilation with complete reference grid (using cache for performance)
     refgrid_compiled = _private_compiled(engine.model, data_nt)
 
-    # Single pass over profiles via helper that takes only concrete arguments
-    _compute_profile_predictions!(predictions, G, refgrid_compiled, engine, data_nt, scale)
+    # Prediction and its gradient at each grid row (prediction kernel)
+    predict_rows!(predictions, G, engine.row_buf, refgrid_compiled, data_nt, engine.β,
+                  predscale(scale, engine.link), 1:n_profiles)
     
     # Safely use g_buf for SE computation if large enough (performance optimization)
     # NOTE: Buffer fallback is intentional and harmless - engines are often created with
@@ -605,9 +597,9 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     
     # Create results DataFrame with profile information (no variable/contrast for predictions)
     results = DataFrame()
-    # Copies: `predictions`/`se_vals` may be views of the engine's buffers, which the
-    # next call on this engine overwrites
-    results.estimate = collect(predictions)
+    # Copy: `se_vals` may be a view of the engine's g_buf, which the next call on this
+    # engine overwrites
+    results.estimate = predictions
     results.se = collect(se_vals)
     results.t_stat = predictions ./ se_vals
     results.p_value = 2 .* ccdf.(Normal(), abs.(predictions ./ se_vals))
@@ -619,23 +611,6 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     
     return results, G
 end
-
-function _compute_profile_predictions!(
-    predictions::AbstractVector{<:Float64},
-    G::AbstractMatrix{<:Float64},
-    compiled,
-    engine::MarginsEngine,
-    data_nt::NamedTuple,
-    scale::Symbol
-)
-    # Extract engine fields once for cleaner code
-    (; row_buf, β, link) = engine
-    
-    # Use centralized batch prediction computation (zero allocation)
-    compute_predictions_batch!(predictions, G, compiled, data_nt, β, link, scale, row_buf)
-    return nothing
-end
-
 
 """
     _convert_profile_terms_to_strings(df::DataFrame)
