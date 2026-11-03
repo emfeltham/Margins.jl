@@ -87,7 +87,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                 context_de = derivativeevaluator(backend, engine.compiled, context_data, continuous_vars_to_compute)
                 cont_results, cont_gradients = _compute_all_continuous_context_effects_batch(
                     engine, context_data, context_indices, continuous_vars_to_compute,
-                    scale, weights, context_de, measure
+                    scale, weights, context_de, _measure_type(measure)
                 )
 
                 # Add context identifiers to continuous results
@@ -366,8 +366,8 @@ once per row and extract all requested variables.
   pass a per-context subset — the accumulation loops and every measure helper index it
   as `weights[row]`.
 - `context_de`: Pre-built derivative evaluator for all continuous variables
-- `measure::Symbol`: Econometric measure (`:effect`, `:elasticity`,
-  `:semielasticity_dyex`, `:semielasticity_eydx`)
+- `measure::Measure`: Econometric measure (`_measure_type(:effect)`, ...; passed through the
+  dynamic call on `context_de`, so only that measure's kernel is compiled)
 
 # Returns
 - `(results_df, gradients_matrix)`: Combined results and gradients for ALL continuous variables
@@ -391,7 +391,7 @@ function _compute_all_continuous_context_effects_batch(
     scale::Symbol,
     weights::Union{Vector{Float64}, Nothing},
     context_de,
-    measure::Symbol=:effect
+    measure::Measure=Effect()
 ) where L
 
     n_vars = length(continuous_vars_to_compute)
@@ -402,11 +402,11 @@ function _compute_all_continuous_context_effects_batch(
     batch_ame_values = zeros(Float64, n_vars)
     batch_gradients = zeros(Float64, n_vars, n_params)
 
-    # Build variable index mapping (which column in context_de.vars for each requested var)
+    # Build variable index mapping (which column of derivative_variables(context_de) for each requested var)
     var_indices = Vector{Int}(undef, n_vars)
     for i in 1:n_vars
         var = continuous_vars_to_compute[i]
-        idx = findfirst(==(var), context_de.vars)
+        idx = findfirst(==(var), derivative_variables(context_de))
         if isnothing(idx)
             error("Variable $var not found in derivative evaluator variables")
         end
@@ -420,11 +420,10 @@ function _compute_all_continuous_context_effects_batch(
     # no-context path uses. Elasticity measures average their unit-level quantity over this
     # context's rows, with scenario overrides applied (`context_data`).
     ws = MEWorkspace(context_de, n_vars)
-    xcols = measure === :effect ? () :
-            Tuple(getproperty(context_data, v) for v in continuous_vars_to_compute)
-    _accumulate_measure!(batch_ame_values, batch_gradients, ws, context_de, engine.β,
-                         predscale(scale, engine.link), measure, var_indices, xcols,
-                         context_indices, weights, total_weight)
+    xcols = _uses_x(measure) ? _float_columns(context_data, continuous_vars_to_compute) : ()
+    accumulate_continuous!(batch_ame_values, batch_gradients, ws, context_de, engine.β,
+                           predscale(scale, engine.link), measure, var_indices, xcols,
+                           context_indices, weights, total_weight)
 
     # Build results DataFrame and gradients matrix
     results = DataFrame(

@@ -168,11 +168,13 @@ function delta_method_se(
     link=nothing
 )
     # Hot path: let method dispatch handle unsupported links naturally
-    # Compute parameter gradient (reuses evaluator's buffer)
-    contrast_gradient!(evaluator.gradient_buffer, evaluator, row, var, from, to, β, link)
+    # Compute parameter gradient into the evaluator's endpoint buffer, free scratch here:
+    # FC writes it only in contrast_modelrow! (not in contrast_gradient!)
+    ∇β = first(contrast_endpoints(evaluator))
+    contrast_gradient!(∇β, evaluator, row, var, from, to, β, link)
 
     # Delta method variance: ∇β' Σ ∇β
-    variance = dot(evaluator.gradient_buffer, vcov, evaluator.gradient_buffer)
+    variance = dot(∇β, vcov, ∇β)
 
     return sqrt(max(0.0, variance))  # Ensure non-negative due to numerical precision
 end

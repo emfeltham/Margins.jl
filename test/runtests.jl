@@ -12,7 +12,7 @@ using FixedEffectModels
 using RDatasets
 using Distributions
 
-# Clear engine cache to ensure fresh engines (prevents stale cache issues)
+# Start from an empty FormulaCompiler compiled-formula cache (Margins keeps no cache of its own)
 Margins.clear_engine_cache!()
 
 # Load testing utilities centrally to prevent method definition warnings
@@ -57,8 +57,8 @@ end
     include("regression/test_negbin_link_derivative.jl")
     include("regression/test_integer_coded_categorical.jl")
     include("regression/test_profile_measure_quotient_rule.jl")
-    include("regression/test_data_prep_memo.jl")
-    include("regression/test_int_column_engine_cache.jl")
+    include("regression/test_int_column_conversion.jl")
+    include("regression/test_stale_results.jl")
     include("regression/test_hierarchical_partial_typical.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
@@ -105,6 +105,7 @@ end
     include("primitives/test_derivatives_log_profile_regression.jl")
     include("primitives/test_marginal_effects_allocations.jl")
     include("helpers/test_mixture_utilities.jl")
+    include("primitives/test_formulacompiler_public_api.jl")  # no FC internals; baseline from contrasts
 end
 
 @testset "Validation Tests" begin
@@ -117,8 +118,8 @@ end
     include("validation/test_measure_contexts.jl")
     include("validation/test_elasticity_unit_definitions.jl")
     include("validation/test_second_differences_r_oracle.jl")
-    include("validation/test_engine_cache.jl")
-    include("validation/test_engine_cache_bound.jl")
+    include("validation/test_engine_data_binding.jl")
+    include("validation/test_no_engine_cache.jl")
     include("validation/test_concurrent_calls.jl")
     include("validation/test_profile_categorical_contrasts.jl")
     # Step 0 of the R6/R7 refactor: independent oracle and golden-snapshot equivalence

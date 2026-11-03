@@ -52,10 +52,8 @@ function _convert_numeric_to_float64(data_nt::NamedTuple{names}) where {names}
         col = _narrow_missing_eltype(getproperty(data_nt, name))
         # Convert numeric columns (excluding Bool and CategoricalArray)
         if col isa AbstractVector{<:Real} && !(eltype(col) <: Bool) && !(eltype(col) === Float64)
-            # Need to convert: Int64, Int32, Float32, etc. Memoized per source array (like
-            # the Union{Missing,T} narrowing) so that repeated calls on the same data get the
-            # same Float64 array back and hit the engine cache, which checks column identity.
-            return _memoized_transform(_to_float64_copy, col, _FLOAT64_CONVERSION_TAG)
+            # Need to convert: Int64, Int32, Float32, etc. (a per-call copy)
+            return Float64.(col)
         else
             # Keep as-is: Float64 (already correct), Bool, CategoricalArray, String, etc.
             return col
@@ -86,17 +84,14 @@ do hold `missing` values, and columns without `Missing` in their element type, a
 unchanged.
 
 The narrowed copy is a real `Vector`/`CategoricalArray` because FormulaCompiler's
-derivative and contrast machinery dispatches on those concrete types. To keep repeated
-calls on the same data from rebuilding the cached engine every time (the engine cache
-checks column identity), the copy is memoized per source array (`_NARROWED_COLUMNS`) and
-reused only while the source's contents still equal it, so in-place edits of the source
-are always picked up.
+derivative and contrast machinery dispatches on those concrete types. It is made on every
+call, so in-place edits of the source are always picked up.
 """
 function _narrow_missing_eltype(col::AbstractVector)
     E = eltype(col)
     (E === Missing || !(Missing <: E)) && return col
     any(ismissing, col) && return col
-    return _memoized_narrowing(col)
+    return _narrow_copy(col)
 end
 _narrow_missing_eltype(col) = col
 
@@ -113,101 +108,19 @@ function _narrow_copy(col::AbstractVector)
         convert(CategoricalArrays.CategoricalArray{T}, col) : convert(Vector{T}, col)
 end
 
-# hash(tag, objectid(source)) => (WeakRef(source), transformed copy), shared by the
-# Union{Missing,T} narrowing and the model-categorical conversion. Weak keys: an entry never
-# keeps its SOURCE alive. Entries whose source has been collected are purged on every lookup,
-# so a dead entry's copy is released at the next Margins call; live entries hold at most
-# `_NARROWED_COLUMNS_MAX` copies (the table is emptied when full), each as large as its
-# source column. `clear_engine_cache!()` empties it.
-const _NARROWED_COLUMNS = Dict{UInt, Tuple{WeakRef, AbstractVector}}()
-const _NARROWED_COLUMNS_MAX = 64
-
-_memoized_narrowing(col::AbstractVector) = _memoized_transform(_narrow_copy, col, UInt(0))
-
-# Float64 conversion of non-Float64 numeric columns (`_convert_numeric_to_float64`)
-const _FLOAT64_CONVERSION_TAG = UInt(0x466c6f6174363421)  # distinct from the other tags
-_to_float64_copy(col::AbstractVector) = Float64.(col)
-
 _unwrap_value(x) = x isa CategoricalArrays.CategoricalValue ? CategoricalArrays.unwrap(x) : x
-
-# Staleness check behind a function barrier: the memo stores `AbstractVector`, so this must
-# run on the concrete types (an inline closure over the abstract value allocated O(n)).
-function _same_contents(col::AbstractVector, out::AbstractVector)
-    length(col) == length(out) || return false
-    @inbounds for i in eachindex(col, out)
-        isequal(_unwrap_value(col[i]), _unwrap_value(out[i])) || return false
-    end
-    return true
-end
-function _same_contents(col::AbstractVector, out::CategoricalArrays.CategoricalArray)
-    length(col) == length(out) || return false
-    lv = CategoricalArrays.unwrap.(levels(out))
-    refs = out.refs
-    @inbounds for i in eachindex(col)
-        r = refs[i]
-        r == 0 && return false
-        isequal(_unwrap_value(col[i]), lv[r]) || return false
-    end
-    return true
-end
-
-_purge_dead_memo_entries!() = filter!(kv -> kv.second[1].value !== nothing, _NARROWED_COLUMNS)
-
-# Guards Margins' small process-wide tables — this memo, `VALIDATED_MODELS_CACHE`, and
-# lookups in FormulaCompiler's compiled-formula cache (`_shared_compiled`) — so concurrent
-# Margins calls cannot corrupt them. Held only for lookups and inserts, never while
-# computing. Lock order: `_ENGINE_CACHE_LOCK` may be held when this one is taken, never
-# the reverse.
-const _STATE_LOCK = ReentrantLock()
-
-# Apply `f(col)` once per (source array, `tag`) and reuse the result while the source's
-# contents still equal it (so in-place edits of the source are picked up). Keeps the result's
-# identity stable across calls, which the engine cache's identity check relies on.
-# Thread-safe: the table is touched only under `_STATE_LOCK`; the staleness check and `f`
-# run outside it (a memoized copy is never mutated after it is stored).
-function _memoized_transform(f, col::AbstractVector, tag::UInt)
-    ismutable(col) || return f(col)  # no stable identity to key on
-    key = hash(tag, UInt(objectid(col)))
-    hit = nothing
-    lock(_STATE_LOCK)
-    try
-        _purge_dead_memo_entries!()
-        hit = get(_NARROWED_COLUMNS, key, nothing)
-    finally
-        unlock(_STATE_LOCK)
-    end
-    if !isnothing(hit)
-        (wr, out) = hit
-        wr.value === col && _same_contents(col, out) && return out
-    end
-    out = f(col)
-    lock(_STATE_LOCK)
-    try
-        length(_NARROWED_COLUMNS) >= _NARROWED_COLUMNS_MAX && empty!(_NARROWED_COLUMNS)
-        _NARROWED_COLUMNS[key] = (WeakRef(col), out)
-    finally
-        unlock(_STATE_LOCK)
-    end
-    return out
-end
 
 """
     _shared_compiled(model, data) -> UnifiedCompiled
 
-FormulaCompiler's process-wide cached compiled formula for `(model, data schema)`, looked
-up under `_STATE_LOCK`. The returned object is SHARED: use it only for read-only
-inspection (its `ops`, `continuous_variables`, `categorical_levels`, `length`). Anything
-that evaluates rows must use `_private_compiled`, because evaluation writes into the
-compiled object's scratch buffer.
+FormulaCompiler's process-wide cached compiled formula for `(model, data schema)`. The
+cache is FormulaCompiler's, guarded by its own lock (it compiles outside the lock), so
+concurrent Margins calls need no lock here. The returned object is SHARED: use it only for
+read-only inspection (its `ops`, `continuous_variables`, `categorical_levels`, `length`).
+Anything that evaluates rows must use `_private_compiled`, because evaluation writes into
+the compiled object's scratch buffer.
 """
-function _shared_compiled(model, data)
-    lock(_STATE_LOCK)
-    try
-        return get_or_compile_formula(model, data)
-    finally
-        unlock(_STATE_LOCK)
-    end
-end
+_shared_compiled(model, data) = get_or_compile_formula(model, data)
 
 """
     _private_compiled(model, data) -> UnifiedCompiled
@@ -220,7 +133,7 @@ allocation (the scratch vector) instead of a recompilation.
 """
 _private_compiled(model, data) = _with_private_scratch(_shared_compiled(model, data))
 _with_private_scratch(c::FormulaCompiler.UnifiedCompiled{T, Ops, S, O}) where {T, Ops, S, O} =
-    FormulaCompiler.UnifiedCompiled{T, Ops, S, O}(c.ops)
+    with_private_scratch(c)
 
 """
     _model_variable_names(model) -> Vector{Symbol}
@@ -310,8 +223,7 @@ Convert every column the MODEL treats as categorical but that is not a `Categori
 a `CategoricalArray` whose levels are the model's levels (followed by any other observed
 values). Margins' downstream logic (variable detection, contrast enumeration, `groups`,
 typical values) then sees the model's view of the variable instead of treating the integer
-codes as a continuous variable. The converted column is memoized per source array so
-repeated calls still hit the engine cache.
+codes as a continuous variable. The converted column is a per-call copy.
 """
 function _categorize_model_categoricals(data_nt::NamedTuple, model)
     any(c -> c isa AbstractVector && !(c isa CategoricalArrays.CategoricalArray), values(data_nt)) ||
@@ -326,13 +238,10 @@ function _categorize_model_categoricals(data_nt::NamedTuple, model)
         # used as a continuous regressor (no contrast) is not in `cats` and is untouched.
         col isa CategoricalArrays.CategoricalArray && continue
         col isa AbstractVector || continue
-        replaced[v] = _memoized_transform(col, hash(levs)) do c
-            cc = CategoricalArrays.categorical(c)
-            observed = CategoricalArrays.unwrap.(levels(cc))
-            extra = [x for x in observed if !any(l -> isequal(l, x), levs)]
-            CategoricalArrays.levels!(cc, vcat(convert(Vector{eltype(observed)}, collect(levs)), extra))
-            cc
-        end
+        cc = CategoricalArrays.categorical(col)
+        observed = CategoricalArrays.unwrap.(levels(cc))
+        extra = [x for x in observed if !any(l -> isequal(l, x), levs)]
+        replaced[v] = CategoricalArrays.levels!(cc, vcat(convert(Vector{eltype(observed)}, collect(levs)), extra))
     end
     isempty(replaced) && return data_nt
     return NamedTuple{keys(data_nt)}(map(k -> get(replaced, k, getproperty(data_nt, k)), keys(data_nt)))

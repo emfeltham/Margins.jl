@@ -51,7 +51,6 @@ data_nt = Tables.columntable(df)
 
 engine = Margins.build_engine(
     Margins.PopulationUsage,
-    Margins.HasDerivatives,
     model,
     data_nt,
     [:x, :group],

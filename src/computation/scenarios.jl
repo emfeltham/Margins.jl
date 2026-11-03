@@ -81,7 +81,7 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
             # levels the model knows — e.g. a subset without the reference level. Pairs hold
             # the raw level values; the ContrastEvaluator resolves them by value.
             (model_levels, observed_strs) = _model_contrast_levels(var_col, model, var, data_nt)
-            baseline_level_str = string(_get_baseline_level(model, var, data_nt))
+            baseline_level_str = string(_baseline_level(model, var, data_nt))
             bidx = findfirst(l -> string(l) == baseline_level_str, model_levels)
             isnothing(bidx) && error("Baseline level '$baseline_level_str' is not a level of :$var in the fitted model")
             baseline_level = model_levels[bidx]
@@ -107,7 +107,7 @@ function generate_contrast_pairs(var_col, rows, contrasts::Symbol, model, var::S
             return contrast_pairs
         else
             # For other types (raw strings, etc.), use the data type directly
-            baseline_level = _get_baseline_level(model, var, data_nt)
+            baseline_level = _baseline_level(model, var, data_nt)
             all_levels = Set{T}()
             for row in rows
                 push!(all_levels, var_col[row])

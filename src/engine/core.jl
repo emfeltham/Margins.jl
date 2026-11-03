@@ -11,43 +11,6 @@ See also: [`PopulationUsage`](@ref), [`ProfileUsage`](@ref)
 abstract type MarginsUsage end
 
 """
-    DerivativeSupport
-
-Abstract type for specifying whether a MarginsEngine supports derivative computation.
-Enables compile-time specialization and eliminates Union type overhead.
-
-See also: [`HasDerivatives`](@ref), [`NoDerivatives`](@ref)
-"""
-abstract type DerivativeSupport end
-
-"""
-    HasDerivatives <: DerivativeSupport
-
-Indicates that the MarginsEngine has derivative computation capability.
-Used for engines that need to compute marginal effects for continuous variables.
-
-Provides:
-- `de::AbstractDerivativeEvaluator` field (abstract type)
-- Compile-time dispatch for derivative-based computations
-- Type safety: prevents calling derivative functions on engines without support
-"""
-struct HasDerivatives <: DerivativeSupport end
-
-"""
-    NoDerivatives <: DerivativeSupport
-
-Indicates that the MarginsEngine has no derivative computation capability.
-Used for engines that only handle categorical/boolean variables or predictions.
-
-Provides:
-- No derivative evaluator field
-- Minimal memory footprint
-- Compile-time dispatch for non-derivative computations
-- Type safety: compile-time error if derivative functions are called
-"""
-struct NoDerivatives <: DerivativeSupport end
-
-"""
     PopulationUsage <: MarginsUsage
 
 Usage pattern for population margins (AME, AAP).
@@ -76,22 +39,28 @@ Used by `profile_margins()` function.
 struct ProfileUsage <: MarginsUsage end
 
 """
-    MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport}
+    MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled, E, CE}
 
-Zero-allocation engine for marginal effects computation, optimized for specific usage patterns
-and derivative computation requirements.
+Zero-allocation engine for marginal effects computation, optimized for specific usage patterns.
 
-Built on jl with usage-specific pre-allocated buffers for maximum performance.
+Built on FormulaCompiler with usage-specific pre-allocated buffers. Every field read on a hot
+path has a concrete type, so code that receives an engine is compiled for its exact
+evaluators and makes no dynamic dispatch through them; the one dispatch is at the function
+barrier where an entry point first passes the (runtime-built) engine on.
 
 Type Parameters:
 - `L<:GLM.Link`: GLM link function type for the underlying model
 - `U<:MarginsUsage`: Usage pattern determining buffer sizing strategy
-- `D<:DerivativeSupport`: Derivative computation capability (HasDerivatives or NoDerivatives)
+- `C<:UnifiedCompiled`: Compiled formula type
+- `E<:Union{Nothing, AbstractDerivativeEvaluator}`: Type of `de`; `Nothing` when the engine has
+  no derivative evaluator (no continuous variable requested, profile engines, scenarios/groups)
+- `CE<:Union{Nothing, ContrastEvaluator}`: Type of `contrast`; `Nothing` when the engine has no
+  contrast evaluator (no categorical variable requested, profile engines, scenarios/groups)
 
 Fields:
-- `compiled::UnifiedCompiled`: Pre-compiled FormulaCompiler formula
-- `de::Union{AbstractDerivativeEvaluator, Nothing}`: Derivative evaluator (concrete when D <: HasDerivatives, Nothing when D <: NoDerivatives)
-- `contrast::Union{ContrastEvaluator, Nothing}`: Categorical contrast evaluator for discrete effects
+- `compiled::C`: Pre-compiled FormulaCompiler formula
+- `de::E`: Derivative evaluator over the data rows for the requested continuous variables
+- `contrast::CE`: Categorical contrast evaluator over the data rows for the requested categoricals
 - `g_buf::Vector{Float64}`: Usage-optimized buffer for marginal effects results
 - `gβ_accumulator::Vector{Float64}`: Pre-allocated buffer for AME gradient accumulation
 - `row_buf::Vector{Float64}`: Pre-allocated buffer for model row (design matrix row) computations
@@ -105,34 +74,40 @@ Fields:
 - `vars::Vector{Symbol}`: Variables for analysis
 - `data_nt::NamedTuple`: Reference data for scenarios/refgrids
 
+`model` and `data_nt` stay abstractly typed: they are read once per call or per variable,
+never per row, and parameterizing on them would only multiply compiled specializations.
+
 # Buffer Sizing Strategy
 - `PopulationUsage`: Minimal g_buf (sized for FormulaCompiler continuous variables only)
 - `ProfileUsage`: Larger g_buf (sized for typical profile counts ~100 to avoid allocation fallbacks)
 
-# Derivative Support Strategy
-- `HasDerivatives`: de field contains AbstractDerivativeEvaluator for continuous variable computation
-- `NoDerivatives`: de field is nothing, minimal memory footprint for categorical-only analysis
+# Evaluators
+Only population engines evaluate `de` and `contrast` on the data rows. Profile engines build
+their own evaluators over the reference grid, and the scenarios/groups path builds its own per
+context, so their engines carry neither (`build_engine(...; evaluators=false)`).
 
 # Examples
 ```julia
-# Population margins engine with derivatives (continuous variables)
-engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], vcov)
+# Population margins engine (evaluators for the requested variables)
+engine = build_engine(PopulationUsage, model, data_nt, [:x1, :x2], Σ, :ad)
 
-# Profile margins engine without derivatives (categorical-only)  
-engine = build_engine(ProfileUsage, NoDerivatives, model, data_nt, [:category], vcov)
+# Profile margins engine (no evaluators over the data rows)
+engine = build_engine(ProfileUsage, model, data_nt, [:category], Σ, :ad)
 ```
 """
-struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:UnifiedCompiled}
+struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
+                     E<:Union{Nothing, AbstractDerivativeEvaluator},
+                     CE<:Union{Nothing, ContrastEvaluator}}
     # FormulaCompiler components (pre-compiled)
     compiled::C
-    de::Union{AbstractDerivativeEvaluator, Nothing} # Type-parameterized access via dispatch
+    de::E
 
     # Variable index mapping
-    # Pre-computed mapping from variable Symbol to index in de.vars
+    # Pre-computed mapping from variable Symbol to index in derivative_variables(de)
     # Eliminates O(n×m) linear searches in favor of O(1) hash lookups
     var_index_map::Dict{Symbol, Int}
 
-    contrast::Union{ContrastEvaluator, Nothing} # Categorical contrast evaluator
+    contrast::CE # Categorical contrast evaluator
 
     # Usage-optimized buffers (zero runtime allocation)
     g_buf::Vector{Float64}              # Usage-optimized marginal effects results buffer
@@ -143,6 +118,7 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:Unif
     batch_ame_values::Vector{Float64}   # Averaged marginal effects accumulator
     batch_gradients::Matrix{Float64}    # Parameter gradients accumulator (n_vars × n_params)
     cont_var_indices_buf::Vector{Int}   # Scratch mapping for continuous variable indices
+    xcols_buf::Vector{Vector{Float64}}  # Scratch for the requested variables' data columns (measures)
 
     # Workspace of the continuous-effects accumulator (Jacobian, model row, A/B gradient
     # accumulators) for `de`; empty when there is no population derivative evaluator
@@ -166,20 +142,28 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:Unif
 end
 
 """
-    build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt, vars, vcov) where {U<:MarginsUsage, D<:DerivativeSupport} -> MarginsEngine
+    build_engine(usage::Type{U}, model, data_nt, vars, vcov, backend;
+                 evaluators::Bool = U <: PopulationUsage) where {U<:MarginsUsage} -> MarginsEngine
 
-Construct zero-allocation margins engine with usage-specific optimization and derivative support.
+Construct zero-allocation margins engine with usage-specific optimization.
 
 # Arguments
 - `usage::Type{<:MarginsUsage}`: Usage pattern (PopulationUsage or ProfileUsage)
-- `deriv::Type{<:DerivativeSupport}`: Derivative support (HasDerivatives or NoDerivatives)
 - `model`: Fitted statistical model (GLM.jl, MLJ.jl, etc.)
 - `data_nt::NamedTuple`: Data in columntable format from Tables.jl
 - `vars::Vector{Symbol}`: Variables to analyze for marginal effects
-- `vcov`: Covariance estimator (function, CovarianceMatrices estimator, or a covariance matrix)
+- `vcov`: Covariance matrix Σ (what entry points pass, computed once per call), or an estimator
+  evaluated here (a function of the model or a CovarianceMatrices estimator)
+- `backend::Symbol`: Derivative backend of `de` (`:ad` or `:fd`)
+- `evaluators::Bool`: Build the derivative evaluator `de` (for the requested continuous
+  variables) and the contrast evaluator `contrast` (for the requested categoricals) over the
+  data rows. Default `true` for `PopulationUsage` only: profile engines evaluate on the
+  reference grid with evaluators of their own, and the scenarios/groups path passes `false`
+  because it builds its own per context. Without them `de` and `contrast` are `nothing`.
 
 # Returns
-- `MarginsEngine{L, U, D}`: Pre-compiled engine with usage and derivative support optimization
+- `MarginsEngine{L, U, C, E, CE}`: Pre-compiled engine whose type records the exact
+  evaluator types (`E`, `CE`)
 
 # Usage-Specific Buffer Sizing Strategy
 - **PopulationUsage**: Minimal g_buf sized for FormulaCompiler continuous variables only
@@ -192,17 +176,6 @@ Construct zero-allocation margins engine with usage-specific optimization and de
   - Handles most reference grids without buffer reallocations
   - Perfect for MEM/APM/MER/APR operations across profile grids
 
-# Derivative Support Strategy
-- **HasDerivatives**: Includes AbstractDerivativeEvaluator for continuous variable computation
-  - `de` field contains concrete AbstractDerivativeEvaluator
-  - Enables compile-time dispatch for derivative-based computations
-  - Type safety: can call derivative functions
-
-- **NoDerivatives**: No derivative evaluator, minimal memory footprint
-  - `de` field is nothing
-  - Optimized for categorical/boolean variables only
-  - Type safety: compile-time error if derivative functions are called
-
 # Buffer Management
 Pre-allocates three key buffers with usage-specific optimization:
 - `g_buf`: Usage-optimized for marginal effects results
@@ -214,26 +187,27 @@ to prevent bounds errors while maintaining correctness. An @info message
 is logged when buffer allocation fallback occurs for performance visibility.
 
 # Performance Notes
-- Compilation is expensive (~milliseconds), so cache engines when possible
+- Formula compilation is cached by FormulaCompiler; the rest of a build is cheap, so every
+  Margins call builds its own engine (nothing in it is shared across calls)
 - Usage-specific sizing eliminates major allocation bottlenecks
-- Derivative support specialization eliminates Union type overhead
-- PopulationUsage + HasDerivatives: Optimal for continuous AME
-- ProfileUsage + NoDerivatives: Optimal for categorical-only analysis
+- The engine's type is not inferable from the arguments (it depends on `vars` and
+  `backend`), so callers pass the engine through a function barrier (`_ame_calculate`,
+  `_mem_by_grid_blocks`, ...) and everything after it is specialized on the exact type
 
 # Examples
 ```julia
-# Population margins with derivatives - continuous variables
 data_nt = Tables.columntable(data)
-engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:x1, :x2], GLM.vcov)
+Σ = GLM.vcov(model)
 
-# Profile margins without derivatives - categorical-only
-engine = build_engine(ProfileUsage, NoDerivatives, model, data_nt, [:category], GLM.vcov)
+# Population margins - continuous and categorical variables
+engine = build_engine(PopulationUsage, model, data_nt, [:x1, :category], Σ, :ad)
 
-# Mixed case: profile margins with derivatives
-engine = build_engine(ProfileUsage, HasDerivatives, model, data_nt, [:x1, :category], GLM.vcov)
+# Profile margins (evaluators are built over the reference grid, not here)
+engine = build_engine(ProfileUsage, model, data_nt, [:x1, :category], Σ, :ad)
 ```
 """
-function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov, backend::Symbol) where {U<:MarginsUsage, D<:DerivativeSupport}
+function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov, backend::Symbol;
+                      evaluators::Bool = U <: PopulationUsage) where {U<:MarginsUsage}
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
 
@@ -271,39 +245,20 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
         end
     end
 
-    # Build derivative evaluator based on DerivativeSupport parameter
-    de = if D <: HasDerivatives
-        # HasDerivatives: Build evaluator for REQUESTED continuous variables only
-        if isempty(continuous_vars)
-            nothing
-        else
-            # Use FormulaCompiler's derivativeevaluator (dispatches to :ad or :fd backend).
-            # Profile margins never evaluate engine.de on the data rows (they build their
-            # own evaluator over the reference grid and only check that a derivative
-            # evaluator exists), so bind it to a 1-row slice: the AD backend would otherwise
-            # convert all n rows of every continuous column to Duals (~1 GB at n = 500,000).
-            de_data = U <: ProfileUsage ? map(col -> col[1:min(1, length(col))], data_nt) : data_nt
-            derivativeevaluator(backend, compiled, de_data, continuous_vars)
-        end
-    else  # D <: NoDerivatives
-        # NoDerivatives: No derivative evaluator, minimal memory footprint
-        nothing
-    end
+    # Derivative evaluator over the data rows, for the REQUESTED continuous variables only
+    # (FormulaCompiler's derivativeevaluator dispatches to the :ad or :fd backend)
+    de = (evaluators && !isempty(continuous_vars)) ?
+        derivativeevaluator(backend, compiled, data_nt, continuous_vars) : nothing
 
-    # Build contrast evaluator for categorical variables (Phase 4)
-    contrast = if !isempty(categorical_vars)
-        # Build ContrastEvaluator for categorical effects using FC primitives
-        contrastevaluator(compiled, data_nt, categorical_vars)
-    else
-        # No categorical variables requested
-        nothing
-    end
+    # Contrast evaluator for the requested categorical variables (Phase 4)
+    contrast = (evaluators && !isempty(categorical_vars)) ?
+        contrastevaluator(compiled, data_nt, categorical_vars) : nothing
 
     # Build variable index map
-    # Populates mapping from variable Symbol to index in de.vars
+    # Populates mapping from variable Symbol to index in derivative_variables(de)
     # Eliminates O(n×m) linear searches during marginal effects computation
     var_index_map = if !isnothing(de)
-        Dict{Symbol, Int}(var => i for (i, var) in enumerate(de.vars))
+        Dict{Symbol, Int}(var => i for (i, var) in enumerate(derivative_variables(de)))
     else
         # Empty map if no derivative evaluator
         Dict{Symbol, Int}()
@@ -319,16 +274,10 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
         # PopulationUsage: Minimal g_buf sized only for FormulaCompiler continuous variables
         # Optimizes for minimal memory footprint and zero FormulaCompiler allocation fallbacks
         g_buf_size = max(n_continuous, 1)  # At least size 1 to avoid bounds errors
-
-        # Additional optimization: NoDerivatives engines can use smaller g_buf for PopulationUsage
-        if D <: NoDerivatives
-            # For categorical-only computations, we don't need large g_buf
-            g_buf_size = 1  # Minimal size
-        end
     elseif U <: ProfileUsage
         # ProfileUsage: Larger g_buf sized for typical profile counts (~100)
         # Optimizes for multiple profiles without allocation fallbacks in SE computation
-        # NOTE: ProfileUsage needs this size even for NoDerivatives (predictions use g_buf)
+        # NOTE: ProfileUsage needs this size even without derivatives (predictions use g_buf)
         g_buf_size = max(n_continuous, 100)  # Handle up to 100 profiles without fallback
     else
         error("Unknown MarginsUsage type: $U")
@@ -343,46 +292,49 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     batch_ame_values = Vector{Float64}(undef, max(n_continuous, 1))
     batch_gradients = Matrix{Float64}(undef, max(n_continuous, 1), n_coef)
 
-    # Continuous-effects accumulator workspace (population engines; profile engines build
-    # their own evaluator and workspace over the reference grid)
-    me_ws = (de === nothing || U <: ProfileUsage) ? MEWorkspace() : MEWorkspace(de, n_continuous)
+    # Continuous-effects accumulator workspace for `de` (population engines only)
+    me_ws = de === nothing ? MEWorkspace() : MEWorkspace(de, n_continuous)
 
     # Initialize categorical effects buffers (Phase 4 zero-allocation optimization)
     # These buffers enable zero-allocation categorical AME computation
     contrast_buf = Vector{Float64}(undef, n_coef)        # Contrast vector buffer
 
     
-    # vcov should always be a function or CovarianceMatrices estimator
-    actual_vcov = vcov
-    
-    # Handle both functions (GLM.vcov) and CovarianceMatrices estimators (HC1())
-    if isa(actual_vcov, AbstractMatrix)
-        # A matrix given directly. Copy it: the cache key is a hash of its contents, so the engine
-        # must not alias an array the caller may modify later.
-        covariance_matrix = Float64.(actual_vcov)
-    elseif isa(actual_vcov, Function)
-        covariance_matrix = actual_vcov(model)
-    else
-        # Handle CovarianceMatrices estimators as optional dependency
-        vcov_module = Base.require(Main, :CovarianceMatrices)
-        covariance_matrix = Base.invokelatest(vcov_module.vcov, actual_vcov, model)
-    end
-    
-    # Create engine instance
-    engine = MarginsEngine{typeof(_auto_link(model)), U, D, typeof(compiled)}(
+    # Covariance matrix Σ. Entry points pass the matrix they computed once per call
+    # (`validate_vcov_parameter`); a function or CovarianceMatrices estimator is evaluated
+    # here. Always a fresh copy, never aliasing the caller's array.
+    covariance_matrix = _covariance_matrix(model, vcov)
+
+    # Create engine instance, with the evaluator types as explicit parameters
+    link = _auto_link(model)
+    return MarginsEngine{typeof(link), U, typeof(compiled), typeof(de), typeof(contrast)}(
         compiled, de, var_index_map, contrast, g_buf, gβ_accumulator, row_buf,
         batch_ame_values, batch_gradients,
         Vector{Int}(undef, max(n_continuous, 1)),  # cont_var_indices_buf
+        Vector{Vector{Float64}}(undef, n_continuous),  # xcols_buf
         me_ws,
         contrast_buf,  # Categorical contrast buffer
         copy(continuous_vars), copy(categorical_vars),
-        model, coef(model), covariance_matrix, _auto_link(model), vars, data_nt
+        model, coef(model), covariance_matrix, link, vars, data_nt
     )
+end
 
-    # Fix 4: Verify and repair buffers if needed (root cause prevention)
-    engine = verify_and_repair_engine_buffers!(engine)
+"""
+    clear_engine_cache!()
 
-    return engine
+Clear FormulaCompiler's compiled-formula cache (`FormulaCompiler.clear_compiled_cache!()`).
+
+Margins 3.0 keeps no cache of its own: every call builds its own engine, converts the data
+columns it needs, validates its inputs and evaluates `vcov` afresh, so results always reflect
+the current model (e.g. after a MixedModels `refit!`), data and covariance matrix. The only
+state shared across calls is FormulaCompiler's cache of compiled formulas, one small entry
+per model and column-type signature; this function empties it. Kept, under its 2.x name, so
+existing code (benchmarks that clear caches before every sample) keeps working; ordinary use
+never needs it.
+"""
+function clear_engine_cache!()
+    FormulaCompiler.clear_compiled_cache!()
+    return nothing
 end
 
 """
@@ -478,93 +430,4 @@ function _validate_variables(data_nt::NamedTuple, vars::Vector{Symbol})
             ))
         end
     end
-end
-
-"""
-    verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivatives,C}) where {L,U,C}
-
-Verify and repair engine derivative buffers to ensure sufficient size.
-Function barrier ensures compiler optimization for HasDerivatives engines.
-"""
-function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivatives,C}) where {L,U,C}
-    # Function barrier: compiler knows engine has HasDerivatives
-    required_size = length(engine.β)
-    needs_rebuild = false
-    new_de = engine.de
-    new_contrast_buf = engine.contrast_buf
-
-    # Validate derivative evaluator buffers
-    if !isnothing(engine.de)
-        # Check if current buffers are sufficient using common buffer field
-        current_buffer_size = length(engine.de.xrow_buffer)  # Both AD and FD have this field
-
-        if current_buffer_size < required_size
-            @warn "Engine derivative buffers too small: $current_buffer_size < $required_size. Rebuilding derivative evaluator."
-            needs_rebuild = true
-
-            # Rebuild derivative evaluator with correct size
-            # Detect backend from existing evaluator type
-            backend = engine.de isa FDEvaluator ? :fd : :ad
-            new_de = derivativeevaluator(backend, engine.compiled, engine.data_nt, engine.continuous_vars)
-        end
-    end
-
-    # Validate categorical buffers (Phase 4)
-    if length(engine.contrast_buf) != required_size
-        @warn "Categorical contrast_buf incorrectly sized: $(length(engine.contrast_buf)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_buf = Vector{Float64}(undef, required_size)
-    end
-
-    # Rebuild engine if any buffers were invalid
-    if needs_rebuild
-        return MarginsEngine{L,U,HasDerivatives,C}(
-            engine.compiled, new_de, engine.var_index_map, engine.contrast,
-            engine.g_buf, engine.gβ_accumulator, engine.row_buf,
-            engine.batch_ame_values, engine.batch_gradients,
-            engine.cont_var_indices_buf, engine.me_ws,
-            new_contrast_buf,  # Categorical contrast buffer
-            engine.continuous_vars, engine.categorical_vars,
-            engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt
-        )
-    end
-
-    # Buffers are adequate
-    return engine
-end
-
-"""
-    verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivatives,C}) where {L,U,C}
-
-Verify and repair categorical buffers for engines without derivatives.
-Engines without derivatives can still have categorical variables.
-"""
-function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivatives,C}) where {L,U,C}
-    # No derivative buffers to verify, but validate categorical buffers (Phase 4)
-    required_size = length(engine.β)
-    needs_rebuild = false
-    new_contrast_buf = engine.contrast_buf
-
-    # Validate categorical buffers (Phase 4)
-    if length(engine.contrast_buf) != required_size
-        @warn "Categorical contrast_buf incorrectly sized: $(length(engine.contrast_buf)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_buf = Vector{Float64}(undef, required_size)
-    end
-
-    # Rebuild engine if any buffers were invalid
-    if needs_rebuild
-        return MarginsEngine{L,U,NoDerivatives,C}(
-            engine.compiled, engine.de, engine.var_index_map, engine.contrast,
-            engine.g_buf, engine.gβ_accumulator, engine.row_buf,
-            engine.batch_ame_values, engine.batch_gradients,
-            engine.cont_var_indices_buf, engine.me_ws,
-            new_contrast_buf,  # Categorical contrast buffer
-            engine.continuous_vars, engine.categorical_vars,
-            engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt
-        )
-    end
-
-    # Buffers are adequate
-    return engine
 end

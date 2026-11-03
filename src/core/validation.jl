@@ -197,11 +197,16 @@ function _reject_ci_alpha(ci_alpha)
 end
 
 """
-    validate_vcov_parameter(vcov, model)
+    validate_vcov_parameter(vcov, model) -> Matrix{Float64}
 
-Validate the `vcov` parameter for margins functions.
-A function of the model returning a covariance matrix, a CovarianceMatrices estimator, or a
-covariance matrix itself (square, finite, symmetric, one row per coefficient).
+Validate the `vcov` parameter for margins functions and return the covariance matrix Σ it
+gives for `model`. `vcov` is a function of the model returning a covariance matrix, a
+CovarianceMatrices estimator, or a covariance matrix itself (square, finite, symmetric, one
+row per coefficient).
+
+This is the one place an entry point evaluates `vcov`: the returned Σ (a fresh copy, never
+aliasing the caller's matrix) is passed on to `build_engine`, so a robust or clustered
+estimator is computed once per call.
 
 # Arguments
 - `vcov`: Function that computes covariance matrix from model
@@ -209,18 +214,13 @@ covariance matrix itself (square, finite, symmetric, one row per coefficient).
 
 # Examples
 ```julia
-validate_vcov_parameter(GLM.vcov, model)
-validate_vcov_parameter(CovarianceMatrices.HC1, model)
+Σ = validate_vcov_parameter(GLM.vcov, model)
+Σ = validate_vcov_parameter(CovarianceMatrices.HC1(), model)
 ```
 """
-function validate_vcov_parameter(vcov, model)
-    # Create cache key for this specific vcov + model combination
-    vcov_key = hash((vcov, typeof(model), coef(model)))
-    
-    # Skip expensive validation if we've already validated this combination
-    if _is_validated(vcov_key)
-        return nothing
-    end
+function validate_vcov_parameter(vcov, model)::Matrix{Float64}
+    # Already evaluated (and validated) by an enclosing entry point
+    vcov isa _PrecomputedVcov && return vcov.Σ
 
     # A covariance matrix given directly: check its shape, not the model
     if vcov isa AbstractMatrix
@@ -229,33 +229,55 @@ function validate_vcov_parameter(vcov, model)
             throw(ArgumentError("vcov matrix is $(size(vcov, 1))×$(size(vcov, 2)) but the model has $k coefficients"))
         all(isfinite, vcov) || throw(ArgumentError("vcov matrix contains non-finite values"))
         isapprox(vcov, vcov'; rtol=1e-8, atol=1e-12) || throw(ArgumentError("vcov matrix is not symmetric"))
-        _mark_validated!(vcov_key)
-        return nothing
+        return Matrix{Float64}(vcov)
     end
-    
-    # Test that vcov works with the model
-    try
-        if isa(vcov, Function)
-            # vcov is a function like GLM.vcov
-            vcov_result = vcov(model)
-        else
-            # vcov is likely a CovarianceMatrices estimator like HC1()
-            # Use Base.invokelatest to handle the optional dependency
-            vcov_module = Base.require(Main, :CovarianceMatrices)
-            vcov_result = Base.invokelatest(vcov_module.vcov, vcov, model)
-        end
-        
-        if !isa(vcov_result, AbstractMatrix)
-            throw(ArgumentError("vcov must produce a matrix when applied to the model"))
-        end
+
+    # Evaluate the estimator on the model
+    vcov_result = try
+        _evaluate_vcov(vcov, model)
     catch e
+        # The default estimator failing means the model has no covariance method
+        vcov === GLM.vcov &&
+            throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
         throw(ArgumentError("vcov failed when applied to provided model: $e"))
     end
-    
-    # Cache successful validation
-    _mark_validated!(vcov_key)
-    return nothing
+    vcov_result isa AbstractMatrix ||
+        throw(ArgumentError("vcov failed when applied to provided model: " *
+                            "vcov must produce a matrix when applied to the model"))
+    return Matrix{Float64}(vcov_result)
 end
+
+"""
+    _PrecomputedVcov(Σ, source)
+
+A covariance matrix Σ already computed from the user's `vcov` (`source`), for entry points
+that call other entry points (the model-level `second_differences` calls
+`population_margins` once per profile point or shift). Passed as `vcov`, it is not
+evaluated again, and the t/z df rule (`_inference_df`) still sees the original `source`.
+Internal.
+"""
+struct _PrecomputedVcov
+    Σ::Matrix{Float64}
+    source::Any
+end
+
+# `vcov` applied to the model: a function of the model (`GLM.vcov`, `m -> ...`) or a
+# CovarianceMatrices estimator (`HC1()`, `CR1(cl)`, ...). CovarianceMatrices is a hard
+# dependency, so it is called directly.
+_evaluate_vcov(vcov::Function, model) = vcov(model)
+_evaluate_vcov(vcov, model) = CovarianceMatrices.vcov(vcov, model)
+
+"""
+    _covariance_matrix(model, vcov) -> Matrix{Float64}
+
+Covariance matrix for `vcov` given as a matrix (copied), a function of the model (e.g.
+`GLM.vcov`) or a CovarianceMatrices estimator (`HC1()`, ...), without the entry-point
+checks of `validate_vcov_parameter`. Used by `build_engine`, which entry points call with
+the matrix they already computed.
+"""
+_covariance_matrix(model, vcov::AbstractMatrix)::Matrix{Float64} = Matrix{Float64}(vcov)
+_covariance_matrix(model, vcov::_PrecomputedVcov)::Matrix{Float64} = copy(vcov.Σ)
+_covariance_matrix(model, vcov)::Matrix{Float64} = Matrix{Float64}(_evaluate_vcov(vcov, model))
 
 """
     _filter_vars_for_measure(vars, data_nt, measure, vars_explicit) -> Vector{Symbol}

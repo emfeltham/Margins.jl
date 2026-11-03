@@ -82,6 +82,7 @@ end
 # Is `vcov` the model's own (classical) covariance estimator?
 _is_model_based_vcov(model, vcov::Function) = vcov === GLM.vcov
 _is_model_based_vcov(model, vcov::AbstractMatrix) = vcov == GLM.vcov(model)
+_is_model_based_vcov(model, vcov::_PrecomputedVcov) = _is_model_based_vcov(model, vcov.source)
 _is_model_based_vcov(model, vcov) = false  # CovarianceMatrices estimators and anything else
 
 """

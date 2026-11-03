@@ -171,7 +171,6 @@ using Random
         data_nt = Tables.columntable(df)
         engine = Margins.build_engine(
             Margins.PopulationUsage,
-            Margins.HasDerivatives,
             model,
             data_nt,
             [:x1, :x2, :x3],
@@ -230,7 +229,6 @@ using Random
         data_nt = Tables.columntable(df)
         engine = Margins.build_engine(
             Margins.PopulationUsage,
-            Margins.HasDerivatives,
             model,
             data_nt,
             [:x1],
@@ -254,7 +252,6 @@ using Random
         data_nt_large = Tables.columntable(df_large)
         engine_large = Margins.build_engine(
             Margins.PopulationUsage,
-            Margins.HasDerivatives,
             model_large,
             data_nt_large,
             vars_large,

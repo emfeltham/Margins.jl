@@ -43,22 +43,21 @@ module Margins
 # Dependencies
 using Tables, DataFrames, StatsModels, GLM
 using FormulaCompiler
+# Only FormulaCompiler's exported (public) API is used
 using FormulaCompiler:
     CategoricalMixture, MixtureWithLevels, validate_mixture_against_data,
     mixture_to_scenario_value,
-    AbstractDerivativeEvaluator, derivativeevaluator, ADEvaluator, FDEvaluator,
-    LoadOp, ContrastOp,
+    AbstractDerivativeEvaluator, derivativeevaluator,
+    derivative_variables, derivative_backend,
     CategoricalCounterfactualVector,  # Needed by continuous_variables
     fixed_effects_form,
-    ContrastEvaluator, contrast_modelrow!, contrast_gradient!,
+    ContrastEvaluator, contrast_modelrow!, contrast_gradient!, contrast_endpoints,
     validate_mixture_weights, validate_mixture_levels,
-    categorical_levels, categorical_variables,
-    get_or_compile_formula,
+    categorical_levels, categorical_variables, baseline_level,
+    get_or_compile_formula, with_private_scratch, extract_variable_names,
     mix,
     _dmu_deta, _d2mu_deta2,  # Link function derivatives (marginal_effects_mu! test oracle)
     link_derivatives         # (μ, dμ/dη, d²μ/dη²) for the prediction kernel
-# Import (not using) to allow method extension
-import FormulaCompiler: _get_baseline_level
 using LinearAlgebra: dot, mul!, BLAS
 using LinearAlgebra
 using Statistics: mean, median
@@ -67,6 +66,7 @@ using Printf: @sprintf
 using Distributions: Normal, TDist, cdf, ccdf, quantile
 using Dates: now
 import StatsBase  # weight types of a fitted model (_weights_from_storage)
+import CovarianceMatrices  # robust/clustered `vcov` estimators (`_evaluate_vcov`)
 
 # Version info
 const VERSION = pkgversion(@__MODULE__)  # read from Project.toml, so it cannot drift
@@ -95,9 +95,7 @@ include("metadata.jl")   # the documented contract of `result.metadata` and its 
 
 # Statistical inference modules
 include("inference/derivative_utilities.jl")             # _matrix_multiply_eta!, continuous_variables
-include("inference/marginal_effects.jl")                 # marginal_effects_mu! (row-level; internal test oracle)
-include("inference/marginal_effects_automatic_diff.jl")  # marginal_effects_eta! (AD backend; test oracle)
-include("inference/marginal_effects_finite_diff.jl")     # marginal_effects_eta! (FD backend; test oracle)
+include("inference/marginal_effects.jl")                 # marginal_effects_eta!/_mu! (row-level; internal test oracles)
 include("inference/delta_method.jl")                     # delta_method_se
 include("inference/mixture_utilities.jl")                # create_mixture_column, expand_mixture_grid, create_balanced_mixture
 
@@ -116,7 +114,6 @@ include("core/engine_validation.jl")  # Uses MarginsEngine, must come after engi
 include("core/variable_detection.jl")  # Uses MarginsEngine, must come after engine/core.jl
 # core/buffer_management.jl DELETED (2026-08): ComputationBuffers/ProfileBuffers and their
 # accessors were never adopted; all computation uses the engine's own pre-allocated buffers.
-include("engine/caching.jl")  # Unified caching system
 include("kernels/categorical.jl")  # Phase 4: Categorical kernel using FC primitives
 include("population/core.jl")
 include("population/contexts.jl")
@@ -146,13 +143,32 @@ const REMOVED_SECOND_DIFFERENCE_FUNCTIONS = Dict(
         "(it returns a DataFrame row, not a NamedTuple)",
 )
 
+# The engine cache and its controls, removed in 3.0 (every call builds its own engine; only
+# FormulaCompiler's compiled-formula cache remains), with what to do instead.
+const REMOVED_CACHE_NAMES = Dict(
+    :get_cache_stats => "there is no engine cache to inspect",
+    :set_engine_cache_capacity! => "there is no engine cache to bound",
+    :engine_cache_capacity => "there is no engine cache to bound",
+    :get_or_build_engine => "use `Margins.build_engine` (same arguments without the second, " *
+        "`HasDerivatives`/`NoDerivatives`)",
+    :ENGINE_CACHE => "there is no engine cache; `Margins.clear_engine_cache!()` still clears " *
+        "FormulaCompiler's compiled-formula cache",
+    :VALIDATED_MODELS_CACHE => "validation runs on every call, so there is nothing to clear",
+)
+
 function __init__()
     if isdefined(Base, :Experimental) && isdefined(Base.Experimental, :register_error_hint)
         Base.Experimental.register_error_hint(UndefVarError) do io, exc
             replacement = get(REMOVED_SECOND_DIFFERENCE_FUNCTIONS, exc.var, nothing)
+            if !isnothing(replacement)
+                print(io, "\n`", exc.var, "` was removed in Margins 3.0. Use ", replacement,
+                      ". See the CHANGELOG and the Second Differences documentation for the migration.")
+                return
+            end
+            replacement = get(REMOVED_CACHE_NAMES, exc.var, nothing)
             isnothing(replacement) && return
-            print(io, "\n`", exc.var, "` was removed in Margins 3.0. Use ", replacement,
-                  ". See the CHANGELOG and the Second Differences documentation for the migration.")
+            print(io, "\n`Margins.", exc.var, "` was removed in Margins 3.0 with the engine cache: ",
+                  replacement, ". See the CHANGELOG.")
         end
     end
 end

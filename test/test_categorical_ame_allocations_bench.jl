@@ -21,7 +21,6 @@ model1 = lm(@formula(y ~ x + group), df)
 data_nt1 = Tables.columntable(df)
 engine1 = Margins.build_engine(
     Margins.PopulationUsage,
-    Margins.HasDerivatives,
     model1,
     data_nt1,
     [:group],
@@ -51,7 +50,6 @@ model2 = lm(@formula(y ~ x + treatment), df)
 data_nt2 = Tables.columntable(df)
 engine2 = Margins.build_engine(
     Margins.PopulationUsage,
-    Margins.HasDerivatives,
     model2,
     data_nt2,
     [:treatment],
@@ -81,7 +79,6 @@ model3 = lm(@formula(y ~ x * group), df)
 data_nt3 = Tables.columntable(df)
 engine3 = Margins.build_engine(
     Margins.PopulationUsage,
-    Margins.HasDerivatives,
     model3,
     data_nt3,
     [:group],

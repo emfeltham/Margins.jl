@@ -55,7 +55,7 @@ measure_symbol(::Eydx) = :semielasticity_eydx
 """
     MEWorkspace
 
-Scratch for [`accumulate_continuous!`](@ref): the Jacobian `J` (length(de) × length(de.vars))
+Scratch for [`accumulate_continuous!`](@ref): the Jacobian `J` (length(de) × length(derivative_variables(de)))
 and model row `x` of one row, the column-wise gradient accumulators `A` and `B`
 (n_params × n_vars) and per-row coefficients `c` (n_vars).
 """
@@ -74,7 +74,7 @@ Workspace for accumulating `n_vars` of `de`'s variables.
 """
 function MEWorkspace(de::AbstractDerivativeEvaluator, n_vars::Int)
     n_params = length(de)
-    return MEWorkspace(Matrix{Float64}(undef, n_params, length(de.vars)),
+    return MEWorkspace(Matrix{Float64}(undef, n_params, length(derivative_variables(de))),
                        Vector{Float64}(undef, n_params),
                        Matrix{Float64}(undef, n_params, n_vars),
                        Matrix{Float64}(undef, n_params, n_vars),
@@ -86,16 +86,49 @@ MEWorkspace() = MEWorkspace(Matrix{Float64}(undef, 0, 0), Float64[],
                             Matrix{Float64}(undef, 0, 0), Matrix{Float64}(undef, 0, 0), Float64[])
 
 """
+    XColumns
+
+Data columns of the requested variables for measures that multiply by x (`_uses_x`): one
+`Vector{Float64}` per variable ([`_float_columns`](@ref)), or `()` for measures that do not
+read x.
+"""
+const XColumns = Union{Tuple{}, Vector{Vector{Float64}}}
+
+"""
+    _float_columns(data_nt, vars) -> Vector{Vector{Float64}}
+    _float_columns!(buf, data_nt, vars) -> buf
+
+The columns `vars` of `data_nt` as `Vector{Float64}`: the column itself when it already is one
+(continuous columns are, after `_prepare_margins_data`), otherwise a converted copy (e.g. an
+integer column of a user-supplied reference grid). A homogeneous vector, unlike a tuple of the
+columns, has the same type whatever the column types, so reading it needs no dynamic dispatch.
+"""
+_float_columns(data_nt::NamedTuple, vars::AbstractVector{Symbol}) =
+    _float_columns!(Vector{Vector{Float64}}(undef, length(vars)), data_nt, vars)
+
+# In place, into `buf` (resized to `length(vars)`)
+function _float_columns!(buf::Vector{Vector{Float64}}, data_nt::NamedTuple, vars::AbstractVector{Symbol})
+    resize!(buf, length(vars))
+    for (k, v) in enumerate(vars)
+        buf[k] = _float_column(getproperty(data_nt, v))
+    end
+    return buf
+end
+_float_column(col::Vector{Float64}) = col
+_float_column(col::AbstractVector) = convert(Vector{Float64}, col)
+
+"""
     accumulate_continuous!(vals, grads, ws::MEWorkspace, de, β, s::PredScale, m::Measure,
                            var_idx, xcols, rows, weights, total_weight)
 
 Add to `vals[k]` the (weighted) average over `rows` of the unit quantity of measure `m` on
-scale `s` for variable `de.vars[var_idx[k]]`, and to row `k` of `grads` its gradient with
+scale `s` for variable `derivative_variables(de)[var_idx[k]]`, and to row `k` of `grads` its gradient with
 respect to β (see the formulas at the top of this file).
 
 Each row has weight `1/length(rows)` when `weights === nothing`, else
 `weights[row] / total_weight`; rows with weight ≤ 0 are skipped. `xcols[k]` is the data
-column of variable `k` (used only by measures that multiply by x; pass `()` otherwise).
+column of variable `k` (used only by measures that multiply by x; pass `()` otherwise; see
+[`XColumns`](@ref)).
 Measures that divide by ŷ throw a `MarginsError` at a row with ŷ = 0.
 
 `ws` must be sized for `de` and at least `length(var_idx)` variables. Allocation-free per
@@ -104,7 +137,7 @@ row; the only backend-dependent call is `derivative_modelrow!(J, x, de, row)`.
 function accumulate_continuous!(vals::AbstractVector{Float64}, grads::AbstractMatrix{Float64},
                                 ws::MEWorkspace, de::AbstractDerivativeEvaluator,
                                 β::Vector{Float64}, s::PredScale, m::Measure,
-                                var_idx::AbstractVector{Int}, xcols::Tuple, rows,
+                                var_idx::AbstractVector{Int}, xcols::XColumns, rows,
                                 weights::Union{Nothing, AbstractVector{Float64}},
                                 total_weight::Float64)
     (; J, x, A, B, c) = ws
@@ -135,7 +168,7 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
                                       x::Vector{Float64}, A::Matrix{Float64}, B::Matrix{Float64},
                                       c::Vector{Float64}, de::AbstractDerivativeEvaluator,
                                       β::Vector{Float64}, s::PredScale, m::Measure,
-                                      var_idx::AbstractVector{Int}, xcols::Tuple, rows,
+                                      var_idx::AbstractVector{Int}, xcols::XColumns, rows,
                                       weights::Union{Nothing, AbstractVector{Float64}},
                                       total_weight::Float64, unweighted_weight::Float64)
     n_params = length(β)
@@ -160,7 +193,7 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
             @simd for i in 1:n_params
                 a += J[i, j] * β[i]
             end
-            mk = _measure_factor(m, _uses_x(m) ? Float64(xcols[k][row]) : 1.0, ŷ)
+            mk = _measure_factor(m, _uses_x(m) ? xcols[k][row] : 1.0, ŷ)
             α = w * mk * d₁                     # coefficient of Jᵢ[:,j]
             wq = α * a                          # w × unit quantity
             vals[k] += wq
@@ -192,27 +225,16 @@ end
     "measure=:semielasticity_dyex or :effect, or exclude such observations."))
 
 """
-    _accumulate_measure!(vals, grads, ws, de, β, s::PredScale, measure::Symbol, var_idx,
-                         xcols, rows, weights, total_weight)
+    _measure_type(measure::Symbol) -> Measure
 
-[`accumulate_continuous!`](@ref) with the measure given as a symbol (resolved here, once).
+The `Measure` for a `measure` keyword value. Entry points convert once and pass the result
+through the same dynamic call that passes the (runtime-built) engine or evaluator on, so the
+code behind it is compiled for the requested measure only, not for all four.
 """
-function _accumulate_measure!(vals, grads, ws::MEWorkspace, de, β, s::PredScale, measure::Symbol,
-                              var_idx, xcols, rows, weights, total_weight)
-    measure === :effect && return accumulate_continuous!(vals, grads, ws, de, β, s, Effect(),
-                                     var_idx, (), rows, weights, total_weight)
-    measure === :elasticity && return accumulate_continuous!(vals, grads, ws, de, β, s, Eyex(),
-                                     var_idx, xcols, rows, weights, total_weight)
-    measure === :semielasticity_dyex && return accumulate_continuous!(vals, grads, ws, de, β, s, Dyex(),
-                                     var_idx, xcols, rows, weights, total_weight)
-    measure === :semielasticity_eydx && return accumulate_continuous!(vals, grads, ws, de, β, s, Eydx(),
-                                     var_idx, xcols, rows, weights, total_weight)
+function _measure_type(measure::Symbol)
+    measure === :effect && return Effect()
+    measure === :elasticity && return Eyex()
+    measure === :semielasticity_dyex && return Dyex()
+    measure === :semielasticity_eydx && return Eydx()
     throw(ArgumentError("Unknown measure: $measure"))
 end
-
-# Entry from a call site where `de` is abstractly typed (an engine field): the scale is
-# resolved here, after the dynamic dispatch on the evaluator type
-_accumulate_measure!(vals, grads, ws::MEWorkspace, de, β, scale::Symbol, link::GLM.Link,
-                     measure::Symbol, var_idx, xcols, rows, weights, total_weight) =
-    _accumulate_measure!(vals, grads, ws, de, β, predscale(scale, link), measure, var_idx,
-                         xcols, rows, weights, total_weight)

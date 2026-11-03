@@ -8,12 +8,17 @@ Main entry point for population-level marginal effects computation.
 Uses decomposed functions from the modular architecture.
 
 use `weights = nothing` for standard unweighted scenario
+
+`measure` is a `Measure` (`_measure_type(:elasticity)`, ...): entry points convert the keyword
+before this call, which dispatches on the engine's type at runtime, so only the requested
+measure's kernel is compiled. (A `Symbol` is accepted for convenience, at the cost of compiling
+every measure.)
 """
 function _ame_calculate(
-    engine::MarginsEngine{L,U,D,C}, data_nt::NamedTuple,
-    scale::Symbol, backend::Symbol, measure::Symbol,
+    engine::MarginsEngine, data_nt::NamedTuple,
+    scale::Symbol, backend::Symbol, measure::Measure,
     contrasts::Symbol, weights
-) where {L,U,D,C}
+)
 
     # Step 1: Validate engine using new validation system
     validate_engine_for_computation(engine, backend)
@@ -56,6 +61,10 @@ function _ame_calculate(
     return (results, G)
 end
 
+_ame_calculate(engine::MarginsEngine, data_nt::NamedTuple, scale::Symbol, backend::Symbol,
+               measure::Symbol, contrasts::Symbol, weights) =
+    _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights)
+
 """
     _process_continuous_variables!(
         results, G, start_idx, engine, continuous_requested,
@@ -69,7 +78,7 @@ Uses type-stable buffer management and focused computation kernels.
 - `results`: Pre-allocated results DataFrame (modified in-place)
 - `G`: Pre-allocated gradient matrix (modified in-place)
 - `start_idx`: Starting row index in results DataFrame
-- `engine`: MarginsEngine with model parameters and derivatives (requires HasDerivatives)
+- `engine`: MarginsEngine with model parameters and a derivative evaluator `de`
 - `continuous_requested`: Vector of continuous variable names to process
 - `data_nt`: Named tuple containing data
 - `rows`: Row indices to process
@@ -105,11 +114,11 @@ gᵢ = ∂ŷᵢ/∂x and ŷᵢ is the prediction on `scale` — the definition u
 """
 function _process_continuous_variables!(
     results::DataFrame, G::Matrix, start_idx::Int,
-    engine::MarginsEngine{L,U,HasDerivatives,C},
+    engine::MarginsEngine{<:Any,<:Any,<:Any,<:AbstractDerivativeEvaluator},
     continuous_requested::Vector{Symbol},
     data_nt::NamedTuple, rows, scale::Symbol,
-    measure::Symbol, weights
-) where {L,U,C}
+    measure::Measure, weights
+)
 
     if isempty(continuous_requested)
         return start_idx
@@ -180,19 +189,25 @@ Accumulate the measure for the requested continuous variables into
 using the engine's derivative evaluator and workspace. Allocation-free per row.
 """
 function _compute_continuous_effects!(engine::MarginsEngine, continuous_requested::Vector{Symbol},
-                                      data_nt::NamedTuple, rows, scale::Symbol, measure::Symbol,
+                                      data_nt::NamedTuple, rows, scale::Symbol, measure::Measure,
                                       weights, total_weight::Float64)
-    # Indices of the requested variables in de.vars. The buffer is sized to the request (a
-    # plain Vector rather than a view, so the dynamic dispatch on the abstractly typed
-    # `engine.de` below does not box it).
+    # Indices of the requested variables in derivative_variables(de), in a buffer sized to
+    # the request
     indices_buf = resize!(engine.cont_var_indices_buf, length(continuous_requested))
     for i in eachindex(continuous_requested)
         indices_buf[i] = engine.var_index_map[continuous_requested[i]]  # KeyError if absent
     end
-    # Measures that multiply by x read the variables' data columns
-    xcols = measure === :effect ? () : Tuple(getproperty(data_nt, v) for v in continuous_requested)
-    _accumulate_measure!(engine.batch_ame_values, engine.batch_gradients, engine.me_ws, engine.de,
-                         engine.β, scale, engine.link, measure,
-                         indices_buf, xcols, rows, weights, total_weight)
+    # Measures that multiply by x read the variables' data columns (in the engine's buffer,
+    # so a call allocates nothing)
+    xcols = _uses_x(measure) ? _float_columns!(engine.xcols_buf, data_nt, continuous_requested) : ()
+    accumulate_continuous!(engine.batch_ame_values, engine.batch_gradients, engine.me_ws, engine.de,
+                           engine.β, predscale(scale, engine.link), measure,
+                           indices_buf, xcols, rows, weights, total_weight)
     return nothing
 end
+
+_compute_continuous_effects!(engine::MarginsEngine, continuous_requested::Vector{Symbol},
+                             data_nt::NamedTuple, rows, scale::Symbol, measure::Symbol,
+                             weights, total_weight::Float64) =
+    _compute_continuous_effects!(engine, continuous_requested, data_nt, rows, scale,
+                                 _measure_type(measure), weights, total_weight)

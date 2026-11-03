@@ -6,10 +6,13 @@
 # Before 3.0.0 concurrent calls on the same model and data shared one cached engine (and
 # FormulaCompiler's cached compiled formula), whose scratch buffers they overwrote: 64 of 64
 # concurrent `population_margins` calls returned wrong estimates. Every concurrent result
-# must now equal its serial counterpart exactly.
+# must now equal its serial counterpart exactly. Since the engine cache was removed (3.0),
+# each call builds its own engine and the only state shared between calls is
+# FormulaCompiler's compiled-formula cache (locked) and the read-only compiled operations.
 
 using Test, Random, DataFrames, CategoricalArrays, GLM, StatsModels, Statistics
 using Margins
+import CovarianceMatrices
 
 function _concurrency_fixture()
     Random.seed!(1); n = 4_000
@@ -92,26 +95,29 @@ end
         end
     end
 
-    @testset "tight cache capacity under concurrency" begin
-        old = Margins.set_engine_cache_capacity!(2)
-        try
-            ok, errs = _run_concurrently(jobs, refs, 64; spawn = true)
+    @testset "concurrent first calls (cold compiled-formula cache)" begin
+        # Every call builds its own engine; the only shared state is FormulaCompiler's
+        # compiled-formula cache, which compiles outside its lock. Start cold so that
+        # concurrent calls race to compile the same formula.
+        for mode in (:spawn, :threads)
+            Margins.clear_engine_cache!()
+            ok, errs = _run_concurrently(jobs, refs, 44; spawn = mode === :spawn)
             @test count(!isnothing, errs) == 0
             @test all(ok)
-            @test Margins.get_cache_stats().entries <= 2
-        finally
-            Margins.set_engine_cache_capacity!(old)
         end
     end
 
-    @testset "pool accounting after concurrent use" begin
-        st = Margins.get_cache_stats()
-        @test st.entries <= st.capacity
-        # nothing left checked out
-        @test all(slot -> slot.checked_out == 0, values(Margins.ENGINE_CACHE))
-        # a single-threaded repeat still reuses one engine per configuration
-        Margins.clear_engine_cache!()
-        population_margins(m, d); e1 = only(Margins._cached_engines())
-        population_margins(m, d); @test only(Margins._cached_engines()) === e1
+    @testset "concurrent calls with a robust vcov and a vcov matrix" begin
+        V = 1.5 .* GLM.vcov(m)
+        vjobs = Tuple{String, Any}[
+            ("AME HC1",     () -> DataFrame(population_margins(m, d; vcov = CovarianceMatrices.HC1()))),
+            ("AME matrix",  () -> DataFrame(population_margins(m, d; vcov = V))),
+            ("APM HC1",     () -> DataFrame(profile_margins(m, d, means_grid(d); type = :predictions,
+                                                          vcov = CovarianceMatrices.HC1()))),
+        ]
+        vrefs = [f() for (_, f) in vjobs]
+        ok, errs = _run_concurrently(vjobs, vrefs, 48; spawn = true)
+        @test count(!isnothing, errs) == 0
+        @test all(ok)
     end
 end

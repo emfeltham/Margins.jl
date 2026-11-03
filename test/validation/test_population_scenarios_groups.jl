@@ -140,8 +140,7 @@ end
 
     # Directly inspect override application: categorical should remain pooled, boolean stays Bool
     data_nt = Tables.columntable(df)
-    engine = Margins.build_engine(Margins.PopulationUsage, Margins.HasDerivatives,
-                                  m, data_nt, [:x, :g, :flag], GLM.vcov, :fd)
+    engine = Margins.build_engine(Margins.PopulationUsage, m, data_nt, [:x, :g, :flag], GLM.vcov, :fd)
 
     context_cat, _, _ = Margins._create_context_data_with_weights(engine.data_nt, Dict(:g => "A"), Dict(), nothing)
     @test eltype(context_cat.g) <: CategoricalValue

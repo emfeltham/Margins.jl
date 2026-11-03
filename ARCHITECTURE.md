@@ -49,7 +49,6 @@ src/
 ├── types.jl                           # EffectsResult, PredictionsResult, ContrastResult
 ├── engine/                            # Engine layer
 │   ├── core.jl                        # MarginsEngine construction and management
-│   ├── caching.jl                     # Engine caching system
 │   └── measures.jl                    # Measure conversions (elasticities)
 ├── kernels/                           # Computational kernels
 │   └── categorical.jl                 # Categorical AME kernel (ContrastEvaluator-based)
@@ -71,9 +70,7 @@ src/
 │   └── marginal_effects.jl           # ME computation utilities
 ├── inference/                         # Statistical inference
 │   ├── delta_method.jl               # Delta-method SE computation
-│   ├── marginal_effects.jl           # ME inference wrappers (dispatch hub)
-│   ├── marginal_effects_automatic_diff.jl  # AD backend
-│   ├── marginal_effects_finite_diff.jl     # FD backend
+│   ├── marginal_effects.jl           # Row-level ME test oracles (both backends)
 │   ├── derivative_utilities.jl       # _matrix_multiply_eta!, continuous_variables
 │   └── mixture_utilities.jl          # Categorical mixture support (mix(), CategoricalMixture)
 ├── core/                              # Core utilities
@@ -99,41 +96,35 @@ src/
 The central data structure wrapping FormulaCompiler components with pre-allocated buffers.
 
 ```julia
-struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:UnifiedCompiled}
+struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
+                     E<:Union{Nothing, AbstractDerivativeEvaluator},
+                     CE<:Union{Nothing, ContrastEvaluator}}
     # FormulaCompiler components (pre-compiled)
     compiled::C
-    de::Union{AbstractDerivativeEvaluator, Nothing}
+    de::E                               # Derivative evaluator over the data rows, or nothing
 
     # Variable index mapping (O(1) lookups instead of O(n) linear search)
     var_index_map::Dict{Symbol, Int}
 
-    # Categorical contrast evaluator
-    contrast::Union{ContrastEvaluator, Nothing}
+    # Categorical contrast evaluator over the data rows, or nothing
+    contrast::CE
 
     # Core buffers (zero runtime allocation)
     g_buf::Vector{Float64}              # Marginal effects results
     gβ_accumulator::Vector{Float64}     # AME gradient accumulation
-    η_buf::Vector{Float64}              # Linear predictor computation
     row_buf::Vector{Float64}            # Design matrix row
 
     # Batch operation buffers
     batch_ame_values::Vector{Float64}   # Averaged marginal effects accumulator
     batch_gradients::Matrix{Float64}    # Parameter gradients (n_vars × n_params)
-    batch_var_indices::Vector{Int}      # Variable indices scratch
-    deta_dx_buf::Vector{Float64}        # Marginal effects on linear predictor scale
     cont_var_indices_buf::Vector{Int}   # Continuous variable index mapping
+    xcols_buf::Vector{Vector{Float64}}  # Data columns read by measures that multiply by x
 
-    # Continuous effects buffers
-    g_all_buf::Vector{Float64}          # All continuous variable marginal effects
-    Gβ_all_buf::Matrix{Float64}         # All continuous variable parameter gradients
+    # Continuous-effects accumulator workspace (Jacobian, model row, gradient accumulators)
+    me_ws::MEWorkspace
 
-    # Categorical effects buffers (zero-allocation via ContrastEvaluator)
+    # Categorical effects buffer (zero-allocation via ContrastEvaluator)
     contrast_buf::Vector{Float64}
-    contrast_grad_buf::Vector{Float64}
-    contrast_grad_accum::Vector{Float64}
-
-    # Persistent EffectsBuffers for zero-allocation population_margins_raw!
-    effects_buffers::EffectsBuffers
 
     # Cached variable metadata
     continuous_vars::Vector{Symbol}
@@ -152,13 +143,15 @@ end
 **Type Parameters:**
 - `L <: GLM.Link`: Link function type (IdentityLink, LogitLink, etc.)
 - `U <: MarginsUsage`: Usage pattern (PopulationUsage or ProfileUsage) — controls buffer sizing
-- `D <: DerivativeSupport`: Whether derivatives are needed (HasDerivatives or NoDerivatives)
 - `C <: UnifiedCompiled`: Compiled formula type from FormulaCompiler
+- `E`, `CE`: Exact types of `de` and `contrast` (`Nothing` when absent). Only population
+  engines carry evaluators; profile engines build theirs over the reference grid and the
+  scenarios/groups path per context (`build_engine(...; evaluators=false)`)
 
 **Key Properties:**
 - Single compilation per model+data combination
 - All buffers pre-allocated — zero allocation in hot paths
-- Cached by data signature for reuse across calls
+- Built per call (only FormulaCompiler's compiled formula is cached), so nothing is shared across calls
 - Separates population vs profile usage for optimal buffer sizing
 
 ### Result Types
@@ -178,7 +171,7 @@ population_margins(model, data; type=:effects, scenarios=..., groups=...)
     ↓
 Tables.columntable(data)                    # Single conversion
     ↓
-build_engine(PopulationUsage, ...)          # Compilation + caching
+build_engine(PopulationUsage, ..., Σ)       # Per call; compiled formula cached by FC
     ↓
 ┌─ If scenarios/groups specified:
 │      contexts.jl dispatches per-context:
@@ -200,7 +193,7 @@ profile_margins(model, data, reference_grid; type=:effects)
     ↓
 Tables.columntable(reference_grid)           # Convert grid
     ↓
-build_engine(ProfileUsage, ...)              # Compilation + caching
+build_engine(ProfileUsage, ..., Σ)           # Per call; compiled formula cached by FC
     ↓
 For each row in reference_grid:
     ├─ Continuous: marginal_effects_eta!()   # Derivative at profile
@@ -293,12 +286,9 @@ All buffers pre-allocated in `MarginsEngine` and reused:
 
 ### Caching Strategy
 
-Compiled engines are cached by model+data signature:
-```julia
-const COMPILED_CACHE = Dict{UInt64, MarginsEngine}()
-# cache_key = hash(model, keys(data_nt), vars)
-# Automatic invalidation via hash-based keys
-```
+Margins keeps no cache of its own (removed in 3.0). Every call builds its own engine and
+evaluates `vcov` once; FormulaCompiler caches the compiled formula per model and column-type
+signature (`get_or_compile_formula`, locked). See `docs/src/caching.md`.
 
 ## FormulaCompiler Integration
 
@@ -365,7 +355,7 @@ test/
 - If `:ad` is requested and fails, the error surfaces (no silent switch to `:fd`)
 - Invalid statistical requests (e.g., effect of x while holding x fixed) raise an error, never a silently emptied result
 
-### Aggressive Caching
-- FormulaCompiler compilation is expensive (milliseconds)
-- Users often call margins on same model+data
-- Small memory cost for major performance gain via `COMPILED_CACHE`
+### Caching Only Where It Pays
+- FormulaCompiler compilation is expensive (milliseconds) and is cached by FormulaCompiler
+- Building an engine from a compiled formula is cheap (a fraction of a millisecond), so it is
+  done per call: no stale results after `refit!` or in-place `vcov` edits, no locks

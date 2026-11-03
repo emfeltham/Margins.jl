@@ -13,10 +13,10 @@ _normalize_override_value(v) = v
 _normalize_override_value(v::CategoricalValue) = String(v)
 
 """
-    _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
+    _baseline_level(model, var::Symbol, data_nt::NamedTuple)
 
-Extended version of _get_baseline_level with Boolean variable support.
-Handles Boolean variables by returning `false` as the baseline level.
+FormulaCompiler's `baseline_level(model, var)` (from the model's contrasts), with Boolean
+variable support: a Boolean variable's baseline is `false`.
 
 # Arguments
 - `model`: Statistical model (GLM, etc.)
@@ -26,17 +26,17 @@ Handles Boolean variables by returning `false` as the baseline level.
 # Returns
 - Baseline level for the variable (specific to variable type)
 """
-function _get_baseline_level(model, var::Symbol, data_nt::NamedTuple)
+function _baseline_level(model, var::Symbol, data_nt::NamedTuple)
     col = getproperty(data_nt, var)
     if eltype(col) <: Bool
         return false
     elseif eltype(col) <: CategoricalArrays.CategoricalValue
         # For categorical variables, return String for consistent level_map lookup
         # FormulaCompiler returns the actual type (Bool, String, Int, etc.)
-        baseline = _get_baseline_level(model, var)
+        baseline = baseline_level(model, var)
         return string(baseline)
     else
-        return _get_baseline_level(model, var)
+        return baseline_level(model, var)
     end
 end
 
@@ -128,7 +128,7 @@ function count_categorical_rows(categorical_requested, engine::MarginsEngine, co
             n_levels = length(unique_levels)
 
             if contrasts == :baseline
-                baseline_level = _get_baseline_level(engine.model, var, engine.data_nt)
+                baseline_level = _baseline_level(engine.model, var, engine.data_nt)
                 non_baseline_count = sum(level != baseline_level for level in unique_levels)
                 additional_rows += max(non_baseline_count, 1)
             elseif contrasts == :pairwise
@@ -179,7 +179,7 @@ function count_categorical_rows(categorical_vars::Vector{Symbol}, engine::Margin
                 if eltype(col) <: Bool
                     total += max(0, n_levels - 1)
                 else
-                    baseline_str = string(_get_baseline_level(engine.model, var, engine.data_nt))
+                    baseline_str = string(_baseline_level(engine.model, var, engine.data_nt))
                     total += count(l -> string(l) != baseline_str, levels)
                 end
             elseif contrasts == :pairwise

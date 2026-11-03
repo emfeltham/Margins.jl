@@ -1,6 +1,6 @@
 # Test that categorical batch function maintains zero allocations
 using Test, Margins, GLM, DataFrames, Tables, BenchmarkTools, CategoricalArrays
-using Margins: build_engine, PopulationUsage, HasDerivatives, categorical_contrast_ame_batch!
+using Margins: build_engine, PopulationUsage, categorical_contrast_ame_batch!
 using Margins: generate_contrast_pairs, ContrastPair
 
 @testset "Categorical Batch Function Zero-Allocation" begin
@@ -18,7 +18,7 @@ using Margins: generate_contrast_pairs, ContrastPair
 
     @testset "Batch function: multi-level categorical zero-alloc" begin
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         # Generate contrast pairs
         var_col = getproperty(data_nt, :treatment)
@@ -66,7 +66,7 @@ using Margins: generate_contrast_pairs, ContrastPair
     end
 
     @testset "Batch function: weighted computation zero-alloc" begin
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         var_col = getproperty(data_nt, :treatment)
         rows = collect(1:50)
@@ -118,7 +118,7 @@ using Margins: generate_contrast_pairs, ContrastPair
         model_bool = lm(@formula(y ~ x + treated), df_bool)
         data_nt_bool = Tables.columntable(df_bool)
 
-        engine = build_engine(PopulationUsage, HasDerivatives, model_bool, data_nt_bool, [:treated], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model_bool, data_nt_bool, [:treated], GLM.vcov, :ad)
 
         var_col = getproperty(data_nt_bool, :treated)
         rows = collect(1:50)
@@ -164,7 +164,7 @@ using Margins: generate_contrast_pairs, ContrastPair
 
     @testset "Correctness: batch matches single contrast" begin
         # Verify batch function gives same results as calling single contrast multiple times
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         var_col = getproperty(data_nt, :treatment)
         rows = collect(1:50)
@@ -203,7 +203,7 @@ using Margins: generate_contrast_pairs, ContrastPair
     end
 
     @testset "Result array dimensions" begin
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         var_col = getproperty(data_nt, :treatment)
         rows = collect(1:50)
@@ -232,7 +232,7 @@ using Margins: generate_contrast_pairs, ContrastPair
     @testset "Batched pairs reproduce the single-pair kernel (pairwise, both scales, weights)" begin
         # The batch evaluates X₀ once per row and level; the arithmetic per pair is the same
         # as the single-pair kernel's, so estimates and gradients agree exactly.
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
         var_col = getproperty(data_nt, :treatment)
         rows = collect(1:n)
         w = rand(n); w[1:5:end] .= 0.0

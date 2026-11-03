@@ -201,6 +201,10 @@ function second_differences(
         end
     end
 
+    # Evaluate `vcov` once for the whole call: every population_margins call below gets the
+    # matrix together with its source (which the t/z df rule keys on), not the estimator
+    vcov = _PrecomputedVcov(validate_vcov_parameter(vcov, model), vcov)
+
     if mtype === :continuous && isnothing(levels)
         # Derivative of the AME with respect to the modifier (default `at=:observed`)
         out = _second_differences_local(
@@ -230,7 +234,7 @@ function second_differences(
     mtype === :continuous && !all(x -> x isa Number && !(x isa Bool), lv) &&
         error("A continuous modifier needs numeric `levels`, got $(eltype(lv)).")
 
-    Σ = _covariance_matrix(model, vcov)   # computed here, not read back from the cached engine
+    Σ = _covariance_matrix(model, vcov)   # the matrix computed above
     # Resolved once to validate and to record the source; each population_margins call below
     # resolves the same keyword against the same rows
     (_, weights_source) = _weights_vector(weights, model, data)

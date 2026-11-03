@@ -1,13 +1,14 @@
-# test/validation/test_engine_cache.jl
+# test/validation/test_engine_data_binding.jl
 #
-# Regression tests for engine-cache data binding.
+# Regression tests for engine data binding: one fitted model used on several datasets that
+# share a schema (subgroups, train/test splits) must give each dataset its own answer.
 #
-# Motivation: `ENGINE_CACHE` is keyed on the data's column *names*, but a `MarginsEngine`
-# is bound to the column objects it was built from — its derivative and contrast evaluators
-# store those arrays and dereference them at call time. Two datasets sharing a schema and a
-# fitted model therefore collided on one cache entry, and the second caller silently got the
-# first caller's rows (or a BoundsError, if the second dataset was longer). The fix
-# revalidates a cache hit with `_engine_data_matches` before reusing it.
+# Motivation: a `MarginsEngine` is bound to the column objects it was built from — its
+# derivative and contrast evaluators store those arrays and dereference them at call time.
+# The 2.x/early-3.0 engine cache (`ENGINE_CACHE`, removed in 3.0) keyed entries on the data's
+# column *names*, so two such datasets collided on one entry and the second caller silently
+# got the first caller's rows (or a BoundsError, if the second dataset was longer). Since 3.0
+# every call builds its own engine; these tests keep the workflow covered.
 #
 # Every expected value here is computed from `modelmatrix`/`coef`/`vcov` with plain array
 # code. Do NOT switch to "compute it again with Margins on the other data" — that oracle is
@@ -55,7 +56,7 @@ function _cache_data(; n=240, seed=42)
     return DataFrame(y=y, x=x, g=g, w=rand(n) .+ 0.25)
 end
 
-@testset "engine cache is bound to its data" begin
+@testset "engine is bound to its data" begin
 
     df = _cache_data()
     m = glm(@formula(y ~ x + g), df, Binomial(), LogitLink())
@@ -143,35 +144,8 @@ end
         @test r.n[1] == length(b_rows)
     end
 
-    @testset "cache still caches, and does not grow" begin
-        Margins.clear_engine_cache!()
-        data_nt = Margins._convert_numeric_to_float64(Margins.Tables.columntable(df))
-        sub_nt = Margins._convert_numeric_to_float64(Margins.Tables.columntable(sub))
-        args = (Margins.PopulationUsage, Margins.HasDerivatives, m)
-
-        e1 = Margins.get_or_build_engine(args..., data_nt, [:x], GLM.vcov, :ad)
-        e2 = Margins.get_or_build_engine(args..., data_nt, [:x], GLM.vcov, :ad)
-        @test e1 === e2                                    # same data: cache hit
-        @test Margins.get_cache_stats().entries == 1
-
-        e3 = Margins.get_or_build_engine(args..., sub_nt, [:x], GLM.vcov, :ad)
-        @test e3 !== e1                                    # different data: rebuilt
-        @test Margins._engine_data_matches(e3, sub_nt)
-        @test !Margins._engine_data_matches(e3, data_nt)
-        @test Margins.get_cache_stats().entries == 1        # replaced, not accumulated
-
-        # Repeated identical calls must not leak entries
-        for _ in 1:5
-            population_margins(m, df; type=:effects, vars=[:x])
-        end
-        @test Margins.get_cache_stats().entries <= 2        # effects engine (+ any predictions)
-    end
-
-    @testset "Int columns: correct, cached and bounded" begin
-        # _convert_numeric_to_float64 converts non-Float64 numerics to a Float64 copy that is
-        # memoized per source array, so repeated calls reuse one engine (see
-        # test/regression/test_int_column_engine_cache.jl). Results must stay correct and
-        # the cache bounded.
+    @testset "Int columns: correct on repeated calls and slices" begin
+        # _convert_numeric_to_float64 converts non-Float64 numerics to a per-call Float64 copy
         Margins.clear_engine_cache!()
         Random.seed!(7); n = 200
         di = DataFrame(x=abs.(randn(n)) .+ 1.0, k=rand(1:10, n))
@@ -187,8 +161,6 @@ end
             @test r.estimate[1] ≈ want_est atol=1e-9
             @test r.se[1] ≈ want_se atol=1e-6
         end
-        @test Margins.get_cache_stats().entries == 1
-
         half = di[1:100, :]
         (h_est, _) = _ame_truth(Xi, βi, Σi, linki, ixi, 1:100, :response)
         @test DataFrame(population_margins(mi, half; type=:effects, vars=[:x])).estimate[1] ≈ h_est atol=1e-9

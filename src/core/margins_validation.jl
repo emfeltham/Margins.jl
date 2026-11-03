@@ -1,39 +1,19 @@
 # Shared validation utilities for margins computation
 # Contains only genuinely common validation logic between population_margins() and profile_margins()
 
-# Cache for validated models to avoid repeated expensive vcov() calls
-const VALIDATED_MODELS_CACHE = Set{UInt64}()
-
-# Thread-safe access (see `_STATE_LOCK`)
-function _is_validated(key::UInt64)
-    lock(_STATE_LOCK)
-    try
-        return key in VALIDATED_MODELS_CACHE
-    finally
-        unlock(_STATE_LOCK)
-    end
-end
-function _mark_validated!(key::UInt64)
-    lock(_STATE_LOCK)
-    try
-        push!(VALIDATED_MODELS_CACHE, key)
-    finally
-        unlock(_STATE_LOCK)
-    end
-    return nothing
-end
-
 """
-    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
+    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov) -> Matrix{Float64}
 
 Shared input validation for both population_margins and profile_margins.
 Only validates the truly common requirements - each function handles its specific validation separately.
+Validation runs on every call (nothing is cached), and returns the covariance matrix Σ that
+`vcov` gives for `model` (`validate_vcov_parameter`), which the caller passes to `build_engine`.
 """
 function validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
     validate_required_args(model, data)
     validate_model_methods(model)
     validate_population_parameters(type, scale, backend, measure, vars)
-    validate_vcov_parameter(vcov, model)
+    return validate_vcov_parameter(vcov, model)
 end
 
 """
@@ -50,34 +30,16 @@ end
 """
     validate_model_methods(model)
 
-Validate that model supports required methods for margins computation.
-Uses caching to avoid repeated expensive vcov() calls for large models.
+Validate that model supports required methods for margins computation. Its covariance is
+checked where it is evaluated, once per call (`validate_vcov_parameter`).
 Eliminates the duplicated try/catch blocks between both margin functions.
 """
 function validate_model_methods(model)
-    # Create a lightweight cache key for the model
-    # Use hash of model type and coefficient vector (not the full model object)
-    model_key = hash((typeof(model), coef(model)))
-    
-    # Skip expensive validation if we've already validated this model
-    if _is_validated(model_key)
-        return nothing
-    end
-    
     try
         coef(model)
     catch e
         throw(ArgumentError("model must support coef() method (fitted statistical model required)"))
     end
-    
-    try
-        GLM.vcov(model)
-    catch e
-        throw(ArgumentError("model must support vcov() method (covariance matrix required for standard errors)"))
-    end
-    
-    # Cache successful validation
-    _mark_validated!(model_key)
     return nothing
 end
 

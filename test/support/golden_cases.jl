@@ -116,8 +116,8 @@ _vars_for(measure, candidates) = measure === :effect ? candidates : filter(in(CO
 
 """
 Vector of `(case_id, operation, thunk)`; each thunk returns a Margins result. Models are
-fitted once, here. Results must not depend on whether a cached engine is reused, so the
-cases do not clear the engine cache between calls.
+fitted once, here. Repeated calls on the same objects must give the same results, so the
+cases do not clear FormulaCompiler's compiled-formula cache between calls.
 """
 function cases()
     out = Tuple{String, String, Function}[]

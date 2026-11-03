@@ -1,7 +1,4 @@
-# population/core.jl - Main population_margins() function with compilation caching
-
-# Global cache for compiled formulas (MARGINS_GUIDE.md pattern)
-# Unified caching system (see engine/caching.jl)
+# population/core.jl - Main population_margins() function
 
 """
     population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model) -> Union{EffectsResult, PredictionsResult}
@@ -55,11 +52,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   (a function of the model, a CovarianceMatrices estimator, or a covariance matrix; a matrix must be square,
-  finite, symmetric and match the coefficients). The covariance is computed once per cached engine. A
-  matrix is cached by its contents, so changing it between calls is always picked up; a *function* is
-  cached by identity, so one that builds a new array each call from state you modify later (a copy of a
-  captured matrix, say) keeps returning the old one: pass the matrix itself, a new function, or call
-  `clear_engine_cache!()`.
+  finite, symmetric and match the coefficients). It is evaluated once per call (nothing is cached
+  across calls), so a refitted model or a changed matrix is always picked up.
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator (e.g. `HC1()`) for robust/clustered
     standard errors (inference is then z-based; see *Inference* below)
@@ -159,8 +153,9 @@ function population_margins(
     alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
-    # Shared input validation for common parameters
-    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
+    # Shared input validation for common parameters. Returns Σ: `vcov` is evaluated once,
+    # here, and the matrix is passed to the engine; `vcov` itself is kept for the df rule.
+    Σ = validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
     
     # Population-specific validation
     if !isnothing(scenarios)
@@ -209,61 +204,58 @@ function population_margins(
         _validate_group_columns_complete(groups, data_nt)
     end
 
-    # Build zero-allocation engine with PopulationUsage optimization (including vcov function)
-    # Determine derivative support based on type and vars
-    deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
-    # Exclusive use of a cached engine for this call (returned in `finally`, so an
-    # error cannot leak it); concurrent calls each get their own engine.
-    (engine, engine_key) = _checkout_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
-    try
-        # Handle scenarios/groups parameters for counterfactual scenarios and grouping
-        if !isnothing(scenarios) || !isnothing(groups)
-            res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts), model, vcov, engine.Σ)
-            _set_weights_metadata!(res.metadata, weights_vec, weights_source)
-            return res
-        end
+    # Build zero-allocation engine with PopulationUsage optimization.
+    # Each call builds its own engine (nothing is cached across calls), so concurrent calls
+    # never share mutable buffers and every call sees the current model, data and Σ.
+    # The scenarios/groups path builds its own evaluators per context, so its engine gets none.
+    has_contexts = !isnothing(scenarios) || !isnothing(groups)
+    engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, Σ, backend;
+                          evaluators = !has_contexts)
+    # Handle scenarios/groups parameters for counterfactual scenarios and grouping
+    if has_contexts
+        res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts), model, vcov, engine.Σ)
+        _set_weights_metadata!(res.metadata, weights_vec, weights_source)
+        return res
+    end
+
+    if type === :effects
+        df, G = _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights_vec)  # → AME (both continuous and categorical)
+        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
     
-        if type === :effects
-            df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)  # → AME (both continuous and categorical)
-            metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-        
-            # Store confidence interval parameters in metadata
-            metadata[:alpha] = alpha
-        
-            # Add analysis_type for format auto-detection
-            metadata[:analysis_type] = :population
-        
-            # Store weights info in metadata
-            _set_weights_metadata!(metadata, weights_vec, weights_source)
-        
-            # Extract raw components from DataFrame
-            estimates = df.estimate
-            standard_errors = df.se
-            variables = df.variable  # The "x" in dy/dx
-            terms = df.contrast
-        
-            return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov, engine.Σ)
-        else # :predictions  
-            df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
-            metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-        
-            # Store confidence interval parameters in metadata
-            metadata[:alpha] = alpha
-        
-            # Add analysis_type for format auto-detection
-            metadata[:analysis_type] = :population
-        
-            # Store weights info in metadata
-            _set_weights_metadata!(metadata, weights_vec, weights_source)
-        
-            # Extract raw components from DataFrame
-            estimates = df.estimate
-            standard_errors = df.se
-        
-            return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov, engine.Σ)
-        end
-    finally
-        _checkin_engine!(engine_key, engine)
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = alpha
+    
+        # Add analysis_type for format auto-detection
+        metadata[:analysis_type] = :population
+    
+        # Store weights info in metadata
+        _set_weights_metadata!(metadata, weights_vec, weights_source)
+    
+        # Extract raw components from DataFrame
+        estimates = df.estimate
+        standard_errors = df.se
+        variables = df.variable  # The "x" in dy/dx
+        terms = df.contrast
+    
+        return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov, engine.Σ)
+    else # :predictions  
+        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+    
+        # Store confidence interval parameters in metadata
+        metadata[:alpha] = alpha
+    
+        # Add analysis_type for format auto-detection
+        metadata[:analysis_type] = :population
+    
+        # Store weights info in metadata
+        _set_weights_metadata!(metadata, weights_vec, weights_source)
+    
+        # Extract raw components from DataFrame
+        estimates = df.estimate
+        standard_errors = df.se
+    
+        return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov, engine.Σ)
     end
 end
 

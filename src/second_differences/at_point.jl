@@ -27,15 +27,6 @@ const SMALL_VALUE_MIN_DELTA = 1e-9
 # Helper Functions for _second_differences_local
 # ============================================================================
 
-# Covariance matrix for `vcov` given as a matrix, a function of the model (e.g. `GLM.vcov`) or a
-# CovarianceMatrices estimator (`HC1()`, …), the same forms `population_margins` accepts.
-function _covariance_matrix(model, vcov)::Matrix{Float64}
-    vcov isa AbstractMatrix && return Matrix{Float64}(vcov)
-    vcov isa Function && return Matrix{Float64}(vcov(model))
-    cm = Base.require(Main, :CovarianceMatrices)
-    return Matrix{Float64}(Base.invokelatest(cm.vcov, vcov, model))
-end
-
 """
     _adjust_delta_for_eval_point(eval_pt::Real, δ_raw::Float64)::Float64
 
@@ -279,7 +270,7 @@ function _second_differences_local(
     data,
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
-    vcov; # An AbstractMatrix or a Function returning one
+    vcov; # An AbstractMatrix, a Function returning one, an estimator, or a _PrecomputedVcov
     at::Union{Symbol,Real,AbstractVector,NamedTuple}=:observed,
     profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto,
@@ -430,7 +421,7 @@ function _second_differences_local(
     # This enables stratified analysis: "does the interaction vary across subgroups?"
     profile_combinations = _expand_profile_to_cartesian(full_profile)
 
-    # 7. Prepare vcov function and matrix once (avoid repeated wrapping in loops)
+    # 7. Covariance matrix (already computed when `vcov` is a `_PrecomputedVcov`)
     vcov_matrix = _covariance_matrix(model, vcov)
 
     # 8. Main computation loop: iterate over all profile combinations and evaluation points

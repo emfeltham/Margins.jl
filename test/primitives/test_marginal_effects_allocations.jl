@@ -38,8 +38,8 @@ function _bench_eta_marginal_effects_with_grad!(gloc, Gβloc, deloc, bloc, rowlo
     return nothing
 end
 
-function _bench_mu_marginal_effects_with_grad!(gloc, Gβloc, deloc, bloc, linkloc, rowloc)
-    marginal_effects_mu!(gloc, Gβloc, deloc, bloc, linkloc, rowloc)
+function _bench_mu_marginal_effects_with_grad!(gloc, Gβloc, xloc, deloc, bloc, linkloc, rowloc)
+    marginal_effects_mu!(gloc, Gβloc, xloc, deloc, bloc, linkloc, rowloc)
     return nothing
 end
 
@@ -73,13 +73,14 @@ end
     g = Vector{Float64}(undef, length(vars))          # Marginal effects vector
     Gβ = Matrix{Float64}(undef, length(compiled), length(vars))  # Parameter gradient matrix
     row_vec = Vector{Float64}(undef, length(compiled))
+    xrow = Vector{Float64}(undef, length(compiled))            # model-row scratch (marginal_effects_mu!)
 
     # Warmup all functions
     compiled(row_vec, data, 2)
     marginal_effects_eta!(g, Gβ, de_ad, β, 2)
     marginal_effects_eta!(g, Gβ, de_fd, β, 2)
-    marginal_effects_mu!(g, Gβ, de_ad, β, LogitLink(), 2)
-    marginal_effects_mu!(g, Gβ, de_fd, β, LogitLink(), 2)
+    marginal_effects_mu!(g, Gβ, xrow, de_ad, β, LogitLink(), 2)
+    marginal_effects_mu!(g, Gβ, xrow, de_fd, β, LogitLink(), 2)
 
     # === η-scale marginal effects with parameter gradients ===
 
@@ -100,24 +101,24 @@ end
     # === μ-scale marginal effects with parameter gradients ===
 
     # AD backend with Logit link: zero allocations required
-    b_mu_grad_ad = @benchmark marginal_effects_mu!($g, $Gβ, $de_ad, $β, LogitLink(), 3) samples=400
+    b_mu_grad_ad = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de_ad, $β, LogitLink(), 3) samples=400
     push!(results, ("mu_marginal_effects_with_grad_logit", "ad", minimum(b_mu_grad_ad.memory), minimum(b_mu_grad_ad.times)))
     @test results[end, :min_memory_bytes] == 0
 
     # FD backend with Logit link: zero allocations
-    b_mu_grad_fd = @benchmark marginal_effects_mu!($g, $Gβ, $de_fd, $β, LogitLink(), 3) samples=400
+    b_mu_grad_fd = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de_fd, $β, LogitLink(), 3) samples=400
     push!(results, ("mu_marginal_effects_with_grad_logit", "fd", minimum(b_mu_grad_fd.memory), minimum(b_mu_grad_fd.times)))
     @test results[end, :min_memory_bytes] == 0
 
     # Strict zero-allocation check using non-capturing kernel (FD only)
-    b_mu_grad_fd_strict = @benchmark _bench_mu_marginal_effects_with_grad!($g, $Gβ, $de_fd, $β, LogitLink(), 3) samples=400
+    b_mu_grad_fd_strict = @benchmark _bench_mu_marginal_effects_with_grad!($g, $Gβ, $xrow, $de_fd, $β, LogitLink(), 3) samples=400
     @test minimum(b_mu_grad_fd_strict.memory) == 0
 
     # Test other link functions for μ-scale with parameter gradients
     for (link_name, link) in [("identity", IdentityLink()), ("log", LogLink()), ("probit", ProbitLink())]
         # FD backend only (for zero allocations)
-        marginal_effects_mu!(g, Gβ, de_fd, β, link, 2)  # Warmup
-        b_link = @benchmark marginal_effects_mu!($g, $Gβ, $de_fd, $β, $link, 3) samples=200
+        marginal_effects_mu!(g, Gβ, xrow, de_fd, β, link, 2)  # Warmup
+        b_link = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de_fd, $β, $link, 3) samples=200
         push!(results, ("mu_marginal_effects_with_grad_$(link_name)", "fd", minimum(b_link.memory), minimum(b_link.times)))
         @test results[end, :min_memory_bytes] == 0
     end
@@ -148,11 +149,11 @@ end
 
     # μ-scale with parameter gradients (FD backend, Logit)
     for _ in 1:10
-        marginal_effects_mu!(g, Gβ, de_fd, β, LogitLink(), 3)
+        marginal_effects_mu!(g, Gβ, xrow, de_fd, β, LogitLink(), 3)
     end
     b_loop_mu_grad = @benchmark begin
         for _ in 1:50_000
-            marginal_effects_mu!($g, $Gβ, $de_fd, $β, LogitLink(), 3)
+            marginal_effects_mu!($g, $Gβ, $xrow, $de_fd, $β, LogitLink(), 3)
         end
     end samples=20
     @test minimum(b_loop_mu_grad.memory) == 0
@@ -180,14 +181,14 @@ end
             b_eta_ad = @benchmark marginal_effects_eta!($g, $Gβ, $de_ad, $β, $test_row) samples=100 evals=1
             @test minimum(b_eta_ad).memory == 0
 
-            b_mu_ad = @benchmark marginal_effects_mu!($g, $Gβ, $de_ad, $β, LogitLink(), $test_row) samples=100 evals=1
+            b_mu_ad = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de_ad, $β, LogitLink(), $test_row) samples=100 evals=1
             @test minimum(b_mu_ad).memory == 0
 
             # FD backend allocations (statistical interface only)
             b_eta_fd = @benchmark marginal_effects_eta!($g, $Gβ, $de_fd, $β, $test_row) samples=100 evals=1
             @test minimum(b_eta_fd).memory == 0
 
-            b_mu_fd = @benchmark marginal_effects_mu!($g, $Gβ, $de_fd, $β, LogitLink(), $test_row) samples=100 evals=1
+            b_mu_fd = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de_fd, $β, LogitLink(), $test_row) samples=100 evals=1
             @test minimum(b_mu_fd).memory == 0
         end
     end
@@ -210,8 +211,8 @@ end
         @test Gβ_ad ≈ Gβ_fd rtol=1e-6 atol=1e-8
 
         # μ-scale comparison (Logit link)
-        marginal_effects_mu!(g_ad, Gβ_ad, de_ad, β, LogitLink(), test_row)
-        marginal_effects_mu!(g_fd, Gβ_fd, de_fd, β, LogitLink(), test_row)
+        marginal_effects_mu!(g_ad, Gβ_ad, xrow, de_ad, β, LogitLink(), test_row)
+        marginal_effects_mu!(g_fd, Gβ_fd, xrow, de_fd, β, LogitLink(), test_row)
 
         @test g_ad ≈ g_fd rtol=1e-6 atol=1e-8
         @test Gβ_ad ≈ Gβ_fd rtol=1e-6 atol=1e-8

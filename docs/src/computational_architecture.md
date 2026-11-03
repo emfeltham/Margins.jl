@@ -100,7 +100,7 @@ struct MarginsEngine
 end
 ```
 
-These buffers are **reused across calls**, eliminating runtime allocations. Because they are mutable, a call takes its engine from the cache for its exclusive use and returns it when it finishes, and every engine evaluates through its own copy of the compiled formula's scratch buffer. Concurrent Margins calls from several tasks or threads are therefore safe: each gets its own engine (see [Caching: Thread Safety](caching.md#Thread-Safety)).
+These buffers are **reused across the rows of a call**, eliminating per-row allocations. Each call builds its own engine (only the compiled formula is cached, by FormulaCompiler), and every engine evaluates through its own copy of the compiled formula's scratch buffer. Concurrent Margins calls from several tasks or threads are therefore safe: no two calls share an engine (see [Caching: Thread Safety](caching.md#Thread-Safety)).
 
 ## Data Type Architecture
 
@@ -199,8 +199,9 @@ FormulaCompiler.jl automatically caches compiled evaluators:
 # First call: compilation cost
 result1 = population_margins(model, data)  # ~milliseconds (compile + compute)
 
-# Subsequent calls: pure computation  
-result2 = profile_margins(model, data, means_grid(data))  # ~microseconds (reuse compilation)
+# Subsequent calls reuse the compiled formula; the engine (buffers, evaluators, Σ) is
+# rebuilt per call, a fraction of a millisecond
+result2 = profile_margins(model, data, means_grid(data))
 ```
 
 ## Integration with JuliaStats Ecosystem

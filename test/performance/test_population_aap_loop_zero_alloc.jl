@@ -2,8 +2,10 @@
 #
 # Allocation of the population adjusted-prediction (AAP) path: the per-row prediction loop
 # on an engine's compiled formula is allocation-free, and a warm
-# `population_margins(...; type=:predictions)` call allocates the same amount at n = 1,000 and
-# n = 50,000 (O(1) in rows), unweighted and weighted.
+# `population_margins(...; type=:predictions)` call on Float64 data allocates the same amount at
+# n = 1,000 and n = 50,000 (O(1) in rows), unweighted and weighted. An integer column is
+# converted to Float64 on every call (one column copy, 8 bytes per row) and nothing else
+# grows with n.
 #
 # (Rewritten in 3.0.0: it used a removed 5-argument `get_or_build_engine` and was not run by
 # runtests.jl.)
@@ -37,7 +39,7 @@ end
     df = _aap_data(5_000)
     model = glm(@formula(y ~ x + k + group), df, Binomial(), LogitLink())
     data_nt = Margins._prepare_margins_data(Tables.columntable(df), model)
-    engine = Margins.build_engine(Margins.PopulationUsage, Margins.NoDerivatives, model, data_nt,
+    engine = Margins.build_engine(Margins.PopulationUsage, model, data_nt,
                                   Symbol[], GLM.vcov, :ad)
     # (measured inside a function: on Julia 1.10, @allocated at testset scope counts boxing)
     alloc_loop(e, d, rows) = @allocated _aap_loop!(e.compiled, e.row_buf, e.β, e.link, d, rows)
@@ -45,21 +47,23 @@ end
     alloc_loop(engine, data_nt, 1:10)
     @test alloc_loop(engine, data_nt, 1:5_000) == 0
 
-    allocs = Dict{Tuple{Int, Bool}, Int}()
-    for n in (1_000, 50_000)
+    allocs = Dict{Tuple{Int, Bool, Bool}, Int}()
+    for n in (1_000, 50_000), float_k in (false, true)
         d = _aap_data(n)
+        float_k && (d.k = Float64.(d.k))
         m = glm(@formula(y ~ x + k + group), d, Binomial(), LogitLink())
         for weighted in (false, true)
             w = weighted ? :w : nothing
             population_margins(m, d; type=:predictions, weights=w)
             population_margins(m, d; type=:predictions, weights=w)
-            allocs[(n, weighted)] = @allocated population_margins(m, d; type=:predictions, weights=w)
+            allocs[(n, weighted, float_k)] = @allocated population_margins(m, d; type=:predictions, weights=w)
         end
     end
     for weighted in (false, true)
-        # The integer column k is converted to Float64 once and memoized, so a warm call does
-        # not copy it: allocation must be far below one column's worth (8 × 50,000 bytes)
-        @test allocs[(50_000, weighted)] < allocs[(1_000, weighted)] + 20_000
-        @test allocs[(50_000, weighted)] < 8 * 50_000 ÷ 4
+        # Float64 data: no column is copied, allocation far below one column (8 × 50,000 bytes)
+        @test allocs[(50_000, weighted, true)] < allocs[(1_000, weighted, true)] + 20_000
+        @test allocs[(50_000, weighted, true)] < 8 * 50_000 ÷ 4
+        # Int column k: its per-call Float64 copy is the only O(n) allocation
+        @test allocs[(50_000, weighted, false)] - allocs[(1_000, weighted, false)] < 8 * 49_000 + 20_000
     end
 end

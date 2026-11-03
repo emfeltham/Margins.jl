@@ -77,13 +77,14 @@ using Margins: marginal_effects_eta!, marginal_effects_mu!, delta_method_se
         de = derivativeevaluator(:fd, compiled_logit, data_logit, vars)
         g = Vector{Float64}(undef, length(vars))
         Gβ = Matrix{Float64}(undef, length(compiled_logit), length(vars))
+        xrow = Vector{Float64}(undef, length(compiled_logit))
         link = LogitLink()
 
         println("1. Warmup call:")
-        @btime marginal_effects_mu!($g, $Gβ, $de, $β_logit, $link, 1)
+        @btime marginal_effects_mu!($g, $Gβ, $xrow, $de, $β_logit, $link, 1)
 
         println("\n2. Steady-state call (should be 0 bytes):")
-        result = @benchmark marginal_effects_mu!($g, $Gβ, $de, $β_logit, $link, 1) samples=100 evals=1
+        result = @benchmark marginal_effects_mu!($g, $Gβ, $xrow, $de, $β_logit, $link, 1) samples=100 evals=1
         @test minimum(result).allocs == 0
         println("   Allocations: $(minimum(result).allocs)")
     end

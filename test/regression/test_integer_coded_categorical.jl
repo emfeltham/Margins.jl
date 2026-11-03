@@ -86,13 +86,11 @@ using Margins
         end
     end
 
-    @testset "repeated calls reuse the cached engine" begin
-        Margins.clear_engine_cache!()
+    @testset "repeated calls agree" begin
         dk = select(d, :x, :k, :z, :y); dk.x = Float64.(dk.x); dk.z = Float64.(dk.z)
-        population_margins(m, dk; vars=[:k])
-        e1 = only(Margins._cached_engines())
-        population_margins(m, dk; vars=[:k])
-        @test only(Margins._cached_engines()) === e1
+        r1 = DataFrame(population_margins(m, dk; vars=[:k]))
+        r2 = DataFrame(population_margins(m, dk; vars=[:k]))
+        @test r1.estimate == r2.estimate && r1.se == r2.se
     end
 
     @testset "explicit grid values must be levels; typical values become mixtures" begin

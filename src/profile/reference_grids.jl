@@ -23,16 +23,7 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
     compiled = _shared_compiled(model, data_nt)
 
     # Extract all variables used in model operations
-    model_vars = Set{Symbol}()
-    for op in compiled.ops
-        if op isa LoadOp
-            Col = typeof(op).parameters[1]
-            push!(model_vars, Col)
-        elseif op isa ContrastOp
-            Col = typeof(op).parameters[1]
-            push!(model_vars, Col)
-        end
-    end
+    model_vars = extract_variable_names(compiled)   # every data column the formula reads
     
     # Filter data to only include predictor variables (exclude response)
     filtered_data = Dict{Symbol, Any}()

@@ -51,17 +51,11 @@ using Margins
                    population_margins(mm, disallowmissing(ds); vars=[:x]))
     end
 
-    @testset "repeated calls reuse the cached engine" begin
-        # (an Int column — model variable or not — is re-converted to Float64 on every call
-        # and so always rebuilds the engine; that predates this fix, so leave k out here)
+    @testset "repeated calls agree; in-place edits are picked up" begin
         mf = glm(@formula(y ~ x * z + b + g), d, Binomial(), LogitLink())
         duf = select(du, Not(:k))
-        Margins.clear_engine_cache!()
-        population_margins(mf, duf; vars=[:x])
-        e1 = only(Margins._cached_engines())
-        population_margins(mf, duf; vars=[:x])
-        @test only(Margins._cached_engines()) === e1
-        # ...but an in-place edit of the source column is picked up
+        @test same(population_margins(mf, duf; vars=[:x]), population_margins(mf, duf; vars=[:x]))
+        # an in-place edit of the source column is picked up (the narrowed copy is per call)
         du2 = allowmissing(select(d, Not(:k))); d2 = select(d, Not(:k))
         population_margins(mf, du2; vars=[:x])
         du2.z .+= 1; d2.z .+= 1

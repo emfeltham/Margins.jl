@@ -29,8 +29,7 @@ using Margins: _auto_link, validate_model_methods, MarginsError,
                _population_margins_with_contexts, _process_vars_parameter,
                _process_weights_parameter, _convert_numeric_to_float64, _prepare_margins_data,
                _resolve_weights, _set_weights_metadata!,
-               _checkout_engine, _checkin_engine!, PopulationUsage, ProfileUsage,
-               HasDerivatives, NoDerivatives,
+               build_engine, PopulationUsage, ProfileUsage, _measure_type,
                _profile_margins, process_reference_grid,
                _validate_reference_grid_column_type
 using FixedEffectModels: FixedEffectModel
@@ -59,8 +58,9 @@ end
 Margins._model_weights(::FixedEffectModel) = nothing
 
 # ---------------------------------------------------------------------------
-# fixed_effects_form: return clean formula without fe() terms
-# FixedEffectModel.formula_schema already has fe() stripped and schema applied
+# fixed_effects_form (FormulaCompiler's public model-class hook): return clean formula
+# without fe() terms. FixedEffectModel.formula_schema already has fe() stripped and schema
+# applied
 # ---------------------------------------------------------------------------
 function FormulaCompiler.fixed_effects_form(model::FixedEffectModel)
     return formula(model)  # StatsModels.formula returns formula_schema (clean, no fe())
@@ -68,7 +68,7 @@ end
 
 # ---------------------------------------------------------------------------
 # validate_model_methods: FixedEffectModel already passes via StatsAPI dispatch,
-# but add explicit method to cache and skip the try/catch path
+# but add an explicit method to skip the generic try/catch path
 # ---------------------------------------------------------------------------
 function Margins.validate_model_methods(model::FixedEffectModel)
     _warn_if_iv(model)
@@ -102,10 +102,10 @@ function Margins.validate_margins_common_inputs(model::FixedEffectModel, data, t
         end
     end
 
-    # Delegate to the default validation path (call individual validators)
+    # Delegate to the default validation path (call individual validators); returns Σ
     Margins.validate_required_args(model, data)
     Margins.validate_population_parameters(type, scale, backend, measure, vars)
-    Margins.validate_vcov_parameter(vcov, model)
+    return Margins.validate_vcov_parameter(vcov, model)
 end
 
 # ---------------------------------------------------------------------------
@@ -119,8 +119,8 @@ function Margins.population_margins(
     alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
     Margins._reject_ci_alpha(ci_alpha)
-    # Shared input validation
-    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
+    # Shared input validation; returns Σ, the one evaluation of `vcov` for this call
+    Σ = validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
 
     # Population-specific validation
     if !isnothing(scenarios)
@@ -147,52 +147,48 @@ function Margins.population_margins(
         vars = nothing
     end
 
-    # Build engine
-    deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
-    # Exclusive use of a cached engine for this call (returned in `finally`, so an
-    # error cannot leak it); concurrent calls each get their own engine.
-    (engine, engine_key) = _checkout_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
-    try
-        # Handle scenarios/groups
-        if !isnothing(scenarios) || !isnothing(groups)
-            result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts)
-            _set_weights_metadata!(result.metadata, weights_vec, weights_source)
-            # Add FE offset for predictions with contexts
-            if type === :predictions
-                return _adjust_population_result_with_fe(result, model, data, weights_vec)
-            end
-            return result
+    # Build engine. Each call builds its own engine (nothing is cached across calls); the
+    # scenarios/groups path builds its own evaluators per context, so its engine gets none.
+    has_contexts = !isnothing(scenarios) || !isnothing(groups)
+    engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, Σ, backend;
+                          evaluators = !has_contexts)
+    # Handle scenarios/groups
+    if has_contexts
+        result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts)
+        _set_weights_metadata!(result.metadata, weights_vec, weights_source)
+        # Add FE offset for predictions with contexts
+        if type === :predictions
+            return _adjust_population_result_with_fe(result, model, data, weights_vec)
         end
+        return result
+    end
 
-        if type === :effects
-            df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)
-            metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-            metadata[:alpha] = alpha
-            metadata[:analysis_type] = :population
-            _set_weights_metadata!(metadata, weights_vec, weights_source)
+    if type === :effects
+        df, G = _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights_vec)
+        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        metadata[:alpha] = alpha
+        metadata[:analysis_type] = :population
+        _set_weights_metadata!(metadata, weights_vec, weights_source)
 
-            estimates = df.estimate
-            standard_errors = df.se
-            variables = df.variable
-            terms = df.contrast
+        estimates = df.estimate
+        standard_errors = df.se
+        variables = df.variable
+        terms = df.contrast
 
-            return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
-        else # :predictions
-            df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
-            metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-            metadata[:alpha] = alpha
-            metadata[:analysis_type] = :population
-            _set_weights_metadata!(metadata, weights_vec, weights_source)
+        return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+    else # :predictions
+        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+        metadata[:alpha] = alpha
+        metadata[:analysis_type] = :population
+        _set_weights_metadata!(metadata, weights_vec, weights_source)
 
-            # Add FE offset to prediction estimates
-            fe_offset = _compute_population_fe_offset(model, data, weights_vec)
-            estimates = df.estimate .+ fe_offset
-            standard_errors = df.se  # SEs unchanged — FE offset is constant w.r.t. β
+        # Add FE offset to prediction estimates
+        fe_offset = _compute_population_fe_offset(model, data, weights_vec)
+        estimates = df.estimate .+ fe_offset
+        standard_errors = df.se  # SEs unchanged — FE offset is constant w.r.t. β
 
-            return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
-        end
-    finally
-        _checkin_engine!(engine_key, engine)
+        return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
     end
 end
 
@@ -214,8 +210,8 @@ function Margins.profile_margins(
     # Process reference grid
     processed_reference_grid = process_reference_grid(data, reference_grid)
 
-    # Validation
-    validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
+    # Validation; returns Σ, the one evaluation of `vcov` for this call
+    Σ = validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
 
     if isnothing(reference_grid)
         throw(ArgumentError("reference_grid cannot be nothing"))
@@ -237,7 +233,7 @@ function Margins.profile_margins(
     end
 
     # Delegate to internal implementation
-    result = _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, alpha, contrasts)
+    result = _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, Σ, processed_reference_grid, alpha, contrasts)
 
     # Add FE offset for predictions
     if type === :predictions

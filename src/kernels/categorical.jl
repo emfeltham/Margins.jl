@@ -6,7 +6,7 @@
 # `PredScale` (link: Δη = (X₁ − X₀)'β; response: g⁻¹(η₁) − g⁻¹(η₀)), with its delta-method
 # gradient and standard error.
 
-using FormulaCompiler: contrast_modelrow!, level_modelrow!
+using FormulaCompiler: contrast_modelrow!, level_modelrow!, contrast_endpoints
 using LinearAlgebra: dot
 
 # ŷ(X₀) and dŷ/dη at X₀, which every contrast from the same level shares within a row
@@ -72,14 +72,13 @@ function categorical_contrast_ame!(
     weights::Union{Nothing, Vector{Float64}} = nothing
 )
     fill!(gradient_accum, 0.0)
-    x₀ = evaluator.y_from_buf
-    x₁ = evaluator.y_to_buf
+    x₀, x₁ = contrast_endpoints(evaluator)
     ame_sum = 0.0
     total_weight = 0.0
     for row in rows
         w = rowweight(weights, row)
         w > 0 || continue
-        # Δx = X₁ − X₀, leaving X₀ / X₁ in the evaluator's y_from_buf / y_to_buf
+        # Δx = X₁ − X₀, leaving X₀ / X₁ in the evaluator's endpoint buffers (x₀, x₁)
         contrast_modelrow!(contrast_buf, evaluator, row, var, from_level, to_level)
         ame_sum += w * _contrast_row!(gradient_accum, w, contrast_buf, x₀, x₁,
                                       _contrast_base(s, x₀, β), β, s)
@@ -125,8 +124,7 @@ function categorical_contrast_ame_batch!(
     n_pairs = length(contrast_pairs)
     fill!(results_ame, 0.0)
     fill!(gradient_matrix, 0.0)
-    x₀ = evaluator.y_from_buf
-    x₁ = evaluator.y_to_buf
+    x₀, x₁ = contrast_endpoints(evaluator)   # the evaluator's own buffers, used as scratch
     total_weight = 0.0
     for row in rows
         w = rowweight(weights, row)

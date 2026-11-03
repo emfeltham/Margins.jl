@@ -1,6 +1,6 @@
 # Test that categorical kernel maintains zero allocations through FC primitives
 using Test, Margins, GLM, DataFrames, Tables, BenchmarkTools, CategoricalArrays
-using Margins: build_engine, PopulationUsage, HasDerivatives, categorical_contrast_ame!
+using Margins: build_engine, PopulationUsage, categorical_contrast_ame!
 using FormulaCompiler: contrast_modelrow!, contrast_gradient!
 using LinearAlgebra: dot
 
@@ -19,7 +19,7 @@ using LinearAlgebra: dot
 
     @testset "FC Primitives: contrast_modelrow! zero-alloc" begin
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         # Verify ContrastEvaluator exists
         @test !isnothing(engine.contrast)
@@ -45,7 +45,7 @@ using LinearAlgebra: dot
 
     @testset "FC Primitives: contrast_gradient! zero-alloc" begin
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         grad_buf = Vector{Float64}(undef, length(engine.β))
 
@@ -72,7 +72,7 @@ using LinearAlgebra: dot
 
     @testset "Full kernel: categorical_contrast_ame! zero-alloc" begin
         # Build engine with categorical variables
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         rows = collect(1:50)
 
@@ -132,7 +132,7 @@ using LinearAlgebra: dot
 
     @testset "Kernel with weighted computation zero-alloc" begin
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
 
         rows = collect(1:50)
         weights = ones(Float64, n)  # Equal weights
@@ -202,7 +202,7 @@ using LinearAlgebra: dot
         data_nt_bool = Tables.columntable(df_bool)
 
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model_bool, data_nt_bool, [:treated], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model_bool, data_nt_bool, [:treated], GLM.vcov, :ad)
 
         rows = collect(1:50)
 
@@ -261,7 +261,7 @@ using LinearAlgebra: dot
 
     @testset "Performance benchmarks" begin
         # Build engine
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
         rows = collect(1:100)
 
         # Warmup
@@ -309,7 +309,7 @@ using LinearAlgebra: dot
 
     @testset "Gradient correctness" begin
         # Verify that gradient is properly accumulated in gradient_accum
-        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        engine = build_engine(PopulationUsage, model, data_nt, [:treatment], GLM.vcov, :ad)
         rows = collect(1:10)
 
         # Clear gradient accumulator

@@ -125,7 +125,11 @@ function create_balanced_mixture(levels::AbstractVector)
     # FormulaCompiler's validation (errors on duplicate levels)
     validate_mixture_levels(levels)
 
-    # Delegate the construction to FormulaCompiler, keeping Margins' Dict return value
-    m = FormulaCompiler.create_balanced_mixture(levels)
-    return Dict{String, Float64}(string(l) => w for (l, w) in zip(m.levels, m.weights))
+    # Equal weights over the levels as strings (a CategoricalArray contributes its pool
+    # levels). FormulaCompiler's unexported function of the same name is not used: it is
+    # internal, and exporting it would clash with this one.
+    strs = levels isa CategoricalArray ? string.(CategoricalArrays.levels(levels)) :
+                                         unique(string.(levels))
+    w = 1.0 / length(strs)
+    return Dict{String, Float64}(s => w for s in strs)
 end
