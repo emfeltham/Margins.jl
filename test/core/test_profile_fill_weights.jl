@@ -25,8 +25,6 @@ using Margins
     shares(w) = [sum(w[d.g .== l]) / sum(w) for l in ["a", "b", "c"]]
     # a mixture as level => share (its level order is a Dict's, see _create_frequency_mixture)
     mixshares(m) = [Dict(string(l) => v for (l, v) in zip(m.levels, m.weights))[k] for k in ("a", "b", "c")]
-    samecell(a, b) = a isa CategoricalMixture ? (b isa CategoricalMixture && mixshares(a) == mixshares(b)) : isequal(a, b)
-    samegrid(a, b) = names(a) == names(b) && size(a) == size(b) && all(samecell(a[r, c], b[r, c]) for r in 1:nrow(a), c in names(a))
 
     @testset "weighted fit: weighted means, shares and mixture (hand computation)" begin
         c = complete_reference_grid(cg, mw, d)
@@ -52,7 +50,6 @@ using Margins
         c0 = complete_reference_grid(cg, mw, d; weights = :none)
         @test all(c0.z .== mean(d.z)) && all(c0.b .== mean(d.b))
         @test mixshares(c0.g[1]) == [count(==(l), d.g) / n for l in ["a", "b", "c"]]
-        @test samegrid(c0, complete_reference_grid(cg, mw, d; weights = nothing))
         r0 = profile_margins(mw, d, c0; type = :predictions)
         @test r0.metadata[:weights_source] === :none && r0.metadata[:weighted] === false
         # the weighted default moves the point, not the method: the two differ
@@ -60,7 +57,7 @@ using Margins
     end
 
     @testset "unweighted fit: bitwise unchanged" begin
-        @test samegrid(complete_reference_grid(cg, mu, d), complete_reference_grid(cg, mu, d; weights = :none))
+        # (the grids themselves are compared in features/test_typical_values.jl)
         for type in (:predictions, :effects)
             a = profile_margins(mu, d, cg; type)
             b = profile_margins(mu, d, complete_reference_grid(cg, mu, d; weights = :none); type)

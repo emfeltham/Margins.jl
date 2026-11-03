@@ -83,129 +83,35 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
         ("probit", glm(@formula(y ~ x + z + g), df, Binomial(), ProbitLink())),
     )
 
-    @testset "groups: $mname, $measure, scale=$scale" for (mname, m) in models,
-                                                          measure in _MEASURES,
-                                                          scale in (:response, :link)
-        X = modelmatrix(m); β = coef(m); Σ = GLM.vcov(m)
-        link = GLM.Link(m.model)
-        ix = findfirst(==("x"), coefnames(m))
-
-        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                           measure=measure, scale=scale, groups=:g))
-        @test nrow(res) == 3
-        for lev in ("a", "b", "c")
-            rows = findall(==(lev), string.(df.g))
-            (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
-                                                  measure, scale, nothing)
-            r = only(eachrow(res[string.(res.over_g) .== lev, :]))
-            @test r.estimate ≈ want_est atol=1e-9
-            @test r.se ≈ want_se atol=1e-6 rtol=1e-6   # central difference on β (link-scale unit
-            # elasticities divide by η, which can be near 0, so SEs can be large)
-            @test r.n == length(rows)
-        end
-    end
-
-    @testset "weighted groups: $measure" for measure in _MEASURES
-        # Regression test for the weight-convention bug: this combination used to throw
-        # BoundsError before reaching any arithmetic.
-        m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
-        X = modelmatrix(m); β = coef(m); Σ = GLM.vcov(m)
-        link = GLM.Link(m.model)
-        ix = findfirst(==("x"), coefnames(m))
-
-        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                           measure=measure, groups=:g, weights=:w))
-        for lev in ("a", "b", "c")
-            rows = findall(==(lev), string.(df.g))
-            (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
-                                                  measure, :response, df.w)
-            r = only(eachrow(res[string.(res.over_g) .== lev, :]))
-            @test r.estimate ≈ want_est atol=1e-9
-            @test r.se ≈ want_se atol=1e-6
-        end
-
-        # Weights must actually matter here
-        unw = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                           measure=measure, groups=:g))
-        @test !isapprox(sort(res.estimate), sort(unw.estimate); atol=1e-8)
-    end
-
-    @testset "scenarios: $measure, scale=$scale" for measure in _MEASURES,
-                                                     scale in (:response, :link)
-        # Override a continuous term that enters linearly, so the oracle's design matrix
-        # is the original one with that column replaced.
-        m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
-        β = coef(m); Σ = GLM.vcov(m)
-        link = GLM.Link(m.model)
-        ix = findfirst(==("x"), coefnames(m))
-        iz = findfirst(==("z"), coefnames(m))
-
-        for zval in (-1.0, 0.0, 1.5)
-            X = copy(modelmatrix(m)); X[:, iz] .= zval
-            rows = 1:nrow(df)
-            (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
-                                                  measure, scale, nothing)
-            res = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                               measure=measure, scale=scale,
-                                               scenarios=(z=zval,)))
-            @test res.estimate[1] ≈ want_est atol=1e-9
-            @test res.se[1] ≈ want_se atol=1e-6
-        end
-    end
-
-    @testset "scenarios and groups combined" begin
+    # `measure` under groups alone, weighted groups and scenarios alone is checked against
+    # closed forms for 7 links × 2 scales × 3 weightings in test_feature_matrix_oracle.jl
+    # (paths "groups=h", "groups=(z,3)", "scenarios z=0.5"; estimates rtol 1e-6) and pinned
+    # to 1e-12 by test_golden_equivalence.jl. This testset keeps an analytic (no finite
+    # difference in x) check at atol 1e-9 of every measure, scale and weighting with a
+    # scenario and groups at once.
+    @testset "scenarios and groups combined: $measure, scale=$scale, weights=$wname" for
+            measure in (_MEASURES..., :effect), scale in (:response, :link),
+            (wname, wcol) in (("none", nothing), ("w", :w))
         m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
         β = coef(m); Σ = GLM.vcov(m)
         link = GLM.Link(m.model)
         ix = findfirst(==("x"), coefnames(m))
         iz = findfirst(==("z"), coefnames(m))
         X = copy(modelmatrix(m)); X[:, iz] .= 0.0
+        w = isnothing(wcol) ? nothing : df[!, wcol]
+        wkw = isnothing(wcol) ? (;) : (; weights=wcol)
 
-        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                           measure=:elasticity, scenarios=(z=0.0,), groups=:h))
+        res = DataFrame(population_margins(m, df; type=:effects, vars=[:x], measure, scale,
+                                           scenarios=(z=0.0,), groups=:h, wkw...))
         @test nrow(res) == 2
         for lev in ("p", "q")
             rows = findall(==(lev), string.(df.h))
             (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
-                                                  :elasticity, :response, nothing)
+                                                  measure, scale, w)
             r = only(eachrow(res[string.(res.over_h) .== lev, :]))
             @test r.estimate ≈ want_est atol=1e-9
-            @test r.se ≈ want_se atol=1e-6
-        end
-    end
-
-    @testset "context normalizers are context-specific" begin
-        # The exact signature of the bug: a transformed measure must differ from the raw
-        # AME, and each group must average over its own rows (so the three groups differ
-        # from the single whole-sample elasticity).
-        m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
-
-        raw = DataFrame(population_margins(m, df; type=:effects, vars=[:x], groups=:g))
-        for measure in _MEASURES
-            transformed = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                                       measure=measure, groups=:g))
-            for lev in ("a", "b", "c")
-                a = only(eachrow(raw[string.(raw.over_g) .== lev, :]))
-                b = only(eachrow(transformed[string.(transformed.over_g) .== lev, :]))
-                @test !isapprox(a.estimate, b.estimate; atol=1e-8)
-                @test !isapprox(a.se, b.se; atol=1e-8)
-            end
-        end
-
-        # measure=:effect must be untouched by the change
-        for scale in (:response, :link)
-            r = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
-                                             scale=scale, groups=:g))
-            X = modelmatrix(m); β = coef(m); Σ = GLM.vcov(m)
-            link = GLM.Link(m.model); ix = findfirst(==("x"), coefnames(m))
-            for lev in ("a", "b", "c")
-                rows = findall(==(lev), string.(df.g))
-                (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
-                                                      :effect, scale, nothing)
-                row = only(eachrow(r[string.(r.over_g) .== lev, :]))
-                @test row.estimate ≈ want_est atol=1e-9
-                @test row.se ≈ want_se atol=1e-6
-            end
+            @test r.se ≈ want_se atol=1e-6 rtol=1e-6
+            @test r.n == length(rows)
         end
     end
 

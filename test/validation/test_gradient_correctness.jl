@@ -179,56 +179,10 @@ using LinearAlgebra
         @test Gβ_ad ≈ Gβ_fd rtol=1e-6 atol=1e-8
     end
 
-    # === Test 5: Delta Method Integration ===
-
-    @debug "Testing delta method integration..."
-
-    # Test that parameter gradients work correctly with delta_method_se
-
-    # Create a test covariance matrix
-    p = length(β)
-    Σ = Matrix{Float64}(I, p, p) * 0.01  # Simple diagonal covariance
-
-    # Get parameter gradient for first variable at test row
-    Margins.marginal_effects_eta!(g_fd, Gβ_fd, de_fd, β, test_row)
-
-    # Extract parameter gradient for first variable
-    gβ_x = Gβ_fd[:, 1]  # Parameter gradient for variable x
-
-    # Compute standard error using delta method
-    se_x = Margins.delta_method_se(gβ_x, Σ)
-
-    # Should be positive and finite
-    @test se_x > 0
-    @test isfinite(se_x)
-
-    # Should be deterministic (same result each time)
-    se_x2 = Margins.delta_method_se(gβ_x, Σ)
-    @test se_x ≈ se_x2
-
-    # === Test 6: Dimensional Consistency ===
-
-    @debug "Testing dimensional consistency..."
-
-    # Verify dimensions are correct
-    @test size(Gβ_ad) == (length(compiled), length(vars))
-    @test size(Gβ_fd) == (length(compiled), length(vars))
-    @test length(g_ad) == length(vars)
-    @test length(g_fd) == length(vars)
-
-    # Verify that each column of Gβ corresponds to the correct variable
-    # by checking the gradient structure matches the model matrix
-
-    # For our simple model y ~ x + z, columns should match model matrix structure
-    @test size(Gβ_fd, 1) == size(modelmatrix(model), 2)  # Same number of parameters
-    @test size(Gβ_fd, 2) == length(vars)  # One column per variable
-
     @debug "All mathematical correctness tests passed!"
     @debug "  - η-scale gradients: analytically verified for linear model"
     @debug "  - μ-scale gradients: chain rule verified vs numerical differentiation"
     @debug "  - Identity link: confirmed to match η-scale exactly"
     @debug "  - Nonlinear links: AD vs FD cross-validated"
     @debug "  - Batch consistency: verified across multiple rows"
-    @debug "  - Delta method integration: confirmed working"
-    @debug "  - Dimensional consistency: all matrix sizes correct"
 end

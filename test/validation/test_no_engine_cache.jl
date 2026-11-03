@@ -4,8 +4,9 @@
 # development a bounded engine cache (LRU, `set_engine_cache_capacity!`) kept engines — and
 # through them the datasets they were built from — across calls; before that it was
 # unbounded (a 40-replicate bootstrap at n = 50,000 retained ~320 MB). These tests check what
-# replaces it: nothing Margins holds keeps a dataset alive, repeated calls are identical, and
-# `clear_engine_cache!()` remains as an alias that clears FormulaCompiler's compiled cache.
+# replaces it: nothing Margins holds keeps a dataset alive, and `clear_engine_cache!()`
+# remains as an alias that clears FormulaCompiler's compiled cache. (Repeated calls giving
+# identical results is checked bit for bit in concurrent_calls_checks.jl.)
 
 using Test
 using DataFrames, GLM, StatsModels, Random, Statistics
@@ -34,22 +35,6 @@ end
         refs = [_replicate!(s) for s in 100:140]
         GC.gc(); GC.gc()
         @test all(r -> r.value === nothing, refs)
-    end
-
-    @testset "repeated calls are identical" begin
-        d = _bound_data(31); m = _bound_model(d)
-        r1 = DataFrame(population_margins(m, d))
-        r2 = DataFrame(population_margins(m, d))
-        @test r1.estimate == r2.estimate
-        @test r1.se == r2.se
-        g = means_grid(d)
-        @test DataFrame(profile_margins(m, d, g)).se == DataFrame(profile_margins(m, d, g)).se
-    end
-
-    @testset "build_engine rejects unknown variables" begin
-        d = _bound_data(51); m = _bound_model(d)
-        nt = Margins._prepare_margins_data(Margins.Tables.columntable(d), m)
-        @test_throws Margins.MarginsError Margins.build_engine(Margins.PopulationUsage, m, nt, [:nope], GLM.vcov, :ad)
     end
 
     @testset "clear_engine_cache! clears FormulaCompiler's cache" begin

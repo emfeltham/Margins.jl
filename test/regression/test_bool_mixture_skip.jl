@@ -40,68 +40,6 @@ using Random
         @test all(result_df.contrast .== "dy/dx")
     end
 
-    @testset "Multiple Bool variables with grid completion" begin
-        # Simulate user's scenario more closely
-        n = 100
-        df = DataFrame(
-            socio4 = rand(Bool, n),
-            wealth_d1_4_h = randn(n),
-            wealth_d1_4_h_nb_1_socio = randn(n),
-            other_bool = rand(Bool, n),  # Will get filled with frequency
-            age = rand(25:65, n),
-            y = rand(Bool, n)
-        )
-
-        # Fit logistic regression
-        model = glm(@formula(y ~ socio4 + wealth_d1_4_h + wealth_d1_4_h_nb_1_socio + other_bool + age),
-                   df, Binomial(), LogitLink())
-
-        # Create reference grid without other_bool
-        cgx = DataFrame(
-            socio4 = [false, true, false, true],
-            wealth_d1_4_h = [0.0, 0.0, 0.853083, 0.853083],
-            wealth_d1_4_h_nb_1_socio = [0.0, 0.796425, 0.0, 0.796425]
-        )
-
-        # This should work without error
-        result = profile_margins(model, df, cgx; type=:effects)
-        result_df = DataFrame(result)
-
-        # Verify that other_bool is NOT in the results (it was skipped)
-        @test !any(result_df.variable .== "other_bool")
-
-        # Verify that continuous variables ARE in the results
-        @test any(result_df.variable .== "wealth_d1_4_h")
-        @test any(result_df.variable .== "wealth_d1_4_h_nb_1_socio")
-        @test any(result_df.variable .== "age")
-    end
-
-    @testset "Explicit Bool values in reference grid (not mixture)" begin
-        # When Bool values are explicitly provided (not filled), they should be scenario-defining
-        n = 100
-        df = DataFrame(
-            bool_var = rand(Bool, n),
-            x1 = randn(n),
-            y = randn(n)
-        )
-
-        model = lm(@formula(y ~ bool_var + x1), df)
-
-        # Explicitly specify Bool values in reference grid
-        ref_grid = DataFrame(
-            bool_var = [false, true],
-            x1 = [0.0, 0.0]
-        )
-
-        # This should compute effects for x1 only (bool_var is scenario-defining)
-        result = profile_margins(model, df, ref_grid; type=:effects)
-        result_df = DataFrame(result)
-
-        # bool_var should NOT be in results (it's scenario-defining, not implicit mixture)
-        @test !any(result_df.variable .== "bool_var")
-        @test all(result_df.variable .== "x1")
-    end
-
     @testset "Bool variable with 0.0 and 1.0 Float values (edge case)" begin
         # Edge case: Bool variable filled with exact 0.0 or 1.0 Float values
         # These should still be treated as discrete, not mixture

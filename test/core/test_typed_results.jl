@@ -114,6 +114,9 @@ using CovarianceMatrices: HC1
         @test collect(keys(p.context)) == [:z, :x, :b]
         @test p.context.kinds == [:grid, :grid, :grid]
         @test names(DataFrame(p))[1:4] == ["z", "x", "b", "type"]
+        # grid columns are neither groups nor scenarios
+        @test Margins.context_columns(p) == (Symbol[], Symbol[])
+        @test p.metadata[:groups_vars] == Symbol[] && p.metadata[:scenarios_vars] == Symbol[]
         pe = profile_margins(lmod, d, grid; vars = [:w])
         @test collect(keys(pe.context)) == [:z, :x, :b]
         @test names(DataFrame(pe))[1:3] == ["z", "x", "b"]
@@ -127,6 +130,7 @@ using CovarianceMatrices: HC1
         @test collect(keys(r.context)) == [:k, :h, :g, :z, :x, :b]
         @test r.context.kinds == [:group, :group, :group, :scenario, :scenario, :scenario]
         @test Margins.context_columns(r) == ([:k, :h, :g], [:z, :x, :b])
+        @test r.metadata[:groups_vars] == [:k, :h, :g] && r.metadata[:scenarios_vars] == [:z, :x, :b]
         @test names(DataFrame(r))[1:7] == ["over_k", "over_h", "over_g", "at_z", "at_x", "at_b", "type"]
         r2 = population_margins(lmod, d; vars = [:w], groups = [:g, :k, :h])
         @test names(DataFrame(r2))[1:3] == ["over_g", "over_k", "over_h"]
@@ -145,7 +149,11 @@ using CovarianceMatrices: HC1
         rn = population_margins(lmod, d; type = :predictions, groups = :k => :h)
         @test collect(keys(rn.context)) == [:k, :h]
         # a plain AME has no context
-        @test isnothing(population_margins(lmod, d; vars = [:x]).context)
+        plain = population_margins(lmod, d; vars = [:x])
+        @test isnothing(plain.context)
+        # context_columns reads the context, not the metadata
+        plain.metadata[:groups_vars] = [:g]; plain.metadata[:scenarios_vars] = [:z]
+        @test Margins.context_columns(plain) == (Symbol[], Symbol[])
     end
 
     @testset "second differences use the result's inference" begin

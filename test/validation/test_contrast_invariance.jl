@@ -10,15 +10,16 @@
 #   AME(A→B) should be identical across all contrast coding schemes
 #   AME(A→C) should be identical across all contrast coding schemes
 #
-# This tests the statistical correctness of the override system and ensures
-# that baseline detection (_get_baseline_level) works properly across contrast types.
+# This tests the statistical correctness of the override system and ensures that the
+# baseline level is the same under every coding: the contrast labels Margins reports
+# ("level - baseline") must agree across schemes, and a Bool-valued categorical's must be
+# "true - false". (Baseline detection with DummyCoding(base = …) is checked in
+# primitives/test_formulacompiler_public_api.jl.)
 
 using Test
 using Random
 using DataFrames, CategoricalArrays, GLM, StatsModels
 using Margins
-using FormulaCompiler
-import FormulaCompiler: _get_baseline_level
 
 # Test data for all three contrast coding schemes
 const contrast_schemes = [
@@ -43,56 +44,38 @@ const contrast_schemes = [
         df.group = categorical(df.group)
         
         ame_results = Dict()
-        baseline_levels = Dict()
-        
+
         @testset "Fit models with different contrast codings" begin
             for (scheme_name, contrast_type) in contrast_schemes
                 # Set contrast coding for this scheme
                 contrasts_dict = Dict(:group => contrast_type)
-                
+
                 # Fit model with specific contrast coding
                 model = lm(@formula(y ~ x + group), df; contrasts=contrasts_dict)
-                
-                # Store baseline level detection
-                baseline_levels[scheme_name] = _get_baseline_level(model, :group)
-                
+
                 # Compute AME for the categorical variable
                 ame = population_margins(model, df; type=:effects, vars=[:group], scale=:response)
                 ame_df = DataFrame(ame)
-                
+
                 # Store results
                 ame_results[scheme_name] = ame_df
-                
-                @test nrow(ame_df) >= 1  # Should have at least one contrast
-                @test all(isfinite, ame_df.estimate)
-                @test !isempty(ame_df.variable)
-                
+
+                # every non-baseline level against the first level, whatever the coding
+                @test sort(ame_df.contrast) == ["Low - High", "Medium - High"]
+
                 # Debug output
-                @debug "Contrast scheme results" scheme=scheme_name baseline=baseline_levels[scheme_name] n_contrasts=nrow(ame_df) estimates=ame_df.estimate
+                @debug "Contrast scheme results" scheme=scheme_name contrasts=ame_df.contrast estimates=ame_df.estimate
             end
         end
-        
-        @testset "Baseline level consistency" begin
-            # All schemes should detect the same baseline level
-            # (StatsModels.jl should handle this consistently)
-            baseline_dummy = baseline_levels[:dummy]
-            baseline_effects = baseline_levels[:effects] 
-            baseline_helmert = baseline_levels[:helmert]
-            
-            @debug "Baseline level detection" dummy=baseline_dummy effects=baseline_effects helmert=baseline_helmert
-            
-            # For categorical variables, baseline should be consistent across contrast schemes
-            # This is a mathematical requirement - the baseline is an inherent property of the data
-            @test baseline_dummy == baseline_effects
-            @test baseline_dummy == baseline_helmert
-        end
-        
+
         @testset "AME contrast invariance" begin
-            # Extract AME estimates for comparison
-            dummy_estimates = sort(ame_results[:dummy].estimate)
-            effects_estimates = sort(ame_results[:effects].estimate)
-            helmert_estimates = sort(ame_results[:helmert].estimate)
-            
+            # Rows matched by contrast label (the same baseline in every scheme)
+            byc(s) = [ame_results[s].estimate[findfirst(==(c), ame_results[s].contrast)]
+                      for c in ("Low - High", "Medium - High")]
+            dummy_estimates = byc(:dummy)
+            effects_estimates = byc(:effects)
+            helmert_estimates = byc(:helmert)
+
             # Debug detailed comparison
             @debug "AME comparison across schemes" dummy=dummy_estimates effects=effects_estimates helmert=helmert_estimates
             
@@ -117,38 +100,23 @@ const contrast_schemes = [
         df.treatment_cat = categorical(df.treatment)
         
         ame_results_bool = Dict()
-        baseline_levels_bool = Dict()
-        
+
         @testset "Boolean variable with contrast schemes" begin
             for (scheme_name, contrast_type) in contrast_schemes
                 contrasts_dict = Dict(:treatment_cat => contrast_type)
-                
+
                 model = lm(@formula(y ~ x + treatment_cat), df; contrasts=contrasts_dict)
-                
-                # Baseline detection for boolean
-                baseline_levels_bool[scheme_name] = _get_baseline_level(model, :treatment_cat)
-                
+
                 ame = population_margins(model, df; type=:effects, vars=[:treatment_cat], scale=:response)
                 ame_df = DataFrame(ame)
-                
+
                 ame_results_bool[scheme_name] = ame_df
-                
-                @test nrow(ame_df) == 1  # Binary variable should have exactly one contrast
-                @test isfinite(ame_df.estimate[1])
+
+                # one contrast, with false as the baseline (the false → true convention)
+                @test ame_df.contrast == ["true - false"]
             end
         end
-        
-        @testset "Boolean baseline convention" begin
-            # For boolean variables, baseline should always be false (0)
-            # This tests the false→true (0→1) convention from the plan
-            for (scheme_name, baseline) in baseline_levels_bool
-                @test baseline == false
-                if baseline != false
-                    @error "Boolean baseline should be false for $scheme_name scheme, got $baseline"
-                end
-            end
-        end
-        
+
         @testset "Boolean AME invariance" begin
             # AME should be identical across contrast schemes for boolean variables
             dummy_est = ame_results_bool[:dummy].estimate[1]
@@ -187,17 +155,18 @@ const contrast_schemes = [
                 ame_df = DataFrame(ame)
                 
                 ame_interaction_results[scheme_name] = ame_df
-                
-                @test nrow(ame_df) >= 1
-                @test all(isfinite, ame_df.estimate)
+
+                @test sort(ame_df.contrast) == ["B - A", "C - A"]
             end
         end
         
         @testset "Interaction model AME invariance" begin
             # Even with interactions, AME should be contrast-invariant
-            dummy_est = sort(ame_interaction_results[:dummy].estimate)
-            effects_est = sort(ame_interaction_results[:effects].estimate)
-            helmert_est = sort(ame_interaction_results[:helmert].estimate)
+            byc(s) = [ame_interaction_results[s].estimate[findfirst(==(c), ame_interaction_results[s].contrast)]
+                      for c in ("B - A", "C - A")]
+            dummy_est = byc(:dummy)
+            effects_est = byc(:effects)
+            helmert_est = byc(:helmert)
             
             @debug "Interaction model AME comparison" dummy=dummy_est effects=effects_est helmert=helmert_est
             

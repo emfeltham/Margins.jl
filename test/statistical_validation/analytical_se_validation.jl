@@ -263,66 +263,6 @@ function analytical_poisson_se(model, data, var_symbol, at_values)
 end
 
 """
-    compute_population_linear_se(model, data, var_symbol)
-
-Compute population-level (AME) standard error for linear model analytically.
-For linear models, population and profile SEs are identical since effects are constant.
-
-# Arguments
-- `model`: Fitted linear model
-- `data`: DataFrame used to fit model  
-- `var_symbol`: Variable symbol
-
-# Returns
-- Analytical population SE (same as coefficient SE for linear models)
-"""
-function compute_population_linear_se(model, data, var_symbol)
-    # For linear models, AME SE = coefficient SE (constant marginal effects)
-    return analytical_linear_se(model, data, var_symbol)
-end
-
-"""
-    verify_linear_se_consistency(model, data, var_symbol; tolerance=1e-12)
-
-Verify that computed standard errors match analytical values for linear models.
-Tests both population and profile approaches.
-
-# Arguments
-- `model`: Fitted linear model
-- `data`: DataFrame used to fit model
-- `var_symbol`: Variable to test
-- `tolerance`: Numerical tolerance for comparison
-
-# Returns
-- NamedTuple with validation results for both population and profile approaches
-"""
-function verify_linear_se_consistency(model, data, var_symbol; tolerance=1e-12)
-    analytical_se = analytical_linear_se(model, data, var_symbol)
-    
-    # Test population margins SE
-    pop_result = population_margins(model, data; type=:effects, vars=[var_symbol])
-    pop_df = DataFrame(pop_result)
-    pop_se = pop_df.se[1]
-    pop_matches = abs(pop_se - analytical_se) < tolerance
-    
-    # Test profile margins SE  
-    profile_result = profile_margins(model, data, means_grid(data); type=:effects, vars=[var_symbol])
-    prof_df = DataFrame(profile_result)
-    prof_se = prof_df.se[1]
-    prof_matches = abs(prof_se - analytical_se) < tolerance
-    
-    return (
-        analytical_se = analytical_se,
-        population_se = pop_se,
-        profile_se = prof_se,
-        population_matches = pop_matches,
-        profile_matches = prof_matches,
-        both_match = pop_matches && prof_matches,
-        max_deviation = max(abs(pop_se - analytical_se), abs(prof_se - analytical_se))
-    )
-end
-
-"""
     verify_glm_se_chain_rule(model, data, var_symbol, at_values; tolerance=1e-10, model_type=:logistic)
 
 Verify that computed GLM standard errors match analytical delta method calculations.

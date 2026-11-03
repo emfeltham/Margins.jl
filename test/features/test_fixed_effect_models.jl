@@ -35,37 +35,17 @@ using CategoricalArrays
     # Phase 1: Marginal Effects
     # =====================================================================
 
-    @testset "Basic AME" begin
-        result = population_margins(m, df; type=:effects)
-        df_r = DataFrame(result)
-
-        @test nrow(df_r) == 3
-        @test Set(df_r.variable) == Set(["x1", "x2", "x3"])
-
-        for row in eachrow(df_r)
-            if row.variable == "x1"
-                @test abs(row.estimate - 2.0) < 0.15
-            elseif row.variable == "x2"
-                @test abs(row.estimate - (-1.5)) < 0.15
-            elseif row.variable == "x3"
-                @test abs(row.estimate - 0.5) < 0.15
-            end
-        end
-
-        @test all(df_r.se .> 0)
-        @test all(df_r.se .< 0.1)
-    end
-
-    @testset "Specific vars" begin
-        result = population_margins(m, df; type=:effects, vars=[:x1])
-        df_r = DataFrame(result)
-        @test nrow(df_r) == 1
-        @test df_r.variable[1] == "x1"
-        @test abs(df_r.estimate[1] - 2.0) < 0.15
-
-        result2 = population_margins(m, df; type=:effects, vars=[:x1, :x2])
-        df_r2 = DataFrame(result2)
-        @test nrow(df_r2) == 2
+    @testset "AME is the coefficient (additive model, fit without save=:fe)" begin
+        # (the AME == coef check of core/test_model_interface.jl uses a save=:fe fit; here the
+        # default vars must leave out the absorbed state and year)
+        df_r = DataFrame(population_margins(m, df; type=:effects))
+        @test df_r.variable == ["x1", "x2", "x3"]
+        @test df_r.estimate ≈ coef(m) rtol = 1e-10
+        @test df_r.se ≈ sqrt.([vcov(m)[j, j] for j in 1:3]) rtol = 1e-10
+        df_1 = DataFrame(population_margins(m, df; type=:effects, vars=[:x1]))
+        @test df_1.variable == ["x1"]
+        @test df_1.estimate[1] ≈ coef(m)[1] rtol = 1e-10
+        @test nrow(DataFrame(population_margins(m, df; type=:effects, vars=[:x1, :x2]))) == 2
     end
 
     @testset "Interaction model" begin
@@ -73,19 +53,12 @@ using CategoricalArrays
         df_int.y .= 2.0 .* df.x1 .+ (-1.5) .* df.x2 .+ 0.8 .* df.x1 .* df.x2 .+ randn(n) * 0.3
 
         m_int = reg(df_int, @formula(y ~ x1 + x2 + x1 & x2 + fe(state)))
-        m_glm = lm(@formula(y ~ x1 + x2 + x1 & x2), df_int)
 
-        result_fe = population_margins(m_int, df_int; type=:effects, vars=[:x1, :x2])
-        result_glm = population_margins(m_glm, df_int; type=:effects, vars=[:x1, :x2])
-
-        df_fe = DataFrame(result_fe)
-        df_glm = DataFrame(result_glm)
-
-        for var in ["x1", "x2"]
-            fe_est = df_fe[df_fe.variable .== var, :estimate][1]
-            glm_est = df_glm[df_glm.variable .== var, :estimate][1]
-            @test abs(fe_est - glm_est) < 0.05
-        end
+        # AME(x1) = β₁ + β₁₂ mean(x2), AME(x2) = β₂ + β₁₂ mean(x1)
+        β = coef(m_int)
+        df_fe = DataFrame(population_margins(m_int, df_int; type=:effects, vars=[:x1, :x2]))
+        @test df_fe.variable == ["x1", "x2"]
+        @test df_fe.estimate ≈ [β[1] + β[3] * mean(df_int.x2), β[2] + β[3] * mean(df_int.x1)] rtol = 1e-10
     end
 
     @testset "Profile margins (MEM)" begin
@@ -115,8 +88,8 @@ using CategoricalArrays
         df_r = DataFrame(result)
 
         @test nrow(df_r) == 2
-        @test abs(df_r.estimate[1] - β[1]) < 0.05
-        @test abs(df_r.estimate[2] - (β[1] + β[3])) < 0.05
+        @test df_r.estimate[1] ≈ β[1] rtol = 1e-10
+        @test df_r.estimate[2] ≈ β[1] + β[3] rtol = 1e-10
     end
 
     @testset "FE variables in vars blocked" begin
@@ -139,24 +112,23 @@ using CategoricalArrays
         df_r = DataFrame(result)
         @test nrow(df_r) == 1
         @test df_r.variable[1] == "x1"
-        # IV estimate should be in the ballpark of true value (2.0)
-        # but IV is noisier than OLS, so use wider tolerance
-        @test abs(df_r.estimate[1] - 2.0) < 1.0
-        @test df_r.se[1] > 0
+        # the AME is the structural coefficient, with its SE
+        @test df_r.estimate[1] ≈ coef(m_iv)[1] rtol = 1e-10
+        @test df_r.se[1] ≈ sqrt(vcov(m_iv)[1, 1]) rtol = 1e-10
 
         # IV predictions should also work if save=:fe
         m_iv_fe = reg(df_iv, @formula(y ~ (x1 ~ z) + fe(state)); save=:fe)
         result_pred = population_margins(m_iv_fe, df_iv; type=:predictions)
         df_pred = DataFrame(result_pred)
         @test nrow(df_pred) == 1
-        @test isfinite(df_pred.estimate[1])
+        @test df_pred.estimate[1] ≈ mean(coef(m_iv_fe)[1] .* df_iv.x1 .+ m_iv_fe.fe.fe_state) rtol = 1e-10
     end
 
     @testset "Both backends" begin
         for backend in [:ad, :fd]
             result = population_margins(m, df; type=:effects, vars=[:x1], backend=backend)
             df_r = DataFrame(result)
-            @test abs(df_r.estimate[1] - 2.0) < 0.15
+            @test df_r.estimate[1] ≈ coef(m)[1] rtol = (backend === :ad ? 1e-10 : 1e-6)
         end
     end
 
@@ -238,26 +210,19 @@ using CategoricalArrays
     end
 
     @testset "Predictions have correct SEs" begin
-        # SEs should match the Xβ-only SEs (FE offsets are constants)
-        result = population_margins(m_fe, df; type=:predictions)
-        df_r = DataFrame(result)
-
-        @test df_r.se[1] > 0
-        @test isfinite(df_r.se[1])
+        # The FE offsets are constants: the SE is that of the Xβ part, sqrt(x' V x)
+        V = vcov(m_fe)
+        df_r = DataFrame(population_margins(m_fe, df; type=:predictions))
+        xbar = [mean(df.x1), mean(df.x2), mean(df.x3)]
+        @test df_r.se[1] ≈ sqrt(xbar' * V * xbar) rtol = 1e-10
 
         # Profile SEs at non-zero covariate values
         grid = DataFrame(x1=[0.5, 1.0], x2=[0.3, -0.2], x3=[0.1, 0.5], state=["CA", "TX"], year=[2021, 2022])
-        result2 = profile_margins(m_fe, df, grid; type=:predictions)
-        df_r2 = DataFrame(result2)
-
-        @test all(df_r2.se .> 0)
-        @test all(isfinite.(df_r2.se))
-    end
-
-    @testset "Effects still work with save=:fe model" begin
-        result = population_margins(m_fe, df; type=:effects, vars=[:x1])
-        df_r = DataFrame(result)
-        @test abs(df_r.estimate[1] - 2.0) < 0.15
+        df_r2 = DataFrame(profile_margins(m_fe, df, grid; type=:predictions))
+        for k in 1:2
+            xk = [grid.x1[k], grid.x2[k], grid.x3[k]]
+            @test df_r2.se[k] ≈ sqrt(xk' * V * xk) rtol = 1e-10
+        end
     end
 
     @testset "Shared validation of the request layer (B7)" begin

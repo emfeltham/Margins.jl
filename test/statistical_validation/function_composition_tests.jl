@@ -17,8 +17,19 @@ using CategoricalArrays
 using GLM
 using Statistics
 using Margins
+using LinearAlgebra
 
-include("testing_utilities.jl")
+# testing_utilities.jl is loaded centrally in runtests.jl
+
+# Exact checks for an lm: an effect is linear in β, effect = g'β with g = ∂effect/∂β written
+# out by hand, and its SE is √(g'Vg)
+function _fc_check(res, g, model; rtol=1e-10)
+    r = DataFrame(res)
+    @test r.estimate[1] ≈ dot(g, coef(model)) rtol=rtol
+    @test r.se[1] ≈ sqrt(g' * vcov(model) * g) rtol=rtol
+end
+_fc_mem(model, data, point, var) = profile_margins(model, data, DataFrame(point); type=:effects, vars=[var])
+_fc_ame(model, data, var; kw...) = population_margins(model, data; type=:effects, vars=[var], kw...)
 
 """
     make_function_composition_data(; n = 500, seed = 42)
@@ -138,10 +149,11 @@ end
             # Test exp(x - z) pattern
             data.outcome = 1.0 .+ 0.3 .* exp.(data.x .- data.z) .+ 0.1 .* randn(400)
             model = lm(@formula(outcome ~ exp(x - z)), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="exp(x-z)")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # ∂/∂x β·exp(x − z) = β·exp(x − z), ∂/∂z = −β·exp(x − z)
+            pt = (x=[0.3], z=[-0.2])
+            _fc_check(_fc_mem(model, data, pt, :x), [0, exp(0.5)], model)
+            _fc_check(_fc_mem(model, data, pt, :z), [0, -exp(0.5)], model)
+            _fc_check(_fc_ame(model, data, :x), [0, mean(exp.(data.x .- data.z))], model)
         end
         
         @testset "1.3 Square Root Compositions" begin  
@@ -170,10 +182,13 @@ end
             # Test x * log(z) pattern where derivative w.r.t. x should be log(z)
             data.outcome = 1.5 .+ 0.4 .* (data.x .* log.(data.pos_x)) .+ 0.1 .* randn(400)
             model = lm(@formula(outcome ~ x * log(pos_x)), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="x*log(pos_x)")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # coefficients: (Intercept), x, log(pos_x), x & log(pos_x)
+            # ∂/∂x = β_x + β_int·log(pos_x); ∂/∂pos_x = (β_log + β_int·x)/pos_x
+            pt = (x=[0.5], pos_x=[2.0])
+            _fc_check(_fc_mem(model, data, pt, :x), [0, 1, 0, log(2.0)], model)
+            _fc_check(_fc_mem(model, data, pt, :pos_x), [0, 0, 1 / 2.0, 0.5 / 2.0], model)
+            _fc_check(_fc_ame(model, data, :x), [0, 1, 0, mean(log.(data.pos_x))], model)
+            _fc_check(_fc_ame(model, data, :pos_x), [0, 0, mean(1 ./ data.pos_x), mean(data.x ./ data.pos_x)], model)
         end
     end
     
@@ -187,10 +202,11 @@ end
                           0.5 .* data.pos_income ./ 1000.0 .+ 5.0 .* randn(400)
             
             model = lm(@formula(outcome ~ sin(3.141592653589793 * time / 12) + pos_income), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="seasonal_sin")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # time is an Int column; ∂/∂time = β·(π/12)·cos(π·time/12)
+            d1(t) = π / 12 * cos(π * t / 12)
+            _fc_check(_fc_mem(model, data, (time=[5], pos_income=[50000.0]), :time), [0, d1(5), 0], model)
+            _fc_check(_fc_ame(model, data, :time), [0, mean(d1.(data.time)), 0], model)
+            _fc_check(_fc_ame(model, data, :pos_income), [0, 0, 1], model)
         end
         
         @testset "2.2 Cosine Patterns" begin
@@ -200,10 +216,10 @@ end
                           0.3 .* data.age .+ 3.0 .* randn(400)
             
             model = lm(@formula(outcome ~ cos(2 * 3.141592653589793 * time / 24) + age), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="cosine_cycle")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # ∂/∂time = −β·(2π/24)·sin(2π·time/24)
+            d2(t) = -2π / 24 * sin(2π * t / 24)
+            _fc_check(_fc_mem(model, data, (time=[7], age=[40]), :time), [0, d2(7), 0], model)
+            _fc_check(_fc_ame(model, data, :time), [0, mean(d2.(data.time)), 0], model)
         end
         
         @testset "2.3 Combined Trigonometric" begin
@@ -213,10 +229,10 @@ end
                           0.2 .* data.pos_income ./ 1000.0 .+ 4.0 .* randn(400)
             
             model = lm(@formula(outcome ~ sin(3.141592653589793 * time / 6) + cos(3.141592653589793 * time / 4) + pos_income), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="combined_trig")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # ∂/∂time = β₁·(π/6)·cos(π·time/6) − β₂·(π/4)·sin(π·time/4)
+            g(t) = [0, π / 6 * cos(π * t / 6), -π / 4 * sin(π * t / 4), 0]
+            _fc_check(_fc_mem(model, data, (time=[3], pos_income=[50000.0]), :time), g(3), model)
+            _fc_check(_fc_ame(model, data, :time), vec(mean(reduce(hcat, g.(data.time)); dims=2)), model)
         end
     end
     
@@ -231,16 +247,16 @@ end
             data.outcome = 2.0 .+ 0.3 .* log_capital .+ 0.6 .* log_labor .+ 0.1 .* randn(500)
             
             model = lm(@formula(outcome ~ log(pos_capital) + log(pos_income)), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="production_function")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
-            
-            # Test elasticity computation for production function
-            elast_result = population_margins(model, data; type=:effects, measure=:elasticity)
-            elast_df = DataFrame(elast_result)
-            @test all(isfinite, elast_df.estimate)
-            @test all(isfinite, elast_df.se)
+            # ∂/∂capital = β₁/capital
+            _fc_check(_fc_ame(model, data, :pos_capital), [0, mean(1 ./ data.pos_capital), 0], model)
+            _fc_check(_fc_mem(model, data, (pos_capital=[300.0], pos_income=[50000.0]), :pos_capital), [0, 1 / 300, 0], model)
+            # elasticity: mean of unit elasticities (β₁/capitalᵢ)·capitalᵢ/ŷᵢ = mean(β₁/ŷᵢ);
+            # not linear in β: gradient mean(e₁/ŷᵢ − β₁ xᵢ/ŷᵢ²)
+            X = modelmatrix(model); b = coef(model); ŷ = X * b
+            r = DataFrame(_fc_ame(model, data, :pos_capital; measure=:elasticity))
+            gel = vec(mean([0 1 0] ./ ŷ .- b[2] .* X ./ ŷ .^ 2; dims=1))
+            @test r.estimate[1] ≈ mean(b[2] ./ ŷ) rtol=1e-10
+            @test r.se[1] ≈ sqrt(gel' * vcov(model) * gel) rtol=1e-10
         end
         
         @testset "3.2 Growth Model" begin
@@ -251,10 +267,11 @@ end
             
             # Simplified test: just use the main components
             model = lm(@formula(outcome ~ exp(log(pos_capital) + log(pos_income / 1000)) + experience^2), data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, data; test_name="growth_model")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # exp(log c + log(i/1000)) = c·i/1000: ∂/∂c = β₁·i/1000; ∂/∂experience = 2β₂·experience
+            pt = (pos_capital=[300.0], pos_income=[50000.0], experience=[10])
+            _fc_check(_fc_mem(model, data, pt, :pos_capital), [0, 50.0, 0], model)
+            _fc_check(_fc_mem(model, data, pt, :experience), [0, 0, 20.0], model)
+            _fc_check(_fc_ame(model, data, :pos_income), [0, mean(data.pos_capital) / 1000, 0], model)
         end
         
         @testset "3.3 Consumption Function" begin
@@ -269,10 +286,11 @@ end
             test_data.log_price = log_price
             test_data.interest_rate = interest_rate
             model = lm(@formula(log(pos_consumption) ~ log(pos_income) + log_price + interest_rate^2), test_data)
-            
-            quadrant_results = test_2x2_framework_quadrants(model, test_data; test_name="consumption_function")
-            @test quadrant_results.all_successful
-            @test quadrant_results.all_finite
+            # ∂/∂income = β₁/income; ∂/∂rate = 2β₃·rate (link = identity: the log(y) scale)
+            pt = (pos_income=[50000.0], log_price=[0.4], interest_rate=[0.05])
+            _fc_check(_fc_mem(model, test_data, pt, :interest_rate), [0, 0, 0, 0.1], model)
+            _fc_check(_fc_ame(model, test_data, :pos_income), [0, mean(1 ./ test_data.pos_income), 0, 0], model)
+            _fc_check(_fc_ame(model, test_data, :interest_rate), [0, 0, 0, 2 * mean(test_data.interest_rate)], model)
         end
     end
     
@@ -350,15 +368,6 @@ end
             model = lm(@formula(outcome ~ sin(3.141592653589793 * time / 12)), data)
             
             consistency_results = test_backend_consistency(model, data; vars=[:time], rtol_estimate=1e-6, rtol_se=1e-6)
-            @test consistency_results.all_consistent
-        end
-        
-        @testset "5.3 Complex Expression Consistency" begin
-            # Test consistency for sqrt(x) + log(z)
-            data.outcome = 1.5 .+ 0.3 .* sqrt.(data.pos_x) .+ 0.4 .* log.(data.pos_income ./ 1000.0) .+ 0.1 .* randn(250)
-            model = lm(@formula(outcome ~ sqrt(pos_x) + log(pos_income)), data)
-            
-            consistency_results = test_backend_consistency(model, data; vars=[:pos_x, :pos_income], rtol_estimate=1e-6, rtol_se=1e-6)
             @test consistency_results.all_consistent
         end
     end

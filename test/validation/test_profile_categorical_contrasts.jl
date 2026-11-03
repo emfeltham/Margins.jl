@@ -7,7 +7,8 @@
 # was a mixture *or* if it appeared in the reference grid, and grid completion fills an
 # absent categorical with a mixture — so naming the variable in the grid made it
 # "scenario-defining" and leaving it out made it a mixture. Every route returned 0 rows, and
-# `test/test_profile_pairwise.jl` was excluded from runtests.jl because it would fail.
+# the old `test/test_profile_pairwise.jl` (folded into this file) was excluded from runtests.jl
+# because it would fail.
 #
 # The two modes now available for a categorical named in `vars`:
 #   pinned to discrete levels in the grid -> one contrast per grid row (that row's level vs
@@ -205,6 +206,11 @@ end
 
         auto_grid = DataFrame(profile_margins(m, df, cartesian_grid(g=["a", "b"]); type=:effects))
         @test Set(auto_grid.variable) == Set(["x", "z"])
+    end
+
+    @testset "an unknown contrasts= errors with a categorical in vars" begin
+        m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink())
+        @test_throws ArgumentError profile_margins(m, df, means_grid(df); type=:effects, vars=[:g], contrasts=:invalid)
     end
 
     @testset "requesting a categorical not in the model errors" begin

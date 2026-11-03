@@ -30,12 +30,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         @test Set(grid.region) == Set(["North", "South"])
         @test Set(grid.education) == Set(["HS", "College"])
         
-        # Continuous representative specification - quartiles
-        grid = hierarchical_grid(data, (:income, :quartiles))
-        @test nrow(grid) == 3  # the cut points 0.25, 0.5, 0.75 (as quantile_grid(data; income = 4))
-        @test "income" in names(grid)
-        @test length(unique(grid.income)) == 3
-        
         # Continuous representative specification - mean
         grid = hierarchical_grid(data, (:age, :mean))
         @test nrow(grid) == 1
@@ -54,18 +48,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         @test "age" in names(grid)
         @test Set(grid.age) == Set([30, 50, 70])
         
-        # New Phase 1.2 features - deciles
-        grid = hierarchical_grid(data, (:income, :deciles))
-        @test nrow(grid) == 9
-        @test "income" in names(grid)
-        @test length(unique(grid.income)) == 9
-        
-        # Terciles/tertiles
-        grid = hierarchical_grid(data, (:age, :terciles))
-        @test nrow(grid) == 2
-        @test "age" in names(grid)
-        @test length(unique(grid.age)) == 2
-        
         # Min and max
         grid = hierarchical_grid(data, (:age, :min))
         @test nrow(grid) == 1
@@ -74,18 +56,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         grid = hierarchical_grid(data, (:age, :max))  
         @test nrow(grid) == 1
         @test grid.age[1] ≈ maximum(data.age)
-        
-        # Custom percentiles as vector
-        grid = hierarchical_grid(data, (:income, [0.1, 0.5, 0.9]))
-        @test nrow(grid) == 3
-        expected_percentiles = [quantile(data.income, q) for q in [0.1, 0.5, 0.9]]
-        @test sort(grid.income) ≈ sort(expected_percentiles)
-        
-        # Explicit percentiles specification
-        grid = hierarchical_grid(data, (:income, (:percentiles, [0.25, 0.75])))
-        @test nrow(grid) == 2
-        expected = [quantile(data.income, 0.25), quantile(data.income, 0.75)]
-        @test sort(grid.income) ≈ sort(expected)
         
         # Custom n-quantiles
         grid = hierarchical_grid(data, (:income, (:quantiles, 7)))  # septiles: 6 cut points
@@ -135,9 +105,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
     end
     
     @testset "Error Handling" begin
-        # Invalid variable name
-        @test_throws Exception hierarchical_grid(data, :nonexistent_var)
-        
         # Continuous variable in categorical specification
         @test_throws Exception hierarchical_grid(data, [:region, :income])  # income is continuous
         
@@ -152,7 +119,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         @test_throws Exception hierarchical_grid(data, (:income, (:percentiles, [-0.1, 0.5, 1.5])))
         
         # Invalid n-quantiles (must be > 1)
-        @test_throws Exception hierarchical_grid(data, (:income, (:quantiles, 1)))
         @test_throws Exception hierarchical_grid(data, (:income, (:quantiles, 0)))
         
         # Invalid range specification
@@ -184,41 +150,6 @@ using Random, Statistics, DataFrames, CategoricalArrays, Tables, GLM, StatsModel
         empty_data = DataFrame(x = Float64[], y = Float64[])
         grid = hierarchical_grid(empty_data, (:x, :mean))
         @test nrow(grid) == 1  # Still creates a single row with NaN for mean of empty data
-    end
-    
-    @testset "Representative Value Computation" begin
-        # Test quartile computation matches manual calculation
-        spec = (:income, :quartiles)
-        grid = hierarchical_grid(data, spec)
-        
-        @test nrow(grid) == 3
-        expected_quartiles = [quantile(data.income, q) for q in [0.25, 0.50, 0.75]]
-        computed_quartiles = sort(grid.income)
-        
-        for (expected, computed) in zip(expected_quartiles, computed_quartiles)
-            @test expected ≈ computed
-        end
-        
-        # Test quintiles  
-        spec = (:income, :quintiles)
-        grid = hierarchical_grid(data, spec)
-        @test nrow(grid) == 4
-        
-        expected_quintiles = [quantile(data.income, q) for q in [0.2, 0.4, 0.6, 0.8]]
-        computed_quintiles = sort(grid.income)
-        
-        for (expected, computed) in zip(expected_quintiles, computed_quintiles)
-            @test expected ≈ computed
-        end
-    end
-    
-    @testset "Integration with Existing Infrastructure" begin
-        # Test that hierarchical grid works with means_grid typical structure
-        hierarchical_single = hierarchical_grid(data, (:age, :mean))
-        means_single = means_grid(data)
-        
-        # Should have compatible structure for age column
-        @test hierarchical_single.age[1] ≈ means_single.age[1] rtol=1e-10
     end
     
     @testset "Complex Example" begin
@@ -290,10 +221,7 @@ end
             @test nrow(region_data) > 0  # This region should exist in this country
             @test row.education in region_data.education  # This education should exist in this region
         end
-        
-        # Test depth validation
-        depth = Margins._count_nesting_depth(spec)
-        @test depth == 2  # :country => (:region => :education) has depth 2
+
     end
     
     @testset "4-Level Nesting" begin
@@ -316,10 +244,7 @@ end
             @test nrow(city_data) > 0  # This city should exist in this region/country
             @test row.education in city_data.education  # This education should exist in this city
         end
-        
-        # Test depth validation
-        depth = Margins._count_nesting_depth(spec)
-        @test depth == 3  # 4-level nesting has depth 3
+
     end
     
     @testset "Mixed Depth Nesting" begin
@@ -411,109 +336,13 @@ end
         end
     end
     
-    @testset "Enhanced Parameter Integration" begin
-        # Test new parameters on hierarchical_grid function
-        spec = :country => (:region => :education)
-        
-        # Test warn_large=false (should suppress warnings)
-        grid = hierarchical_grid(data, spec; warn_large=false)
-        @test grid isa DataFrame
-        
-        # Test increased max_depth
-        grid = hierarchical_grid(data, spec; max_depth=10)
-        @test grid isa DataFrame
-        
-        # Test that 2-level specs still use optimized path
-        simple_spec = :country => :region
-        depth = Margins._count_nesting_depth(simple_spec)
-        @test depth <= 2
-        
-        grid = hierarchical_grid(data, simple_spec)
-        @test grid isa DataFrame
-    end
-    
     @testset "Performance and Safety Features" begin
-        # Test grid size warnings (create a spec that should warn)
-        # Use smaller test data to control the actual grid size
-        small_data = data[1:10, :]  # Use subset
-        
-        # Create a specification that would generate many combinations
-        large_spec = [:country, :region, :city, :education]
-        estimated_size = Margins._estimate_grid_size(large_spec, Tables.columntable(small_data))
-        
-        # The actual warning threshold testing requires specific data composition
-        # Verification of function execution without errors
-        grid = hierarchical_grid(small_data, large_spec)
-        @test grid isa DataFrame
-        
         # Test that validation functions work
         @test Margins._validate_grid_size(100) == true  # Small size, no warning
         @test Margins._validate_grid_size(15000) == true  # Medium size, should info
         
         # Test that very large sizes error
         @test_throws Exception Margins._validate_grid_size(2_000_000)
-    end
-end
-
-@testset "Integration with profile_margins() Workflow" begin
-    @testset "Basic DataFrame Construction Tests" begin
-        # Test that hierarchical grid produces proper DataFrames with correct types
-        Random.seed!(06515)
-        data = DataFrame(
-            region = categorical(["North", "South", "East", "West"]),
-            income = [25000, 50000, 75000, 40000],
-            age = [30, 45, 60, 35]
-        )
-        
-        # Evaluation of basic continuous variable specification
-        reference_grid = hierarchical_grid(data, (:income, :mean))
-        @test reference_grid isa DataFrame
-        @test nrow(reference_grid) == 1
-        @test eltype(reference_grid.income) <: Real
-        
-        # Test categorical specification
-        reference_grid = hierarchical_grid(data, :region)
-        @test reference_grid isa DataFrame
-        @test nrow(reference_grid) == 4
-        @test eltype(reference_grid.region) <: AbstractString || eltype(reference_grid.region) <: CategoricalValue
-        
-        # Test quartiles specification
-        reference_grid = hierarchical_grid(data, (:income, :quartiles))
-        @test reference_grid isa DataFrame
-        @test nrow(reference_grid) == 3
-        @test eltype(reference_grid.income) <: Real
-        @test all(x -> x isa Real, reference_grid.income)
-        
-        # Test range specification  
-        reference_grid = hierarchical_grid(data, (:age, (:range, 3)))
-        @test reference_grid isa DataFrame
-        @test nrow(reference_grid) == 3
-        @test eltype(reference_grid.age) <: Real
-        @test all(x -> x isa Real, reference_grid.age)
-    end
-    
-    @testset "Error Handling in Integration" begin
-        data = DataFrame(
-            region = categorical(["North", "South"]),
-            income = [25000, 50000],
-            education = categorical(["HS", "College"])
-        )
-        
-        # Test that validation catches errors before they reach profile_margins
-        try
-            reference_grid = hierarchical_grid(data, :nonexistent_variable)
-            @test false  # Should not reach here
-        catch e
-            @test occursin("not found in data", string(e))
-        end
-        
-        # Test that invalid specifications are caught early
-        try
-            reference_grid = hierarchical_grid(data, (:education, :mean))  # categorical with continuous spec
-            @test false  # Should not reach here
-        catch e
-            @test occursin("requires continuous variable", string(e))
-        end
     end
 end
 

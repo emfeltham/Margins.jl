@@ -13,6 +13,7 @@
 #
 # Each expected value comes from a fresh fit / closed form, never from a second Margins call
 # on the same objects.
+# (That `vcov` is evaluated once per call is checked in core/test_request_layer.jl.)
 
 using Test
 using DataFrames, GLM, StatsModels, Random, LinearAlgebra
@@ -111,30 +112,5 @@ using Margins
         V[k, k] = V0[k, k]
         V[k, 1] += 1.0                                                # asymmetric
         @test_throws ArgumentError population_margins(m, d; vars = [var], vcov = V)
-    end
-
-    @testset "vcov is evaluated once per call" begin
-        calls = Ref(0)
-        counted = mdl -> (calls[] += 1; vcov(mdl))
-        dm = DataFrame(x = randn(MersenneTwister(1), 200), z = randn(MersenneTwister(2), 200))
-        dm.y = dm.x .+ dm.z .+ randn(MersenneTwister(3), 200)
-        mm = lm(@formula(y ~ x * z), dm)
-        population_margins(mm, dm; vcov = counted)
-        @test calls[] == 1
-        calls[] = 0
-        population_margins(mm, dm; vars = [:x], scenarios = (z = [-1.0, 1.0],), vcov = counted)
-        @test calls[] == 1
-        calls[] = 0
-        profile_margins(mm, dm, means_grid(dm); vcov = counted)
-        @test calls[] == 1
-        calls[] = 0
-        second_differences(mm, dm, :x, :z; vcov = counted)
-        @test calls[] == 1
-        calls[] = 0
-        second_differences(mm, dm, :x, :z; levels = [-1.0, 1.0], vcov = counted)
-        @test calls[] == 1
-        calls[] = 0
-        second_differences(mm, dm, :x, :z; at = 0.0, vcov = counted)
-        @test calls[] == 1
     end
 end

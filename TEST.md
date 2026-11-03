@@ -8,7 +8,7 @@ Test Coverage: 60+ test files with cross-platform validation against R's margins
 
 1. [Overview](#overview)
 2. [Test Organization](#test-organization)
-3. [R Cross-Validation](#r-cross-validation)
+3. [R Oracles](#r-oracles)
 4. [Statistical Validation](#statistical-validation)
 5. [Performance Validation](#performance-validation)
 6. [Running Tests](#running-tests)
@@ -18,7 +18,7 @@ Test Coverage: 60+ test files with cross-platform validation against R's margins
 
 The Margins.jl testing framework ensures:
 
-- Statistical correctness: All computations validated against established software and bootstrap estimates
+- Statistical correctness: All computations validated against closed-form oracles and R
 - Performance characteristics: Zero-allocation core functions with O(1) scaling for profile margins
 - Comprehensive coverage: 60+ test files covering all model types, features, and edge cases
 - Cross-platform validation: Results match R's margins package within numerical precision
@@ -40,26 +40,21 @@ test/
 ├── core/                                # Core functionality (14 files)
 │   ├── test_glm_basic.jl               # GLM.jl integration
 │   ├── test_profiles.jl                # Reference grids
-│   ├── test_grouping.jl                # Group-wise computation
-│   ├── test_contrasts.jl               # Categorical contrasts
 │   ├── test_vcov.jl                    # Covariance matrices
 │   ├── test_errors.jl                  # Error handling
 │   ├── test_mixedmodels.jl             # Mixed models
-│   └── test_weights.jl                 # Sampling/frequency weights
+│   └── test_weights.jl                 # weights= keyword; see also test_model_weights.jl
 │
 ├── features/                            # Advanced features (12 files)
 │   ├── test_elasticities.jl            # Elasticity computations
-│   ├── test_categorical_mixtures.jl    # CategoricalMixture profiles
+│   ├── test_categorical_mixtures.jl    # mixtures in interaction terms of profile grids
 │   ├── test_bool_profiles.jl           # Boolean variable handling
-│   ├── test_prediction_scales.jl       # Link vs response scale
 │   └── test_hierarchical_grids.jl      # Multi-level grids
 │
 ├── performance/                         # Performance validation (8 files)
-│   ├── test_zero_allocations.jl        # Zero-allocation verification
-│   └── test_performance.jl             # Scaling characteristics
+│   └── test_allocation_scaling.jl      # Allocations independent of n
 │
 ├── statistical_validation/              # Statistical correctness (10 files)
-│   ├── bootstrap_se_validation.jl      # Bootstrap SE validation
 │   ├── analytical_se_validation.jl     # Analytical SE verification
 │   ├── backend_consistency.jl          # AD vs FD agreement
 │   ├── robust_se_validation.jl         # Robust/clustered SEs
@@ -67,114 +62,47 @@ test/
 │
 ├── validation/                          # Mathematical validation (6 files)
 │   ├── test_contrast_invariance.jl     # Categorical invariance
-│   ├── test_manual_counterfactual_validation.jl  # Manual verification
 │   └── test_zero_allocation_comprehensive.jl  # Allocation scaling
 │
-└── r_compare/                           # R cross-validation (10 files)
-    ├── README.md                        # Workflow documentation
-    ├── VALIDATION_RESULTS.md            # Validation summary
-    ├── generate_data.jl                 # Synthetic data generation
-    ├── julia_model.jl                   # Julia analysis
-    ├── r_model.R                        # R analysis
-    ├── compare_results.jl               # Coefficient comparison
-    ├── compare_margins.jl               # Marginal effects comparison
-    └── Makefile                         # Automated workflow
+└── r_compare_marginaleffects/           # committed R fixtures read by validation/ (no R needed)
+    ├── second_differences/              # second differences vs marginaleffects
+    ├── elasticity/                      # unit-level elasticities vs marginaleffects
+    └── oracle_3_0/                      # at=:observed, weights, offsets, fixest
 ```
 
 ### Test Utilities (`test/statistical_validation/testing_utilities.jl`)
 
 Loaded once by `runtests.jl`: data generators (`make_econometric_data`, `make_simple_test_data`,
-`make_glm_test_data`, `make_heteroskedastic_data`, `make_grunfeld_style_data`) and validation
-helpers (`test_2x2_framework_quadrants`, `test_backend_consistency`, `analytical_derivative`,
-`validate_all_finite_positive`). `test/support/generate_large_synthetic_data.jl`
-(`generate_synthetic_dataset(n)`) generates the large synthetic data for the R comparisons.
+`make_glm_test_data`, `make_heteroskedastic_data`) and validation helpers
+(`test_2x2_framework_quadrants`, `test_backend_consistency`).
 
-## R Cross-Validation
+## R Oracles
 
-Objective: Validate Margins.jl against R's `margins` package to ensure statistical equivalence.
+The test suite checks Margins against committed R fixtures, and needs no R to run:
 
-Location: `test/r_compare/`
+- `test/r_compare_marginaleffects/second_differences/` and `elasticity/`: second differences
+  across counterfactual levels, and unit-level elasticities, against marginaleffects
+  (`validation/test_second_differences_r_oracle.jl`, `validation/test_elasticity_unit_definitions.jl`).
+- `test/r_compare_marginaleffects/oracle_3_0/`: the 3.0 paths. These are the default
+  `at = :observed` second difference, estimation weights (with the GLM.jl vs R weight
+  convention characterized), offsets, and FixedEffectModels against fixest
+  (`validation/test_oracle_3_0.jl`).
 
-Documentation: See [`test/r_compare/VALIDATION_RESULTS.md`](test/r_compare/VALIDATION_RESULTS.md) for comprehensive results.
-
-### Validation Results Summary
-
-#### Model Coefficients
-
-| Metric | Result |
-|--------|--------|
-| Dataset size | 5,000 observations |
-| Model complexity | 65 coefficients (logistic regression) |
-| Max coefficient relative error | 0.0028% |
-| Mean coefficient relative error | 0.0005% |
-| Max SE relative error | 0.04% |
-| Mean SE relative error | 0.034% |
-| Verdict | ✓✓✓ SUCCESS |
-
-#### Marginal Effects Validation
-
-| Type | Variables | Max Est Error | Max SE Error | Status |
-|------|-----------|---------------|--------------|--------|
-| AME (Average Marginal Effects) | 32 | 0.0036% | 0.04% | ✓✓✓ SUCCESS |
-| AAP (Average Adjusted Predictions) | 1 | 0.0001% | 0.03% | ✓✓✓ SUCCESS |
-| APM (Adjusted Predictions at Profiles) | 4 | 0.87% | 1.98% | ✓ PASS |
-| AME by Age | 1 | 0.0003% | 0.04% | ✓✓✓ SUCCESS |
-| AME by Scenario | 2 | 0.0017% | 0.04% | ✓✓✓ SUCCESS |
-
-### Key Findings
-
-1. Perfect agreement on core functionality: AME (the primary use case) achieves < 0.004% error
-2. Proper delta-method SEs: Both implementations use rigorous delta-method standard errors
-3. Statistical equivalence: All differences within numerical precision expectations
-
-### Delta Method Validation
-
-Critical validation: Both Margins.jl and R's margins package implement proper delta-method standard errors:
-
-$$\text{SE}(\hat{g}(\boldsymbol{\beta})) = \sqrt{\nabla g(\boldsymbol{\beta})^\top \boldsymbol{\Sigma} \nabla g(\boldsymbol{\beta})}$$
-
-where:
-- $g(\boldsymbol{\beta})$ is the marginal effect function
-- $\boldsymbol{\Sigma}$ is the model covariance matrix
-- $\nabla g(\boldsymbol{\beta})$ is the gradient vector
-
-No independence assumptions: Full covariance structure preserved in all computations.
-
-### Running R Comparison
-
-```bash
-cd test/r_compare
-
-# Automated workflow (requires R and Julia)
-make all
-
-# Manual workflow
-julia --project=. generate_data.jl      # Generate synthetic data
-julia --project=. julia_model.jl        # Run Julia analysis
-Rscript r_model.R                       # Run R analysis
-julia --project=. compare_results.jl    # Compare coefficients
-julia --project=. compare_margins.jl    # Compare marginal effects
-```
-
-Requirements:
-- R with packages: `margins`, `readr`, `dplyr`
-- Julia with Margins.jl and dependencies
+Each directory's R scripts regenerate its fixtures; see `oracle_3_0/README.md` for versions,
+cases and observed differences. The matched Julia/R benchmarks are in the paper's replication
+materials, not in this repository.
 
 ## Statistical Validation
 
-### Bootstrap Validation (`test/statistical_validation/`)
+### Closed-form oracles (`test/validation/`)
 
-Objective: Validate delta-method standard errors against bootstrap estimates.
+Objective: Check estimates and delta-method standard errors exactly.
 
-Method: 1000 bootstrap resamples with automatic bias correction
-
-Coverage: All model types (LM, GLM, LMM, GLMM) and effect types
-
-Tolerance: ±10% agreement between delta-method and bootstrap SEs
+Method: Estimates and gradients computed directly from X, β and V, independently of Margins.
 
 Files:
-- `bootstrap_se_validation.jl`: Core bootstrap validation framework
-- `elasticity_se_validation.jl`: Elasticity-specific bootstrap validation
+- `test_feature_matrix_oracle.jl`: 7 links × 2 scales × 3 weightings × population, groups, scenarios and profile paths × 4 measures × AD/FD
+- `test_elasticity_unit_definitions.jl`: elasticities and semielasticities as means of unit-level quantities, plus R `avg_slopes()`
 
 ### Analytical Validation
 
@@ -186,7 +114,6 @@ Scope: Main effects models (55% of test formulas)
 
 Files:
 - `analytical_se_validation.jl`: Linear, logistic, Poisson models
-- `analytical_elasticity_se_validation.jl`: Elasticity SE validation
 - `incompatible_formula_se_validation.jl`: Specialized validation for interactions and mixed models
 
 Formula Compatibility:
@@ -290,8 +217,6 @@ julia --project=. test/runtests.jl test/statistical_validation/
 # Performance tests only
 julia --project=. test/runtests.jl test/performance/
 
-# R comparison
-cd test/r_compare && make all
 ```
 
 ### Specific Test Files
@@ -311,16 +236,16 @@ julia --project=. test/core/test_glm_basic.jl test/features/test_elasticities.jl
 JULIA_DEBUG=Margins julia --project=. test/validation/test_zero_allocation_comprehensive.jl
 
 # Profile memory usage
-julia --project=. --track-allocation=user test/performance/test_performance.jl
+julia --project=. --track-allocation=user test/performance/test_allocation_scaling.jl
 
 # Profile with detailed output
-julia --project=. --track-allocation=user --inline=no test/performance/test_performance.jl
+julia --project=. --track-allocation=user --inline=no test/performance/test_allocation_scaling.jl
 ```
 
 ## Confidence Assessment
 
-#### 1. R Cross-Validation ✓✓✓
-- Strong agreement with R's margins package
+#### 1. R Oracles ✓✓✓
+- Agreement with committed R marginaleffects and fixest fixtures (see [R Oracles](#r-oracles))
 
 #### 2. Comprehensive Test Suite (60+ files) ✓✓✓
 - Core functionality: GLM integration, mixed models, predictions, grouping, contrasts
@@ -371,23 +296,21 @@ implies that Margins.jl is production-ready.
 
 - GLM Integration (`test_glm_basic.jl`): Basic GLM.jl compatibility, prediction scales, coefnames
 - Profiles (`test_profiles.jl`): Reference grid systems (cartesian, means, balanced, quantile, hierarchical)
-- Grouping (`test_grouping.jl`): Group-wise computation with `over`/`within`/`by` parameters
-- Contrasts (`test_contrasts.jl`): Categorical variable baseline and pairwise contrasts
 - VCov (`test_vcov.jl`): Covariance matrix handling, robust SEs, user-provided matrices
 - Error Handling (`test_errors.jl`): Input validation, meaningful error messages
 - Variable Detection (`test_automatic_variable_detection.jl`): Automatic Int64/Float64/Bool/Categorical classification
 - Mixed Models (`test_mixedmodels.jl`): LinearMixedModel and GeneralizedLinearMixedModel support
-- Weights (`test_weights.jl`): Sampling weights and frequency weights integration
+- Weights (`test_weights.jl`, `test_model_weights.jl`, `test_profile_fill_weights.jl`): the `weights=` keyword, model estimation weights and weighted profile fill-ins
 
 ### Advanced Features Tests (`test/features/`)
 
 12 test files covering specialized functionality:
 
 - Elasticities (`test_elasticities.jl`): `:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx` measures
-- Categorical Mixtures (`test_categorical_mixtures.jl`): CategoricalMixture objects for fractional specifications
+- Categorical Mixtures (`test_categorical_mixtures.jl`): `mix(...)` values inside interaction terms of profile grids, checked exactly (the `mix` API itself is tested in FormulaCompiler)
 - Bool Profiles (`test_bool_profiles.jl`): Boolean variables treated as categorical with discrete contrasts
 - Table Profiles (`test_table_profiles.jl`): DataFrame-based custom reference grids
-- Prediction Scales (`test_prediction_scales.jl`): Link vs response scale with proper chain rule
+- Prediction scales: link and response predictions and their SEs are checked exactly in `validation/test_feature_matrix_oracle.jl` (7 links, population and profile)
 - Hierarchical Grids (`test_hierarchical_grids.jl`): Multi-level reference grid construction
 
 ### Performance Tests (`test/performance/`)
@@ -395,7 +318,6 @@ implies that Margins.jl is production-ready.
 8 test files validating computational efficiency:
 
 - Zero Allocations (`test_zero_allocations.jl`): FormulaCompiler primitive verification
-- Performance Benchmarks (`test_performance.jl`): Overall performance characteristics
 - Allocation Scaling (`test_detailed_allocations.jl`): Detailed allocation profiling
 - Type Stability (`test_type_stability.jl`): Type inference verification
 
@@ -403,9 +325,7 @@ implies that Margins.jl is production-ready.
 
 10 test files ensuring statistical correctness:
 
-- Bootstrap SE (`bootstrap_se_validation.jl`): 1000-sample bootstrap validation
 - Analytical SE (`analytical_se_validation.jl`): Hand-coded gradient verification (main effects)
-- Elasticity SE (`analytical_elasticity_se_validation.jl`): Elasticity-specific analytical validation
 - Backend Consistency (`backend_consistency.jl`): AD vs FD agreement at machine precision
 - Robust SE (`robust_se_validation.jl`): HC0-HC3, cluster-robust SE validation
 - Incompatible Formulas (`incompatible_formula_se_validation.jl`): Specialized validation for interactions/mixed models
@@ -416,7 +336,6 @@ implies that Margins.jl is production-ready.
 6 test files ensuring mathematical correctness:
 
 - Contrast Invariance (`test_contrast_invariance.jl`): Categorical contrast mathematical invariance
-- Manual Counterfactual (`test_manual_counterfactual_validation.jl`): Manual step-by-step verification
 - Zero Allocation Comprehensive (`test_zero_allocation_comprehensive.jl`): Complete allocation scaling analysis
 - True Zero Allocation (`test_true_zero_allocation.jl`): Core function zero-allocation proofs
 

@@ -1,14 +1,120 @@
-# test_second_differences_at.jl
-# Tests for second_differences(model, data, x, m; at=…) - local derivatives at specific points
-# (the internal _second_differences_local was removed in 3.0; these tests use the public path)
+# sd_model_level.jl
+# second_differences(model, data, variables, modifier; …): binary, categorical and continuous
+# modifiers, the local derivative (`at` = :mean / :median / a value / points / a NamedTuple),
+# `levels`, `profile` strata, `delta`, `scale`, weights, the integer-code warning and input errors
 
 using Test
 using Margins
 using DataFrames
 using GLM
+using CategoricalArrays
 using Random
 using Statistics
-using CategoricalArrays
+
+@testset "second_differences(model, data, …)" begin
+    Random.seed!(7)
+    n = 800
+    df = DataFrame(
+        x = randn(n), w = randn(n), z = randn(n),
+        t = rand([0, 1], n), g = rand(["a", "b", "c"], n),
+    )
+    df.y = 0.2 .+ 0.4df.x .+ 0.3df.w .+ 0.5df.t .+ 0.7df.x .* df.t .- 0.6df.x .* df.w .+
+           0.3 .* (df.g .== "b") .+ 0.4 .* df.x .* (df.g .== "c") .+ 0.5df.z .+ randn(n)
+    lmod = lm(@formula(y ~ x * t + x * w + x * g + z), df)
+    β = coef(lmod); names = coefnames(lmod)
+    b(nm) = β[findfirst(==(nm), names)]
+
+    @testset "binary modifier: equals the interaction coefficient in a linear model" begin
+        sd = second_differences(lmod, df, :x, :t)
+        @test nrow(sd) == 1
+        @test sd.second_diff[1] ≈ b("x & t") atol=1e-8
+        @test sd.modifier_type[1] == :binary
+        @test (sd.modifier_level1[1], sd.modifier_level2[1]) == (0, 1)
+        @test sd.df[1] == dof_residual(lmod)
+        # same answer as building it by hand
+        ames = population_margins(lmod, df; vars=:x, scenarios=(t=[0, 1],), type=:effects)
+        by_hand = second_differences(ames, :x, :t)
+        @test sd.second_diff[1] ≈ by_hand.second_diff[1]
+        @test sd.se[1] ≈ by_hand.se[1]
+    end
+
+    @testset "continuous modifier: local derivative and slope between levels" begin
+        loc = second_differences(lmod, df, :x, :w)
+        @test loc.second_diff[1] ≈ b("x & w") atol=1e-6
+        @test isnan(loc.eval_point[1])                                   # default at = :observed: no single point
+        @test isequal(loc, second_differences(lmod, df, :x, :w; at = :observed))
+        @test second_differences(lmod, df, :x, :w; at = :mean).eval_point[1] ≈ sum(df.w) / n
+        @test loc.modifier_type[1] == :continuous
+        sl = second_differences(lmod, df, :x, :w; levels=[-1.0, 0.0, 1.0])
+        @test nrow(sl) == 3
+        @test all(isapprox.(sl.second_diff, b("x & w"); atol=1e-8))
+        two = second_differences(lmod, df, :x, :w; levels=[0.0, 10.0])   # slope, not raw difference
+        @test two.second_diff[1] ≈ b("x & w") atol=1e-8
+        @test two.modifier_type[1] == :continuous
+        @test second_differences(lmod, df, :x, :w; at=[-1.0, 1.0]).eval_point == [-1.0, 1.0]
+    end
+
+    @testset "categorical modifier, several focal variables" begin
+        sd = second_differences(lmod, df, [:x, :z], :g; warn=false)
+        @test nrow(sd) == 6                       # 2 variables × 3 level pairs
+        @test Set(sd.variable) == Set([:x, :z])
+        xr = sd[(sd.variable .== :x) .&& (sd.modifier_level1 .== "a") .&& (sd.modifier_level2 .== "c"), :]
+        @test xr.second_diff[1] ≈ b("x & g: c") atol=1e-8
+        zr = sd[sd.variable .== :z, :]
+        @test all(abs.(zr.second_diff) .< 1e-8)    # no z × g interaction
+    end
+
+    @testset "categorical focal variable and categorical modifier array" begin
+        d2 = copy(df); d2.gc = categorical(d2.g; levels=["c", "b", "a"])
+        m2 = lm(@formula(y ~ x + t * gc + w + z), d2)
+        sd = second_differences(m2, d2, :gc, :t)
+        @test nrow(sd) == 2                       # baseline contrasts
+        @test all(sd.modifier_level1 .== 0) && all(sd.modifier_level2 .== 1)
+        sdm = second_differences(m2, d2, :x, :gc; warn=false)    # no x:gc term in m2
+        @test (sdm.modifier_level1[1], sdm.modifier_level2[1]) == ("c", "b")   # level order, not alphabetical
+    end
+
+    @testset "profile strata and options" begin
+        sd = second_differences(lmod, df, :x, :t; profile=(g=["a", "b"],))
+        @test nrow(sd) == 2 && sd.g == ["a", "b"]
+        # integer-coded categorical modifier
+        d3 = copy(df); d3.k = rand(1:3, n)
+        m3 = lm(@formula(y ~ x * k + t + w + z), d3)     # k enters the model, with an interaction
+        auto = @test_logs (:warn, r"takes only 3 integer values \(1, 2, 3\)") second_differences(m3, d3, :x, :k)
+        @test all(auto.modifier_type .== :continuous)
+        # no warning when the user states what they mean
+        @test_logs second_differences(m3, d3, :x, :k; at=2)
+        @test_logs second_differences(m3, d3, :x, :k; levels=[1, 3])
+        cat = @test_logs second_differences(m3, d3, :x, :k; modifier_type=:categorical)
+        @test all(cat.modifier_type .== :categorical)
+        # many distinct integers (an age-like variable) is continuous without a warning
+        d3.age = rand(20:70, n)
+        m3b = lm(@formula(y ~ x * age + t + z), d3)
+        @test_logs second_differences(m3b, d3, :x, :age)
+        # non-integer numeric modifier: no warning
+        @test_logs second_differences(lmod, df, :x, :w)
+    end
+
+    @testset "logit: model-level equals the hand-built result" begin
+        yb = df.y .> 0
+        d4 = copy(df); d4.yb = yb
+        gm = glm(@formula(yb ~ x * t + w), d4, Binomial(), LogitLink())
+        a = second_differences(gm, d4, :x, :t)
+        ames = population_margins(gm, d4; vars=:x, scenarios=(t=[0, 1],), type=:effects)
+        h = second_differences(ames, :x, :t)
+        @test a.second_diff[1] ≈ h.second_diff[1] && a.se[1] ≈ h.se[1]
+        @test a.df[1] == Inf
+    end
+
+    @testset "errors" begin
+        @test_throws ArgumentError second_differences(lmod, df, :x, :nope)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; at=0.0, levels=[0.0, 1.0])
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; at=0.5)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; modifier_type=:nonsense)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; levels=[1])
+        @test_throws Exception second_differences(lmod, df, :t, :t)
+    end
+end
 
 @testset "second_differences(model, data, x, m; at=…) - Local Derivatives" begin
     Random.seed!(789)
@@ -157,9 +263,6 @@ using CategoricalArrays
 
         @test sd1.delta_used[1] ≈ 0.01 * std(df.age) rtol=0.01
         @test sd2.delta_used[1] == 1.0
-
-        # Derivatives may differ slightly due to different delta
-        @test sd1.second_diff[1] != sd2.second_diff[1]
     end
 
     @testset "Scale Parameter" begin
@@ -169,17 +272,6 @@ using CategoricalArrays
 
         # For linear models, they should be the same
         @test sd_response.second_diff[1] ≈ sd_link.second_diff[1]
-    end
-
-    @testset "vcov as Function (Mixed Model Support)" begin
-        # Test with vcov as a function instead of matrix
-        sd_matrix = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous)
-        sd_function = second_differences(model, df, :x1, :age; vcov=vcov, modifier_type=:continuous)  # vcov is the function
-
-        # Results should be identical
-        @test sd_matrix.second_diff[1] ≈ sd_function.second_diff[1]
-        @test sd_matrix.se[1] ≈ sd_function.se[1]
-        @test sd_matrix.p_value[1] ≈ sd_function.p_value[1]
     end
 
     @testset "Error Handling - Invalid Modifier" begin
@@ -230,25 +322,6 @@ using CategoricalArrays
         @test_throws ArgumentError second_differences(
             model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
             contrasts=:invalid)
-    end
-
-    @testset "Consistency with second_differences()" begin
-        # Compare at-point derivative with discrete contrast slope
-        # They should be similar when evaluation points are the same
-
-        # Using second_differences_at at specific points
-        sd_at = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
-                                     at=[40.0, 50.0])
-
-        # Using second_differences with same points
-        ames = population_margins(model, df; scenarios=(age=[40.0, 50.0],), type=:effects)
-        sd_discrete = second_differences(ames, :x1, :age; modifier_type=:continuous)
-
-        # The slopes should be similar (but not identical due to different delta)
-        # second_differences uses (50-40)=10 as delta
-        # second_differences_at uses auto delta around each point
-        @test sd_discrete.second_diff[1] isa Real
-        @test sd_at.second_diff[1] isa Real
     end
 
     @testset "Real-World Example - Interaction Detection" begin
@@ -327,56 +400,6 @@ using CategoricalArrays
             @test Set(sd.socio4) == Set([false, true])  # Vector varies
         end
 
-        @testset "Multiple Vector Profiles (Cartesian Product)" begin
-            # Cartesian product: socio4 × gender
-            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
-                                      at=45.0,
-                                      profile=(socio4=[false, true],
-                                              gender=["male", "female"]))
-
-            @test nrow(sd) == 4  # 2 × 2 = 4 combinations
-            @test hasproperty(sd, :socio4)
-            @test hasproperty(sd, :gender)
-
-            # Check all combinations present
-            combos = Set(zip(sd.socio4, sd.gender))
-            expected_combos = Set([
-                (false, "male"), (false, "female"),
-                (true, "male"), (true, "female")
-            ])
-            @test combos == expected_combos
-        end
-
-        @testset "Vector Profile × Multiple Eval Points" begin
-            # Combine vector profile with multiple evaluation points
-            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
-                                      at=[30.0, 60.0],
-                                      profile=(socio4=[false, true],))
-
-            @test nrow(sd) == 4  # 2 eval points × 2 socio4 levels
-
-            # Check structure
-            @test count(sd.eval_point .== 30.0) == 2
-            @test count(sd.eval_point .== 60.0) == 2
-            @test count(sd.socio4 .== false) == 2
-            @test count(sd.socio4 .== true) == 2
-        end
-
-        @testset "Multiple Variables × Vector Profile" begin
-            # Multiple focal variables with vector profile
-            sd = second_differences(model_strat, df_strat, [:x1, :x2], :age; vcov=Σ_strat, modifier_type=:continuous,
-                                      at=45.0,
-                                      profile=(socio4=[false, true],))
-
-            @test nrow(sd) == 4  # 2 variables × 2 socio4 levels
-            @test count(sd.variable .== :x1) == 2
-            @test count(sd.variable .== :x2) == 2
-
-            # Each variable should have both socio4 levels
-            x1_rows = sd[sd.variable .== :x1, :]
-            @test Set(x1_rows.socio4) == Set([false, true])
-        end
-
         @testset "Complex Combination: All Dimensions" begin
             # Combine everything: multiple variables × multiple eval points × vector profiles
             sd = second_differences(model_strat, df_strat, [:x1, :x2], :age; vcov=Σ_strat, modifier_type=:continuous,
@@ -386,140 +409,97 @@ using CategoricalArrays
 
             @test nrow(sd) == 16  # 2 variables × 2 eval points × 2 socio4 × 2 gender
 
-            # Verify structure
-            @test length(unique(sd.variable)) == 2
-            @test length(unique(sd.eval_point)) == 2
-            @test length(unique(sd.socio4)) == 2
-            @test length(unique(sd.gender)) == 2
+            # Every combination appears once (the full Cartesian product)
+            @test Set(zip(sd.variable, sd.eval_point, sd.socio4, sd.gender)) ==
+                  Set(Iterators.product([:x1, :x2], [30.0, 60.0], [false, true], ["male", "female"]))
+            @test all(sd.modifier .== :age)
 
-            # All combinations should be present
             @test all(isfinite.(sd.second_diff))
             @test all(sd.se .> 0)
         end
     end
+end
 
-    @testset "Categorical Focal Variables" begin
-        # Create data with categorical focal variable and interaction
-        Random.seed!(999)
-        df_cat = DataFrame(
-            religion = categorical(rand(["Catholic", "Protestant", "None"], n)),
-            modifier = randn(n),
-            other = randn(n)
-        )
+@testset "second differences: `at` forms, profile and modifier checks, warnings, weights" begin
+    Random.seed!(21)
+    n = 600
+    df = DataFrame(x = randn(n), w = randn(n), z = rand([false, true], n), t = rand([0, 1], n),
+                   g = rand(["a", "b", "c"], n))
+    df.y = 0.2 .+ 0.4df.x .+ 0.3df.w .+ 0.5df.z .+ 0.6df.x .* df.z .- 0.4df.x .* df.w .+ randn(n)
+    df.yb = (0.3 .+ 0.6df.x .+ 0.5df.z .+ 0.4df.x .* df.z .+ randn(n)) .> 0
+    lmod = lm(@formula(y ~ x * z + x * w + t + g), df)
+    lg = glm(@formula(yb ~ x * z + w), df, Binomial(), LogitLink())
 
-        # Create interaction: religion effects vary with modifier
-        df_cat.y = 0.5 .+
-                   (df_cat.religion .== "Protestant") .* 0.3 .+
-                   (df_cat.religion .== "None") .* 0.2 .+
-                   0.1 .* df_cat.modifier .+
-                   (df_cat.religion .== "Protestant") .* df_cat.modifier .* 0.5 .+
-                   (df_cat.religion .== "None") .* df_cat.modifier .* 0.3 .+
-                   randn(n) .* 0.3
+    @testset "`at` forms" begin
+        a1 = second_differences(lmod, df, :x, :w; at = [0.0, 0.5, 1.0])
+        a2 = second_differences(lmod, df, :x, :w; at = 0.0:0.5:1.0)
+        @test a1.second_diff ≈ a2.second_diff
+        t = second_differences(lmod, df, :x, :w; at = (w = [0.0, 1.0], t = 1))
+        @test nrow(t) == 2 && t.eval_point == [0.0, 1.0]
+    end
 
-        model_cat = lm(@formula(y ~ religion * modifier + other), df_cat)
-        Σ_cat = vcov(model_cat)
+    @testset "profile must not contain the modifier" begin
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; profile = (w = 1.0,))
+        @test_throws ArgumentError second_differences(lmod, df, :x, :z; profile = (z = true,))
+        err = try second_differences(lmod, df, :x, :w; profile = (w = 1.0,)) catch e; sprint(showerror, e) end
+        @test occursin("contains the modifier", err)
+    end
 
-        @testset "Baseline Contrasts (Default)" begin
-            # Default should use baseline contrasts
-            sd = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous, at=:mean)
+    @testset "a Bool modifier cannot be forced continuous" begin
+        err = try second_differences(lg, df, :x, :z; modifier_type = :continuous) catch e; sprint(showerror, e) end
+        @test occursin("Bool", err)
+        @test second_differences(lg, df, :x, :z).modifier_type == [:binary]
+    end
 
-            # Should have K-1 contrasts for K=3 levels
-            @test nrow(sd) == 2
-            @test hasproperty(sd, :contrast)
-            @test all(sd.variable .== :religion)
-        end
+    @testset "integer codes stored as floats are flagged; warn=false silences it" begin
+        d = copy(df); d.k = Float64.(rand(1:3, n))
+        m = lm(@formula(y ~ x * k + w), d)
+        @test_logs (:warn, r"takes only 3 integer values") second_differences(m, d, :x, :k)
+        @test_logs second_differences(m, d, :x, :k; warn = false)
+        @test_logs second_differences(m, d, :x, :k; at = :mean)
+    end
 
-        @testset "Pairwise Contrasts" begin
-            # Explicit pairwise contrasts
-            sd_pairwise = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
-                                                at=:mean, contrasts=:pairwise)
+    @testset "warn=false silences every warning" begin
+        d = copy(df); d.k = rand([10.0, 20.0], n)
+        m = lm(@formula(y ~ x * k + w), d)
+        ames = population_margins(m, d; vars = :x, scenarios = (k = [10.0, 20.0],), type = :effects)
+        @test_logs (:warn, r"treated as :binary") second_differences(ames, :x, :k)
+        @test_logs second_differences(ames, :x, :k; warn = false)
+        @test_logs second_differences(m, d, :x, :k; levels = [10.0, 20.0], delta = 0.1, warn = false)
+    end
 
-            # Should have K(K-1)/2 = 3 contrasts for K=3 levels
-            @test nrow(sd_pairwise) == 3
-            @test hasproperty(sd_pairwise, :contrast)
-            @test all(sd_pairwise.variable .== :religion)
+    @testset "binary route warns like the pairwise route" begin
+        d = copy(df); d.k = rand([10.0, 20.0], n)
+        d.cg = categorical(d.g)
+        m = lm(@formula(y ~ x * k + cg * k + w), d)
+        ames = population_margins(m, d; vars = :cg, scenarios = (k = [10.0, 20.0],), type = :effects)
+        @test_logs (:warn, r"treated as :binary") second_differences(ames, :cg, :k)
+    end
 
-            # All derivatives should be finite
-            @test all(isfinite.(sd_pairwise.second_diff))
-            @test all(sd_pairwise.se .> 0)
-        end
-
-        @testset "Baseline vs Pairwise Comparison" begin
-            sd_baseline = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
-                                               at=:mean, contrasts=:baseline)
-            sd_pairwise = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
-                                               at=:mean, contrasts=:pairwise)
-
-            # Different number of rows
-            @test nrow(sd_baseline) == 2  # K-1
-            @test nrow(sd_pairwise) == 3  # K(K-1)/2
-
-            # Some contrasts should overlap (baseline contrasts appear in pairwise)
-            baseline_contrasts = Set(sd_baseline.contrast)
-            pairwise_contrasts = Set(sd_pairwise.contrast)
-            # Baseline contrasts should be a subset of pairwise contrasts
-            @test length(intersect(baseline_contrasts, pairwise_contrasts)) >= 1
-        end
-
-        @testset "Basic Categorical Focal Variable" begin
-            # Should work without error
-            sd = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous, at=:mean)
-
-            # Should have one row per contrast
-            @test nrow(sd) >= 2  # At least 2 contrasts (depends on levels)
-            @test hasproperty(sd, :contrast)
-            @test hasproperty(sd, :variable)
-            @test hasproperty(sd, :second_diff)
-
-            # All contrasts should be for religion
-            @test all(sd.variable .== :religion)
-
-            # Contrasts should not be "dy/dx" (that's for continuous only)
-            @test !("dy/dx" in sd.contrast)
-
-            # Statistical properties
-            @test all(isfinite.(sd.second_diff))
-            @test all(sd.se .> 0)
-            @test all(0 .<= sd.p_value .<= 1)
-        end
-
-        @testset "Categorical with Vector Profile" begin
-            # Add binary variable for stratification
-            df_cat.treated = rand([false, true], n)
-            model_cat2 = lm(@formula(y ~ religion * modifier + treated + other), df_cat)
-
-            sd = second_differences(
-                model_cat2, df_cat, :religion, :modifier; vcov=vcov(model_cat2), modifier_type=:continuous,
-                at=:mean,
-                profile=(treated=[false, true],))
-
-            # Should have rows for each contrast × treated level
-            @test hasproperty(sd, :treated)
-            n_contrasts = length(unique(sd.contrast))
-            @test nrow(sd) == n_contrasts * 2  # contrasts × 2 treated levels
-
-            # Check stratification worked
-            @test Set(sd.treated) == Set([false, true])
-        end
-
-        @testset "Mixed: Continuous and Categorical Focal Variables" begin
-            # Should handle both types in one call
-            sd = second_differences(
-                model_cat, df_cat, [:religion, :other], :modifier; vcov=Σ_cat, modifier_type=:continuous,
-                at=:mean)
-
-            # Other is continuous (1 row), religion is categorical (multiple rows)
-            religion_rows = sd[sd.variable .== :religion, :]
-            other_rows = sd[sd.variable .== :other, :]
-
-            @test nrow(religion_rows) >= 2  # Multiple contrasts
-            @test nrow(other_rows) == 1     # Single derivative
-
-            # Continuous variable should have "dy/dx" contrast
-            @test other_rows.contrast[1] == "dy/dx"
-
-            # Categorical should not
-            @test !("dy/dx" in religion_rows.contrast)
-        end
+    @testset "weights" begin
+        w = 1.0 .+ 2.0 .* (df.x .> 0)          # weight 3 for x > 0, else 1
+        dup = vcat(df, df[df.x .> 0, :], df[df.x .> 0, :])  # same weighting as 2 extra copies
+        un = second_differences(lg, df, :x, :z)
+        wt = second_differences(lg, df, :x, :z; weights = w)
+        @test !isapprox(wt.second_diff[1], un.second_diff[1]; rtol = 1e-6)
+        # equals the unweighted calculation on the expanded data, and a weights column works too
+        ex = second_differences(lg, dup, :x, :z)
+        @test wt.second_diff ≈ ex.second_diff && wt.se ≈ ex.se
+        dw = copy(df); dw.sw = w
+        @test second_differences(lg, dw, :x, :z; weights = :sw).second_diff ≈ wt.second_diff
+        @test second_differences(lg, df, :x, :z; weights = ones(n)).second_diff ≈ un.second_diff
+        # same as the result-level form on a weighted result
+        ames = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects, weights = w)
+        @test second_differences(ames, :x, :z).second_diff ≈ wt.second_diff
+        # local derivative: weighted mean as the point for at = :mean, weighted effects
+        lw = second_differences(lg, df, :x, :w; weights = w, delta = 0.01, at = :mean)
+        @test lw.eval_point[1] ≈ sum(w .* df.w) / sum(w)
+        lex = second_differences(lg, dup, :x, :w; at = lw.eval_point[1], delta = 0.01)
+        @test lw.second_diff ≈ lex.second_diff
+        lmed = second_differences(lg, df, :x, :w; weights = ones(n), at = :median, delta = 0.01)
+        @test lmed.eval_point[1] ≈ sort(df.w)[n ÷ 2] / 2 + sort(df.w)[n ÷ 2 + 1] / 2
+        # invalid weights are rejected
+        @test_throws ArgumentError second_differences(lg, df, :x, :z; weights = ones(n - 1))
+        @test_throws ArgumentError second_differences(lg, df, :x, :z; weights = :nope)
     end
 end

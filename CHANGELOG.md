@@ -712,8 +712,103 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
   removed APIs: `test_ad_vs_fd_actual.jl`, `test_complex_example.jl`,
   `test_categorical_ame_allocations_bench.jl`, `test_full_dataset_optimization.jl`,
   `test_performance_regression.jl` (wall-clock thresholds) and `test_utilities.jl` (unused copy of
-  FormulaCompiler test helpers). Tooling that is not a test stays: `support/` (golden snapshot and
-  synthetic-data generators), `r_compare*/` and `performance/benchmark_blas_opt.jl`.
+  FormulaCompiler test helpers). Also deleted, as tooling no runner uses: `r_compare/` and the
+  benchmark scripts of `r_compare_marginaleffects/` (the earlier non-matched R benchmark design;
+  its fixture directories `second_differences/`, `elasticity/` and `oracle_3_0/` stay),
+  `test/R_instructions.md`, `support/test_synthetic_generation.jl`,
+  `support/generate_large_synthetic_data.jl` and `performance/benchmark_blas_opt.jl`. The golden
+  snapshot generator in `support/` stays.
+- **Test checks that could not fail now test something.** `performance/test_allocation_scaling.jl`
+  benchmarked the closure object (`@benchmark $f`) rather than calling it, so every scaling
+  assertion passed; it now calls it and asserts what holds: no per-row allocations (≤ 0.01 extra
+  per row from 100 to 10,000 rows), a constant cost per added variable, and the same count for
+  every measure (its "≤ 10 allocations in total" and "≤ 0.01 per variable" bounds never held).
+  `validation/test_population_scenarios_groups.jl` matched contrast labels against `"B vs"`
+  (labels are `"B - A"`), so its weighted and grouped estimate checks never ran; they now run,
+  for every row. The robust-SE tests looked up `:HC1` in results keyed `:HR0`–`:HR3`, and
+  accepted 3 of 4 estimators failing silently; all four must now work. Parse failures in
+  `incompatible_formula_se_validation.jl` fail instead of `@test_skip`. Removed: `@test true`
+  branches and timing blocks without assertions (`backend_reliability_tests.jl`, now requiring
+  AD and FD to succeed and agree near the log/sqrt domain boundary), a `2 + 1 + 5 >= 8` coverage
+  "test", `analytical_elasticity_se_validation.jl` (only `@test true`, positivity checks and a
+  `relative_error < 5.0` against a formula that ignored the dependence of ŷ on β; closed-form
+  elasticity SEs are in `validation/test_elasticity_unit_definitions.jl`) and
+  `performance/profiling/test_contrast_gradient_allocations.jl` (only `>= 0` and `@test true`;
+  the zero-allocation checks are in `test_per_row_allocations.jl`).
+- **Redundant slow tests removed.** The bootstrap SE files (`bootstrap_validation_tests.jl`,
+  `multi_model_bootstrap_tests.jl`, `categorical_bootstrap_tests.jl`, their helpers
+  `bootstrap_se_validation.jl`, `elasticity_se_validation.jl` and
+  `population_context_bootstrap_validation.jl`; about 4,900 refits) are deleted. Their only
+  accuracy checks were agreement rates at 15–25% tolerance, the categorical one was an empty `if`,
+  and the resampling helper skipped any replicate that threw. Every model, link, measure, profile
+  and scenario they covered is checked exactly against closed forms in
+  `validation/test_feature_matrix_oracle.jl` and `validation/test_elasticity_unit_definitions.jl`.
+  `MARGINS_COMPREHENSIVE_TESTS` went with them. Also deleted: `performance/test_performance.jl`
+  (a 1,000,000-row dataset whose assertions were timing bounds up to 50× and non-NaN estimates;
+  allocation scaling is in `performance/test_allocation_scaling.jl`) and
+  `primitives/test_marginal_effects_allocations.jl` with the `marginal_effects_eta!`/`_mu!`
+  sections of `test_per_row_allocations.jl`, which benchmarked allocations of functions only the
+  tests use (their values are checked in `validation/test_gradient_correctness.jl` and
+  `primitives/test_links.jl`).
+  `regression/test_int_column_conversion.jl` uses 2,000 rows instead of 100,000 (the size dated
+  from the removed engine cache).
+- **Test consolidation.** Duplicate and vacuous checks are removed. Moved checks keep their
+  strictness, and several weak ones are now exact.
+  - Second differences: the ten root files `test_second_differences*.jl` and
+    `test_second_diff_bool_fix.jl` become five in `test/second_differences/`
+    (`sd_result_level`, `sd_model_level`, `sd_inference`, `sd_observed_groups`,
+    `sd_categorical_focal`). Removed: checks of 0 ≈ 0 on modifiers without an interaction, a
+    wrapper compared with the function it calls, `isa Real` checks, a flaky `!=`, and copies
+    of the df-rule and bad-alpha checks.
+  - Allocations: `test_categorical_batch_zero_alloc.jl` is merged into
+    `test_categorical_kernel_zero_alloc.jl`. Its FormulaCompiler-primitive copies are dropped,
+    since `test_per_row_allocations.jl` covers them. Every allocation check is a warmup plus
+    `@allocated … == 0` behind a function barrier, and now runs on both scales, weighted and
+    unweighted.
+  - Weights: checks repeated across `core/test_weights.jl`, `test_model_weights.jl`,
+    `test_profile_fill_weights.jl` and `features/test_typical_values.jl` are removed, and the
+    unique invalid-weight errors move to `test_model_weights.jl`.
+  - `statistical_validation/`: `specialized_se_tests.jl`, `robust_se_tests.jl`,
+    `backend_reliability_tests.jl` and `backend_reliability_guide.jl` are deleted, along with
+    the finite/positive-only blocks elsewhere. `robust_se_validation.jl` now checks HC0–HC3
+    and CR0 (region, year and unbalanced clusters) exactly for `lm`, and HC0, HC1 and CR0 for
+    logit: the hand-computed sandwich matrix and sqrt(g'Vg) for AME, AAP, MEM and APM, at
+    1e-10. Before this, no exact robust GLM or clustered check existed.
+  - Tightened: the GLM chain-rule SEs (0.1 → 1e-10), the incompatible-formula comparison
+    (`rtol=0.1` → 1e-10; observed 2e-16), and AD vs FD (1e-8 → 1e-10).
+  - Exact SEs now replace finiteness checks for `log(x)`, `x + x²`, `exp(x - z)`,
+    `x*log(x)`, sin/cos compositions, small samples, extreme coefficients and Int×Float
+    interactions. The log/sqrt domain-boundary AD/FD check moves to `backend_consistency.jl`.
+  - `features/test_prediction_scales.jl` is deleted. It checked only finiteness, [0,1] bounds and
+    that link and response values differ. `validation/test_feature_matrix_oracle.jl` checks
+    population and profile predictions and SEs on both scales exactly for all 7 links.
+  - `validation/test_golden_equivalence.jl` compared the inference df exactly even when the
+    platform fingerprint differs and the value comparison is skipped. A df computed from
+    estimation weights (weighted `lm`) differs in its last digits without `--check-bounds=yes`,
+    so 110 rows failed. The df is now exact on a matching platform and within a relative
+    difference of 1e-12 elsewhere, which still catches a changed df rule.
+  - `validation/`: `test_manual_counterfactual_validation.jl` is deleted (the oracle covers
+    it). `test_ci_and_n_logic.jl`, `test_measure_contexts.jl`,
+    `test_population_scenarios_groups.jl`, `test_gradient_correctness.jl` and
+    `test_no_engine_cache.jl` lose repeated checks. `test_measure_contexts.jl` keeps the tighter
+    analytic estimate check (atol 1e-9, every measure, scale and weighting).
+    `test_contrast_invariance.jl` checks contrast labels for dummy, effects and Helmert coding
+    on the public result, instead of FormulaCompiler's internal `_get_baseline_level`.
+  - `core/`: `test_column_naming.jl`, `test_contrasts.jl` and `test_grouping.jl` (only `nrow`,
+    `isfinite` and column-exists checks) are deleted, after their few unique checks moved to
+    `test_typed_results.jl`. `test_profile_pairwise.jl` is folded into
+    `validation/test_profile_categorical_contrasts.jl`. In `test_errors.jl`, a Julia
+    MethodError check and a "fallback" test that never reached its code are removed, and two
+    `nrow >= 1` checks are now exact. The alpha checks from the second-differences files move
+    to `test_request_layer.jl`.
+  - `features/` and `primitives/`: `test_fixed_effect_models.jl` now checks AMEs, interactions,
+    IV, scenarios, backends and prediction SEs exactly, instead of recovering β to 0.15.
+    `test_table_profiles.jl` and `test_hierarchical_grids.jl` lose the blocks the oracle or
+    their own exact checks cover. `test_categorical_mixtures.jl` checks mixtures inside
+    interaction terms exactly; its tests of the `mix` API move to FormulaCompiler.
+    `test_derivatives.jl` (613 → 97 lines) drops its retests of FormulaCompiler, and adds
+    exact checks of `delta_method_se`: its contrast form, and the negative-variance branch,
+    which warns and returns NaN.
 - **Stata migration guide corrected.** It mapped `margins, at(x=…)` to `profile_margins` with a
   `cartesian_grid` (other variables at their means); Stata's `at()` leaves the other variables as
   observed and averages over the sample (`asobserved`, its default), which is `population_margins(…;
@@ -841,7 +936,7 @@ Internal changes with identical estimates and standard errors (verified on the s
 
 - `test/performance/test_ame_fd_loop_zero_alloc.jl` called a removed `marginal_effects_eta!(…; backend=:fd)` signature and a removed 5-argument `get_or_build_engine`, and was not run. Rewritten to test the current FD AME loop (`_compute_continuous_marginal_effects!` → `_compute_me_loop_linear!`/`_compute_me_loop_response!` with an `FDEvaluator`): allocation identical at 1,000 and 20,000 rows and ≤ 64 bytes, both scales, weighted and unweighted. It is not redundant: the other FD allocation tests cover one row of `marginal_effects_eta!/mu!` or the full `population_margins` call, not the accumulation loop.
 - `test/performance/test_population_aap_loop_zero_alloc.jl` used the same removed `get_or_build_engine` signature and was not run. Rewritten: the per-row prediction loop is allocation-free, and warm `population_margins(...; type=:predictions)` calls on Float64 data are O(1) in rows (n = 1,000 vs 50,000), unweighted and weighted; with an `Int` column its per-call `Float64` copy is the only O(n) allocation. It was the only allocation test of the predictions path.
-- Both are now in `test/runtests.jl`. `test/performance/benchmark_blas_opt.jl` is a manual benchmark script using only the public API and is left as is.
+- Both are now in `test/runtests.jl`. `test/performance/benchmark_blas_opt.jl` is a manual benchmark script using only the public API (deleted later; see above).
 - **Tests pass on Julia 1.10, 1.12 and 1.13** (each with ForwardDiff 1.3.2 and 1.4.6). Test data
   that depended on the Julia version was made version-independent: `MersenneTwister` streams
   changed between 1.10 and 1.11, so the feature-matrix oracle uses its own SplitMix64 generator

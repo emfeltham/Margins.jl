@@ -206,15 +206,11 @@ _grid_eq(a, b) = names(a) == names(b) && size(a) == size(b) &&
         mem_h = DataFrame(profile_margins(m, d, hand; vars=[:x]))
         @test mem_w.estimate ≈ mem_h.estimate rtol=1e-12
         @test mem_w.se ≈ mem_h.se rtol=1e-12
-        # ... and a partial grid completed with weights equals the explicit weighted grid
+        # profile_margins' own completion uses the model's weights (the default of complete_reference_grid);
+        # against a hand-built grid, and :none differing, in core/test_profile_fill_weights.jl
         pp_w = DataFrame(profile_margins(m, d, cw; type=:predictions))
-        pp_h = DataFrame(profile_margins(m, d, DataFrame(x=[1.0, 2.0], z=fill(wmean(d.z), 2), t=fill(wmean(d.t), 2),
-                                                         g=fill(hand.g[1], 2)); type=:predictions))
-        @test pp_w.estimate ≈ pp_h.estimate rtol=1e-12
-        # profile_margins' own completion uses the model's weights (the default of complete_reference_grid)
         pp_d = DataFrame(profile_margins(m, d, part; type=:predictions))
         @test pp_d.estimate == pp_w.estimate
-        @test DataFrame(profile_margins(m, d, c0; type=:predictions)).estimate != pp_d.estimate
         @test_throws MethodError profile_margins(m, d, part; weights=:w)
     end
 

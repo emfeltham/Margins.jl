@@ -26,7 +26,7 @@
 # optimizer path, change the last digits and the GLMM fits) AND the bounds-checking mode matches (the snapshot is made
 # with --check-bounds=yes, as `Pkg.test` uses; run standalone with the same flag). Otherwise
 # the value comparison is skipped (`@test_skip`) with a warning, but the case and key sets
-# are still checked.
+# and the inference df (to a relative difference of 1e-12) are still checked.
 
 using Test
 using CSV, DataFrames, Printf
@@ -82,9 +82,12 @@ include(joinpath(@__DIR__, "..", "support", "golden_cases.jl"))
         println(io, "by operation:\n", ops)
         @error String(take!(io))
     end
-    # The inference df (t or z) must match exactly: it is a property of the model class (and
-    # of the `df` keyword), not a computed quantity
-    df_bad = j[j.df .!= j.df_now, :]
+    # The inference df (t or z) follows the model class and the `df` keyword, so it is checked on
+    # every platform. With estimation weights it is computed from them (weighted lm: 310.927…),
+    # and its last digits follow summation order like the estimates: exact where the snapshot is
+    # comparable, relative difference ≤ 1e-12 elsewhere (a changed df rule moves it far more)
+    dfmatch(a, b) = isequal(a, b) || (!comparable && isapprox(a, b; rtol=1e-12))
+    df_bad = j[.!dfmatch.(j.df, j.df_now), :]
     isempty(df_bad) || @error "inference df differs" n=nrow(df_bad) first=first(df_bad[:, [:case_id, :key, :df, :df_now]], 10)
     @test nrow(df_bad) == 0
     if comparable

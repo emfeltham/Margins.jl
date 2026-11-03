@@ -338,7 +338,7 @@ end
 
 # Second differences with `groups=` and a categorical variable that appears only inside an
 # interaction (added in step 8 of the 3.0 plan, after checking them against the result-level route,
-# a stratum-subset oracle and hand computations from `modelcols`; test_second_differences_groups.jl).
+# a stratum-subset oracle and hand computations from `modelcols`; second_differences/sd_observed_groups.jl and sd_categorical_focal.jl).
 # A second-difference table is reported in the margins row format (`_sd_as_rows`): estimate =
 # second_diff, keyed by the levels compared, the evaluation point and the strata/profile columns.
 function _second_difference_cases!(out)

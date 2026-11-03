@@ -396,7 +396,7 @@ result = profile_margins(model, grid; type=:predictions)
 ### **Statistical Correctness**
 - **Delta-method standard errors**: Full covariance matrix integration
 - **Zero tolerance policy**: Errors rather than invalid approximations  
-- **Bootstrap validated**: All computations verified against bootstrap estimates
+- **Oracle validated**: estimates and SEs checked against closed forms computed from X, β and V, and against R
 - **Publication-grade**: Ready for econometric research and academic publication
 
 ### **Categorical Effects**

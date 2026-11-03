@@ -147,19 +147,18 @@ end
 
                 coef_names = GLM.coefnames(model)
                 x_main_idx = findfirst(==("x"), coef_names)
+                @test !isnothing(x_main_idx)   # a parse failure must fail the test, not skip it
 
-                if !isnothing(x_main_idx)
-                    vcov_matrix = GLM.vcov(model)
-                    analytical_se = sqrt(vcov_matrix[x_main_idx, x_main_idx])
+                vcov_matrix = GLM.vcov(model)
+                analytical_se = sqrt(vcov_matrix[x_main_idx, x_main_idx])
 
-                    # Computed SE from profile margins
-                    reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
-                    computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects)
-                    computed_se = DataFrame(computed_result).se[1]
+                # Computed SE from profile margins
+                reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
+                computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects)
+                computed_se = DataFrame(computed_result).se[1]
 
-                    @test computed_se ≈ analytical_se atol=1e-10
-                    @info "Two-way interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
-                end
+                @test computed_se ≈ analytical_se atol=1e-10
+                @info "Two-way interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
             end
 
             @testset "Main Effect of x at Treatment Level" begin
@@ -173,26 +172,25 @@ end
                 coef_names = GLM.coefnames(model)
                 x_main_idx = findfirst(==("x"), coef_names)
                 interaction_idx = findfirst(name -> contains(name, "x") && contains(name, "Treatment"), coef_names)
+                @test !isnothing(x_main_idx) && !isnothing(interaction_idx)
 
-                if !isnothing(x_main_idx) && !isnothing(interaction_idx)
-                    vcov_matrix = GLM.vcov(model)
+                vcov_matrix = GLM.vcov(model)
 
-                    # Gradient vector for linear combination β₁ + β₃
-                    g = zeros(length(coef_names))
-                    g[x_main_idx] = 1.0        # Coefficient of β₁
-                    g[interaction_idx] = 1.0   # Coefficient of β₃
+                # Gradient vector for linear combination β₁ + β₃
+                g = zeros(length(coef_names))
+                g[x_main_idx] = 1.0        # Coefficient of β₁
+                g[interaction_idx] = 1.0   # Coefficient of β₃
 
-                    # Delta method: SE = sqrt(g' * Σ * g)
-                    analytical_se = sqrt(g' * vcov_matrix * g)
+                # Delta method: SE = sqrt(g' * Σ * g)
+                analytical_se = sqrt(g' * vcov_matrix * g)
 
-                    # Computed SE from profile margins
-                    reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
-                    computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects)
-                    computed_se = DataFrame(computed_result).se[1]
+                # Computed SE from profile margins
+                reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
+                computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects)
+                computed_se = DataFrame(computed_result).se[1]
 
-                    @test computed_se ≈ analytical_se atol=1e-10
-                    @info "Two-way interaction (Treatment level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
-                end
+                @test computed_se ≈ analytical_se atol=1e-10
+                @info "Two-way interaction (Treatment level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
             end
         end
 
@@ -237,32 +235,31 @@ end
                 # Find coefficient indices
                 x_main_idx = findfirst(==("x"), coef_names)
 
-                if !isnothing(x_main_idx)
-                    # Marginal effect = β₁ * μ(1-μ) at Control level
-                    # Gradient computation using corrected chain rule approach
-                    g = zeros(length(coeffs))
+                @test !isnothing(x_main_idx)
+                # Marginal effect = β₁ * μ(1-μ) at Control level
+                # Gradient computation using corrected chain rule approach
+                g = zeros(length(coeffs))
 
-                    for j in 1:length(coeffs)
-                        # Direct effect when j = x_main_idx
-                        direct_effect = (j == x_main_idx) ? μ * (1 - μ) : 0.0
+                for j in 1:length(coeffs)
+                    # Direct effect when j = x_main_idx
+                    direct_effect = (j == x_main_idx) ? μ * (1 - μ) : 0.0
 
-                        # Chain rule effect: β₁ × μ(1-μ)(1-2μ) × x_eval[j]
-                        chain_effect = coeffs[x_main_idx] * μ * (1 - μ) * (1 - 2*μ) * x_eval[j]
+                    # Chain rule effect: β₁ × μ(1-μ)(1-2μ) × x_eval[j]
+                    chain_effect = coeffs[x_main_idx] * μ * (1 - μ) * (1 - 2*μ) * x_eval[j]
 
-                        g[j] = direct_effect + chain_effect
-                    end
-
-                    analytical_se = sqrt(g' * vcov_matrix * g)
-
-                    # Computed SE from profile margins
-                    reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
-                    computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects, scale=:response)
-                    computed_se = DataFrame(computed_result).se[1]
-
-                    # Use more relaxed tolerance for GLM chain rule complexity
-                    @test computed_se ≈ analytical_se rtol=0.1
-                    @info "GLM interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
+                    g[j] = direct_effect + chain_effect
                 end
+
+                analytical_se = sqrt(g' * vcov_matrix * g)
+
+                # Computed SE from profile margins
+                reference_grid = DataFrame(x = [at_values.x], group = [at_values.group])
+                computed_result = profile_margins(model, df, reference_grid; vars=[:x], type=:effects, scale=:response)
+                computed_se = DataFrame(computed_result).se[1]
+
+                # exact delta method (g by hand from β, x_eval and the logit derivatives)
+                @test computed_se ≈ analytical_se rtol=1e-10
+                @info "GLM interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
             end
         end
 
@@ -317,7 +314,7 @@ end
                     @info "Three-way interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                     @info "Contributing coefficients" contributing_terms=[(coef_names[idx], contribution) for (idx, contribution) in coefficient_indices]
                 else
-                    @test_skip "Could not parse three-way interaction coefficients"
+                    error("Could not parse three-way interaction coefficients")  # a parse failure must fail the test, not skip it
                 end
             end
 
@@ -351,7 +348,7 @@ end
                     @info "Three-way interaction (Treatment level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                     @info "Contributing coefficients" contributing_terms=[(coef_names[idx], contribution) for (idx, contribution) in coefficient_indices]
                 else
-                    @test_skip "Could not parse three-way interaction coefficients"
+                    error("Could not parse three-way interaction coefficients")  # a parse failure must fail the test, not skip it
                 end
             end
 
@@ -383,7 +380,7 @@ end
                     @test computed_se ≈ analytical_se rtol=1e-6
                     @info "Three-way interaction (y=-1.0, Treatment)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                 else
-                    @test_skip "Could not parse three-way interaction coefficients"
+                    error("Could not parse three-way interaction coefficients")  # a parse failure must fail the test, not skip it
                 end
             end
         end
@@ -482,7 +479,7 @@ end
                     @test computed_se ≈ analytical_se rtol=1e-6
                     @info "Random slope (fixed effects approach)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                 else
-                    @test_skip "Could not find x coefficient in fixed effects"
+                    error("Could not find x coefficient in fixed effects")  # a parse failure must fail the test, not skip it
                 end
             end
         end
@@ -532,7 +529,7 @@ end
                     @test computed_se ≈ analytical_se rtol=1e-6
                     @info "Mixed interaction (Control level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                 else
-                    @test_skip "Could not find x coefficient in fixed effects"
+                    error("Could not find x coefficient in fixed effects")  # a parse failure must fail the test, not skip it
                 end
             end
 
@@ -562,7 +559,7 @@ end
                     @test computed_se ≈ analytical_se rtol=1e-6
                     @info "Mixed interaction (Treatment level)" analytical_se computed_se relative_error=abs(computed_se - analytical_se)/analytical_se
                 else
-                    @test_skip "Could not find interaction coefficients in fixed effects"
+                    error("Could not find interaction coefficients in fixed effects")  # a parse failure must fail the test, not skip it
                 end
             end
         end
@@ -706,24 +703,6 @@ end
                 @test isapprox(ad_se, fd_se, rtol=1e-6)
                 @info "Power terms backend consistency" ad_se fd_se
             end
-        end
-    end
-
-    # =================================================================
-    # SUMMARY INFORMATION
-    # =================================================================
-    @testset "Incompatible Formula Coverage Summary" begin
-        @testset "Coverage Analysis" begin
-            compatible_count = 11  # From main effects in statistical_validation.jl
-            interaction_coverage = 2  # Two-way linear and GLM implemented
-            mixed_model_coverage = 1  # Random intercept implemented
-            function_coverage = 5     # Various function types tested
-
-            total_specialized = interaction_coverage + mixed_model_coverage + function_coverage
-
-            @test total_specialized >= 8  # Minimum coverage threshold
-            @info "Specialized SE validation coverage" compatible_formulas=compatible_count specialized_formulas=total_specialized
-            @info "Validation methods" interactions="Hand-coded analytical" mixed_models="Fixed effects vcov" functions="Backend consistency"
         end
     end
 end

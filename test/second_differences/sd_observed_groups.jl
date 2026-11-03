@@ -1,21 +1,20 @@
-# test_second_differences_groups.jl
-# Margins 3.0, step 8: the model-level second differences on the request layer.
+# sd_observed_groups.jl
+# at = :observed (the average derivative over the observed modifier values) and groups= on
+# second_differences(model, data, …), with backend = :ad vs :fd.
 #
-# - `groups=` on second_differences(model, data, …): the counterfactual second difference within
-#   each stratum. Checked (1) exactly against the result-level route (population_margins with the
-#   same scenarios and groups, then second_differences(result, …)), and (2) against an oracle: the
-#   ungrouped call on that stratum's rows only, with the same Σ.
+# - at = :observed: the interaction coefficient in a linear model, the row layout, and a
+#   closed-form oracle (the average unit-level cross-derivative, estimate and SE).
+# - groups=: the counterfactual second difference within each stratum. Checked (1) exactly against
+#   the result-level route (population_margins with the same scenarios and groups, then
+#   second_differences(result, …)), and (2) against an oracle: the ungrouped call on that stratum's
+#   rows only, with the same Σ.
 # - backend=:ad vs :fd agree on second differences.
-# - the FixedEffectModels estimation sample is used by at=:mean (the removed internal
-#   _second_differences_local did not subset to it).
-# - a categorical variable that appears only inside an interaction (no main effect), as a focal
-#   variable of population_margins and of second_differences and as a modifier, against hand
-#   computations from modelcols; the same pattern for a Bool and a continuous variable.
+# (The FixedEffectModels estimation sample under at = :mean is checked in
+# validation/test_second_differences_mixed_fem.jl.)
 
 using Test
 using Margins
-using DataFrames, CategoricalArrays, GLM, StatsModels, Statistics, Random, LinearAlgebra
-using FixedEffectModels
+using DataFrames, CategoricalArrays, GLM, StatsModels, Tables, Statistics, Random, LinearAlgebra
 
 # The schema columns two second-difference frames share, compared exactly (NaN == NaN)
 const _SD_COLS = [:variable, :contrast, :modifier, :modifier_type, :modifier_level1, :modifier_level2,
@@ -27,7 +26,80 @@ function _frames_equal(a::DataFrame, b::DataFrame, cols)
     return all(c -> all(_same.(a[!, c], b[!, c])), cols)
 end
 
-@testset "second differences: groups=, backend=, interaction-only variables" begin
+
+@testset "second differences: at = :observed" begin
+    Random.seed!(41)
+    n = 500
+    df = DataFrame(x = randn(n), w = randn(n) .+ 0.3, z = randn(n), t = rand([0.0, 1.0], n), sw = 0.5 .+ rand(n))
+    df.y = 0.2 .+ 0.4df.x .+ 0.3df.w .+ 0.2df.z .+ 0.5df.x .* df.w .+ randn(n)
+    df.yb = (0.1 .+ 0.7df.x .+ 0.4df.w .+ 0.3df.x .* df.w .+ 0.3 .* df.x .^ 2 .+ randn(n)) .> 0
+    lin = lm(@formula(y ~ x * w + z), df)
+    lg = glm(@formula(yb ~ x * w + z + t + x^2), df, Binomial(), LogitLink())
+
+    @testset "linear model: the interaction coefficient, like any evaluation point" begin
+        k = findfirst(==("x & w"), coefnames(lin))
+        ob = second_differences(lin, df, :x, :w; at = :observed)
+        @test nrow(ob) == 1
+        @test ob.second_diff[1] ≈ coef(lin)[k] rtol = 1e-6
+        @test ob.se[1] ≈ sqrt(vcov(lin)[k, k]) rtol = 1e-6
+        @test ob.df[1] == dof_residual(lin)
+    end
+
+    @testset "row layout" begin
+        ob = second_differences(lg, df, :x, :w; at = :observed, warn = false)
+        @test isnan(ob.eval_point[1]) && isnan(ob.modifier_level1[1]) && isnan(ob.modifier_level2[1])
+        @test ob.delta_used[1] > 0 && ob.modifier_type == [:continuous]
+        @test ob.variable == [:x] && ob.contrast == ["dy/dx"]
+        # differs from the derivative at the mean of the modifier in a nonlinear model
+        @test !isapprox(ob.second_diff[1], second_differences(lg, df, :x, :w; at = :mean, warn = false).second_diff[1]; rtol = 1e-3)
+        # profile strata, several points, several variables, p_adjust, gradients, contrast selection
+        pr = second_differences(lg, df, [:x, :z], :w; at = :observed, profile = (t = [0.0, 1.0],), p_adjust = :holm,
+                                include_gradients = true, warn = false)
+        @test nrow(pr) == 4 && sort(unique(pr.t)) == [0.0, 1.0] && all(isnan, pr.eval_point)
+        @test hasproperty(pr, :p_adjusted) && hasproperty(pr, :gradient)
+        @test second_differences(lg, df, :x, :w; at = :observed, contrast = "dy/dx", warn = false).second_diff == ob.second_diff
+    end
+
+    @testset "equals the average unit-level cross-derivative (closed-form oracle)" begin
+        rhs = formula(lg).rhs
+        X(dd) = modelcols(rhs, Tables.columntable(dd))
+        function est(β, scale, w; δ = 0.01, h = 1e-5)
+            function ame(shift)
+                dd = copy(df); dd.w .+= shift
+                dp = copy(dd); dp.x .+= h
+                dm = copy(dd); dm.x .-= h
+                pred(Xs) = scale === :response ? 1 ./ (1 .+ exp.(-(Xs * β))) : Xs * β
+                g = (pred(X(dp)) .- pred(X(dm))) ./ (2h)
+                isnothing(w) ? mean(g) : sum(w .* g) / sum(w)
+            end
+            (ame(δ) - ame(-δ)) / (2δ)
+        end
+        β = coef(lg)
+        for (scale, w) in ((:response, nothing), (:link, nothing), (:response, df.sw))
+            grad = map(eachindex(β)) do k
+                st = 1e-5 * max(abs(β[k]), 1e-2)
+                bp = copy(β); bp[k] += st; bm = copy(β); bm[k] -= st
+                (est(bp, scale, w) - est(bm, scale, w)) / (2st)
+            end
+            sd = second_differences(lg, df, :x, :w; at = :observed, delta = 0.01, scale, weights = w, warn = false)
+            @test sd.second_diff[1] ≈ est(β, scale, w) rtol = 1e-5
+            @test sd.se[1] ≈ sqrt(grad' * vcov(lg) * grad) rtol = 2e-3
+        end
+    end
+
+    @testset "a modifier the model does not use is a structural zero" begin
+        m = lm(@formula(y ~ x + z), df)
+        sd = @test_logs (:warn, r"zero by construction") second_differences(m, df, :x, :w; at = :observed)
+        @test sd.second_diff[1] == 0.0 && isnan(sd.p_value[1])
+    end
+
+    @testset "errors" begin
+        @test_throws ArgumentError second_differences(lg, df, :x, :t; at = :observed)   # 0/1 modifier is discrete
+        @test_throws ArgumentError second_differences(lg, df, :x, :w; at = :nonsense)
+    end
+end
+
+@testset "second differences: groups=, backend=" begin
     Random.seed!(8008)
     n = 900
     df = DataFrame(x = randn(n), w = randn(n), t = rand(0:1, n),
@@ -203,142 +275,5 @@ end
         f = second_differences(m, df, :x, :t; groups = :g, backend = :fd)
         @test isapprox(a.second_diff, f.second_diff; rtol = 1e-6) && isapprox(a.se, f.se; rtol = 1e-6)
         @test_throws ArgumentError second_differences(m, df, :x, :t; backend = :nope)
-    end
-
-    @testset "bad alpha is an ArgumentError on both forms" begin
-        for a in (0.0, 1.0, 1.5, -0.1, "0.05")
-            @test_throws ArgumentError second_differences(m, df, :x, :t; alpha = a)
-            @test_throws ArgumentError second_differences(m, df, :x, :w; alpha = a)
-        end
-        r = population_margins(m, df; vars = [:x], scenarios = (t = [0, 1],))
-        @test_throws ArgumentError second_differences(r, :x, :t; alpha = 2)
-        @test second_differences(m, df, :x, :t; alpha = 1 // 10).ci_lower[1] ≈
-              second_differences(m, df, :x, :t; alpha = 0.1).ci_lower[1]
-    end
-end
-
-@testset "second differences on FixedEffectModels: the estimation sample (at=:mean)" begin
-    Random.seed!(77)
-    n = 400
-    d = DataFrame(x = randn(n), z = randn(n), h = rand(["p", "q", "r", "s"], n))
-    d.y = d.x .+ 0.5 .* d.x .* d.z .+ 0.3 .* d.z .+ randn(n)
-    d.h[1] = "singleton"
-    d.z[1] = 50.0                     # a dropped row far from the others: it would move the mean
-    fm = reg(d, @formula(y ~ x * z + fe(h)))
-    @test sum(fm.esample) == n - 1
-    sd = second_differences(fm, d, :x, :z; at = :mean, weights = :none)
-    @test sd.eval_point[1] == mean(d.z[fm.esample])
-    @test sd.eval_point[1] != mean(d.z)
-    # identity link, linear in z: the derivative is the interaction coefficient
-    @test sd.second_diff[1] ≈ coef(fm)[findfirst(==("x & z"), coefnames(fm))] rtol = 1e-6
-    so = second_differences(fm, d, :x, :z; weights = :none)
-    @test so.second_diff[1] ≈ sd.second_diff[1] rtol = 1e-6
-end
-
-# Hand computations for a categorical variable: average over rows of the prediction with every row
-# set to `lv` minus every row set to `base` (other variables as observed, and `set` applied), with
-# the delta-method SE from the modelcols gradients
-function _hand_contrast(m, d, var, lv, base; set = (;), link = :identity)
-    f = formula(m).rhs
-    β = coef(m)
-    function X(level)
-        dd = copy(d)
-        dd[!, var] = categorical(fill(level, nrow(dd)); levels = levels(d[!, var]))
-        for (k, v) in pairs(set)
-            dd[!, k] = fill(v, nrow(dd))
-        end
-        modelcols(f, dd)
-    end
-    Xl, Xb = X(lv), X(base)
-    if link === :identity
-        return mean(Xl * β .- Xb * β), vec(mean(Xl .- Xb; dims = 1))
-    end
-    μ(η) = 1 / (1 + exp(-η))
-    dμ(η) = μ(η) * (1 - μ(η))
-    el, eb = Xl * β, Xb * β
-    return mean(μ.(el) .- μ.(eb)), vec(mean(dμ.(el) .* Xl .- dμ.(eb) .* Xb; dims = 1))
-end
-
-@testset "a variable that appears only inside an interaction" begin
-    Random.seed!(4242)
-    n = 600
-    d = DataFrame(x = randn(n), w = 1 .+ rand(n), t = rand(0:1, n), b = rand(Bool, n),
-                  g = categorical(rand(["a", "b", "c"], n)))
-    d.y = d.x .+ 0.5 .* (d.g .== "b") .* d.w .- 0.4 .* (d.g .== "c") .* d.x .* d.w .+ 0.3 .* d.t .+ randn(n)
-    ηb = 0.2 .+ d.x .+ 0.8 .* (d.g .== "b") .* d.w .- 0.5 .* (d.g .== "c") .* d.t .* d.w
-    d.yb = rand(n) .< 1 ./ (1 .+ exp.(-ηb))
-
-    @testset "AME of g (no main effect) against the hand computation: $(fm)" for (fm, link) in (
-            (@formula(y ~ x + g & w), :identity),
-            (@formula(y ~ x + g & x & w), :identity),
-            (@formula(y ~ x + g & log(w)), :identity),
-            (@formula(yb ~ x + g & w + g & t & w), :logit))
-        m = link === :identity ? lm(fm, d) : glm(fm, d, Binomial(), LogitLink())
-        r = DataFrame(population_margins(m, d; vars = [:g]))
-        @test r.contrast == ["b - a", "c - a"]          # full-rank coding: the first level is the reference
-        for row in eachrow(r)
-            est, grad = _hand_contrast(m, d, :g, split(row.contrast, " - ")[1], "a"; link)
-            @test row.estimate ≈ est atol = 1e-12
-            @test row.se ≈ sqrt(dot(grad, vcov(m), grad)) atol = 1e-12
-        end
-        # auto-detected variables include it too
-        @test "g" in DataFrame(population_margins(m, d)).variable
-        # pairwise contrasts
-        @test nrow(DataFrame(population_margins(m, d; vars = [:g], contrasts = :pairwise))) == 3
-        # profile_margins (row-specific baseline at a grid row)
-        # (a grid row that sets g gives the row-specific contrast of that level against the reference)
-        @test DataFrame(profile_margins(m, d, cartesian_grid(g = ["b"]); type = :effects, vars = [:g])).contrast == ["b - a"]
-    end
-
-    @testset "full-rank main effect (y ~ 0 + g + x): contrasts are coefficient differences" begin
-        m0 = lm(@formula(y ~ 0 + g + x), d)
-        r = DataFrame(population_margins(m0, d; vars = [:g]))
-        cn = coefnames(m0)
-        @test r.estimate[1] ≈ coef(m0)[findfirst(==("g: b"), cn)] - coef(m0)[findfirst(==("g: a"), cn)] atol = 1e-12
-    end
-
-    m = glm(@formula(yb ~ x + g & w + g & t & w), d, Binomial(), LogitLink())
-    @testset "as a focal variable of second differences" begin
-        sd = second_differences(m, d, :g, :t)
-        @test sd.contrast == ["b - a", "c - a"]
-        for row in eachrow(sd)
-            lv = split(row.contrast, " - ")[1]
-            e0, g0 = _hand_contrast(m, d, :g, lv, "a"; set = (t = 0,), link = :logit)
-            e1, g1 = _hand_contrast(m, d, :g, lv, "a"; set = (t = 1,), link = :logit)
-            @test row.second_diff ≈ e1 - e0 atol = 1e-12
-            @test row.se ≈ sqrt(dot(g1 .- g0, vcov(m), g1 .- g0)) atol = 1e-12
-        end
-        @test nrow(second_differences(m, d, :g, :w)) == 2          # continuous modifier, at=:observed
-        @test nrow(second_differences(m, d, :g, :t; groups = :b)) == 4
-    end
-
-    @testset "as a modifier" begin
-        sd = second_differences(m, d, :x, :g; warn = false)
-        @test nrow(sd) == 3                                         # pairs of a, b, c
-        r = population_margins(m, d; vars = [:x], scenarios = (g = ["a", "b", "c"],))
-        @test _frames_equal(sd, second_differences(r, :x, :g; warn = false), _SD_COLS)
-        sd = second_differences(m, d, :w, :g; warn = false)
-        @test nrow(sd) == 3 && all(isfinite, sd.se)
-    end
-
-    @testset "Bool and continuous variables only inside an interaction" begin
-        mb = glm(@formula(yb ~ x + b & w + x & w), d, Binomial(), LogitLink())
-        rb = DataFrame(population_margins(mb, d; vars = [:b, :w]))
-        @test Set(rb.variable) == Set(["b", "w"])
-        # Bool: the true - false contrast, by hand
-        f = formula(mb).rhs
-        Xt = modelcols(f, transform(d, :b => ByRow(_ -> true) => :b))
-        Xf = modelcols(f, transform(d, :b => ByRow(_ -> false) => :b))
-        μ(η) = 1 / (1 + exp(-η)); dμ(η) = μ(η) * (1 - μ(η))
-        β = coef(mb)
-        est = mean(μ.(Xt * β) .- μ.(Xf * β))
-        grad = vec(mean(dμ.(Xt * β) .* Xt .- dμ.(Xf * β) .* Xf; dims = 1))
-        rowb = rb[rb.variable .== "b", :]
-        @test rowb.estimate[1] ≈ est atol = 1e-12
-        @test rowb.se[1] ≈ sqrt(dot(grad, vcov(mb), grad)) atol = 1e-12
-        # second differences: Bool focal and Bool modifier; continuous w only in interactions
-        @test nrow(second_differences(mb, d, :b, :x; warn = false)) == 1
-        @test nrow(second_differences(mb, d, :x, :b)) == 1
-        @test nrow(second_differences(mb, d, :w, :x)) == 1
     end
 end

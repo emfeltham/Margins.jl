@@ -8,6 +8,7 @@
 using Test
 using Margins
 using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
+using Distributions: Normal, quantile
 
 @testset "Request layer" begin
     n = 400
@@ -57,8 +58,10 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
             @test ra.inference.alpha === Float64(a)
             @test DataFrame(ra).estimate == DataFrame(r).estimate
         end
-        @test population_margins(m, d; vars=[:x], alpha=1//10).inference.alpha == 0.1
         @test DataFrame(population_margins(m, d; vars=[:x], alpha=1//10)).ci_lower == DataFrame(r).ci_lower
+        # the interval is estimate ± the critical value at that alpha × SE (z for a logit)
+        rl = DataFrame(population_margins(lg, d; vars=[:x], alpha=0.1))
+        @test rl.ci_upper ≈ rl.estimate .+ quantile(Normal(), 0.95) .* rl.se rtol=1e-12
         @test profile_margins(m, d, means_grid(d); vars=[:x], alpha=1//10).inference.alpha == 0.1
         for bad in (1.5, 1, 0, 0.0, -0.1, NaN)
             @test_throws ArgumentError population_margins(m, d; vars=[:x], alpha=bad)
@@ -66,9 +69,14 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
         end
         @test_throws ArgumentError population_margins(m, d; vars=[:x], scenarios=(w=[1.0],), alpha=1.5)
         @test_throws TypeError population_margins(m, d; vars=[:x], alpha="0.1")
+        # the 2.x keyword `ci_alpha` points to the new name
+        msg = try population_margins(m, d; vars=[:x], ci_alpha=0.1); "" catch e; sprint(showerror, e) end
+        @test occursin("`ci_alpha` was renamed `alpha`", msg)
+        @test_throws ArgumentError profile_margins(m, d, means_grid(d); vars=[:x], ci_alpha=0.1)
         # contrast() takes the same alpha
         pr = profile_margins(m, d, cartesian_grid(x=[0.0, 1.0]); type=:predictions)
         @test contrast(pr, 1, 2; alpha=1//10).ci_lower == contrast(pr, 1, 2; alpha=0.1).ci_lower
+        @test contrast(pr, 1, 2; alpha=0.1).metadata[:alpha] == 0.1
         @test_throws ArgumentError contrast(pr, 1, 2; alpha=1.5)
         @test_throws ArgumentError contrast(pr, (x=0.0,), (x=1.0,); alpha=0.0)
     end
@@ -120,6 +128,7 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
                   () -> profile_margins(lg, d, means_grid(d); vcov=counting),
                   () -> second_differences(lg, d, :x, :g; profile=(t=[false, true],), vcov=counting),
                   () -> second_differences(lg, d, :x, :w; at=[1.0, 2.0], profile=(t=[false, true],), vcov=counting),
+                  () -> second_differences(lg, d, :x, :w; levels=[1.0, 2.0], vcov=counting),
                   () -> second_differences(lg, d, :x, :w; vcov=counting))
             calls[] = 0
             f()

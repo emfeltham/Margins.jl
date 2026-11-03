@@ -70,10 +70,10 @@
 #
 # Validation
 # ──────────
-# This is validated in test/statistical_validation/:
-# - analytical_se_validation.jl: Hand-calculated formulas match
-# - bootstrap_se_validation.jl: Bootstrap SEs confirm delta method
-# - backend_consistency.jl: AD and FD backends agree
+# This is validated in test/:
+# - validation/test_feature_matrix_oracle.jl: closed-form estimates and SEs from X, β and V
+# - statistical_validation/analytical_se_validation.jl: Hand-calculated formulas match
+# - statistical_validation/backend_consistency.jl: AD and FD backends agree
 #
 # Bottom Line
 # ───────────

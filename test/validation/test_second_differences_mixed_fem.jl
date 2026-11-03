@@ -166,7 +166,8 @@ end
             @test all(isapprox.(forms[name].se, set; rtol = 1e-10))
         end
         es = m.esample
-        @test forms.mean.eval_point[1] ≈ mean(fd.z[es])
+        @test forms.mean.eval_point[1] == mean(fd.z[es])                # the estimation sample's mean,
+        @test forms.mean.eval_point[1] != mean(skipmissing(fd.z))       # not the data's
         @test forms.observed.delta_used[1] ≈ 0.01 * std(fd.z[es]) rtol = 1e-12
         # FEM: t inference with the cluster-adjusted dof_residual
         @test forms.observed.df[1] == dof_residual(m)

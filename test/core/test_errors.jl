@@ -37,12 +37,6 @@ using LinearAlgebra
         @test population_margins(m, select(df, Not(:y))) isa EffectsResult
     end
 
-    # Test deprecated target parameter rejection (defensive testing)
-    @testset "Deprecated target parameter rejection" begin
-        @debug "Testing deprecated target parameter error handling" test_input=:invalid expected_error=MethodError
-        @test_throws MethodError population_margins(m, df; type=:effects, target=:invalid)  # target param no longer exists
-    end
-
     # Test invalid scale parameter
     @testset "Invalid scale parameter" begin
         @debug "Testing invalid scale parameter error handling" test_input=:invalid expected_error=ArgumentError
@@ -60,6 +54,15 @@ using LinearAlgebra
     @testset "Invalid variable names" begin
         @debug "Testing invalid variable names error handling" test_input=[:nonexistent] expected_error=Margins.MarginsError
         @test_throws Margins.MarginsError population_margins(m, df; type=:effects, vars=[:nonexistent])
+    end
+
+    # The public path rejects unknown variables before the engine is built; build_engine's own
+    # guard (src/engine/core.jl) is reached only directly
+    @testset "build_engine rejects unknown variables" begin
+        d = DataFrame(x = randn(100), z = randn(100)); d.y = rand(100) .< 0.5
+        mb = glm(@formula(y ~ x + z), d, Binomial(), LogitLink())
+        nt = Margins._prepare_margins_data(Margins.Tables.columntable(d), mb)
+        @test_throws Margins.MarginsError Margins.build_engine(Margins.PopulationUsage, mb, nt, [:nope], GLM.vcov, :ad)
     end
 
     # Test mismatched model and data
@@ -87,8 +90,11 @@ using LinearAlgebra
 
         # Mixed data types should work fine (Int/Bool are properly handled)
         # Bool variables in reference grids are converted to P(true) Float64
-        result = profile_margins(m_mixed, df_mixed, means_grid(df_mixed); type=:effects)
-        @test nrow(DataFrame(result)) >= 1  # Should succeed
+        # The Bool z is set by the grid, so only the Int x has an effect; in a linear model
+        # it is the coefficient
+        result = DataFrame(profile_margins(m_mixed, df_mixed, means_grid(df_mixed); type=:effects))
+        @test result.variable == ["x"]
+        @test result.estimate ≈ [coef(m_mixed)[2]] rtol = 1e-10
     end
 
     # Test unsupported data types - explicit error policy
@@ -105,8 +111,9 @@ using LinearAlgebra
             m_unsup = lm(@formula(y ~ x), df_unsupported)  # Model doesn't use unsupported var
             
             # This should work since unsupported var is not used in model
-            result = population_margins(m_unsup, df_unsupported; type=:effects)
-            @test nrow(DataFrame(result)) >= 1
+            result = DataFrame(population_margins(m_unsup, df_unsupported; type=:effects))
+            @test result.variable == ["x"]
+            @test result.estimate ≈ [coef(m_unsup)[2]] rtol = 1e-10
             
             # But trying to create a reference grid with unsupported type should fail
             @test_throws Margins.MarginsError means_grid(df_unsupported)
@@ -203,23 +210,6 @@ using LinearAlgebra
             )
         end
 
-        @testset "Acceptable combination counts" begin
-            # Small number of combinations should work fine
-            df_small = DataFrame(
-                y = randn(100),
-                x = randn(100),
-                group1 = categorical(rand(1:5, 100))  # 5 groups only
-            )
-            m_small = lm(@formula(y ~ x), df_small)
-            
-            # Should work without error
-            result = population_margins(
-                m_small, df_small;
-                type=:effects,
-                groups=:group1  # Single group with few levels
-            )
-            @test nrow(DataFrame(result)) >= 1  # Should succeed
-        end
     end
 
     # Test DataFrame structure validation - explicit error policy
@@ -284,40 +274,6 @@ using LinearAlgebra
         end
     end
 
-    # Test gradient format validation - explicit error policy
-    @testset "Gradient format validation explicit errors" begin
-        @debug "Testing gradient format error policy compliance"
-        
-        @testset "Critical fix: old gradient format fallback removed" begin
-            # CRITICAL TEST: Verify that the dangerous old gradient format fallback
-            # has been removed from src/features/averaging.jl:225-231
-            # 
-            # The old code had:
-            #   elseif isa(grad_key, Tuple) && length(grad_key) == 2
-            #       # Fallback to old format if available  <- DANGEROUS
-            #       g_term, g_prof_idx = grad_key
-            #
-            # This has been replaced with explicit MarginsError to prevent
-            # incorrect gradient associations and invalid standard errors.
-            
-            # Since the internal function is not exported, we test indirectly
-            # by ensuring profile margins with grouping work correctly.
-            # The key improvement is that silent format fallbacks are eliminated.
-            
-            df = DataFrame(
-                y = randn(50),
-                x = randn(50),
-                group = categorical(rand(["A", "B"], 50))
-            )
-            m = lm(@formula(y ~ x), df)
-            
-            # This should work correctly with proper gradient format handling
-            # (no more silent fallbacks to old formats)
-            result = profile_margins(m, df, means_grid(df); type=:effects)
-            @test nrow(DataFrame(result)) >= 1
-        end
-    end
-
     # Test raw String variable validation
     @testset "Raw String variable validation" begin
         @debug "Testing raw String variable rejection"
@@ -341,20 +297,6 @@ using LinearAlgebra
             @test res.contrast == ref.contrast == ["B - A"]
             @test res.estimate ≈ ref.estimate
             @test res.se ≈ ref.se
-        end
-
-        @testset "CategoricalArray String columns should work" begin
-            # Convert to CategoricalArray - should work fine
-            df_cat = DataFrame(
-                y = randn(50),
-                x = randn(50),
-                str_var = categorical(repeat(["A", "B"], 25))
-            )
-            m_cat = lm(@formula(y ~ x + str_var), df_cat)
-
-            # Should work without error
-            result = population_margins(m_cat, df_cat; vars=[:str_var])
-            @test nrow(DataFrame(result)) >= 1
         end
 
         @testset "Multiple variables with String" begin

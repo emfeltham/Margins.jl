@@ -3,11 +3,7 @@
 ## Quick Start
 
 ```julia
-# Default
 julia --project=. test/runtests.jl
-
-# Comprehensive: also runs the extra elasticity and categorical-mixture checks
-MARGINS_COMPREHENSIVE_TESTS=true julia --project=. test/runtests.jl
 ```
 
 ## Run time and slow runs
@@ -68,23 +64,15 @@ parallel, and read the `[clock]` lines rather than the total wall time.
 
 Further validation lives in separate files in `statistical_validation/`:
 
-- `backend_consistency.jl`: AD vs FD agreement
+- `backend_consistency.jl`: AD vs FD agreement, including near the log/sqrt domain boundary
 - `incompatible_formula_se_validation.jl`: SEs for formulas that need special handling
-- `elasticity_se_validation.jl`: elasticity SEs (bootstrap)
-- `analytical_elasticity_se_validation.jl`: elasticity SEs (hand-calculated)
-- `bootstrap_validation_tests.jl`: bootstrap SE agreement
-- `robust_se_tests.jl`: CovarianceMatrices.jl robust and clustered SEs
-- `population_context_bootstrap_validation.jl`: bootstrap SEs for `population_margins` with scenarios
-- `backend_reliability_tests.jl`: AD vs FD behavior on domain-sensitive functions
+- `robust_se_validation.jl` (run under Core): HC0–HC3 and CR0 SEs for `lm` and logit, checked against hand-computed sandwich matrices and sqrt(g'Vg)
 - `function_composition_tests.jl`: nested and trigonometric formula terms checked against closed-form derivatives
-- `specialized_se_tests.jl`: integer variables, elasticities, categorical mixtures, error propagation
-
-`MARGINS_COMPREHENSIVE_TESTS=true` enables additional checks in `elasticity_se_validation.jl`.
 
 ## Statistical Validation Features
 
 - **Analytical Verification**: Hand-calculated SE verification across linear and GLM models
-- **Bootstrap Validation**: Empirical SE agreement testing  
+- **Closed-form oracles**: `validation/test_feature_matrix_oracle.jl` and `validation/test_elasticity_unit_definitions.jl` check estimates and SEs exactly
 - **Robust SE Integration**: CovarianceMatrices.jl sandwich estimators (HC0-HC3) and clustered SEs
 - **Specialized Cases**: Integer variables, elasticities, categorical mixtures, error propagation
 - **Publication Grade**: All SE computations meet econometric publication standards

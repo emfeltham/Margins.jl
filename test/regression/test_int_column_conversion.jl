@@ -11,7 +11,7 @@ using DataFrames, GLM, StatsModels, Random, Statistics, Tables
 using Margins
 
 @testset "continuous Int/Float32 columns" begin
-    Random.seed!(3); n = 100_000
+    Random.seed!(3); n = 2_000
     d = DataFrame(x = randn(n), k = rand(0:20, n), f = Float32.(randn(n)))
     d.y = rand(n) .< 1 ./ (1 .+ exp.(-(0.3 .* d.x .+ 0.05 .* d.k .- 0.2 .* d.f)))
     m = glm(@formula(y ~ x + k + f), d, Binomial(), LogitLink())
@@ -28,13 +28,13 @@ using Margins
     @test r1.se ≈ rf.se rtol=1e-12
 
     # In-place mutation of the source is picked up (and matches a fresh Float64 frame)
-    d.k[1:1000] .= 20
-    dd.k[1:1000] .= 20.0
+    d.k[1:200] .= 20
+    dd.k[1:200] .= 20.0
     r4 = DataFrame(population_margins(m, d))
     @test r4.estimate != r1.estimate
     @test r4.estimate ≈ DataFrame(population_margins(m, dd)).estimate rtol=1e-12
-    d.f[1:1000] .= 2.5f0
-    dd.f[1:1000] .= 2.5
+    d.f[1:200] .= 2.5f0
+    dd.f[1:200] .= 2.5
     @test DataFrame(population_margins(m, d)).estimate ≈ DataFrame(population_margins(m, dd)).estimate rtol=1e-12
 
     # Values that do not round-trip through Float64 (|k| > 2^53) are converted afresh

@@ -1,11 +1,53 @@
-# test_second_differences.jl
-# Tests for second differences (interaction effects)
+# sd_result_level.jl
+# second_differences(result, variables, modifier) on an EffectsResult (population_margins or
+# profile_margins) and its engines (_second_difference, _second_differences_pairwise,
+# _second_differences_all_contrasts): modifier types, pairwise rows, continuous slopes, several
+# focal variables, row selection and ordering, the EffectIndex, and the public API surface
 
 using Test
 using Margins
 using DataFrames
 using GLM
+using CategoricalArrays
+using CovarianceMatrices
 using Random
+
+@testset "second differences: public API surface" begin
+    exported = Set(names(Margins))
+    @test :second_differences in exported
+    removed = (:second_differences_at, :second_differences_pairwise, :second_differences_all_contrasts,
+               :second_differences_table, :second_difference)
+    for f in removed
+        @test f ∉ exported                       # no longer exported ...
+        @test !isdefined(Margins, f)             # ... and no longer defined
+    end
+    @test Set(keys(Margins.REMOVED_SECOND_DIFFERENCE_FUNCTIONS)) == Set(removed)
+
+    # the two methods of the one public function
+    ms = methods(second_differences)
+    @test any(m -> Base.unwrap_unionall(m.sig).parameters[2] <: Margins.EffectsResult, ms)
+    @test any(m -> Base.unwrap_unionall(m.sig).parameters[2] <: Margins.RegressionModel, ms)
+end
+
+@testset "second differences: removed functions explain themselves" begin
+    for (f, mention) in ((:second_differences_at, "at="), (:second_differences_pairwise, "contrast="),
+                         (:second_differences_all_contrasts, "second_differences(result"),
+                         (:second_differences_table, "second_differences(result"),
+                         (:second_difference, "include_gradients=true"))
+        err = try
+            getfield(Margins, f); nothing
+        catch e
+            e
+        end
+        @test err isa UndefVarError
+        msg = sprint(showerror, err)
+        @test occursin("removed in Margins 3.0", msg)
+        @test occursin(mention, msg)
+    end
+    # unrelated undefined names get no hint
+    err = try getfield(Margins, :definitely_not_a_function); nothing catch e; e end
+    @test !occursin("removed in Margins 3.0", sprint(showerror, err))
+end
 
 @testset "Second Differences - Basic Functionality" begin
     # Generate test data
@@ -73,42 +115,12 @@ using Random
         pairs = Set([(row.modifier_level1, row.modifier_level2) for row in eachrow(sd_df)])
         @test length(pairs) == 3
 
-        # All should have valid statistics
-        @test all(isfinite.(sd_df.second_diff))
-        @test all(sd_df.se .>= 0)  # Can be zero if no interaction with modifier
-        # `education` is not in the model, so each difference is zero by construction: zero estimate and
-        # SE, and NaN inference (there is nothing to test)
+        # `education` enters the model but has no interaction with `x`, so each difference is zero by
+        # construction: zero estimate and SE, and NaN inference (there is nothing to test)
         @test all(abs.(sd_df.second_diff) .< 1e-12) && all(sd_df.se .< 1e-12)
         @test all(isnan, sd_df.statistic) && all(isnan, sd_df.p_value)
         @test all(isnan, sd_df.ci_lower) && all(isnan, sd_df.ci_upper)
         @test all(sd_df.significant .== false)
-    end
-
-    @testset "Continuous Modifier (numeric levels)" begin
-        # Compute AME at three age values
-        ages = [30, 45, 60]
-        ames = population_margins(model, df; scenarios=(age=ages,), type=:effects)
-
-        # Use pairwise function with continuous modifier
-        sd_df = Margins._second_differences_pairwise(ames, :x, :age; modifier_type=:continuous)
-
-        # Should have 3 pairwise contrasts: (3 choose 2) = 3
-        @test nrow(sd_df) == 3
-        @test sd_df.modifier_type[1] == :continuous
-
-        # For continuous, second_diff is slope (change per unit)
-        # Find the 30-45 comparison
-        idx = findfirst(r -> r.modifier_level1 == 30 && r.modifier_level2 == 45, eachrow(sd_df))
-        @test !isnothing(idx)
-
-        row_30_45 = sd_df[idx, :]
-        # Slope should be: (AME_45 - AME_30) / (45 - 30)
-        expected_slope = (row_30_45.ame_at_level2 - row_30_45.ame_at_level1) / 15
-        @test row_30_45.second_diff ≈ expected_slope
-
-        # All slopes should be valid
-        @test all(isfinite.(sd_df.second_diff))
-        @test all(sd_df.se .>= 0)  # Can be zero if no interaction with modifier
     end
 
     @testset "Auto-detection of modifier type" begin
@@ -323,36 +335,6 @@ end
     model = lm(@formula(y ~ x * treated + education + age), df)
     Σ = vcov(model)
 
-    @testset "Wrapper routes to pairwise for continuous focal" begin
-        ames = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
-
-        # Using unified wrapper
-        sd_wrapper = second_differences(ames, :x, :treated)
-
-        # Using direct function
-        sd_direct = Margins._second_differences_pairwise(ames, :x, :treated)
-
-        # Should produce same results
-        @test sd_wrapper.second_diff == sd_direct.second_diff
-        @test sd_wrapper.se == sd_direct.se
-        @test sd_wrapper.p_value == sd_direct.p_value
-    end
-
-    @testset "Wrapper routes to all_contrasts for categorical modifier >2" begin
-        ames = population_margins(model, df; scenarios=(education=["hs", "college", "grad"],), type=:effects)
-
-        # Using unified wrapper
-        sd_wrapper = second_differences(ames, :x, :education)
-
-        # Using direct function
-        sd_direct = Margins._second_differences_pairwise(ames, :x, :education)
-
-        # Should produce same results (3 pairwise contrasts)
-        @test nrow(sd_wrapper) == 3
-        @test nrow(sd_direct) == 3
-        @test sd_wrapper.second_diff == sd_direct.second_diff
-    end
-
     @testset "Wrapper with a single contrast" begin
         ames = population_margins(model, df; scenarios=(education=["hs", "college", "grad"],), type=:effects)
 
@@ -407,6 +389,10 @@ end
             @test sd[sd.variable .== :x1, :second_diff][1] ≈ sd1.second_diff[1]
             @test sd[sd.variable .== :x2, :second_diff][1] ≈ sd2.second_diff[1]
             @test sd[sd.variable .== :x3, :second_diff][1] ≈ sd3.second_diff[1]
+            # one focal variable gives one row
+            @test nrow(sd1) == 1 && sd1.variable[1] == :x1
+            # the significance column follows the p-values
+            @test all(sd.significant .== (sd.p_value .< 0.05))
         end
 
         @testset "Multiple Variables - Categorical Modifier" begin
@@ -418,7 +404,6 @@ end
             @test count(sd.variable .== :x1) == 3  # 3 education pairs
             @test count(sd.variable .== :x2) == 3  # 3 education pairs
             @test all(sd.modifier .== :education)
-            @test all(sd.se .>= 0)
         end
 
         @testset "Multiple Variables - Continuous Modifier" begin
@@ -432,24 +417,149 @@ end
             @test count(sd.variable .== :x3) == 3
             @test all(sd.modifier_type .== :continuous)
         end
+    end
+end
 
-        @testset "second_differences with Multiple Variables (table form)" begin
-            ames = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
+@testset "Second Differences - Row selection, ordering, delta" begin
+    Random.seed!(1)
+    n = 1500
+    df = DataFrame(
+        x = randn(n), w = randn(n),
+        m = rand([0.0, 1.0], n), z = rand([0.0, 1.0], n),
+        g = rand(["a", "b", "c"], n),
+    )
+    df.y = rand(n) .< 1 ./ (1 .+ exp.(-(0.3 .+ 0.5df.x .+ 0.4df.m .+ 0.6df.x .* df.m .+ 0.2df.z)))
+    model = glm(@formula(y ~ x * m + z), df, Binomial(), LogitLink())
+    Σ = vcov(model)
 
-            # Test table wrapper
-            sd = second_differences(ames, [:x1, :x2, :x3], :treated)
-            @test nrow(sd) == 3
-            @test hasproperty(sd, :significant)
-            @test all(sd.significant .== (sd.p_value .< 0.05))
+    @testset "several scenario variables are rejected, not mixed" begin
+        a = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0], z=[0.0, 1.0]), type=:effects)
+        @test_throws ArgumentError Margins._second_differences_pairwise(a, :x, :m)
+        @test_throws ArgumentError Margins._second_difference(a, :x, :m)
+        @test_throws ArgumentError second_differences(a, :x, :m)
+    end
+
+    @testset "grouped results are rejected, not mixed" begin
+        a = population_margins(model, df; vars=:x, groups=:g, scenarios=(m=[0.0, 1.0],), type=:effects)
+        @test_throws ArgumentError Margins._second_differences_pairwise(a, :x, :m)
+    end
+
+    @testset "numeric levels are ordered ascending in every function" begin
+        up = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
+        down = population_margins(model, df; vars=:x, scenarios=(m=[1.0, 0.0],), type=:effects)
+        pw_up = Margins._second_differences_pairwise(up, :x, :m)
+        pw_down = Margins._second_differences_pairwise(down, :x, :m)
+        sd_down = Margins._second_difference(down, :x, :m)
+        @test pw_down.modifier_level1[1] == 0.0 && pw_down.modifier_level2[1] == 1.0
+        @test pw_down.second_diff[1] ≈ pw_up.second_diff[1]
+        @test pw_down.second_diff[1] ≈ sd_down.second_diff
+        @test second_differences(down, :x, :m).second_diff[1] ≈ sd_down.second_diff
+    end
+
+    @testset "two non-0/1 numeric levels under :auto warn; explicit type does not" begin
+        b = population_margins(model, df; vars=:x, scenarios=(z=[0.0, 10.0],), type=:effects)
+        @test_logs (:warn, r"treated as :binary") Margins._second_differences_pairwise(b, :x, :z)
+        @test_logs Margins._second_differences_pairwise(b, :x, :z; modifier_type=:continuous)
+        c = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
+        @test_logs Margins._second_differences_pairwise(c, :x, :m)
+    end
+
+    @testset "missing contrast / variable give specific errors" begin
+        c = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
+        err = try Margins._second_differences_pairwise(c, :x, :m; contrast="nope"); nothing catch e; e end
+        @test err isa ArgumentError && occursin("Contrasts available: dy/dx", err.msg)
+        err = try Margins._second_differences_pairwise(c, :z, :m); nothing catch e; e end
+        @test err isa ArgumentError && occursin("not found in the effects result", err.msg)
+    end
+
+    @testset "small delta near |at| ≈ 0.5 no longer raises a spurious error" begin
+        r = second_differences(model, df, :x, :m; vcov=Σ, modifier_type=:continuous, at=0.5, delta=1e-9)
+        @test all(isfinite, r.second_diff)
+        r2 = second_differences(model, df, :x, :m; vcov=Σ, modifier_type=:continuous, at=1.0, delta=1e-9)
+        @test all(isfinite, r2.second_diff)
+    end
+
+    @testset "EffectIndex: one typed view of the result's labels" begin
+        a = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
+        idx = Margins._effect_index(a)
+        @test idx.n == 2 && idx.variables == [:x, :x] && idx.contrasts == ["dy/dx", "dy/dx"]
+        @test keys(idx.cells) == (:at_m,) || keys(idx.cells) == (:m,)
+        @test Margins._variable_contrasts(idx, :x) == ["dy/dx"]
+        @test isempty(Margins._variable_rows(idx, :nope))
+        err = try Margins._require_variable(idx, :nope); nothing catch e; e end
+        @test err isa ArgumentError && occursin("variables: x", err.msg)
+        err = try Margins._second_differences_pairwise(a, :x, :zzz); nothing catch e; e end
+        @test err isa ArgumentError && occursin("does not have modifier :zzz", err.msg)
+
+        # the old "derivative" spelling in a result is matched by the canonical "dy/dx" query
+        old = Margins.EffectsResult(a.estimates, a.standard_errors, a.variables,
+                                    replace(a.terms, "dy/dx" => "derivative"),
+                                    a.context, a.gradients, a.inference, a.metadata)
+        @test Margins._effect_index(old).contrasts == ["dy/dx", "dy/dx"]
+        @test Margins._second_differences_pairwise(old, :x, :m).second_diff ≈ Margins._second_differences_pairwise(a, :x, :m).second_diff
+        @test Margins._second_differences_pairwise(old, :x, :m; contrast="derivative").second_diff ≈
+              Margins._second_differences_pairwise(a, :x, :m).second_diff
+        @test second_differences(old, :x, :m).second_diff ≈ second_differences(a, :x, :m).second_diff
+
+        # inconsistent result shapes fail loudly instead of indexing out of range
+        bad = Margins.EffectsResult(a.estimates, a.standard_errors, a.variables[1:1], a.terms,
+                                    a.context, a.gradients, a.inference, a.metadata)
+        err = try Margins._effect_index(bad); nothing catch e; e end
+        @test err isa ErrorException && occursin("Malformed EffectsResult", err.msg)
+        @test_throws ErrorException Margins._second_differences_pairwise(bad, :x, :m)
+
+        # group columns are indexed too, and named as groups in the error
+        g = population_margins(model, df; vars=:x, groups=:g, scenarios=(m=[0.0, 1.0],), type=:effects)
+        gidx = Margins._effect_index(g)
+        @test any(==("group"), values(gidx.sources))
+        err = try Margins._second_differences_pairwise(g, :x, :m); nothing catch e; e end
+        @test err isa ArgumentError && occursin("group variable", err.msg)
+    end
+end
+
+@testset "second differences of profile_margins and predictions results" begin
+    Random.seed!(7)
+    n = 800
+    df = DataFrame(
+        x = randn(n), w = randn(n), z = randn(n),
+        t = rand([0, 1], n), g = rand(["a", "b", "c"], n),
+    )
+    df.y = 0.2 .+ 0.4df.x .+ 0.3df.w .+ 0.5df.t .+ 0.7df.x .* df.t .- 0.6df.x .* df.w .+
+           0.3 .* (df.g .== "b") .+ 0.4 .* df.x .* (df.g .== "c") .+ 0.5df.z .+ randn(n)
+    lmod = lm(@formula(y ~ x * t + x * w + x * g + z), df)
+    β = coef(lmod); names = coefnames(lmod)
+    b(nm) = β[findfirst(==(nm), names)]
+
+    @testset "profile_margins results and predictions results" begin
+        V = vcov(lmod)
+        grid = cartesian_grid(t=[0, 1])
+        p = profile_margins(lmod, df, grid; type=:effects, vars=[:x])
+        @test p.inference.vcov == V
+        sd = second_differences(p, :x, :t)                       # the result's own covariance
+        @test sd.second_diff[1] ≈ b("x & t") atol=1e-8           # difference of MEMs = interaction coefficient
+        @test sd.df[1] == dof_residual(lmod)
+        g = p.gradients[2, :] .- p.gradients[1, :]
+        @test sd.se[1] ≈ sqrt(g' * V * g)
+        @test Margins._second_differences_pairwise(p, :x, :t).second_diff ≈ sd.second_diff
+        @test Margins._second_difference(p, :x, :t).second_diff ≈ sd.second_diff[1]
+        # robust covariance recorded and used
+        pr = profile_margins(lmod, df, grid; type=:effects, vars=[:x], vcov=HC1())
+        @test pr.inference.vcov != V
+        gr = pr.gradients[2, :] .- pr.gradients[1, :]
+        Vhc = CovarianceMatrices.vcov(HC1(), lmod)
+        @test second_differences(pr, :x, :t).se[1] ≈ sqrt(gr' * Vhc * gr)
+        @test second_differences(pr, :x, :t).df[1] == dof_residual(lmod)   # D1: t with a robust vcov
+        # a grid that varies another variable too is rejected, not mixed
+        p2 = profile_margins(lmod, df, cartesian_grid(t=[0, 1], g=["a", "b"]); type=:effects, vars=[:x])
+        @test_throws ArgumentError second_differences(p2, :x, :t)
+        # predictions results get a pointer, not a MethodError
+        pp = profile_margins(lmod, df, grid; type=:predictions)
+        ap = population_margins(lmod, df; scenarios=(t=[0, 1],), type=:predictions)
+        for r in (pp, ap)
+            err = try second_differences(r, :x, :t); nothing catch e; e end
+            @test err isa ArgumentError && occursin("type=:effects", err.msg)
         end
-
-        @testset "Single Variable Still Works (Backward Compatibility)" begin
-            ames = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
-
-            # Single Symbol should still work
-            sd = second_differences(ames, :x1, :treated)
-            @test nrow(sd) == 1
-            @test sd.variable[1] == :x1
-        end
+        err = try second_differences(ap, [:x], :t); nothing catch e; e end
+        @test err isa ArgumentError && occursin("PredictionsResult", err.msg)
     end
 end

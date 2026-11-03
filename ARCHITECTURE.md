@@ -344,7 +344,7 @@ test/
 ├── primitives/                     # Low-level primitive tests
 ├── inference/                      # Inference method tests
 ├── validation/                     # Cross-validation (contrast invariance, R comparison)
-└── r_compare/                      # R marginaleffects comparison benchmarks
+└── r_compare_marginaleffects/      # committed R fixtures (marginaleffects, fixest)
 ```
 
 **Key testing principles:**

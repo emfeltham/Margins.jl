@@ -40,13 +40,10 @@ using Margins: marginal_effects_eta!
     @test Jk[1] ≈ 0.0 atol=1e-12
     @test Jk[2] ≈ 1.0 / xval rtol=1e-8
 
-    # 2) Full FD Jacobian equals analytic derivative
-    J = Matrix{Float64}(undef, length(compiled), length(de_fd.vars))
-    @test_nowarn FormulaCompiler.derivative_modelrow!(J, de_fd, row)
-    @test J[1, 1] ≈ 0.0 atol=1e-12
-    @test J[2, 1] ≈ 1.0 / xval rtol=1e-8
+    # (the full FD Jacobian of log(x) at row 1 is checked in FormulaCompiler's
+    # test_derivatives_domain_edge_cases.jl)
 
-    # 3) AD marginal effects on η should match β1/x (now from Margins)
+    # 2) AD marginal effects on η should match β1/x (now from Margins)
     β = coef(model)
     g_ad = Vector{Float64}(undef, length(de_ad.vars))
     Gβ_ad = Matrix{Float64}(undef, length(de_ad), length(de_ad.vars))

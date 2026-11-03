@@ -2,8 +2,8 @@
 # weights=:model (the default): averages use the fitted model's estimation weights. Checks that the
 # default equals the explicit column, :none (and nothing) give the 2.x unweighted result, the
 # canonical-link identity Σwᵢ(yᵢ − μ̂ᵢ) = 0 (weighted AAP == weighted mean of y), a length mismatch
-# errors, metadata[:weights_source] in every case, second differences, and MixedModels /
-# FixedEffectModels fits.
+# errors, metadata[:weights_source] in every case, second differences, MixedModels /
+# FixedEffectModels fits, and invalid weights= values (wrong type or length, negative, all zero).
 
 using Test
 using Margins
@@ -33,7 +33,7 @@ using Random
         u = population_margins(logit_w, df; vars = [:x, :t], weights = :w)
         v = population_margins(logit_w, df; vars = [:x, :t], weights = df.w)
         @test d.estimates == u.estimates && d.standard_errors == u.standard_errors
-        @test d.estimates == v.estimates
+        @test d.estimates == v.estimates && d.standard_errors == v.standard_errors   # a vector is the column
         @test d.metadata[:weights_source] === :model && d.metadata[:weighted]
         @test u.metadata[:weights_source] === :user && v.metadata[:weights_source] === :user
     end
@@ -171,5 +171,8 @@ using Random
     @testset "invalid weights keyword" begin
         @test_throws ArgumentError population_margins(logit_w, df; vars = :x, weights = "w")
         @test_throws ArgumentError population_margins(logit_w, df; vars = :x, weights = :not_a_column)
+        @test_throws ArgumentError population_margins(logit_w, df; vars = :x, weights = ones(n - 10))   # wrong length
+        @test_throws ArgumentError population_margins(logit_w, df; vars = :x, weights = [-1.0; ones(n - 1)])
+        @test_throws ArgumentError population_margins(logit_w, df; vars = :x, weights = zeros(n))
     end
 end

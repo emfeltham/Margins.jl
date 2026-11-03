@@ -21,15 +21,11 @@ Margins.clear_engine_cache!()
 
 # Load testing utilities centrally to prevent method definition warnings
 include("statistical_validation/testing_utilities.jl")
-include("statistical_validation/bootstrap_se_validation.jl")
 include("statistical_validation/analytical_se_validation.jl")
 
 suite_phase("Core Functionality")
 @testset "Core Functionality" begin
-    include("core/test_grouping.jl")
-    include("core/test_column_naming.jl")
     include("core/test_output_schema.jl")
-    include("core/test_contrasts.jl")
     include("core/test_contrast_dataframe.jl")
     include("core/test_typed_results.jl")      # result.inference / result.context (B9, B10)
     include("core/test_errors.jl")
@@ -53,7 +49,6 @@ suite_phase("Advanced Features")
     include("features/test_categorical_mixtures.jl")
     include("features/test_bool_profiles.jl")
     include("features/test_table_profiles.jl")
-    include("features/test_prediction_scales.jl")
     include("features/test_prediction_intervals.jl")
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
@@ -76,28 +71,19 @@ suite_phase("Advanced Features")
     include("regression/test_stale_results.jl")
     include("regression/test_hierarchical_partial_typical.jl")
     include("regression/test_mixture_cache.jl")
-    include("test_second_differences.jl")
-    include("test_second_differences_at.jl")
-    include("test_second_differences_regressions.jl")
-    include("test_second_differences_model_interface.jl")
-    include("test_second_differences_api.jl")
-    include("test_second_differences_structural.jl")
-    include("test_second_differences_review.jl")
+    include("second_differences/sd_result_level.jl")      # second_differences(result, …), engines, row selection, public API
+    include("second_differences/sd_model_level.jl")       # second_differences(model, data, …): forms, at=, levels, profile, weights
+    include("second_differences/sd_inference.jl")         # vcov forms, df rule, CIs/alpha, p_adjust, gradients, structural zeros
+    include("second_differences/sd_observed_groups.jl")   # at=:observed, groups=, backend=:ad vs :fd
+    include("second_differences/sd_categorical_focal.jl") # categorical / Bool focal variables, contrast=, interaction-only variables
     include("test_vcov_matrix.jl")
     include("test_result_metadata_contract.jl")
-    include("test_second_differences_observed.jl")
-    include("test_second_differences_groups.jl")    # groups=, backend=, interaction-only variables (step 8)
-    include("test_second_diff_bool_fix.jl")         # categorical Bool focal variable, contrast found automatically
     include("test_unified_api.jl")                  # mixed variable types: joint call equals separate calls
-    include("test_profile_pairwise.jl")
 end
 
 suite_phase("Performance and Allocations")
 @testset "Performance and Allocations" begin
     include("performance/test_allocation_scaling.jl")
-    include("performance/test_performance.jl")
-    include("performance/profiling/test_contrast_gradient_allocations.jl")
-    include("test_categorical_batch_zero_alloc.jl")
     include("test_categorical_kernel_zero_alloc.jl")
     include("test_per_row_allocations.jl")
     include("performance/test_ame_fd_loop_zero_alloc.jl")
@@ -109,13 +95,6 @@ suite_phase("Statistical Correctness")
     include("statistical_validation/backend_consistency.jl")
     include("statistical_validation/statistical_validation.jl")
     include("statistical_validation/incompatible_formula_se_validation.jl")
-    include("statistical_validation/elasticity_se_validation.jl")
-    include("statistical_validation/bootstrap_validation_tests.jl")
-    include("statistical_validation/robust_se_tests.jl")
-    include("statistical_validation/specialized_se_tests.jl")
-    include("statistical_validation/analytical_elasticity_se_validation.jl")
-    include("statistical_validation/population_context_bootstrap_validation.jl")
-    include("statistical_validation/backend_reliability_tests.jl")
     include("statistical_validation/function_composition_tests.jl")
 end
 
@@ -125,7 +104,6 @@ suite_phase("Computational Primitives")
     include("primitives/test_links.jl")
     include("primitives/test_prediction_kernel.jl")
     include("primitives/test_derivatives_log_profile_regression.jl")
-    include("primitives/test_marginal_effects_allocations.jl")
     include("helpers/test_mixture_utilities.jl")
     include("primitives/test_formulacompiler_public_api.jl")  # no FC internals; baseline from contrasts
 end
@@ -133,7 +111,6 @@ end
 suite_phase("Validation Tests")
 @testset "Validation Tests" begin
     include("validation/test_contrast_invariance.jl")
-    include("validation/test_manual_counterfactual_validation.jl")
     include("validation/test_ci_and_n_logic.jl")
     include("validation/test_population_scenarios_groups.jl")
     include("validation/test_gradient_correctness.jl")
