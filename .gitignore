@@ -39,6 +39,10 @@ package_manuals/
 *.csv
 # golden snapshot for the refactor-equivalence test (test/validation/test_golden_equivalence.jl)
 !test/support/golden/*.csv
+# committed R oracle fixtures (R is not needed at test time)
+!test/r_compare_marginaleffects/oracle_3_0/*.csv
+!test/r_compare_marginaleffects/second_differences/*.csv
+!test/r_compare_marginaleffects/elasticity/*.csv
 *.rds
 # development, internal
 CLAUDE.md

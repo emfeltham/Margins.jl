@@ -100,6 +100,42 @@ Average marginal effects computed at specific counterfactual scenarios.
 
 R's `margins(at=...)` computes marginal effects for all variables at each profile point, while Julia's `profile_margins(...; contrasts=:pairwise)` computes specific categorical contrasts. These represent different analytical approaches and cannot be directly compared.
 
+## Margins 3.0 R oracles (marginaleffects 1.0.0, fixest 0.14.2)
+
+The study above compares one large logit model against R's `margins`. The paths added or changed
+in 3.0 are checked in the test suite against committed R fixtures:
+`test/validation/test_oracle_3_0.jl`, with fixtures and scripts in
+`test/r_compare_marginaleffects/oracle_3_0/`. Its README has the full case list. The runs used
+R 4.6.1 and Julia 1.13.0, and all fits were converged tightly in both languages.
+
+| Case | Rows | Max estimate rel. diff. | Max SE rel. diff. |
+|------|------|-------------------------|-------------------|
+| `second_differences` with the default `at = :observed` (lm, logit, probit, additive logit, weighted logit; continuous and categorical focal; `groups=`) vs `avg_slopes(newdata = ±δ shifted data, hypothesis = "(b2 - b1)/(2δ) = 0")` | 32 | 8.5e-10 | 2.3e-9 (dy/dx, contrasts); 1.5e-5 (eyex) |
+| Estimation weights, integer and non-integer (lm, Gaussian, logit, Poisson): AME, AAP, MEM, `groups=` | 216 | 2.1e-10 | 5.0e-10 (logit, Poisson); Gaussian: see below |
+| Poisson with an exposure offset, unweighted and weighted: AAP, AME, MEM and APM at a grid with the offset | 156 | 3.1e-11 | 2.6e-5 (MEM); ≤ 1.2e-6 otherwise |
+| FixedEffectModels vs fixest (two-way FE, esample drops 4 of 304 rows; simple, HC1, clustered): coefficients, AAP and AME overall and by state, prediction at a grid row | 129 | 4.1e-12 | 9.3e-7, after the dof ratio below |
+
+The SE differences that remain come from R's numerical derivatives: a central-difference slope
+and a Richardson Jacobian. Exact cases agree to rounding.
+
+Two differences are conventions, not errors. The test checks each against its predicted
+constant:
+
+- **Weighted Gaussian models.** GLM.jl treats `wts` as frequency weights, σ̂² = Σwr²/(Σw − p).
+  R's `lm(weights =)` treats them as precision weights, σ̂² = Σwr²/(n − p). Every SE differs by
+  sqrt((n − p)/(Σw − p)): predicted 0.629585792103 and observed 0.629585792098–0.629585792112
+  for integer weights (Σw = 1000), and predicted 0.813610696581 and observed
+  0.813610696578–0.813610696587 for non-integer weights (Σw = 601.2). Logit and Poisson have
+  fixed dispersion and agree.
+- **FixedEffectModels vs fixest.** FixedEffectModels' `dof_residual` is 274 because it does
+  not subtract the redundant level of the second fixed effect; fixest uses 275. With state
+  clusters the counts are 285 and 286. SEs differ by sqrt(275/274) = 1.0018231556 (simple,
+  HC1) and sqrt(286/285) = 1.0017528497 (cluster). The coefficient SEs show the same ratio to
+  1e-12, so Margins carries the model's covariance unchanged.
+
+marginaleffects reports z statistics. Margins uses t(`dof_residual`) for linear models and
+FixedEffectModels, so the comparisons cover estimates and SEs only.
+
 ## Statistical Methodology Validation
 
 ### Standard Errors

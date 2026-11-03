@@ -498,6 +498,33 @@ by key (`contrast(result, (over_g = "b",), …)`, filtering on columns) is unaff
 Migration: select rows by their context columns rather than by position; to keep a specific order,
 `sort` the `DataFrame(result)`.
 
+### Validation (R oracles and smoke tests)
+
+New committed R fixtures, with no R needed at test time
+(`test/r_compare_marginaleffects/oracle_3_0/`, tested by `test/validation/test_oracle_3_0.jl`),
+built with R 4.6.1, marginaleffects 1.0.0 and fixest 0.14.2:
+
+- **The default `at = :observed` second difference** (32 rows: lm, logit, probit, weighted
+  logit; continuous and categorical focal variables; `groups=`). R computes it with
+  `avg_slopes` over the ±δ-shifted data and `hypothesis`, using the joint Jacobian. Agreement
+  is 8.5e-10 in the estimate and 2.3e-9 in the SE (1.5e-5 for elasticities).
+- **Estimation weights**, integer and non-integer (216 rows: AME, AAP, MEM, `groups=`).
+  Estimates agree to 2.1e-10, and the logit and Poisson SEs to 5.0e-10. Gaussian SEs differ by
+  exactly sqrt((n − p)/(Σw − p)), because GLM.jl uses frequency weights and R precision
+  weights; the test checks this to 1e-8.
+- **Exposure offsets** (156 rows: AAP = mean(y), AME, MEM and APM with the offset at the grid).
+  Agreement is 3.1e-11 in the estimate and 2.6e-5 in the SE.
+- **FixedEffectModels vs fixest** (129 rows: an esample-dropping two-way FE fit; simple, HC1,
+  clustered; predictions including the fixed effects, AME, by state). Estimates agree to
+  4.1e-12. SEs differ by FixedEffectModels' one-dof-larger absorbed count, sqrt(275/274) or
+  sqrt(286/285) clustered, the same ratio as the coefficient SEs.
+
+`test/validation/test_second_differences_mixed_fem.jl` smoke-tests the model-level
+`second_differences` on an LMM, a Bernoulli GLMM and a FixedEffectModels fit that drops rows
+(`at=:observed`/`:mean`, `levels`, a binary modifier, `groups=`, result-level form). Each is
+checked against hand computations and AD ≈ FD. 56 golden rows for these paths were appended to
+the snapshot after verification; existing rows are unchanged.
+
 ### Smaller fixes and clean-ups
 
 - **`n` counts only the rows with a positive weight** (behaviour change for weighted calls with zero

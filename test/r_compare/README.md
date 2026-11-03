@@ -2,6 +2,19 @@
 
 Validation study comparing Margins.jl against R's `margins` package.
 
+## Other R oracles
+
+The test suite also checks Margins against committed R fixtures, and needs no R to run:
+
+- `test/r_compare_marginaleffects/second_differences/` and `elasticity/`: second differences
+  across counterfactual levels, and unit-level elasticities, against marginaleffects.
+- `test/r_compare_marginaleffects/oracle_3_0/`: the 3.0 paths. These are the default
+  `at = :observed` second difference, estimation weights (with the GLM.jl vs R weight
+  convention characterized), offsets, and FixedEffectModels against fixest.
+
+Each directory's R scripts regenerate its fixtures. See `oracle_3_0/README.md` for versions,
+cases and observed differences, and `VALIDATION_RESULTS.md` for a summary.
+
 ## Quick Start
 
 ### Correctness Validation (5K observations)

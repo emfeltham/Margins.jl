@@ -9739,3 +9739,59 @@ sd:interaction-only g/g × b,second_differences,modifier_level1=false|modifier_l
 sd:interaction-only g/x × g,second_differences,modifier_level1=a|modifier_level2=b|var=x|contrast=d,0.007566202261449689,0.012109217245323435,Inf
 sd:interaction-only g/x × g,second_differences,modifier_level1=a|modifier_level2=c|var=x|contrast=d,-0.009331833309561194,0.02391664533851181,Inf
 sd:interaction-only g/x × g,second_differences,modifier_level1=b|modifier_level2=c|var=x|contrast=d,-0.016898035571010883,0.019836844329365243,Inf
+sd:lmm/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18526738449517346,0.04730658958640657,Inf
+sd:lmm/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,0.0,0.0,Inf
+sd:lmm/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0,0.0,Inf
+sd:lmm/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=x|contrast=d,0.185267384495111,0.04730658958640644,Inf
+sd:lmm/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=b - a,0.0,0.0,Inf
+sd:lmm/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=c - a,0.0,0.0,Inf
+sd:lmm/z/levels,second_differences,modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.18526738449518185,0.04730658958640622,Inf
+sd:lmm/z/groups=g/observed,second_differences,eval_point=NaN|g=a|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18526738449521674,0.04730658958640661,Inf
+sd:lmm/z/groups=g/observed,second_differences,eval_point=NaN|g=b|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18526738449516386,0.04730658958640657,Inf
+sd:lmm/z/groups=g/observed,second_differences,eval_point=NaN|g=c|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.1852673844951783,0.04730658958640652,Inf
+sd:lmm/b,second_differences,modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.0,0.0,Inf
+sd:lmm/b,second_differences,modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0,0.0,Inf
+sd:lmm/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.0,0.0,Inf
+sd:lmm/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.0,0.0,Inf
+sd:fem/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18777557622599356,0.03560619297357964,2.0
+sd:fem/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,0.0,0.0,2.0
+sd:fem/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0,0.0,2.0
+sd:fem/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=x|contrast=d,0.18777557622596952,0.035606192973579545,2.0
+sd:fem/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=b - a,0.0,0.0,2.0
+sd:fem/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=c - a,4.805274469458202e-15,0.0,2.0
+sd:fem/z/levels,second_differences,modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.18777557622599375,0.03560619297357938,2.0
+sd:fem/z/groups=g/observed,second_differences,eval_point=NaN|g=a|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18777557622598876,0.03560619297357967,2.0
+sd:fem/z/groups=g/observed,second_differences,eval_point=NaN|g=b|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18777557622597435,0.03560619297357964,2.0
+sd:fem/z/groups=g/observed,second_differences,eval_point=NaN|g=c|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18777557622599356,0.0356061929735796,2.0
+sd:fem/b,second_differences,modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.0,0.0,2.0
+sd:fem/b,second_differences,modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0,0.0,2.0
+sd:fem/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,-5.551115123125783e-17,0.0,2.0
+sd:fem/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.0,0.0,2.0
+sd:fem-esample/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18722149272541705,0.04807489292617855,388.0
+sd:fem-esample/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,0.0,0.0,388.0
+sd:fem-esample/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,-2.4069146994718827e-15,0.0,388.0
+sd:fem-esample/z/mean,second_differences,eval_point=0.008190252223|modifier_level1=0.002424452625|modifier_level2=0.01395605182|var=x|contrast=d,0.18722149272548924,0.048074892926179245,388.0
+sd:fem-esample/z/mean,second_differences,eval_point=0.008190252223|modifier_level1=0.002424452625|modifier_level2=0.01395605182|var=g|contrast=b - a,0.0,0.0,388.0
+sd:fem-esample/z/mean,second_differences,eval_point=0.008190252223|modifier_level1=0.002424452625|modifier_level2=0.01395605182|var=g|contrast=c - a,0.0,0.0,388.0
+sd:fem-esample/z/levels,second_differences,modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.18722149272542482,0.04807489292617811,388.0
+sd:fem-esample/z/groups=g/observed,second_differences,eval_point=NaN|g=a|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18722149272542185,0.04807489292617855,388.0
+sd:fem-esample/z/groups=g/observed,second_differences,eval_point=NaN|g=b|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.1872214927254411,0.04807489292617854,388.0
+sd:fem-esample/z/groups=g/observed,second_differences,eval_point=NaN|g=c|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.18722149272541946,0.04807489292617856,388.0
+sd:fem-esample/b,second_differences,modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.0,0.0,388.0
+sd:fem-esample/b,second_differences,modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0,0.0,388.0
+sd:fem-esample/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,-5.551115123125783e-17,0.0,388.0
+sd:fem-esample/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,5.551115123125783e-17,0.0,388.0
+sd:glmm-logit/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.02334517638238519,0.039015227556319566,Inf
+sd:glmm-logit/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.0035066556629151243,0.00794471051945246,Inf
+sd:glmm-logit/z/observed,second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.00627720420209105,0.017605925498499375,Inf
+sd:glmm-logit/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=x|contrast=d,0.023167857970568622,0.038173518580461814,Inf
+sd:glmm-logit/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=b - a,-0.0035221274708203774,0.008007081079905677,Inf
+sd:glmm-logit/z/mean,second_differences,eval_point=0.005944164924|modifier_level1=0.000168100353|modifier_level2=0.01172022949|var=g|contrast=c - a,0.006273999742086643,0.017540196437915878,Inf
+sd:glmm-logit/z/levels,second_differences,modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.023205817515144608,0.038364031808978634,Inf
+sd:glmm-logit/z/groups=g/observed,second_differences,eval_point=NaN|g=a|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.019167563242787188,0.032801666898527065,Inf
+sd:glmm-logit/z/groups=g/observed,second_differences,eval_point=NaN|g=b|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.024963766563022537,0.04229692523626183,Inf
+sd:glmm-logit/z/groups=g/observed,second_differences,eval_point=NaN|g=c|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.028463222300313427,0.052550101675990536,Inf
+sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.005451806935474375,0.01024504077196819,Inf
+sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0004801411126207529,0.003565934465241282,Inf
+sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.0026713903470641127,0.006327850658568642,Inf
+sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.006800799700233,0.013351363637089936,Inf

@@ -181,6 +181,7 @@ function cases()
     _coverage_cases!(out)
     _model_interface_cases!(out)
     _second_difference_cases!(out)
+    _mixed_fem_second_difference_cases!(out)
     return out
 end
 
@@ -366,6 +367,32 @@ function _second_difference_cases!(out)
                 () -> _sd_as_rows(second_differences(mi, d, :g, :b))))
     push!(out, ("sd:interaction-only g/x × g", "second_differences",
                 () -> _sd_as_rows(second_differences(mi, d, :x, :g; warn=false))))
+    return out
+end
+
+# Model-level second differences on MixedModels and FixedEffectModels (added in step 11 of the 3.0
+# plan, after the smoke tests in test/validation/test_second_differences_mixed_fem.jl: hand
+# computations, AD ≈ FD, and the esample). Every form: at=:observed (default), at=:mean, levels, a
+# binary modifier, groups=.
+function _mixed_fem_second_difference_cases!(out)
+    function sd_forms!(id, m, d; kw...)
+        sd!(f, name) = push!(out, ("sd:$id/$name", "second_differences", () -> _sd_as_rows(f())))
+        sd!(() -> second_differences(m, d, [:x, :g], :z; kw...), "z/observed")
+        sd!(() -> second_differences(m, d, [:x, :g], :z; at=:mean, kw...), "z/mean")
+        sd!(() -> second_differences(m, d, :x, :z; levels=[-0.5, 0.5], kw...), "z/levels")
+        sd!(() -> second_differences(m, d, :x, :z; groups=:g, kw...), "z/groups=g/observed")
+        sd!(() -> second_differences(m, d, [:x, :z, :g], :b; warn=false, kw...), "b")
+    end
+    d = matrix_data("identity")
+    sd_forms!("lmm", fit(MixedModel, FM, d; progress=false), d)
+    sd_forms!("fem", reg(d, FFE, Vcov.cluster(:h); save=:fe), d; weights=:none)
+    ds = copy(d)
+    ds.hs = string.(ds.h); ds.hs[1] = "singleton"
+    fs = reg(ds, FFE_S; save=:fe)
+    sum(fs.esample) == nrow(ds) - 1 || error("golden case: expected one singleton dropped")
+    sd_forms!("fem-esample", fs, ds; weights=:none)
+    d = matrix_data("logit")
+    sd_forms!("glmm-logit", fit(MixedModel, FM, d, Bernoulli(); progress=false), d)
     return out
 end
 

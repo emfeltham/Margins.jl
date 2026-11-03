@@ -2,6 +2,17 @@
 
 Performance benchmarking comparing Julia's Margins.jl against R's **marginaleffects** package - the current state-of-the-art R implementation for marginal effects computation (~1000× faster than the older `margins` package).
 
+## Correctness oracles
+
+Besides the benchmarks, three subdirectories hold R reference values, committed as CSV
+fixtures that the test suite compares against without running R:
+
+- `second_differences/`: tested by `test/validation/test_second_differences_r_oracle.jl`.
+- `elasticity/`: tested by `test/validation/test_elasticity_unit_definitions.jl`.
+- `oracle_3_0/`: the default `at = :observed` second difference, estimation weights, offsets,
+  and FixedEffectModels vs fixest. Tested by `test/validation/test_oracle_3_0.jl`; see its
+  README.
+
 ## Overview
 
 This directory contains a complete benchmark suite comparing Margins.jl performance against `marginaleffects`, the fastest and most modern R package for marginal effects analysis. Unlike the comparison in `../r_compare/` which benchmarks against the older `margins` package, this comparison tests against the true state of the art in R.
