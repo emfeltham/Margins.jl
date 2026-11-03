@@ -51,9 +51,10 @@ end
 
 """
     second_differences(model, data, variables, modifier;
-                       levels=nothing, at=nothing, modifier_type=:auto, profile=NamedTuple(),
-                       delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing, vcov=GLM.vcov,
-                       weights=:model, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true, backend=:ad)
+                       levels=nothing, at=nothing, modifier_type=:auto, profile=NamedTuple(), groups=nothing,
+                       delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing,
+                       vcov=GLM.vcov, df=nothing, weights=:model, alpha=0.05, p_adjust=:none,
+                       include_gradients=false, warn=true, backend=:ad)
 
 How does the marginal effect of `variables` change with `modifier`? Computes the second
 difference (interaction effect on the response scale) with delta-method standard errors
@@ -92,8 +93,22 @@ What is computed depends on the modifier:
   `at` or `levels` is given).
 - `profile::NamedTuple`: other variables to hold fixed, e.g. `(age=40, region="north")`; vector
   values give one profile point each (Cartesian product), reported as extra columns. These are
-  counterfactuals (everyone's value is set), not subgroups; for subgroups use `groups=` on
-  `population_margins` and the result-level form. Must not contain the modifier.
+  counterfactuals (everyone's value is set), not subgroups; for strata use `groups`. Must not contain
+  the modifier.
+- `groups`: strata, with the syntax of `population_margins` (`:g`, `[:g, :h]`, `(:x, 4)` quartiles,
+  `(:x, [cuts…])` thresholds, `:g => :h` nested). The second difference is computed **within each
+  stratum**: the same counterfactual, averaged over that stratum's rows only, so each stratum's row equals
+  the ungrouped call on that stratum's data with the same `vcov`. Strata are blocks of rows with
+  `over_<var>` columns (in the order of `groups`). With `at=:mean` / `:median` the evaluation point is the
+  stratum's own (weighted) mean / median; a number, a vector or an `at` NamedTuple is the same point in
+  every stratum; `at=:observed` averages the cross-derivative over the stratum's rows; `levels` and
+  `profile` apply in every stratum. δ is the call's (from all rows). The modifier, a `profile` variable and
+  a held variable of `at` cannot be in `groups` (a stratum is selected by observed values the calculation
+  overwrites), nor can a focal variable unless binned. To compare the effect across the *observed*
+  subgroups of the modifier (different rows, a descriptive comparison) use the result-level form:
+  `second_differences(population_margins(model, data; vars=…, groups=modifier), variables, modifier)`.
+  All strata share one Σ, so the covariance of two strata's second differences is g₁'Σg₂
+  (`include_gradients=true`).
 - `delta`: finite-difference step for a local derivative (`:auto` = 1% of the modifier's SD).
 - `measure`: `:effect` (default), `:elasticity`, `:semielasticity_dyex` or `:semielasticity_eydx`, as in
   `population_margins`: the second difference is then the change in that measure across the modifier.
@@ -120,7 +135,7 @@ What is computed depends on the modifier:
 - `alpha`: as in `population_margins`; `ci_lower`/`ci_upper` give the (1 − `alpha`) interval
   (default 0.05, a 95% interval) and `significant` is `p_value < alpha`.
 - `p_adjust`: multiple-testing adjustment over **all rows returned** (every variable, contrast, level
-  pair, evaluation point and `profile` stratum): `:none` (default), `:bonferroni`, `:holm` (family-wise
+  pair, evaluation point, `profile` point and `groups` stratum): `:none` (default), `:bonferroni`, `:holm` (family-wise
   error rate) or `:bh` (Benjamini–Hochberg false discovery rate). Adds a `p_adjusted` column after
   `p_value` and bases `significant` on it. Rows that are zero by construction (see `warn`) are not
   tests and are left out of the family.
@@ -133,15 +148,24 @@ What is computed depends on the modifier:
   In a nonlinear model the effect can vary with the modifier through the link without an interaction
   term, so on the response scale such rows are reported normally (with `scale=:link` the model is
   additive, so they are flagged). And (2) modifier or `profile` values outside the observed
-  range of that variable, where the result extrapolates the fitted model.
+  range of that variable, where the result extrapolates the fitted model. And (3) model columns that
+  look like precomputed transforms of the modifier, a `profile` variable or a focal variable (`m2`
+  holding `m.^2`, `log_m`, a standardized copy, a precomputed product `x .* m`, or a column constant
+  within each value of a discrete variable): changing the variable re-evaluates the formula, so such a
+  column is held fixed rather than following it. Write the transform in the formula instead (`m^2`,
+  `log(m)`, `x & m`); see `population_margins`, *Derived columns*. `warn=false` silences all three.
 
 # Returns
 A `DataFrame` with the columns listed under "Output Schema" in the second-differences
 documentation (`variable, contrast, modifier, modifier_type, modifier_level1, modifier_level2,
 ame_at_level1, ame_at_level2, second_diff, se, statistic, df, p_value, ci_lower, ci_upper, significant`);
-a local derivative adds `eval_point` and `delta_used`, and `profile` variables add one column each.
+a local derivative adds `eval_point` and `delta_used`, `groups` adds `over_<var>` columns, and `profile`
+variables add one column each.
 For a discrete or continuous-`levels` comparison, `second_diff` is `AME(level2) − AME(level1)` (or
 that difference per unit of the modifier for a continuous modifier), with numeric levels ascending.
+
+Every invalid input raises an `ArgumentError` (as in `population_margins`). Everything shared with
+`population_margins` is validated, and `vcov` evaluated, once per call (one request).
 
 # Examples
 ```julia
@@ -153,6 +177,7 @@ second_differences(m, df, :age, :income)               # average ∂AME(age)/∂
 second_differences(m, df, :age, :income; at=[20_000, 50_000])
 second_differences(m, df, :age, :income; levels=[20_000, 50_000])   # slope between two values
 second_differences(m, df, :age, :treated; profile=(female=[0, 1],)) # everyone's `female` set to 0, then 1
+second_differences(m, df, :age, :treated; groups=:region)          # the same comparison within each region
 second_differences(m, df, :age, :treated; vcov=vcov(m))
 second_differences(m, df, :age, :education; p_adjust=:holm, alpha=0.1)    # adjusted tests, 90% intervals
 ```
@@ -163,23 +188,26 @@ does the same comparison on its rows (see its docstring).
 function second_differences(
     model::RegressionModel, data, variables::Union{Symbol,Vector{Symbol}}, modifier::Symbol;
     levels=nothing, at=nothing, modifier_type::Symbol=:auto, profile::NamedTuple=NamedTuple(),
-    delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
-    contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=:model, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
+    groups=nothing, delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
+    contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov,
+    weights=:model, alpha=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
     warn::Bool=true, backend::Symbol=:ad, df=nothing,
 )
+    # The checks here are the ones specific to second differences; everything shared with
+    # population_margins (alpha, df, contrasts, measure, scale, backend, weights, vcov, the groups
+    # syntax and its conflicts, the focal variables) is validated once, by the request below.
     _check_p_adjust(p_adjust)
-    0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
     # Any Tables.jl source: the checks below read the columns restricted to the model's estimation
     # rows (FixedEffectModels' `esample`), as every computation from the request is. The request
     # itself gets the data and weights as given, and subsets them the same way.
     data_cols = Tables.columntable(data)
     (cols, _) = _estimation_subset(model, data_cols, weights)
-    hasproperty(cols, modifier) || error("Modifier variable :$modifier not found in data. " *
-        "Available columns: $(_column_list(cols))")
+    hasproperty(cols, modifier) || throw(ArgumentError("Modifier variable :$modifier not found in data. " *
+        "Available columns: $(_column_list(cols))"))
     modifier_type ∈ (:auto, :categorical, :continuous) ||
-        error("modifier_type must be :auto, :categorical or :continuous, got :$modifier_type")
-    !isnothing(levels) && !isnothing(at) &&
-        error("Give either `levels` (compare these modifier values) or `at` (local derivative), not both.")
+        throw(ArgumentError("modifier_type must be :auto, :categorical or :continuous, got :$modifier_type"))
+    !isnothing(levels) && !isnothing(at) && throw(ArgumentError(
+        "Give either `levels` (compare these modifier values) or `at` (local derivative), not both."))
 
     col = _column(cols, modifier)
     modifier_in_model = _modifier_in_model(model, modifier)
@@ -188,11 +216,13 @@ function second_differences(
         _warn_if_integer_coded(col, modifier)
     end
     vars_vec = variables isa Symbol ? [variables] : variables
-    modifier in keys(profile) && error("`profile` contains the modifier :$modifier; the modifier is " *
-        "varied by the calculation (use `levels` or `at` to choose where). Remove it from `profile`.")
+    modifier in keys(profile) && throw(ArgumentError("`profile` contains the modifier :$modifier; the " *
+        "modifier is varied by the calculation (use `levels` or `at` to choose where). Remove it from `profile`."))
     mtype === :continuous && any(x -> x isa Bool, skipmissing(col)) &&
-        error("Modifier :$modifier is Bool, so modifier_type=:continuous is not defined. " *
-              "Leave modifier_type=:auto to compare false and true.")
+        throw(ArgumentError("Modifier :$modifier is Bool, so modifier_type=:continuous is not defined. " *
+              "Leave modifier_type=:auto to compare false and true."))
+    isnothing(groups) || _check_groups_for_second_differences(groups, modifier,
+                                                               keys(_local_profile(at, profile, modifier)))
 
     if warn
         # modifier / profile values the data does not cover
@@ -217,37 +247,41 @@ function second_differences(
         _check_focal_and_profile_vars(cols, vars_vec, keys(_local_profile(at, profile, modifier)))
         # One request for the whole call: every validator and the one evaluation of `vcov`
         req = _local_derivative_request(model, data_cols, vars_vec, modifier, at, profile;
-                                        scale, backend, measure, contrasts, vcov, weights, alpha, df)
-        out = _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, alpha, p_adjust,
+                                        scale, backend, measure, contrasts, vcov, weights, alpha, df,
+                                        groups, warn)
+        out = _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, p_adjust,
                                  include_gradients, contrast)
         warn && _warn_structural_zeros(out, modifier_in_model)
         return out
     end
 
-    !isnothing(at) && error("`at` (local derivative) applies to a continuous modifier; :$modifier is " *
-        "treated as $mtype. Use `levels` to compare specific values, or modifier_type=:continuous.")
+    !isnothing(at) && throw(ArgumentError("`at` (local derivative) applies to a continuous modifier; " *
+        ":$modifier is treated as $mtype. Use `levels` to compare specific values, or modifier_type=:continuous."))
     warn && !(isnothing(delta) || delta === :auto) && @warn "`delta` is ignored when comparing modifier levels"
 
     _check_focal_and_profile_vars(cols, vars_vec, keys(profile))
 
     lv = isnothing(levels) ? _discrete_levels(col) : collect(levels)
-    length(lv) >= 2 || error("Need at least 2 modifier levels to compare, got $(length(lv)).")
+    length(lv) >= 2 || throw(ArgumentError("Need at least 2 modifier levels to compare, got $(length(lv))."))
     result_type = mtype === :continuous ? :continuous : (length(lv) == 2 ? :binary : :categorical)
     mtype === :continuous && !all(x -> x isa Number && !(x isa Bool), lv) &&
-        error("A continuous modifier needs numeric `levels`, got $(eltype(lv)).")
+        throw(ArgumentError("A continuous modifier needs numeric `levels`, got $(eltype(lv))."))
 
     # One request for the whole call: every validator (the scenario variables, the modifier and the
-    # `profile` variables, included) and the one evaluation of `vcov` and of the weights. Each profile
-    # point is then one AME computation from it, with the scenarios set to that point.
+    # `profile` variables, included; `groups` and its conflicts) and the one evaluation of `vcov` and of
+    # the weights. Each profile point is then one AME computation from it, with the scenarios set to that
+    # point and, with `groups=`, every stratum in the same computation; the result-level form pairs the
+    # modifier levels within each stratum.
     req = _normalize_request(model, data_cols; type=:effects, vars=vars_vec, scale, backend, measure,
-                             contrasts, alpha, vcov, weights, df,
+                             contrasts, alpha, vcov, weights, df, groups, warn,
                              scenario_vars=Symbol[modifier, keys(profile)...])
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)
         scenarios = merge(NamedTuple{(modifier,)}((lv,)), profile_point)
         ames = _run(_with_scenarios(req, scenarios))
         sd = second_differences(
-            ames, vars_vec, modifier; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
+            ames, vars_vec, modifier; modifier_type=result_type, contrast, alpha=req.alpha,
+            include_gradients=true, warn=false,
         )
         for (k, v) in pairs(profile_point)
             sd[!, k] = fill(v, nrow(sd))
@@ -255,8 +289,35 @@ function second_differences(
         push!(pieces, sd)
     end
     out = length(pieces) == 1 ? only(pieces) : vcat(pieces...; cols=:union)
-    return _finalize_frame!(out, p_adjust, alpha, include_gradients; warn, modifier_in_model,
+    return _finalize_frame!(out, p_adjust, req.alpha, include_gradients; warn, modifier_in_model,
                             weights_source=req.weights_source)
+end
+
+# `groups=` on the model-level second differences: the strata must not be defined by a variable the
+# calculation sets. The focal variables and the scenario variables are checked again by the request
+# (`_validate_vars_groups_overlap`, `_validate_scenarios_groups_conflict`); these messages say what each
+# combination would mean for a second difference.
+function _check_groups_for_second_differences(groups, modifier::Symbol, held)
+    gvars = _extract_group_variables(groups)
+    if modifier in gvars
+        throw(ArgumentError(
+            "`groups` contains the modifier :$modifier. second_differences(model, data, …; groups=…) " *
+            "computes the counterfactual second difference within each stratum: every row of the " *
+            "stratum is set to each level of :$modifier (or shifted along it), so a stratum defined by " *
+            ":$modifier would be labelled by values its rows no longer carry. To stratify by another " *
+            "variable, put that variable in `groups`. To compare the effect across the observed " *
+            "subgroups of :$modifier instead (the effect among the rows with one value vs among the " *
+            "rows with another; a descriptive comparison of different rows, not a counterfactual one), " *
+            "use the result-level form: r = population_margins(model, data; vars=…, groups=" *
+            "$(repr(modifier))) and then second_differences(r, variables, $(repr(modifier)))."))
+    end
+    clash = [v for v in held if v in gvars]
+    isempty(clash) || throw(ArgumentError(
+        "`groups` contains $(join(":" .* string.(clash), ", ")), which `profile` (or `at`) also sets for " *
+        "every row. A stratum is selected by the observed values of its variables; setting the same " *
+        "variable counterfactually would leave each stratum labelled by values its rows no longer carry. " *
+        "Use the variable in one of the two."))
+    return nothing
 end
 
 # A column of a column table, by a name known only at run time. The barrier hides the column's
@@ -270,12 +331,12 @@ _column_list(cols::NamedTuple) = join(string.(keys(cols)), ", ")
 # The focal and profile variables must be columns of the data
 function _check_focal_and_profile_vars(cols::NamedTuple, vars_vec, profile_vars)
     for v in vars_vec
-        hasproperty(cols, v) || error("Focal variable :$v not found in data. " *
-            "Available columns: $(_column_list(cols))")
+        hasproperty(cols, v) || throw(ArgumentError("Focal variable :$v not found in data. " *
+            "Available columns: $(_column_list(cols))"))
     end
     for k in profile_vars
-        hasproperty(cols, k) || error("Profile variable :$k not found in data. " *
-            "Available columns: $(_column_list(cols))")
+        hasproperty(cols, k) || throw(ArgumentError("Profile variable :$k not found in data. " *
+            "Available columns: $(_column_list(cols))"))
     end
     return nothing
 end

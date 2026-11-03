@@ -165,8 +165,8 @@ using Margins
         sd_cat = second_differences(ame_3, :x, :z; modifier_type=:categorical)
         sd_pw = Margins._second_differences_pairwise(ame_bin, :x, :t)      # binary via pairwise
         sd_all = Margins._second_differences_all_contrasts(ame_bin, :g, :t)
-        sd_at = Margins._second_differences_local(m, d, :x, :z, vcov(m); at = :mean)
-        sd_at_f = Margins._second_differences_local(m, d, :x, :z, GLM.vcov)
+        sd_at = second_differences(m, d, :x, :z; vcov=vcov(m), modifier_type=:continuous, at = :mean)
+        sd_at_f = second_differences(m, d, :x, :z; vcov=GLM.vcov, modifier_type=:continuous)
 
         for sd in (sd_bin, sd_cont, sd_cat, sd_pw, sd_all)
             @test propertynames(sd) == cols
@@ -192,7 +192,7 @@ using Margins
         @test sd_bin.second_diff[1] ≈ sd_pw.second_diff[1]
         @test sd_at.modifier_level2[1] - sd_at.modifier_level1[1] ≈ 2 * sd_at.delta_used[1]
         # at = :observed (the default) has no single evaluation point: same columns, NaN point and levels
-        sd_obs = Margins._second_differences_local(m, d, :x, :z, vcov(m))
+        sd_obs = second_differences(m, d, :x, :z; vcov=vcov(m), modifier_type=:continuous)
         @test propertynames(sd_obs) == propertynames(sd_at)
         @test isnan(sd_obs.eval_point[1]) && isnan(sd_obs.modifier_level1[1]) && sd_obs.delta_used[1] > 0
 

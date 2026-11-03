@@ -5,7 +5,7 @@
 # keywords into one `MarginsRequest` with `_normalize_request`, which runs every validator once
 # and evaluates `vcov` once, and then compute from the request (`_run`). Nested computations
 # (second differences run one AME per profile point or shift) derive requests from it with
-# `_with_scenarios`/`_with_data` instead of re-entering keyword parsing.
+# `_with_scenarios` instead of re-entering keyword parsing.
 
 """
     MarginsRequest{K,M}
@@ -40,7 +40,7 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `changed_vars` | every variable the request sets counterfactually: scenario keys, grid columns, and the second-differences modifier and `profile` variables |
 | `contrasts`, `measure`, `scale`, `backend`, `interval` | validated options |
 
-`vars ∪ changed_vars` is the set step 7's derived-column detector runs over.
+`vars ∪ changed_vars` is the set the derived-column detector (`_warn_derived_columns`) runs over.
 
 `data_nt` holds the model's estimation rows only (`_estimation_rows`; FixedEffectModels drops
 rows), so weights, offsets and groups all refer to those rows.
@@ -97,7 +97,7 @@ _validate_focal_vars(model, vars) = nothing
                        scenarios=nothing, groups=nothing, reference_grid=nothing, measure=:effect,
                        contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:none,
                        interval=:confidence, df=nothing, offset=nothing, scenario_vars=nothing,
-                       changed_vars=Symbol[]) -> MarginsRequest
+                       changed_vars=Symbol[], warn=true) -> MarginsRequest
 
 Validate every option and prepare everything a computation needs, once per call: the data
 (any Tables.jl source, subset to the model's estimation rows), the focal variables, Σ (`vcov` is
@@ -112,6 +112,9 @@ Two keywords serve callers that run several computations from one request (the m
 would be, once; `changed_vars` adds variables set counterfactually by other means (the
 modifier shifted by `at=:observed`).
 
+`warn=true` runs the derived-column detector (`_warn_derived_columns`) once, over the focal
+variables and every changed variable (`changed_vars` of the request).
+
 The validators run in a fixed order: the required arguments and the scalar options (`type`,
 `scale`, `backend`, `measure`, `alpha`, `contrasts`, `interval`), then the `scenarios` and
 `groups` syntax and their conflicts, the data, the weights, the variables (and the measure
@@ -123,7 +126,8 @@ function _normalize_request(model, data;
         scenarios=nothing, groups=nothing, reference_grid::Union{Nothing,DataFrame}=nothing,
         measure::Symbol=:effect, contrasts::Symbol=:baseline, alpha=0.05, vcov=GLM.vcov,
         weights=:none, interval::Symbol=:confidence, df=nothing, offset=nothing,
-        scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[])
+        scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[],
+        warn::Bool=true)
     validate_required_args(model, data)
     validate_model_methods(model)
 
@@ -214,7 +218,16 @@ function _normalize_request(model, data;
     df_value = isnothing(df_override) ? _inference_df(model) : df_override
 
     changed = _changed_vars(scenario_vars, grid, changed_vars)
-    # (Step 7: the derived-column detector runs here, once, over resolved_vars ∪ changed.)
+    # The derived-column detector, once per call, over the focal and the changed variables. The
+    # values the call sets are known here for `scenarios` and a reference grid; the model-level
+    # second differences set theirs later (`scenario_vars`), so they are not known (`nothing`).
+    # It is called without inference (`invokelatest`), as the contexts path is, so that its code is
+    # compiled only when a call changes a variable, not into every entry point (first-call latency).
+    if warn && !(isempty(changed) && (isnothing(resolved_vars) || isempty(resolved_vars)))
+        settings = !isnothing(completed) ? completed : !isnothing(scenarios_nt) ? scenario_specs : nothing
+        Base.invokelatest(_warn_derived_columns, model, data_nt,
+                          isnothing(resolved_vars) ? Symbol[] : resolved_vars, changed, settings)
+    end
 
     req = MarginsRequest{_request_kind(reference_grid), typeof(model)}(
         model, type, data_nt, resolved_vars, vars_explicit, Σ, vcov, df_value, α, weights_vec,
@@ -243,9 +256,10 @@ _parse_scenario_specs(scenarios_nt::NamedTuple) = _parse_at_specification(scenar
     _with_scenarios(req, scenarios) -> MarginsRequest
 
 `req` with its `scenarios` replaced (a `NamedTuple`, or `nothing`) and parsed again. Its
-variables are not validated again: they must be among the `scenario_vars` `req` was normalized
-with. The second differences validate those once and then run one computation per profile
-point (and evaluation point).
+variables are not validated again: they must be among the `scenario_vars` (or, for a `Shift`,
+the `changed_vars`) `req` was normalized with. The second differences validate those once and
+then run one computation per profile point (and evaluation point). A value may be a
+`Counterfactual` (`at=:observed` passes the modifier as `[Shift(-δ), Shift(δ)]`).
 """
 function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,NamedTuple}) where {K,M}
     specs = _parse_scenario_specs(scenarios)
@@ -258,19 +272,20 @@ function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,Name
 end
 
 """
-    _with_data(req, data_nt) -> MarginsRequest
+    _with_group_specs(req, group_specs) -> MarginsRequest
 
-`req` evaluated on other rows' values: `data_nt` has the same rows and columns as `req.data_nt`
-with some values changed (the second differences' `at=:observed` shifts the modifier column).
-Nothing is validated again; parsed groups keep their row membership, and the offset stays at
-its observed values.
+`req` restricted to the given parsed subgroups (entries of `req.group_specs`). The `groups`
+syntax is kept, so the result's context columns are named as for the full request. The second
+differences use it to compute one stratum at a time when the evaluation point depends on the
+stratum (`at=:mean` / `:median` with `groups=`).
 """
-function _with_data(req::MarginsRequest{K,M}, data_nt::NamedTuple) where {K,M}
+function _with_group_specs(req::MarginsRequest{K,M}, group_specs::Vector) where {K,M}
     return MarginsRequest{K,M}(
-        req.model, req.type, data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
-        req.df, req.alpha, req.weights, req.weights_source, req.offset, req.scenarios, req.scenario_specs,
-        req.groups, req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars,
-        req.changed_vars, req.contrasts, req.measure, req.scale, req.backend, req.interval)
+        req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.vcov_source,
+        req.df, req.alpha, req.weights, req.weights_source, req.offset, req.scenarios,
+        req.scenario_specs, req.groups, group_specs, req.reference_grid, req.completed_grid,
+        req.grid_vars, req.changed_vars, req.contrasts, req.measure, req.scale, req.backend,
+        req.interval)
 end
 
 # ---- validators of single options ---------------------------------------------------------

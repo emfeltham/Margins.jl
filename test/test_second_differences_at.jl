@@ -1,5 +1,6 @@
 # test_second_differences_at.jl
-# Tests for Margins._second_differences_local() - local derivatives at specific points
+# Tests for second_differences(model, data, x, m; at=…) - local derivatives at specific points
+# (the internal _second_differences_local was removed in 3.0; these tests use the public path)
 
 using Test
 using Margins
@@ -9,7 +10,7 @@ using Random
 using Statistics
 using CategoricalArrays
 
-@testset "Margins._second_differences_local() - Local Derivatives" begin
+@testset "second_differences(model, data, x, m; at=…) - Local Derivatives" begin
     Random.seed!(789)
     n = 200
 
@@ -35,7 +36,7 @@ using CategoricalArrays
 
     @testset "Basic Functionality - At Mean" begin
         # Single variable at mean
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ; at=:mean)
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=:mean)
 
         @test nrow(sd) == 1
         @test sd.variable[1] == :x1
@@ -50,21 +51,21 @@ using CategoricalArrays
     end
 
     @testset "At Median" begin
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ; at=:median)
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=:median)
 
         @test nrow(sd) == 1
         @test sd.eval_point[1] ≈ median(df.age) rtol=0.01
     end
 
     @testset "At Specific Value" begin
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ; at=45.0)
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=45.0)
 
         @test nrow(sd) == 1
         @test sd.eval_point[1] == 45.0
     end
 
     @testset "Multiple Evaluation Points" begin
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ; at=[30.0, 45.0, 60.0])
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=[30.0, 45.0, 60.0])
 
         @test nrow(sd) == 3
         @test sd.eval_point == [30.0, 45.0, 60.0]
@@ -73,7 +74,7 @@ using CategoricalArrays
     end
 
     @testset "Multiple Variables - Single Eval Point" begin
-        sd = Margins._second_differences_local(model, df, [:x1, :x2, :x3], :age, Σ; at=:mean)
+        sd = second_differences(model, df, [:x1, :x2, :x3], :age; vcov=Σ, modifier_type=:continuous, at=:mean)
 
         @test nrow(sd) == 3
         @test Set(sd.variable) == Set([:x1, :x2, :x3])
@@ -84,7 +85,7 @@ using CategoricalArrays
     end
 
     @testset "Multiple Variables × Multiple Eval Points" begin
-        sd = Margins._second_differences_local(model, df, [:x1, :x2], :age, Σ; at=[30.0, 45.0, 60.0])
+        sd = second_differences(model, df, [:x1, :x2], :age; vcov=Σ, modifier_type=:continuous, at=[30.0, 45.0, 60.0])
 
         @test nrow(sd) == 6  # 2 variables × 3 eval points
         @test count(sd.variable .== :x1) == 3
@@ -97,7 +98,7 @@ using CategoricalArrays
 
     @testset "Profile Support - Single Variable" begin
         # With profile holding income constant
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ;
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
                                   at=45.0,
                                   profile=(income=50000,))
 
@@ -107,7 +108,7 @@ using CategoricalArrays
     end
 
     @testset "Profile Support - Multiple Profile Variables" begin
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ;
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
                                   at=45.0,
                                   profile=(income=50000, region="north"))
 
@@ -117,7 +118,7 @@ using CategoricalArrays
     end
 
     @testset "Profile with Multiple Variables and Eval Points" begin
-        sd = Margins._second_differences_local(model, df, [:x1, :x2], :age, Σ;
+        sd = second_differences(model, df, [:x1, :x2], :age; vcov=Σ, modifier_type=:continuous,
                                   at=[30.0, 60.0],
                                   profile=(income=50000,))
 
@@ -129,7 +130,7 @@ using CategoricalArrays
 
     @testset "NamedTuple for at Parameter" begin
         # Full profile specification via `at`
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ;
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
                                   at=(age=45.0, income=50000, region="north"))
 
         @test nrow(sd) == 1
@@ -140,7 +141,7 @@ using CategoricalArrays
 
     @testset "NamedTuple with Both at and profile" begin
         # Combine `at` NamedTuple with `profile` parameter
-        sd = Margins._second_differences_local(model, df, :x1, :age, Σ;
+        sd = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
                                   at=(age=45.0, income=50000),
                                   profile=(region="south",))
 
@@ -151,8 +152,8 @@ using CategoricalArrays
     end
 
     @testset "Custom Delta" begin
-        sd1 = Margins._second_differences_local(model, df, :x1, :age, Σ; at=:mean, delta=:auto)
-        sd2 = Margins._second_differences_local(model, df, :x1, :age, Σ; at=:mean, delta=1.0)
+        sd1 = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=:mean, delta=:auto)
+        sd2 = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, at=:mean, delta=1.0)
 
         @test sd1.delta_used[1] ≈ 0.01 * std(df.age) rtol=0.01
         @test sd2.delta_used[1] == 1.0
@@ -163,8 +164,8 @@ using CategoricalArrays
 
     @testset "Scale Parameter" begin
         # Test both :link and :response scales
-        sd_response = Margins._second_differences_local(model, df, :x1, :age, Σ; scale=:response)
-        sd_link = Margins._second_differences_local(model, df, :x1, :age, Σ; scale=:link)
+        sd_response = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, scale=:response)
+        sd_link = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous, scale=:link)
 
         # For linear models, they should be the same
         @test sd_response.second_diff[1] ≈ sd_link.second_diff[1]
@@ -172,8 +173,8 @@ using CategoricalArrays
 
     @testset "vcov as Function (Mixed Model Support)" begin
         # Test with vcov as a function instead of matrix
-        sd_matrix = Margins._second_differences_local(model, df, :x1, :age, Σ)
-        sd_function = Margins._second_differences_local(model, df, :x1, :age, vcov)  # vcov is the function
+        sd_matrix = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous)
+        sd_function = second_differences(model, df, :x1, :age; vcov=vcov, modifier_type=:continuous)  # vcov is the function
 
         # Results should be identical
         @test sd_matrix.second_diff[1] ≈ sd_function.second_diff[1]
@@ -182,58 +183,53 @@ using CategoricalArrays
     end
 
     @testset "Error Handling - Invalid Modifier" begin
-        @test_throws ErrorException Margins._second_differences_local(
-            model, df, :x1, :nonexistent, Σ
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :nonexistent; vcov=Σ, modifier_type=:continuous
         )
     end
 
     @testset "Error Handling - Non-Numeric Modifier" begin
-        @test_throws ErrorException Margins._second_differences_local(
-            model, df, :x1, :region, Σ
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :region; vcov=Σ, modifier_type=:continuous
         )
     end
 
     @testset "Error Handling - Invalid Variable" begin
-        @test_throws ErrorException Margins._second_differences_local(
-            model, df, :nonexistent, :age, Σ
+        @test_throws ArgumentError second_differences(
+            model, df, :nonexistent, :age; vcov=Σ, modifier_type=:continuous
         )
     end
 
     @testset "Error Handling - Invalid Profile Variable" begin
-        @test_throws ErrorException Margins._second_differences_local(
-            model, df, :x1, :age, Σ;
-            profile=(nonexistent=100,)
-        )
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
+            profile=(nonexistent=100,))
     end
 
     @testset "Error Handling - Invalid at Parameter" begin
-        @test_throws TypeError Margins._second_differences_local(
-            model, df, :x1, :age, Σ;
-            at="invalid"
-        )
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
+            at="invalid")
     end
 
     @testset "Error Handling - NamedTuple without Modifier" begin
-        @test_throws ErrorException Margins._second_differences_local(
-            model, df, :x1, :age, Σ;
-            at=(income=50000,)  # Missing :age
-        )
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
+            at=(income=50000,))  # Missing :age
     end
 
     @testset "Error Handling - Invalid Delta" begin
-        @test_throws TypeError Margins._second_differences_local(
-            model, df, :x1, :age, Σ;
-            delta="invalid"
-        )
+        @test_throws TypeError second_differences(
+            model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
+            delta="invalid")
     end
 
     @testset "Error Handling - Invalid Contrasts" begin
         # An ArgumentError from the request layer, as in every other entry point (3.0; was a
         # bare ErrorException here and silently accepted on the discrete path)
-        @test_throws ArgumentError Margins._second_differences_local(
-            model, df, :x1, :age, Σ;
-            contrasts=:invalid
-        )
+        @test_throws ArgumentError second_differences(
+            model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
+            contrasts=:invalid)
     end
 
     @testset "Consistency with second_differences()" begin
@@ -241,7 +237,7 @@ using CategoricalArrays
         # They should be similar when evaluation points are the same
 
         # Using second_differences_at at specific points
-        sd_at = Margins._second_differences_local(model, df, :x1, :age, Σ;
+        sd_at = second_differences(model, df, :x1, :age; vcov=Σ, modifier_type=:continuous,
                                      at=[40.0, 50.0])
 
         # Using second_differences with same points
@@ -271,7 +267,7 @@ using CategoricalArrays
         model_interact = lm(@formula(y ~ x * m), df_interact)
 
         # Compute derivative at mean
-        sd = Margins._second_differences_local(model_interact, df_interact, :x, :m, vcov(model_interact))
+        sd = second_differences(model_interact, df_interact, :x, :m; vcov=vcov(model_interact), modifier_type=:continuous)
 
         # Should detect significant interaction
         @test abs(sd.statistic[1]) > 2  # Statistically significant
@@ -303,7 +299,7 @@ using CategoricalArrays
 
         @testset "Single Vector Profile" begin
             # Vector-valued profile: separate estimation for each socio4 level
-            sd = Margins._second_differences_local(model_strat, df_strat, :x1, :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=45.0,
                                       profile=(socio4=[false, true],))
 
@@ -319,7 +315,7 @@ using CategoricalArrays
 
         @testset "Vector Profile with Scalar Profile" begin
             # Mixed: vector socio4 + scalar income
-            sd = Margins._second_differences_local(model_strat, df_strat, :x1, :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=45.0,
                                       profile=(socio4=[false, true],
                                               income=50000.0))
@@ -333,7 +329,7 @@ using CategoricalArrays
 
         @testset "Multiple Vector Profiles (Cartesian Product)" begin
             # Cartesian product: socio4 × gender
-            sd = Margins._second_differences_local(model_strat, df_strat, :x1, :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=45.0,
                                       profile=(socio4=[false, true],
                                               gender=["male", "female"]))
@@ -353,7 +349,7 @@ using CategoricalArrays
 
         @testset "Vector Profile × Multiple Eval Points" begin
             # Combine vector profile with multiple evaluation points
-            sd = Margins._second_differences_local(model_strat, df_strat, :x1, :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, :x1, :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=[30.0, 60.0],
                                       profile=(socio4=[false, true],))
 
@@ -368,7 +364,7 @@ using CategoricalArrays
 
         @testset "Multiple Variables × Vector Profile" begin
             # Multiple focal variables with vector profile
-            sd = Margins._second_differences_local(model_strat, df_strat, [:x1, :x2], :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, [:x1, :x2], :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=45.0,
                                       profile=(socio4=[false, true],))
 
@@ -383,7 +379,7 @@ using CategoricalArrays
 
         @testset "Complex Combination: All Dimensions" begin
             # Combine everything: multiple variables × multiple eval points × vector profiles
-            sd = Margins._second_differences_local(model_strat, df_strat, [:x1, :x2], :age, Σ_strat;
+            sd = second_differences(model_strat, df_strat, [:x1, :x2], :age; vcov=Σ_strat, modifier_type=:continuous,
                                       at=[30.0, 60.0],
                                       profile=(socio4=[false, true],
                                               gender=["male", "female"]))
@@ -425,7 +421,7 @@ using CategoricalArrays
 
         @testset "Baseline Contrasts (Default)" begin
             # Default should use baseline contrasts
-            sd = Margins._second_differences_local(model_cat, df_cat, :religion, :modifier, Σ_cat; at=:mean)
+            sd = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous, at=:mean)
 
             # Should have K-1 contrasts for K=3 levels
             @test nrow(sd) == 2
@@ -435,7 +431,7 @@ using CategoricalArrays
 
         @testset "Pairwise Contrasts" begin
             # Explicit pairwise contrasts
-            sd_pairwise = Margins._second_differences_local(model_cat, df_cat, :religion, :modifier, Σ_cat;
+            sd_pairwise = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
                                                 at=:mean, contrasts=:pairwise)
 
             # Should have K(K-1)/2 = 3 contrasts for K=3 levels
@@ -449,9 +445,9 @@ using CategoricalArrays
         end
 
         @testset "Baseline vs Pairwise Comparison" begin
-            sd_baseline = Margins._second_differences_local(model_cat, df_cat, :religion, :modifier, Σ_cat;
+            sd_baseline = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
                                                at=:mean, contrasts=:baseline)
-            sd_pairwise = Margins._second_differences_local(model_cat, df_cat, :religion, :modifier, Σ_cat;
+            sd_pairwise = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous,
                                                at=:mean, contrasts=:pairwise)
 
             # Different number of rows
@@ -467,7 +463,7 @@ using CategoricalArrays
 
         @testset "Basic Categorical Focal Variable" begin
             # Should work without error
-            sd = Margins._second_differences_local(model_cat, df_cat, :religion, :modifier, Σ_cat; at=:mean)
+            sd = second_differences(model_cat, df_cat, :religion, :modifier; vcov=Σ_cat, modifier_type=:continuous, at=:mean)
 
             # Should have one row per contrast
             @test nrow(sd) >= 2  # At least 2 contrasts (depends on levels)
@@ -492,11 +488,10 @@ using CategoricalArrays
             df_cat.treated = rand([false, true], n)
             model_cat2 = lm(@formula(y ~ religion * modifier + treated + other), df_cat)
 
-            sd = Margins._second_differences_local(
-                model_cat2, df_cat, :religion, :modifier, vcov(model_cat2);
+            sd = second_differences(
+                model_cat2, df_cat, :religion, :modifier; vcov=vcov(model_cat2), modifier_type=:continuous,
                 at=:mean,
-                profile=(treated=[false, true],)
-            )
+                profile=(treated=[false, true],))
 
             # Should have rows for each contrast × treated level
             @test hasproperty(sd, :treated)
@@ -509,10 +504,9 @@ using CategoricalArrays
 
         @testset "Mixed: Continuous and Categorical Focal Variables" begin
             # Should handle both types in one call
-            sd = Margins._second_differences_local(
-                model_cat, df_cat, [:religion, :other], :modifier, Σ_cat;
-                at=:mean
-            )
+            sd = second_differences(
+                model_cat, df_cat, [:religion, :other], :modifier; vcov=Σ_cat, modifier_type=:continuous,
+                at=:mean)
 
             # Other is continuous (1 row), religion is categorical (multiple rows)
             religion_rows = sd[sd.variable .== :religion, :]

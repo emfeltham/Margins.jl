@@ -145,12 +145,12 @@ end
     @testset "Error: insufficient modifier levels" begin
         # Only one level - should error
         ames_one = population_margins(model, df; scenarios=(group=[1],), type=:effects)
-        @test_throws ErrorException Margins._second_differences_pairwise(ames_one, :x, :group)
+        @test_throws ArgumentError Margins._second_differences_pairwise(ames_one, :x, :group)
     end
 
     @testset "Error: missing modifier in the result's context" begin
         ames = population_margins(model, df; type=:effects)
-        @test_throws ErrorException Margins._second_differences_pairwise(ames, :x, :nonexistent)
+        @test_throws ArgumentError Margins._second_differences_pairwise(ames, :x, :nonexistent)
     end
 
     @testset "Error: dimension mismatch" begin

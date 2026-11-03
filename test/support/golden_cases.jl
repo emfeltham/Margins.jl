@@ -180,6 +180,7 @@ function cases()
     end
     _coverage_cases!(out)
     _model_interface_cases!(out)
+    _second_difference_cases!(out)
     return out
 end
 
@@ -331,6 +332,58 @@ function _model_interface_cases!(out)
     return out
 end
 
+# Second differences with `groups=` and a categorical variable that appears only inside an
+# interaction (added in step 8 of the 3.0 plan, after checking them against the result-level route,
+# a stratum-subset oracle and hand computations from `modelcols`; test_second_differences_groups.jl).
+# A second-difference table is reported in the margins row format (`_sd_as_rows`): estimate =
+# second_diff, keyed by the levels compared, the evaluation point and the strata/profile columns.
+function _second_difference_cases!(out)
+    d = matrix_data("logit")
+    m = fit_matrix_model("logit", d)
+    sd!(id, f) = push!(out, ("sd:logit/$id", "second_differences", () -> _sd_as_rows(f())))
+    sd!("b/groups=h", () -> second_differences(m, d, [:x, :z, :g], :b; groups=:h))
+    sd!("b/groups=h/profile g", () -> second_differences(m, d, [:x, :z], :b; groups=:h, profile=(g=["a", "c"],)))
+    sd!("b/groups=[h,(z,2)]", () -> second_differences(m, d, [:x, :g], :b; groups=[:h, (:z, 2)]))
+    sd!("b/groups=h=>g/w", () -> second_differences(m, d, [:x, :z], :b; groups=:h => :g, weights=:w))
+    sd!("z/groups=h/observed", () -> second_differences(m, d, [:x, :g], :z; groups=:h))
+    sd!("z/groups=h/observed/fd", () -> second_differences(m, d, [:x, :g], :z; groups=:h, backend=:fd))
+    sd!("z/groups=[h,g]/mean", () -> second_differences(m, d, :x, :z; groups=[:h, :g], at=:mean))
+    sd!("z/groups=h/median/w", () -> second_differences(m, d, :x, :z; groups=:h, at=:median, weights=:w))
+    sd!("z/groups=(x,2)/at", () -> second_differences(m, d, [:x, :b], :z; groups=(:x, 2), at=[-0.5, 0.5]))
+    sd!("z/groups=h/levels", () -> second_differences(m, d, :x, :z; groups=:h, levels=[-0.5, 0.0, 0.5]))
+
+    # g only inside interactions (FullDummyCoding): AME of g, and g as focal variable and modifier
+    mi = glm(@formula(y ~ x * z + g & x + g & z & x + b), d, Binomial(), LogitLink())
+    for scale in (:response, :link)
+        push!(out, ("interaction-only g/$scale/population/effect/ad", "population_effects",
+                    () -> population_margins(mi, d; type=:effects, vars=[:g, :x, :b], scale)))
+        push!(out, ("interaction-only g/$scale/groups=h/effect/ad", "population_effects",
+                    () -> population_margins(mi, d; type=:effects, vars=[:g], groups=:h, scale)))
+    end
+    push!(out, ("interaction-only g/profile:means_grid/effect/ad", "profile_effects",
+                () -> profile_margins(mi, d, means_grid(d); type=:effects, vars=[:g, :x])))
+    push!(out, ("sd:interaction-only g/g × b", "second_differences",
+                () -> _sd_as_rows(second_differences(mi, d, :g, :b))))
+    push!(out, ("sd:interaction-only g/x × g", "second_differences",
+                () -> _sd_as_rows(second_differences(mi, d, :x, :g; warn=false))))
+    return out
+end
+
+# A second-difference table in the margins row format `rows` reads
+function _sd_as_rows(sd::DataFrame)
+    keycols = [c for c in names(sd) if startswith(c, "over_") ||
+               !(c in ("variable", "contrast", "modifier", "modifier_type", "ame_at_level1", "ame_at_level2",
+                       "second_diff", "se", "statistic", "df", "p_value", "ci_lower", "ci_upper",
+                       "significant", "delta_used"))]
+    out = select(sd, keycols)
+    out.variable = string.(sd.variable)
+    out.contrast = sd.contrast
+    out.estimate = sd.second_diff
+    out.se = sd.se
+    out.df = sd.df
+    return out
+end
+
 # ---------------------------------------------------------------------------------------
 # Schema-robust row keys
 # ---------------------------------------------------------------------------------------
@@ -358,7 +411,7 @@ _normcontrast(c) = c in ("dy/dx", "derivative") ? "d" : strip(String(c))
 degrees of freedom, `Inf` for z; recorded since step 5 of the 3.0 plan, when df became a
 property of the model class)."""
 function rows(case_id, operation, result)
-    df = DataFrame(result)
+    df = result isa DataFrame ? result : DataFrame(result)
     ctx = sort([c for c in names(df) if !(c in STAT_COLS)]; by=_normname)
     keys = map(1:nrow(df)) do k
         parts = ["$(_normname(c))=$(_fmt(df[k, c]))" for c in ctx]

@@ -10,7 +10,7 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 
 Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It contains everything below.
 
-Highlights: a new output schema (`statistic` + `df` with t inference for linear models, `over_` group columns, one second-difference schema); population elasticities now match Stata and R; a single model-level `second_differences`; concurrent calls are safe and Margins keeps no engine cache (no stale results after `refit!` or in-place `vcov` edits); numerous correctness fixes. FormulaCompiler ≥ 1.5 is required.
+Highlights: a new output schema (`statistic` + `df` with t inference for linear models, `over_` group columns, one second-difference schema); population elasticities now match Stata and R; a single model-level `second_differences`; concurrent calls are safe and Margins keeps no engine cache (no stale results after `refit!` or in-place `vcov` edits); a warning when a precomputed column (`x2 = x.^2`) would be held fixed by a counterfactual; numerous correctness fixes. FormulaCompiler ≥ 1.5 is required.
 
 ### Breaking: output schema
 
@@ -305,6 +305,121 @@ Tests: `test/core/test_typed_results.jl` (B9: contrast Σ/df/alpha against a han
 `inference`; B10: grid, groups and scenarios order where `Dict` order differs; `Inference` for lm, glm
 t and z, HC1 lm, `df=` overrides), and the updated contrast, metadata-contract and second-difference
 tests.
+
+### Derived columns: one counterfactual mechanism, and a warning (new `warn` keyword)
+
+- **The formula defines what a counterfactual changes (ISSUES #2).** Margins changes a variable — a
+  focal variable's derivative or contrast, a `scenarios` value, a reference-grid value, a second
+  difference's modifier or `profile` value — by re-evaluating the formula on the changed data. Terms
+  the formula computes (`x^2`, `log(x)`, `x & z`) follow; a column computed outside the formula
+  (`x2 = x.^2` in the data) is held fixed. This was always so; it is now documented
+  (`docs/src/population_scenarios.md`, "Derived Columns", with the list of transforms a formula can
+  use and the note that a precomputed spline or polynomial basis is held fixed) and cross-referenced
+  from the `population_margins`, `profile_margins` and `second_differences` docstrings.
+- **New: a derived-column warning.** `population_margins`, `profile_margins` and the model-level
+  `second_differences` warn, once per call and listing every pair, when a numeric column the formula
+  uses (never the response) is in the data an exact function (up to floating-point rounding) of a
+  variable the call changes or a focal variable: `v^2`, `v^3`, `sqrt`, `log`, `log10`, `log(v + 1)`,
+  `exp`, `1/v`, a linear rescaling (a standardized copy), a product `v * u` with another model column
+  (a precomputed interaction). A column the call sets itself consistently (`scenarios=(x=2, x2=4)`,
+  a grid giving both) is not reported. There is deliberately no "constant within each value of `v`"
+  (lookup) rule: it fires on legitimate group-level covariates (a year's GDP beside `year`), so the
+  documented formula-dependence rule governs those columns and the warning reports only columns
+  that are almost certainly transforms. It is a warning, not an error, because holding a column
+  fixed can be intended. Results are unchanged; only the warning is new.
+- **New keyword `warn::Bool=true`** on `population_margins` and `profile_margins`; `warn=false`
+  silences the warning. The model-level `second_differences` already had `warn`, which now also covers
+  this warning.
+- **Internal: one counterfactual mechanism.** Every data override goes through
+  `_apply_counterfactuals(data_nt, spec)` with `SetTo(value)` / `Shift(δ)` (internal, not exported):
+  `scenarios=` contexts (which the second differences' levels and evaluation points use), the
+  second differences' `at=:observed`, and reference-grid completion (`SetTo` of the typical value).
+  `at=:observed` is now one population computation with two contexts, `modifier => Shift(-δ)` and
+  `Shift(+δ)`, instead of two calls on a copied data table stitched into a synthetic `EffectsResult`;
+  the internal `_with_data` and `_shifted_modifier_request` are deleted. Not user-visible: the
+  `at=:observed` output is bitwise identical (31 before/after cases — lm, logit, probit, weighted,
+  HC1, Poisson with offset, LMM, GLMM, FixedEffectModels, profiles, categorical focal variables, both
+  backends, all measures — 848 cells, 0 differences), as are the golden snapshot (9605/9605 rows) and
+  every other result.
+- Cost: the detector screens each pair on a few evenly spaced rows (up to 2,048 to fit an affine
+  relation) and makes a full pass only for a column that passes, so it is O(n) only where
+  it finds something. Warm, on the 50,000-row benchmark logit: 0.19 ms for AME (all 8 variables),
+  0.05 ms for one variable; the calls themselves are unchanged within noise (AME all 41.57 vs 41.47 ms
+  with `warn=false`). It is called through `invokelatest` and its checks are precompiled, so it adds
+  little to a first call: fresh-process medians of 6 (before → after) AME (all) 4.13 → 4.08 s, AME (one
+  variable) 3.27 → 3.42 s, MEM 5.68 → 5.83 s, AAP 2.58 → 2.46 s.
+- Tests: `test/core/test_derived_columns.jl` (the mechanism; positive cases x², log, standardized copy,
+  precomputed interaction from either factor; negative cases formula transforms, independent
+  covariates, categorical predictors, constant columns, consistent settings, a lookup column on a
+  discrete variable and a group-level covariate (not reported); `warn=false`).
+
+### Second differences: `groups=`, one request, `ArgumentError`s; interaction-only categorical variables
+
+- **New: `groups=` on `second_differences(model, data, variables, modifier; …)`** (ISSUES #5): the
+  counterfactual second difference *within* each stratum, with the `groups` syntax of
+  `population_margins` (categorical, binned `(:x, 4)` / `(:x, [cuts])`, crossed `[:a, :b]`, nested
+  `:a => :b`). Each stratum is a block of rows with `over_<var>` columns, in the order of `groups`, after
+  the schema columns and before any `profile` columns. A stratum's row equals the ungrouped call on that
+  stratum's rows with the same `vcov` (bitwise in the tests). Per `at`: a discrete modifier or `levels`
+  sets every row of the stratum to each level; `at=:observed` averages the cross-derivative over the
+  stratum's rows; `at=:mean`/`:median` use the stratum's own (weighted) mean/median, as Stata computes
+  `at()` statistics within `over()` groups; a number, vector or `at` NamedTuple is the same point in every
+  stratum; `profile` points are set within each stratum. δ is the call's, from all rows. All strata come
+  from one `vcov` evaluation; with `include_gradients=true` the covariance of two strata's second
+  differences is `g₁'Σg₂`. The modifier, a `profile` variable or a held `at` variable in `groups` is an
+  `ArgumentError`; for the modifier, the message points to the result-level form for the descriptive
+  comparison across observed subgroups. Docs: "Counterfactual and subgroup second differences" in
+  `docs/src/second_differences.md`.
+- **`second_differences(result, …)` takes strata from a result's `groups=` columns.** It used to raise an
+  error when a group variable other than the modifier varied across the result's rows; it now pairs the
+  modifier levels within each stratum and adds `over_<var>` columns, so
+  `population_margins(m, d; scenarios=(t=[0, 1],), groups=:g)` followed by `second_differences(r, :x, :t)`
+  gives the same rows as `second_differences(m, d, :x, :t; groups=:g)` (exactly). A second varying
+  *scenario* variable is still an error.
+- **The model-level form runs entirely from one request.** Σ, df and `alpha` come from the request
+  (`vcov` evaluated once); the separate `alpha` check before it is gone, and the significance level used
+  for intervals is the request's. `backend=` is passed through to every AME computation (tests: AD and FD
+  agree to 1e-6 on second differences, with and without `groups`). `alpha` accepts any `Real` (it was
+  `alpha::Real`-typed; a non-real is now an `ArgumentError` rather than a `MethodError`).
+- **Invalid inputs to `second_differences` raise `ArgumentError`** (both forms), as in the rest of the
+  package: a bad `alpha`, `p_adjust`, `at`, `delta`, `modifier_type` or `levels`; an unknown modifier,
+  focal or `profile` column; a missing contrast label or variable; a result without the modifier, with a
+  second varying scenario variable or a repeated level; a `PredictionsResult`; `all_contrasts`. Internal
+  consistency errors (a malformed hand-built result) stay `ErrorException`.
+- **Removed: the internal `Margins._second_differences_local(model, data, vars, mod, vcov; …)`.** It
+  duplicated the public local-derivative path with its own validation, and passed the full data to the
+  computation without the FixedEffectModels estimation-sample subset (so `at=:mean` on a fit that drops
+  rows averaged over the dropped rows). Use `second_differences(model, data, vars, mod; at=…, vcov=…,
+  modifier_type=:continuous)`; its tests were ported to that call.
+- **Fixed: a categorical variable that appears only inside interactions** (`y ~ x + g & w`, `g & x & w`,
+  `g & log(w)`, no `g` main effect) failed as a focal variable of `population_margins`,
+  `profile_margins` and `second_differences` with `Could not find categorical variable g in model
+  formula terms`. FormulaCompiler's `baseline_level` reads only main-effect terms; Margins now finds the
+  variable's term anywhere in the formula (`_model_baseline_level`). StatsModels codes such a variable
+  with `FullDummyCoding` (no level lacks a coefficient), so the first level of its contrasts is the
+  reference; the same rule makes a full-rank main effect (`y ~ 0 + g + x`) work, which also failed.
+  Results checked against hand computations from `modelcols` (estimate and delta-method SE, identity and
+  logit). Bool and continuous variables in the same position already worked and are now tested.
+- **`groups` naming a column the data does not have** is an `ArgumentError` naming the available columns
+  (was a `FieldError` from inside group parsing), in `population_margins` too.
+- Tests: `test/test_second_differences_groups.jl` (exact equality with the result-level route for
+  discrete, `levels`, point and vector `at`, `profile`, binned and nested groups, weights, a Tables
+  source; the stratum-subset oracle for discrete, `:observed`, `:mean` and `:median`, weighted and not;
+  the errors; AD vs FD; `alpha` errors; FixedEffectModels `at=:mean` over `esample`; the
+  interaction-only categorical, Bool and continuous variables). Golden snapshot: rows added for
+  second differences with `groups=` and for an interaction-only categorical variable; existing rows
+  unchanged.
+- First-call latency (fresh process, median of 7, vs the previous 3.0 commit): AME (all) 4.52 → 4.56 s,
+  AME (one variable) 3.79 → 3.78 s, MEM 6.23 → 6.46 s, AAP 3.02 → 3.07 s, model-level second
+  differences (`at=:observed`) 7.09 → 7.36 s; the ranges of the 7 runs overlap in every case. Warm
+  timings were not re-measured; a call without `groups=` takes the same path with one stratum.
+
+| before | 3.0 |
+|:--|:--|
+| `@test_throws ErrorException second_differences(m, d, :x, :t; alpha=2)` (and other invalid inputs) | `ArgumentError` |
+| `second_differences(population_margins(m, d; scenarios=(t=[0, 1],), groups=:g), :x, :t)` raised an error | one block of rows per stratum, with `over_g` |
+| per-subgroup second differences by subsetting the data and looping | `second_differences(m, d, :x, :t; groups=:g)` |
+| `Margins._second_differences_local(m, d, :x, :w, V; at=…)` (internal) | `second_differences(m, d, :x, :w; at=…, vcov=V, modifier_type=:continuous)` |
 
 ### Breaking / behaviour change
 

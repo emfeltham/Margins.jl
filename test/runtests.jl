@@ -34,6 +34,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_model_weights.jl")
     include("core/test_request_layer.jl")
     include("core/test_model_interface.jl")   # model-class interface: df rule, offsets, FixedEffectModels
+    include("core/test_derived_columns.jl")   # SetTo/Shift counterfactuals and the derived-column warning
     include("statistical_validation/robust_se_validation.jl")
 end
 
@@ -73,6 +74,7 @@ end
     include("test_vcov_matrix.jl")
     include("test_result_metadata_contract.jl")
     include("test_second_differences_observed.jl")
+    include("test_second_differences_groups.jl")    # groups=, backend=, interaction-only variables (step 8)
     include("test_profile_pairwise.jl")
 end
 

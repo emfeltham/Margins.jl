@@ -105,6 +105,8 @@ include("core/model_interface.jl")  # model-class interface: _link, _coef, _infe
 include("core/validation.jl")
 include("core/model_weights.jl")  # weights=:model default: _model_weights, _resolve_weights
 include("core/margins_validation.jl")
+include("core/counterfactuals.jl")  # SetTo/Shift and _apply_counterfactuals: every data override
+include("core/derived_columns.jl")  # the derived-column detector (_warn_derived_columns)
 include("core/request.jl")  # MarginsRequest, _normalize_request: every entry point's options, validated once
 include("core/typical_values.jl")
 include("computation/scenarios.jl")  # ContrastPair and scenario utilities

@@ -9604,3 +9604,138 @@ fem-esample/groups=g/effect/ad,population_effects,g=b|var=b|contrast=true - fals
 fem-esample/groups=g/predictions,population_predictions,g=c,5.341593886367614,0.07858964560574482,388.0
 fem-esample/groups=g/predictions,population_predictions,g=a,5.552865464935957,0.0656262577637127,388.0
 fem-esample/groups=g/predictions,population_predictions,g=b,5.82863410149557,0.07454195886146137,388.0
+sd:logit/b/groups=h,second_differences,h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.006606307135931626,0.012586534952127778,Inf
+sd:logit/b/groups=h,second_differences,h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0006744132118250623,0.003957817518507451,Inf
+sd:logit/b/groups=h,second_differences,h=r|modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.002267884590228548,0.006301183903520792,Inf
+sd:logit/b/groups=h,second_differences,h=r|modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.007583543559618933,0.015198730800118536,Inf
+sd:logit/b/groups=h,second_differences,h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.00680580597406312,0.012959971678270649,Inf
+sd:logit/b/groups=h,second_differences,h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.000979633501582834,0.00418095346325595,Inf
+sd:logit/b/groups=h,second_differences,h=q|modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.002546562454655347,0.006724075909708294,Inf
+sd:logit/b/groups=h,second_differences,h=q|modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.007074069289054193,0.01435537739674268,Inf
+sd:logit/b/groups=h,second_differences,h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.006767410415300212,0.012911091858989641,Inf
+sd:logit/b/groups=h,second_differences,h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0010322934054249507,0.0042576705017705555,Inf
+sd:logit/b/groups=h,second_differences,h=p|modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.0025292170833386626,0.006696082849660692,Inf
+sd:logit/b/groups=h,second_differences,h=p|modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.007064786012241045,0.01433558784550682,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.006726385827844336,0.013466477215617298,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0007346412279690684,0.003603039124722468,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.007158030887254009,0.014321345755254738,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0009898811023541353,0.0038997086098807323,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.006890296181354165,0.013852220654306307,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=a|h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0009718338109786567,0.0038654369805513037,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.004054512015551175,0.012074451112497924,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,-2.5570982217079955e-5,0.005030435547268277,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.0038214850846565625,0.01181645791015242,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0002854082992570612,0.004939120083872266,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.004127610184947443,0.012128950818746256,Inf
+sd:logit/b/groups=h/profile g,second_differences,g=c|h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.00029240276112140774,0.004918984323002084,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin1|var=x|contrast=d,-0.002919661673580227,0.007162672300445103,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=b - a,0.0022043084696275715,0.00621131199780227,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=c - a,0.007765978009505153,0.015570895599343637,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin2|var=x|contrast=d,-0.0103488108628641,0.01974111362595132,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=b - a,0.0023324239853840835,0.0064056769195660725,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=r|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=c - a,0.007398344951401112,0.0148917385940791,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin1|var=x|contrast=d,-0.003888311889335659,0.008368610971404358,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=b - a,0.002248050737767144,0.006283374411184453,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=c - a,0.007717263163300542,0.015495858783639826,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin2|var=x|contrast=d,-0.009394568330934022,0.01803054950952927,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=b - a,0.0028114390485139105,0.007167242507901785,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=q|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=c - a,0.006503347964018746,0.013446242328879764,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin1|var=x|contrast=d,-0.0054931992086725626,0.010992723591495383,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=b - a,0.0022782585585241714,0.0063207081539243875,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin1|var=g|contrast=c - a,0.007593894802387542,0.015271892198263876,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin2|var=x|contrast=d,-0.008183200644886444,0.016057062447046792,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=b - a,0.002808059888688052,0.007165166861898326,Inf
+"sd:logit/b/groups=[h,(z,2)]",second_differences,h=p|modifier_level1=false|modifier_level2=true|z=Bin2|var=g|contrast=c - a,0.006476887356522791,0.013402921420442807,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.01181990923304925,0.02237136749376724,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0007778973104238945,0.003887826565841868,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.0069731366487033875,0.014006546183965995,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0011452612754095396,0.004026219940433163,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=r|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.004892720351078773,0.013118098268523854,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=r|modifier_level1=false|modifier_level2=true|var=z|contrast=d,-0.00015106539455399552,0.005106401774905603,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.004397612069118789,0.012393099502588326,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0004904569777885105,0.004882125684876669,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.007950496544814847,0.015877846680391612,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.001295827065302825,0.004364590725501547,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=q|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.011010298987834982,0.02080902404091238,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=q|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0008375770555084129,0.00384883723518155,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.012316108665803682,0.02345757941010547,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=b|h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0017360991000686422,0.00513044928412932,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,-0.006425204874717379,0.012939068131363245,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=a|h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.000474810090137738,0.0035437167475550636,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=p|modifier_level1=false|modifier_level2=true|var=x|contrast=d,0.002814835287947872,0.010701303954108943,Inf
+sd:logit/b/groups=h=>g/w,second_differences,g=c|h=p|modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.000726297504903026,0.004862099033524599,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.036258806454688854,0.04619852251306741,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.0035500006516034762,0.007541600655287412,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0067589813130509565,0.019503091755295916,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.036726024700702235,0.04757514645048315,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.004075125932889433,0.008550816898232613,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.006396154891552206,0.018689166615241733,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.037481768088483546,0.0479922407930585,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.003970456923501839,0.008316161716616265,Inf
+sd:logit/z/groups=h/observed,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0061962414348674215,0.01847282845259019,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.03625880645331695,0.0461985225113968,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.0035500006516034762,0.007541600655287412,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=r|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0067589813130509565,0.019503091755295916,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.036726024700015084,0.04757514644981323,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.004075125932889433,0.008550816898232613,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=q|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.006396154891552206,0.018689166615241733,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.03748176808867455,0.04799224079314165,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=b - a,-0.003970456923501839,0.008316161716616265,Inf
+sd:logit/z/groups=h/observed/fd,second_differences,eval_point=NaN|h=p|modifier_level1=NaN|modifier_level2=NaN|var=g|contrast=c - a,0.0061962414348674215,0.01847282845259019,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=0.05525910778|g=b|h=r|modifier_level1=0.0494830432|modifier_level2=0.06103517235|var=x|contrast=d,0.036630560626832266,0.04688649212710733,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=-0.1409673301|g=c|h=r|modifier_level1=-0.1467433947|modifier_level2=-0.1351912656|var=x|contrast=d,0.04491441722769179,0.06614687261383348,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=0.004274129147|g=a|h=r|modifier_level1=-0.001501935424|modifier_level2=0.01005019372|var=x|contrast=d,0.0320696784840775,0.04017876372902481,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=-0.01126794997|g=b|h=q|modifier_level1=-0.01704401454|modifier_level2=-0.005491885396|var=x|contrast=d,0.03633454691820657,0.04606999602400527,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=-0.07575282374|g=c|h=q|modifier_level1=-0.08152888831|modifier_level2=-0.06997675917|var=x|contrast=d,0.04144849158733794,0.06040223249624903,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=0.1443455404|g=a|h=q|modifier_level1=0.1385694758|modifier_level2=0.1501216049|var=x|contrast=d,0.03360647133118884,0.04299423391788007,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=-0.04055893633|g=b|h=p|modifier_level1=-0.0463350009|modifier_level2=-0.03478287176|var=x|contrast=d,0.04217533673272382,0.05337514241327844,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=0.2002067933|g=c|h=p|modifier_level1=0.1944307287|modifier_level2=0.2059828579|var=x|contrast=d,0.04213736823806932,0.06000218641911321,Inf
+"sd:logit/z/groups=[h,g]/mean",second_differences,eval_point=-0.1013056043|g=a|h=p|modifier_level1=-0.1070816688|modifier_level2=-0.09552953969|var=x|contrast=d,0.029682410833617615,0.03672784661702585,Inf
+sd:logit/z/groups=h/median/w,second_differences,eval_point=0.00228983621|h=r|modifier_level1=-0.003486228361|modifier_level2=0.008065900781|var=x|contrast=d,0.03587788472979119,0.04525910071121032,Inf
+sd:logit/z/groups=h/median/w,second_differences,eval_point=0.06825595968|h=q|modifier_level1=0.06247989511|modifier_level2=0.07403202425|var=x|contrast=d,0.036478797457309135,0.0463778383123729,Inf
+sd:logit/z/groups=h/median/w,second_differences,eval_point=-0.03177540809|h=p|modifier_level1=-0.03755147266|modifier_level2=-0.02599934352|var=x|contrast=d,0.03746071955215633,0.04728361513487479,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=-0.5|modifier_level1=-0.5057760646|modifier_level2=-0.4942239354|x=Bin1|var=x|contrast=d,0.043417873266251905,0.04872577242035377,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=-0.5|modifier_level1=-0.5057760646|modifier_level2=-0.4942239354|x=Bin1|var=b|contrast=true - false,0.0032213494441261726,0.007647509027946468,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=-0.5|modifier_level1=-0.5057760646|modifier_level2=-0.4942239354|x=Bin2|var=x|contrast=d,0.025457466600769984,0.03841819431199385,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=-0.5|modifier_level1=-0.5057760646|modifier_level2=-0.4942239354|x=Bin2|var=b|contrast=true - false,-0.0017617159817276253,0.006235987416201831,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=0.5|modifier_level1=0.4942239354|modifier_level2=0.5057760646|x=Bin1|var=x|contrast=d,0.058582383778255184,0.08401355071580488,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=0.5|modifier_level1=0.4942239354|modifier_level2=0.5057760646|x=Bin1|var=b|contrast=true - false,0.0036405606399186295,0.009041955621620456,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=0.5|modifier_level1=0.4942239354|modifier_level2=0.5057760646|x=Bin2|var=x|contrast=d,0.019499788087747633,0.022465758581197943,Inf
+"sd:logit/z/groups=(x,2)/at",second_differences,eval_point=0.5|modifier_level1=0.4942239354|modifier_level2=0.5057760646|x=Bin2|var=b|contrast=true - false,-0.0015061375445415913,0.005009618031062894,Inf
+sd:logit/z/groups=h/levels,second_differences,h=r|modifier_level1=-0.5|modifier_level2=0.0|var=x|contrast=d,0.03536275544885088,0.04436682686001997,Inf
+sd:logit/z/groups=h/levels,second_differences,h=r|modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.03629696402957253,0.04598361817358894,Inf
+sd:logit/z/groups=h/levels,second_differences,h=r|modifier_level1=0.0|modifier_level2=0.5|var=x|contrast=d,0.03723117261029418,0.04788584810822616,Inf
+sd:logit/z/groups=h/levels,second_differences,h=q|modifier_level1=-0.5|modifier_level2=0.0|var=x|contrast=d,0.034854644841213686,0.04337371564392958,Inf
+sd:logit/z/groups=h/levels,second_differences,h=q|modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.03607618951404449,0.04576729423109684,Inf
+sd:logit/z/groups=h/levels,second_differences,h=q|modifier_level1=0.0|modifier_level2=0.5|var=x|contrast=d,0.03729773418687529,0.048411324665733474,Inf
+sd:logit/z/groups=h/levels,second_differences,h=p|modifier_level1=-0.5|modifier_level2=0.0|var=x|contrast=d,0.0361151019023388,0.04496038918868277,Inf
+sd:logit/z/groups=h/levels,second_differences,h=p|modifier_level1=-0.5|modifier_level2=0.5|var=x|contrast=d,0.037423553471280194,0.047563471419329935,Inf
+sd:logit/z/groups=h/levels,second_differences,h=p|modifier_level1=0.0|modifier_level2=0.5|var=x|contrast=d,0.03873200504022159,0.0504167395788065,Inf
+interaction-only g/response/population/effect/ad,population_effects,var=x|contrast=d,0.048680671307320664,0.0270717180914097,Inf
+interaction-only g/response/population/effect/ad,population_effects,var=g|contrast=b - a,-0.011932768999444607,0.028393458476472525,Inf
+interaction-only g/response/population/effect/ad,population_effects,var=g|contrast=c - a,-0.060472097565435104,0.04119799004012725,Inf
+interaction-only g/response/population/effect/ad,population_effects,var=b|contrast=true - false,0.01468023579351475,0.029222801280732433,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,-0.011450820530445431,0.028386102734372004,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.06056326233868616,0.04163418249772921,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.013784974899502568,0.02840175683606513,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.06250408770935285,0.04115640795463344,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.010548585208235012,0.028457562223023165,Inf
+interaction-only g/response/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.058333664526883426,0.04090372362840804,Inf
+interaction-only g/link/population/effect/ad,population_effects,var=x|contrast=d,0.6500827401384679,0.32269788620549605,Inf
+interaction-only g/link/population/effect/ad,population_effects,var=g|contrast=b - a,-0.2505302954149242,0.4567693294227809,Inf
+interaction-only g/link/population/effect/ad,population_effects,var=g|contrast=c - a,-0.7776339302718828,0.48083715777540303,Inf
+interaction-only g/link/population/effect/ad,population_effects,var=b|contrast=true - false,0.17709457903447892,0.35765979434214357,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,-0.2593429507749024,0.4672764574369601,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.7983270714002562,0.4918101065055441,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.27241908809050286,0.45590153440646586,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.7964202791222192,0.47927917199599235,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.2196642699908293,0.4478334943703962,Inf
+interaction-only g/link/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.7380131895499378,0.47217595935270723,Inf
+interaction-only g/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.04995298125067262,0.02349254436857983,Inf
+interaction-only g/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.017323599035360737,0.031333780380750284,Inf
+interaction-only g/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.06772177781580746,0.04411430807756979,Inf
+sd:interaction-only g/g × b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.001731242392717016,0.005325192614203019,Inf
+sd:interaction-only g/g × b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.008265516309016945,0.0173892692927591,Inf
+sd:interaction-only g/x × g,second_differences,modifier_level1=a|modifier_level2=b|var=x|contrast=d,0.007566202261449689,0.012109217245323435,Inf
+sd:interaction-only g/x × g,second_differences,modifier_level1=a|modifier_level2=c|var=x|contrast=d,-0.009331833309561194,0.02391664533851181,Inf
+sd:interaction-only g/x × g,second_differences,modifier_level1=b|modifier_level2=c|var=x|contrast=d,-0.016898035571010883,0.019836844329365243,Inf

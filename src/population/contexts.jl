@@ -79,11 +79,7 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
 
                 # Add context identifiers to continuous results
                 for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
-                    display_val = if ctx_val isa NamedTuple && haskey(ctx_val, :label)
-                        ctx_val.label
-                    else
-                        ctx_val
-                    end
+                    display_val = _context_label(ctx_val)
                     cont_results[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(cont_results))
                 end
 
@@ -103,11 +99,7 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
 
                     # Add context identifiers
                     for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
-                        display_val = if ctx_val isa NamedTuple && haskey(ctx_val, :label)
-                            ctx_val.label
-                        else
-                            ctx_val
-                        end
+                        display_val = _context_label(ctx_val)
                         cat_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(cat_result))
                     end
 
@@ -123,11 +115,7 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
 
             # Add context identifiers
             for (ctx_var, ctx_val) in merge(scenario_spec, group_spec)
-                display_val = if ctx_val isa NamedTuple && haskey(ctx_val, :label)
-                    ctx_val.label
-                else
-                    ctx_val
-                end
+                display_val = _context_label(ctx_val)
                 pred_result[!, Symbol("at_$(ctx_var)")] = fill(display_val, nrow(pred_result))
             end
 
@@ -906,76 +894,12 @@ function _create_continuous_subgroups(col, specified_values)
     return subgroups
 end
 
-function _coerce_override_scalar(col, raw_value)
-    T = eltype(col)
-    value = _normalize_override_value(raw_value)
-    if T <: Bool
-        if value isa Bool
-            return value
-        elseif value isa Integer
-            return value != 0
-        elseif value isa AbstractString
-            lowered = lowercase(value)
-            if lowered in ("true", "t", "1")
-                return true
-            elseif lowered in ("false", "f", "0")
-                return false
-            end
-        end
-        return convert(Bool, value)
-    elseif T <: Real
-        return value isa T ? value : convert(T, value)
-    else
-        return value isa T ? value : convert(T, value)
-    end
-end
-
-function _resolve_categorical_override(col, raw_value, var::Symbol)
-    T = eltype(col)
-    if raw_value isa T
-        return raw_value
-    end
-
-    level_candidates = levels(col)
-    match_idx = findfirst(level -> level == raw_value, level_candidates)
-    if match_idx === nothing
-        raw_str = string(raw_value)
-        match_idx = findfirst(level -> string(level) == raw_str, level_candidates)
-    end
-
-    match_idx === nothing && error("Scenario override $raw_value not found among levels for categorical variable :$var")
-
-    matched_level = level_candidates[match_idx]
-    matched_str = string(matched_level)
-    existing_idx = findfirst(x -> string(x) == matched_str, col)
-    if existing_idx !== nothing
-        return col[existing_idx]
-    end
-
-    pool_ref_type = T.parameters[2]
-    ref_value = convert(pool_ref_type, match_idx)
-    return T(pool(col), ref_value)
-end
-
-function _build_override_column(col, raw_value, var::Symbol)
-    if eltype(col) <: CategoricalValue
-        categorical_value = _resolve_categorical_override(col, raw_value, var)
-        override_col = copy(col)
-        fill!(override_col, categorical_value)
-        return override_col
-    else
-        coerced_value = _coerce_override_scalar(col, raw_value)
-        return fill(coerced_value, length(col))
-    end
-end
-
 """
     _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
 
-Apply group filters and scenario overrides while preserving column storage types.
-Categorical overrides reuse the original categorical pool so downstream evaluators
-continue to see `CategoricalValue` levels; Boolean overrides stay `Bool` for the
-zero-allocation counterfactual pathway.
+Apply group filters and the scenario's counterfactuals (`_apply_counterfactuals`: a plain
+value sets the variable on every row, preserving the column's storage type; a `Shift` moves each
+row's own value).
 """
 function _create_context_data_with_weights(data_nt, scenario_spec, group_spec, weights)
     # Create context indices based on group specification with sophisticated filtering
@@ -1015,23 +939,8 @@ function _create_context_data_with_weights(data_nt, scenario_spec, group_spec, w
         end
     end
 
-    # Apply scenario overrides to data (if any)
-    context_data = if isempty(scenario_spec)
-        data_nt
-    else
-        # Create modified data with scenario values
-        modified_data = NamedTuple()
-        for (var, col) in pairs(data_nt)
-            if haskey(scenario_spec, var)
-                override_val = scenario_spec[var]
-                override_col = _build_override_column(col, override_val, var)
-                modified_data = merge(modified_data, NamedTuple{(var,)}((override_col,)))
-            else
-                modified_data = merge(modified_data, NamedTuple{(var,)}((col,)))
-            end
-        end
-        modified_data
-    end
+    # Apply the scenario's counterfactuals (`SetTo` for a plain value, or a `Shift`)
+    context_data = _apply_counterfactuals(data_nt, scenario_spec)
 
     # Extract context weights if provided
     context_weights = if isnothing(weights)

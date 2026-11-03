@@ -1,7 +1,7 @@
 # population/core.jl - Main population_margins() function
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -41,6 +41,9 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
     are skipped with an informational message
 - `scenarios=nothing`: Counterfactual scenarios (NamedTuple mapping variables to values)
   - Example: `(x1=0, x2=[1, 2])` creates scenarios for all combinations
+  - Each scenario sets the variable for every row and re-evaluates the formula, so terms the
+    formula computes from it (`x1^2`, `log(x1)`, `x1 & z`) follow it, while a column computed
+    outside the formula (a precomputed `x1_sq`) is held fixed. See *Derived columns* below.
 - `groups=nothing`: Grouping specification for stratified analysis
   - Simple: `:education` or `[:region, :gender]` for categorical grouping
   - Continuous: `(:income, 4)` for quartiles, `(:age, [25, 50, 75])` for thresholds
@@ -75,6 +78,17 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   the confidence interval, overriding the model-class default (see *Inference*). A positive number,
   or `Inf` for z inference (e.g. `df = G - 1` with a clustered `vcov` on an `lm`, as Stata's
   `vce(cluster)` does). Recorded in `result.inference.df`.
+
+# Derived columns
+Margins changes a variable (a focal variable's derivative or contrast, a `scenarios` value) by
+re-evaluating the model's formula on changed data. The formula defines what depends on what:
+anything it computes from the variable follows the change, and anything precomputed outside it
+is held fixed. Write transforms in the formula (`y ~ x + x^2`, `log(x)`, `x & z`), not as
+precomputed columns. A precomputed spline or polynomial basis means "hold the basis fixed".
+- `warn=true`: warn (once per call) when another numeric model column looks like an exact
+  transform of a variable the call changes (`x2 == x.^2`, `log(x)`, a standardized copy, a
+  precomputed product `x .* z`). `warn=false` silences it, for a column that should stay fixed. See the "Derived columns"
+  section of the Population Scenarios documentation for the supported formula transforms.
 
 # Offsets
 A model's η offset (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`, and for
@@ -171,12 +185,12 @@ function population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing, ci_alpha=nothing
+    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing, warn::Bool=true, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
     # Every option is validated, and `vcov` evaluated, once, here
     req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
-                             measure, contrasts, alpha, vcov, weights, df)
+                             measure, contrasts, alpha, vcov, weights, df, warn)
     return _run(req)
 end
 
@@ -588,13 +602,15 @@ end
 """
     _validate_group_columns_complete(groups, data_nt)
 
-Reject a grouping variable that contains `missing`. Group membership is decided by comparing
-values, which is undefined for `missing`; failing here gives a clear message instead of a
-`TypeError` from deep inside context construction.
+Reject a grouping variable that is not a column of the data, or that contains `missing`. Group
+membership is decided by comparing values, which is undefined for `missing`; failing here gives
+a clear message instead of a `FieldError` or `TypeError` from deep inside context construction.
 """
 function _validate_group_columns_complete(groups, data_nt)
     for var in _extract_group_variables(groups)
-        haskey(data_nt, var) || continue
+        haskey(data_nt, var) || throw(ArgumentError(
+            "Grouping variable '$(var)' is not a column of the data. Available columns: " *
+            "$(join(string.(keys(data_nt)), ", "))"))
         if any(ismissing, data_nt[var])
             throw(ArgumentError(
                 "Grouping variable '$(var)' contains missing values, so group membership is " *

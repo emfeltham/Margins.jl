@@ -24,6 +24,64 @@ Given a fitted model and a dataset, a scenario specifies a set of variable overr
 - Evaluate effects or predictions at the counterfactual covariates by overriding row values during evaluation (no data mutation).
 - Average over the selected rows (weighted or unweighted), compute the averaged parameter gradient, and apply the delta method with the full covariance matrix.
 
+## Derived Columns: the Formula Defines What Changes
+
+Margins changes a variable — a `scenarios` value, a reference-grid value, the modifier of a
+second difference, or a focal variable whose derivative or contrast is taken — by **re-evaluating
+the model's formula** on the changed data. The formula is the model's dependence structure:
+
+- Anything the formula computes from the variable follows the change. With
+  `y ~ age + age^2`, setting `age = 40` also sets the squared term to 1600, and the AME of `age`
+  includes the curvature.
+- Anything precomputed **outside** the formula is, to the model, a separate regressor, and is
+  held fixed. With `y ~ age + age2` where `age2 = age.^2` is a data column, setting `age = 40`
+  leaves `age2` at each row's observed value, and the AME of `age` is ∂ŷ/∂age *holding `age2`
+  fixed* — a different (and rarely meaningful) question. In a reference grid such a column is
+  held at its typical value (`means_grid` gives `mean(age2)`, not `mean(age)^2`).
+
+So write transforms in the formula, not as precomputed columns. This is the same advice Stata
+gives (`c.age##c.age` rather than a generated `age2`).
+
+**Transforms a formula can use** (FormulaCompiler compiles these; any other function in a formula
+is an `ArgumentError` naming this list):
+
+| Kind | Supported |
+|:-----|:----------|
+| Functions of one argument | `exp`, `log`, `log1p`, `sqrt`, `abs`, `sin`, `cos`, `inv` |
+| Arithmetic | `+`, `-`, `*`, `/`, `^` (e.g. `x^2`, `x^3`, `log(x) / log(10)`), unary `-` |
+| Comparisons | `<`, `<=`, `>`, `>=`, `==`, `!=` (e.g. `(age >= 65)`), and `!` |
+| Interactions | `x & z`, `x * z` |
+| Standardization | StandardizedPredictors.jl terms (`ZScore`, `Center`, `Scale` contrasts) |
+
+There are no polynomial or spline bases (`poly`, `bs`, `ns`). If you precompute a spline or
+polynomial basis as data columns, every counterfactual on the underlying variable **holds the
+basis fixed**: the variable itself changes only where it enters the formula directly. To let the
+basis follow, write the polynomial terms in the formula (`x + x^2 + x^3`), or compute
+predictions on data you have transformed yourself.
+
+**The derived-column warning.** `population_margins`, `profile_margins` and the model-level
+`second_differences` check, once per call, every numeric column the formula uses (never the
+response) against each variable the call changes (focal variables, `scenarios` keys, grid
+columns, the second-difference modifier and `profile` variables). They warn, in one message
+naming each pair, when the column is in the data an exact function (up to floating-point
+rounding) of a changed variable `v`:
+
+- a common transform of `v`: `v^2`, `v^3`, `sqrt(v)`, `log(v)`, `log10(v)`, `log(v + 1)`,
+  `exp(v)`, `1/v`, or a linear rescaling `a*v + b` (a standardized copy);
+- a product `v * u` with another numeric column `u` of the model (a precomputed interaction).
+
+A column the call sets itself, consistently with the variable at every scenario or grid row
+(`scenarios=(age=40, age2=1600)`), is not reported.
+
+The check is deliberately narrow: it reports only columns that are almost certainly transforms.
+It does not look for columns that are merely constant within each value of `v`, such as an age
+band computed from age, or a lookup table keyed on a discrete variable, because that pattern is
+also what a legitimate group-level covariate looks like (a year's GDP growth beside a numeric
+`year`), and whether such a column should move with `v` is a modelling question. Such columns
+are held fixed without a warning; the rule above is what governs them. It is a warning, not an
+error, for the same reason: pass `warn=false` for a call where holding the column fixed is
+intended.
+
 ## Basic Usage
 
 ### Single-Variable Scenarios
@@ -261,28 +319,32 @@ result = population_margins(model, survey_data;
 
 ## Architecture Overview
 
-Scenario handling is built around FormulaCompiler’s DataScenario system:
-- DataScenario: a lightweight structure that maps variable overrides (e.g., `:z => 0.5`) and supplies them to the compiled evaluator per-row.
-- Core evaluation calls (internal):
-  - `_predict_with_scenario(compiled, scenario, row, scale, β, link, row_buf)`
-  - `_gradient_with_scenario!(out, compiled, scenario, row, scale, β, link, row_buf)`
+Every counterfactual in Margins goes through one internal mechanism: a spec mapping variables to
+`SetTo(value)` (every row gets the value) or `Shift(δ)` (each row's own value moves by δ; used by
+the second differences' `at=:observed`), applied by `Margins._apply_counterfactuals`.
 
-Key properties:
-- Zero per-row allocations (reuse pre-allocated row and gradient buffers).
-- O(1) memory per context (reuse scenarios; continuous FD constructs only minimal override sets).
-- No mutation of the data; categorical types remain safe (no re-pooling required).
+- The override is column-level: a changed variable becomes one new column, every other column is
+  shared with the data, and the data itself is never mutated.
+- A `SetTo` on a categorical column reuses its pool (a level or its string is accepted); a `Bool`
+  column stays `Bool`.
+- The compiled formula is evaluated on the changed columns row by row, with the same
+  zero-allocation kernels as the observed data, so everything the formula computes from a changed
+  variable follows it (see *Derived Columns* above).
+- Reference-grid completion uses the same `SetTo` for the model variables a grid does not give.
 
 ## Computation Details
 
 ### Continuous Effects under Scenarios
-- For each row i in the context and variable x, FD constructs centered differences around `x_i` while merging user overrides for other variables.
-- Average per-row effects and per-row gradients across the context (weighted or unweighted) and apply the delta method with the averaged gradient: `se = sqrt(ḡ' Σ ḡ)`.
+- For each row i in the context and variable x, the derivative ∂ŷᵢ/∂x is taken at that row's
+  values with the scenario's overrides applied (automatic differentiation, or finite differences
+  with `backend=:fd`).
+- Average per-row effects and per-row gradients across the context (weighted or unweighted) and apply the delta method with the averaged gradient: `se = sqrt(ḡ' Σ ḡ)`.
 
 ### Categorical/Boolean Effects under Scenarios
-- Build contrasts (baseline or pairwise), merge overrides for non-effect variables into each level scenario, compute per-row differences and gradients, then average as above and apply the delta method.
+- Build contrasts (baseline or pairwise); at each row, with the scenario's overrides applied, compute the difference between the two levels and its gradient, then average as above and apply the delta method.
 
 ### Predictions under Scenarios
-- Construct a single DataScenario per context, evaluate predictions and gradients per-row, average (weighted/unweighted), and apply the delta method with the averaged gradient.
+- Evaluate predictions and gradients per row on the overridden data, average (weighted/unweighted), and apply the delta method with the averaged gradient.
 
 ## Grouping (groups = ...)
 
@@ -394,13 +456,13 @@ All scenarios maintain **publication-grade statistical validity**:
 ### Computational Architecture
 
 **Zero-Allocation Design:**
-- Scenarios use FormulaCompiler's DataScenario system for efficient variable overrides
+- Scenarios override whole columns once per context (`Margins._apply_counterfactuals`); the per-row kernels read them like the data
 - Pre-allocated buffers reused across all scenario evaluations
 - No data mutation (original data remains unchanged)
 - Categorical types safe (no re-pooling required)
 
 **Performance Characteristics:**
-- O(1) memory per scenario (reuse buffers)
+- One new column of n values per overridden variable per scenario; buffers are reused
 - O(n) time per scenario where n = observations
 - Scenarios evaluated sequentially within a call (separate Margins calls may run concurrently; see the caching documentation)
 - FD backend: minimal override sets constructed

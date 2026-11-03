@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -55,6 +55,17 @@ or adjusted predictions at specific profiles (APM/APR).
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
+- `warn=true`: warn (once per call) when a numeric model column looks like an exact transform of
+  a grid or focal variable but is a separate column of the data (see *Derived columns*);
+  `warn=false` silences it.
+
+# Derived columns
+The grid sets variables, and the formula is evaluated at each grid row, so terms the formula
+computes (`x^2`, `log(x)`, `x & z`) follow the grid values. A column computed outside the formula
+(a precomputed `x_sq`, a spline or polynomial basis) is a separate variable: unless the grid sets
+it consistently, it is held at its typical value (or, for a basis, the basis is held fixed). Write
+transforms in the formula. See `population_margins`, *Derived columns*, and the "Derived columns"
+section of the Population Scenarios documentation.
 
 # Offsets
 For a model with an offset (η = x'β + offset), predictions and response-scale effects depend on
@@ -268,7 +279,7 @@ function _profile_result(req::MarginsRequest{:profile})
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -313,6 +324,17 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
+- `warn=true`: warn (once per call) when a numeric model column looks like an exact transform of
+  a grid or focal variable but is a separate column of the data (see *Derived columns*);
+  `warn=false` silences it.
+
+# Derived columns
+The grid sets variables, and the formula is evaluated at each grid row, so terms the formula
+computes (`x^2`, `log(x)`, `x & z`) follow the grid values. A column computed outside the formula
+(a precomputed `x_sq`, a spline or polynomial basis) is a separate variable: unless the grid sets
+it consistently, it is held at its typical value (or, for a basis, the basis is held fixed). Write
+transforms in the formula. See `population_margins`, *Derived columns*, and the "Derived columns"
+section of the Population Scenarios documentation.
 
 # Offsets
 For a model with an offset (η = x'β + offset), predictions and response-scale effects depend on
@@ -367,13 +389,13 @@ function profile_margins(
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov,
-    interval::Symbol=:confidence, df=nothing, offset=nothing, ci_alpha=nothing,
+    interval::Symbol=:confidence, df=nothing, offset=nothing, warn::Bool=true, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
     # Every option and the reference grid are validated, and `vcov` evaluated, once, here.
     # `profile_margins` takes no weights (see "Weights" above).
     req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
-                             contrasts, alpha, vcov, weights=:none, interval, df, offset)
+                             contrasts, alpha, vcov, weights=:none, interval, df, offset, warn)
     return _run(req)
 end
 

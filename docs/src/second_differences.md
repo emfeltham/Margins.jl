@@ -130,8 +130,9 @@ Every second-difference function returns the same columns, in this order, whatev
 | `significant` | `p_value < alpha` (`p_adjusted < alpha` when `p_adjust` is set) |
 
 A local derivative adds `eval_point` and `delta_used` (with `modifier_type = :continuous`,
-`modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the derivative ∂AME/∂modifier), and every
-`profile` variable adds one column. With `p_adjust` set, a `p_adjusted` column follows `p_value`; `significant` uses it, but `ci_lower`/`ci_upper` stay unadjusted. With `include_gradients=true`, a `gradient`
+`modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the derivative ∂AME/∂modifier), `groups=`
+adds one `over_<var>` column per grouping variable, and every `profile` variable adds one column (in that
+order). With `p_adjust` set, a `p_adjusted` column follows `p_value`; `significant` uses it, but `ci_lower`/`ci_upper` stay unadjusted. With `include_gradients=true`, a `gradient`
 column (the vector ∂`second_diff`/∂β, for custom variance calculations) follows the schema columns; as in
 `DataFrame(result)` it is omitted by default, so the table has only scalar columns and exports cleanly. The column names are also available as `Margins.SECOND_DIFFERENCE_COLUMNS`.
 
@@ -148,9 +149,10 @@ second_differences(
     model::RegressionModel, data,
     variables::Union{Symbol, Vector{Symbol}}, modifier::Symbol;
     levels = nothing, at = nothing, modifier_type::Symbol = :auto,
-    profile::NamedTuple = NamedTuple(), delta = :auto,
-    scale::Symbol = :response, contrasts::Symbol = :baseline, vcov = GLM.vcov,
-    weights = :model, alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
+    profile::NamedTuple = NamedTuple(), groups = nothing, delta = :auto,
+    scale::Symbol = :response, measure::Symbol = :effect, contrasts::Symbol = :baseline,
+    contrast = nothing, vcov = GLM.vcov, df = nothing, weights = :model, alpha = 0.05,
+    p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true, backend::Symbol = :ad,
 )
 ```
 
@@ -174,6 +176,11 @@ second_differences(
   `modifier_type=:categorical` for an integer-coded categorical modifier
 - `profile`: other variables to hold fixed, e.g. `(age=40, region="north")`; vector values give one
   profile point each (Cartesian product, counterfactual rather than subgroup) and appear as extra columns
+- `groups`: strata, with the syntax of `population_margins` (`:region`, `[:region, :sex]`, `(:income, 4)`
+  quartiles, `(:income, [cut1, cut2])` thresholds, `:region => :sex` nested). The second difference is
+  computed within each stratum, from that stratum's rows only, and each stratum is a block of rows with
+  `over_<var>` columns (in the order of `groups`, after the schema columns and before the `profile`
+  columns). See [Counterfactual and subgroup second differences](#Counterfactual-and-subgroup-second-differences)
 - `weights`: observation weights as in `population_margins`: `:model` (default; the weights the model
   was fit with, if any, otherwise none), `:none` (or `nothing`) for unweighted, a column name or a vector.
   All average marginal effects are weighted, and `at=:mean`/`:median` use the weighted mean/median of the
@@ -188,15 +195,17 @@ second_differences(
   `population_margins`; the second difference is then the change in that measure across the modifier (the
   `ame_at_level1/2` columns hold the measure). These are defined for continuous focal variables only, so
   request categorical variables in a separate call
-- `scale`: `:response` or `:link`
+- `scale`: `:response` or `:link`; `backend`: `:ad` (default) or `:fd` for the derivatives of continuous
+  focal variables, as in `population_margins`
 - `contrast`: restrict the result to one contrast label, e.g. `"college - hs"` or `"dy/dx"`; default `nothing` keeps every contrast. Applies to every focal variable and must exist under the chosen `contrasts`
 - `contrasts`: `:baseline` (K−1 contrasts per categorical focal variable) or `:pairwise` (K(K−1)/2)
 - `vcov`: covariance estimator, as in `population_margins`: a function of the model (`GLM.vcov`, the
-  default), a matrix (any `AbstractMatrix`, e.g. `Symmetric`), or a CovarianceMatrices estimator (`HC1()`)
+  default), a matrix (any `AbstractMatrix`, e.g. `Symmetric`), or a CovarianceMatrices estimator (`HC1()`).
+  It is evaluated once per call; `df` overrides the t/z degrees of freedom, as in `population_margins`
 - `alpha`: as in `population_margins` (default 0.05). `ci_lower`/`ci_upper` are the (1 − `alpha`)
   interval and `significant` is `p_value < alpha`, so `alpha=0.1` gives 90% intervals
 - `p_adjust`: multiple-testing adjustment over **all rows returned**, i.e. every variable, contrast,
-  level pair, evaluation point and `profile` stratum: `:none` (default), `:bonferroni`, `:holm`
+  level pair, evaluation point, `profile` point and `groups` stratum: `:none` (default), `:bonferroni`, `:holm`
   (family-wise error rate) or `:bh` (Benjamini–Hochberg false-discovery rate). It adds a `p_adjusted`
   column after `p_value` and bases `significant` on it. Rows that are zero by construction (see
   [When the model cannot support the calculation](#When-the-model-cannot-support-the-calculation)) are not
@@ -210,8 +219,13 @@ second_differences(
 
 **Returns**: a `DataFrame` with the [output schema](#Output-Schema).
 
-**Cost**: one `population_margins` call per `profile` stratum for a comparison of levels, and one per
-evaluation point and stratum (two modifier values each) for a local derivative.
+**Cost**: one `population_margins` call per `profile` point for a comparison of levels, and one per
+evaluation point and `profile` point (two modifier values each) for a local derivative; `groups` strata
+are computed in the same call (with `at=:mean`/`:median`, one call per stratum, since each stratum has its
+own evaluation point).
+
+**Errors** are `ArgumentError`s for every invalid input (an unknown column, a bad `alpha`, `at`, `delta`,
+`p_adjust`, `levels` or contrast label, a modifier in `profile` or `groups`), as in `population_margins`.
 
 ### `second_differences(result, variables, modifier; …)`
 
@@ -239,8 +253,12 @@ second_differences(
   freedom (`result.inference`), so they agree with those of the AMEs. For a different estimator,
   compute the result with `vcov=…` (or call the model-level form with `vcov=…`). Margins 2.x took a
   matrix as a fourth argument; that is now an error.
-- The result must vary over the modifier only: if another scenario variable or a `groups=` variable also
-  varies across its rows, the function raises an error instead of pairing rows from different cells.
+- The result must vary over the modifier and, optionally, `groups=` variables. Each combination of the
+  `groups` variables (other than the modifier) is a stratum: the modifier levels are paired within it,
+  and the stratum's rows carry `over_<var>` columns. If another *scenario* variable also varies across the
+  rows, the function raises an error instead of pairing rows from different cells. With
+  `groups=modifier` (and no scenarios) the comparison is across the observed subgroups of the modifier:
+  the subgroup second difference (see below).
 - `modifier_type`: `:auto` classifies two levels as `:binary` (with a warning if they are numeric and not
   0/1, because the result is then the raw AME difference rather than a slope), three or more numeric
   levels as `:continuous`, otherwise `:categorical`.
@@ -262,8 +280,9 @@ removed (calling one raises an `UndefVarError` that names its replacement):
 | `second_differences_table(result, vars, mod, vcov)` | `second_differences(result, vars, mod)` |
 | `second_difference(result, var, mod, vcov)` (a `NamedTuple`) | `second_differences(result, var, mod; include_gradients=true)` (one `DataFrame` row) |
 
-Other differences from 2.x: the `vcov` argument is optional for results from `population_margins` and
-`profile_margins`; output tables no longer include a `gradient` column unless `include_gradients=true`;
+Other differences from 2.x: the result-level form takes no `vcov` (it uses the covariance matrix the
+result was computed with, `result.inference.vcov`; pass `vcov=` to `population_margins` or
+`profile_margins` to change it); output tables no longer include a `gradient` column unless `include_gradients=true`;
 there are new `ci_lower`/`ci_upper` columns; the local derivative is in `second_diff` (it was
 `derivative`); and a numeric modifier's levels are always compared in ascending order. See the CHANGELOG
 for the full list.
@@ -404,9 +423,63 @@ second_differences(model, data, :income, :age;
 Local derivatives hold the `profile` variables fixed while the modifier moves by ±δ, so each row is a
 statement about that profile. Discrete comparisons accept `profile` too, which runs the comparison once
 per profile point. A profile value is a counterfactual (everyone's `female` is set to 0, then to 1), not a
-subgroup analysis; in a nonlinear model the two differ. For subgroups, compute the effects with
-`population_margins(…; groups=…)` and pass the result to `second_differences`. `profile` must not contain
-the modifier.
+subgroup analysis; in a nonlinear model the two differ. For subgroups use `groups=` (next section).
+`profile` must not contain the modifier.
+
+### Counterfactual and subgroup second differences
+
+Two questions sound alike and have different answers in a nonlinear model:
+
+1. **Counterfactual**: how would the effect of `x` change if *everyone* had `treated = 1` rather than
+   `treated = 0`? `second_differences(model, data, :x, :treated)` sets every row to each level and
+   compares the two AMEs; the other covariates keep their observed values, so the comparison is over the
+   same people.
+2. **Subgroup**: is the effect of `x` different *among the treated* than *among the untreated*? That
+   compares two different sets of rows, which also differ in their other covariates.
+
+`groups=` makes strata for the first kind: the counterfactual second difference *within* each stratum.
+
+```julia
+m = glm(@formula(y ~ x * treated + x * age + region), df, Binomial(), LogitLink())
+
+# Counterfactual, whole sample: everyone untreated vs everyone treated
+second_differences(m, df, :x, :treated)
+
+# The same counterfactual within each region: one row per region, with an over_region column
+second_differences(m, df, :x, :treated; groups = :region)
+second_differences(m, df, :x, :treated; groups = [:region, (:age, 4)])  # region × age quartile
+
+# A continuous modifier: the average cross-derivative over each region's own rows
+second_differences(m, df, :x, :age; groups = :region)
+
+# Subgroup comparison across the observed treatment groups (different rows): the result-level form
+r = population_margins(m, df; vars = [:x], groups = :treated)
+second_differences(r, :x, :treated)
+```
+
+What each stratum's row means:
+
+| Call | Within each stratum |
+|:--|:--|
+| discrete modifier, or `levels=[…]` | every row of the stratum set to each level; difference (or slope) of the stratum's AMEs |
+| `at = :observed` (default for a continuous modifier) | every row's modifier shifted by ±δ: the average of ∂²ŷᵢ/∂x∂m over the stratum's rows |
+| `at = :mean` / `:median` | the derivative at the stratum's own (weighted) mean / median of the modifier (`eval_point` differs by stratum), as Stata's `margins, over()` computes `at()` statistics within each group |
+| `at = <number(s)>` or a `NamedTuple` | the derivative at that point, the same point in every stratum |
+| `profile = (…)` | the profile variables set for every row of the stratum; one block per profile point |
+
+A stratum's row is exactly what the same call returns on that stratum's rows alone with the same
+`vcov` (the averaging is within the stratum). The step δ is the call's (1% of the modifier's SD over all
+rows, or `delta=`), the same in every stratum: it is a numerical setting, not part of the estimand. All
+strata come from one `vcov` evaluation and their gradients are with respect to the same β, so with
+`include_gradients=true` the covariance of two strata's second differences is `g₁' Σ g₂`; for example,
+whether the interaction differs between two regions has standard error `sqrt((g₁ - g₂)' Σ (g₁ - g₂))`.
+
+Rules:
+- the modifier cannot be in `groups`: a stratum is selected by the observed modifier, which the
+  calculation then overwrites. The error points to the result-level form above for the subgroup comparison;
+- a `profile` variable (or a held variable of an `at` NamedTuple) cannot be in `groups`, for the same reason;
+- a focal variable cannot be in `groups` unless it is binned (`(:x, 4)`), as in `population_margins`;
+- empty strata are skipped. Strata appear in the order `population_margins` reports them.
 
 **Derivative at a point or averaged over the data.** `at=:mean`, `at=:median`, a number or a vector sets
 the modifier to that value *for everyone* and differentiates the resulting AME: the answer is the
@@ -570,8 +643,15 @@ the data, the counterfactual extrapolates the fitted model, and in a nonlinear m
 badly wrong. `second_differences(model, data, …)` warns and lists the values. (A precomputed result
 carries no data, so this check applies to the model-level form only.)
 
-Both warnings are suppressed by `warn=false`. To find the affected rows programmatically, use
-`isnan.(sd.p_value)`.
+**Derived columns.** The modifier is changed by re-evaluating the formula, so a modifier transform
+written in the formula (`y ~ x * m + m^2`) follows it, while a precomputed column (`m2 = m.^2` in the
+data, `y ~ x * m + m2`) is held fixed, which answers a different question ("change `m`, hold `m²`
+fixed"). The model-level form warns when a numeric model column looks like such a transform of the
+modifier, a `profile` variable or a focal variable. Write the transform in the formula; see
+[Derived Columns](population_scenarios.md#Derived-Columns:-the-Formula-Defines-What-Changes).
+
+All three warnings are suppressed by `warn=false`. To find the zero-by-construction rows
+programmatically, use `isnan.(sd.p_value)`.
 
 ## Integration Examples
 
@@ -617,7 +697,7 @@ CSV.write("significant_interactions.csv", significant)
 **Modifier not found, or also a focal variable**:
 ```julia
 second_differences(model, data, :x, :nope)
-# → Error: "Modifier variable :nope not found in data. Available columns: …"
+# → ArgumentError: "Modifier variable :nope not found in data. Available columns: …"
 ```
 The modifier cannot also be in `variables`; `population_margins` rejects a variable that is both
 a focal variable and a scenario variable.
@@ -625,15 +705,15 @@ a focal variable and a scenario variable.
 **`at` and `levels` together, or `at` with a categorical modifier**:
 ```julia
 second_differences(model, data, :x, :age; at=40, levels=[30, 50])
-# → Error: Give either `levels` (compare these modifier values) or `at` (local derivative), not both.
+# → ArgumentError: Give either `levels` (compare these modifier values) or `at` (local derivative), not both.
 second_differences(model, data, :x, :region; at=1)
-# → Error: `at` (local derivative) applies to a continuous modifier; :region is treated as categorical. …
+# → ArgumentError: `at` (local derivative) applies to a continuous modifier; :region is treated as categorical. …
 ```
 
 **Fewer than two modifier levels**:
 ```julia
 second_differences(model, data, :x, :treated; levels=[1])
-# → Error: "Need at least 2 modifier levels to compare, got 1."
+# → ArgumentError: "Need at least 2 modifier levels to compare, got 1."
 ```
 For a precomputed result with a single scenario level the message is
 `Need at least 2 modifier levels, found 1 for variable x with contrast dy/dx`.
@@ -643,16 +723,17 @@ For a precomputed result with a single scenario level the message is
 ames = population_margins(model, data; vars=[:x],
                          scenarios=(treated=[0,1], female=[0,1]), type=:effects)
 second_differences(ames, :x, :treated)
-# → Error: "The effects result varies over scenario variable :female as well as the modifier :treated …"
+# → ArgumentError: "The effects result varies over scenario variable :female as well as the modifier :treated …"
 ```
 Compute the result over the modifier alone (one call per value of the other variable), or use
-`second_differences(model, data, …; profile=(female=[0, 1],))`, which does this for you. The same
-applies to results computed with `groups=`.
+`second_differences(model, data, …; profile=(female=[0, 1],))`, which does this for you. A result
+computed with `groups=` is different: its group variables define strata, and the second differences are
+taken within each.
 
 **Variable not in the result** (precomputed results):
 ```julia
 second_differences(ames, :z, :treated)
-# → Error: "Variable :z not found in the effects result (variables: x). Include it in `vars` …"
+# → ArgumentError: "Variable :z not found in the effects result (variables: x). Include it in `vars` …"
 ```
 
 **A covariance matrix passed to a precomputed result**:

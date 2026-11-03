@@ -84,7 +84,7 @@ src/
 ├── second_differences/               # Second differences (interaction effects)
 │   ├── model_interface.jl            # second_differences(model, data, vars, modifier; ...) entry point
 │   ├── contrasts.jl                  # second_differences(result, ...) and its engines (_pairwise, _all_contrasts, _second_difference)
-│   ├── at_point.jl                   # _second_differences_local() (local derivative engine, finite differences)
+│   ├── at_point.jl                   # _local_derivatives() (local derivative engine, finite differences)
 │   └── utilities.jl                  # Output schema, EffectIndex / _modifier_rows (row selection), vcov defaults
 └── features/                          # Advanced features
     └── averaging.jl                   # Profile averaging with delta-method SEs
@@ -214,19 +214,23 @@ Profile margins are **O(1) with respect to dataset size** — they evaluate only
 ### Second Differences Flow
 
 ```
-second_differences(model, data, :x, :z; levels=, at=, profile=, vcov=)     # model_interface.jl
+second_differences(model, data, :x, :z; levels=, at=, profile=, groups=, vcov=)  # model_interface.jl
     │  modifier type from the data (discrete vs continuous); ONE request for the call
-    │  (_normalize_request with scenario_vars = modifier ∪ profile: validated once, Σ once)
+    │  (_normalize_request with scenario_vars = modifier ∪ profile and `groups`: validated once,
+    │  Σ once; alpha, df and Σ of every row come from it)
     ├─ discrete modifier, or continuous with `levels`:
-    │    _run(_with_scenarios(req, (z=levels, profile_point...)))   # per profile stratum
-    │        → EffectsResult (AMEs + gradients + inference: Σ, df, alpha)
+    │    _run(_with_scenarios(req, (z=levels, profile_point...)))   # per profile point; all
+    │        → EffectsResult (AMEs + gradients + inference: Σ, df, alpha)   # groups strata at once
+    │            → _result_strata (one sub-result per groups stratum, over_ values)
     │            → _effect_index (the one place string labels are read) → _modifier_rows
-    │              (select rows; reject other varying scenario/group columns;
+    │              (select rows; reject other varying scenario columns;
     │              order numeric levels) → pairwise differences, delta-method SE from gradient
     │              differences: sqrt((g₂-g₁)' Σ (g₂-g₁)); Σ and df from result.inference
     └─ continuous modifier (default):
-         _local_derivatives(req, ...)  → AMEs at at±δ (_with_scenarios; at=:observed shifts the
-         modifier column, _with_data) → (AME₊ - AME₋)/2δ via the pairwise engine
+         _local_derivatives(req, ...)  → AMEs at at±δ (_with_scenarios; at=:observed is two
+         Shift(±δ) contexts; at=:mean/:median with groups: one request per stratum,
+         _with_group_specs, at the stratum's own point) → (AME₊ - AME₋)/2δ per stratum via the
+         pairwise engine
 ```
 
 The result-based method (`second_differences(result, …)`) exposes the middle step for users who already hold an `EffectsResult`.

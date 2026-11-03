@@ -79,7 +79,7 @@ using Random
     end
 
     @testset "errors" begin
-        @test_throws ErrorException second_differences(lg, df, :x, :t; at = :observed)   # 0/1 modifier is discrete
-        @test_throws ErrorException second_differences(lg, df, :x, :w; at = :nonsense)
+        @test_throws ArgumentError second_differences(lg, df, :x, :t; at = :observed)   # 0/1 modifier is discrete
+        @test_throws ArgumentError second_differences(lg, df, :x, :w; at = :nonsense)
     end
 end

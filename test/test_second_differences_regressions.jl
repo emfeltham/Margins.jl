@@ -22,14 +22,14 @@ using Random
 
     @testset "several scenario variables are rejected, not mixed" begin
         a = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0], z=[0.0, 1.0]), type=:effects)
-        @test_throws ErrorException Margins._second_differences_pairwise(a, :x, :m)
-        @test_throws ErrorException Margins._second_difference(a, :x, :m)
-        @test_throws ErrorException second_differences(a, :x, :m)
+        @test_throws ArgumentError Margins._second_differences_pairwise(a, :x, :m)
+        @test_throws ArgumentError Margins._second_difference(a, :x, :m)
+        @test_throws ArgumentError second_differences(a, :x, :m)
     end
 
     @testset "grouped results are rejected, not mixed" begin
         a = population_margins(model, df; vars=:x, groups=:g, scenarios=(m=[0.0, 1.0],), type=:effects)
-        @test_throws ErrorException Margins._second_differences_pairwise(a, :x, :m)
+        @test_throws ArgumentError Margins._second_differences_pairwise(a, :x, :m)
     end
 
     @testset "numeric levels are ordered ascending in every function" begin
@@ -55,15 +55,15 @@ using Random
     @testset "missing contrast / variable give specific errors" begin
         c = population_margins(model, df; vars=:x, scenarios=(m=[0.0, 1.0],), type=:effects)
         err = try Margins._second_differences_pairwise(c, :x, :m; contrast="nope"); nothing catch e; e end
-        @test err isa ErrorException && occursin("Contrasts available: dy/dx", err.msg)
+        @test err isa ArgumentError && occursin("Contrasts available: dy/dx", err.msg)
         err = try Margins._second_differences_pairwise(c, :z, :m); nothing catch e; e end
-        @test err isa ErrorException && occursin("not found in the effects result", err.msg)
+        @test err isa ArgumentError && occursin("not found in the effects result", err.msg)
     end
 
     @testset "small delta near |at| ≈ 0.5 no longer raises a spurious error" begin
-        r = Margins._second_differences_local(model, df, :x, :m, Σ; at=0.5, delta=1e-9)
+        r = second_differences(model, df, :x, :m; vcov=Σ, modifier_type=:continuous, at=0.5, delta=1e-9)
         @test all(isfinite, r.second_diff)
-        r2 = Margins._second_differences_local(model, df, :x, :m, Σ; at=1.0, delta=1e-9)
+        r2 = second_differences(model, df, :x, :m; vcov=Σ, modifier_type=:continuous, at=1.0, delta=1e-9)
         @test all(isfinite, r2.second_diff)
     end
 
@@ -95,9 +95,9 @@ using Random
     end
 
     @testset "local derivative accepts Symmetric and function vcov" begin
-        r1 = Margins._second_differences_local(model, df, :x, :m, Σ; at=0.5)
-        r2 = Margins._second_differences_local(model, df, :x, :m, Symmetric(Σ); at=0.5)
-        r3 = Margins._second_differences_local(model, df, :x, :m, m -> Symmetric(vcov(m)); at=0.5)
+        r1 = second_differences(model, df, :x, :m; vcov=Σ, modifier_type=:continuous, at=0.5)
+        r2 = second_differences(model, df, :x, :m; vcov=Symmetric(Σ), modifier_type=:continuous, at=0.5)
+        r3 = second_differences(model, df, :x, :m; vcov=m -> Symmetric(vcov(m)), modifier_type=:continuous, at=0.5)
         @test r1.second_diff ≈ r2.second_diff ≈ r3.second_diff
         @test r1.se ≈ r2.se ≈ r3.se
     end
@@ -124,9 +124,9 @@ using Random
         @test Margins._variable_contrasts(idx, :x) == ["dy/dx"]
         @test isempty(Margins._variable_rows(idx, :nope))
         err = try Margins._require_variable(idx, :nope); nothing catch e; e end
-        @test err isa ErrorException && occursin("variables: x", err.msg)
+        @test err isa ArgumentError && occursin("variables: x", err.msg)
         err = try Margins._second_differences_pairwise(a, :x, :zzz); nothing catch e; e end
-        @test err isa ErrorException && occursin("does not have modifier :zzz", err.msg)
+        @test err isa ArgumentError && occursin("does not have modifier :zzz", err.msg)
 
         # the old "derivative" spelling in a result is matched by the canonical "dy/dx" query
         old = Margins.EffectsResult(a.estimates, a.standard_errors, a.variables,
@@ -150,6 +150,6 @@ using Random
         gidx = Margins._effect_index(g)
         @test any(==("group"), values(gidx.sources))
         err = try Margins._second_differences_pairwise(g, :x, :m); nothing catch e; e end
-        @test err isa ErrorException && occursin("group variable", err.msg)
+        @test err isa ArgumentError && occursin("group variable", err.msg)
     end
 end

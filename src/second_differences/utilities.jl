@@ -114,8 +114,8 @@ Columns of every second-difference DataFrame returned by `second_differences`, i
 
 A local derivative (a continuous modifier with `at`) returns the same columns, with
 `modifier_type = :continuous`, `modifier_level1/2 = eval_point ∓ delta_used` and `second_diff` the
-derivative ∂AME/∂modifier, followed by `eval_point`, `delta_used` and one column per `profile`
-variable. With `p_adjust` set, a `p_adjusted` column follows `p_value`. With `include_gradients=true`, a `gradient`
+derivative ∂AME/∂modifier, followed by `eval_point`, `delta_used`, one `over_<var>` column per
+`groups` variable and one column per `profile` variable. With `p_adjust` set, a `p_adjusted` column follows `p_value`. With `include_gradients=true`, a `gradient`
 column (the vector ∂`second_diff`/∂β, for custom variance calculations) follows the schema columns; it is
 omitted by default, as in `DataFrame(result)`.
 
@@ -188,13 +188,13 @@ const P_ADJUST_METHODS = (:none, :bonferroni, :holm, :bh)
 # an explicit value, else the one the result was computed with.
 function _resolve_alpha(alpha, ame_result)::Float64
     a = isnothing(alpha) ? ame_result.inference.alpha : Float64(alpha)
-    0 < a < 1 || error("alpha must be in (0, 1), got $a")
+    0 < a < 1 || throw(ArgumentError("alpha must be in (0, 1), got $a"))
     return a
 end
 
 function _check_p_adjust(method::Symbol)
     method in P_ADJUST_METHODS ||
-        error("p_adjust must be one of $(join(repr.(P_ADJUST_METHODS), ", ")), got $(repr(method))")
+        throw(ArgumentError("p_adjust must be one of $(join(repr.(P_ADJUST_METHODS), ", ")), got $(repr(method))"))
     return method
 end
 
@@ -369,17 +369,17 @@ _variable_contrasts(idx::EffectIndex, variable::Symbol) =
 function _require_variable(idx::EffectIndex, variable::Symbol)
     haskey(idx.by_variable, variable) && return nothing
     present = unique(idx.variables)
-    error("Variable :$variable not found in the effects result (variables: $(join(present, ", "))). " *
-          "Include it in `vars` of the population_margins/profile_margins call.")
+    throw(ArgumentError("Variable :$variable not found in the effects result (variables: " *
+          "$(join(present, ", "))). Include it in `vars` of the population_margins/profile_margins call."))
 end
 
 # Error unless the modifier is a scenario/profile column of the result
 function _require_modifier(idx::EffectIndex, modifier::Symbol)
     haskey(idx.cells, modifier) && return nothing
     have = isempty(idx.cells) ? "none" : join(keys(idx.cells), ", ")
-    error("The effects result does not have modifier :$modifier among its scenario/profile columns " *
-          "(it has: $have). Compute it with `scenarios=($modifier=levels,)`, or with a reference grid " *
-          "that varies :$modifier.")
+    throw(ArgumentError("The effects result does not have modifier :$modifier among its scenario/profile " *
+          "columns (it has: $have). Compute it with `scenarios=($modifier=levels,)`, or with a reference " *
+          "grid that varies :$modifier."))
 end
 
 """
@@ -402,15 +402,16 @@ function _modifier_rows(idx::EffectIndex, variable::Symbol, modifier::Symbol, co
     for k in keys(idx.cells)
         k == modifier && continue
         if length(unique(idx.cells[k][rows])) > 1
-            error("The effects result varies over $(idx.sources[k]) variable :$k as well as the modifier " *
-                  ":$modifier, so its rows cannot be paired as modifier levels. Compute the " *
-                  "result over :$modifier alone, or subset the result to one :$k value first.")
+            throw(ArgumentError("The effects result varies over $(idx.sources[k]) variable :$k as well " *
+                  "as the modifier :$modifier, so its rows cannot be paired as modifier levels. Compute " *
+                  "the result over :$modifier alone (use `groups=` for strata: second differences are " *
+                  "taken within each `groups` stratum), or subset the result to one :$k value first."))
         end
     end
 
     if length(unique(levels)) != length(levels)
-        error("Modifier :$modifier repeats a level among the rows for variable :$variable " *
-              "(contrast '$label'); expected one row per modifier level.")
+        throw(ArgumentError("Modifier :$modifier repeats a level among the rows for variable :$variable " *
+              "(contrast '$label'); expected one row per modifier level."))
     end
 
     if all(x -> x isa Number, levels)
@@ -421,6 +422,40 @@ function _modifier_rows(idx::EffectIndex, variable::Symbol, modifier::Symbol, co
 end
 _modifier_rows(r::EffectsResult, variable::Symbol, modifier::Symbol, contrast::AbstractString) =
     _modifier_rows(_effect_index(r), variable, modifier, contrast)
+
+"""
+    _result_strata(r, modifier) -> Vector{Tuple{EffectsResult, NamedTuple}}
+
+The `groups=` strata of an effects result: one `(sub_result, over)` pair per distinct
+combination of its group context columns other than `modifier`, in order of first appearance
+(the order of the call's `groups`, as population_margins reports them). `sub_result` holds that
+stratum's rows (same covariance, df and alpha) and `over` its values as `over_<var>` entries.
+A result without group columns (or whose only group column is the modifier) is one stratum,
+itself, with `over = (;)`.
+
+Second differences pair modifier levels within each stratum, so a result computed with
+`groups=` gives one second difference per stratum. Their gradients are with respect to the
+same β, so the joint covariance of any two strata's second differences is g₁'Σg₂
+(`include_gradients=true`).
+"""
+function _result_strata(r::EffectsResult, modifier::Symbol)
+    ctx = r.context
+    isnothing(ctx) && return [(r, NamedTuple())]
+    gvars = Symbol[k for (k, kind) in zip(keys(ctx), ctx.kinds) if kind === :group && k != modifier]
+    isempty(gvars) && return [(r, NamedTuple())]
+    n = length(r.estimates)
+    cell = [Tuple(ctx[g][i] for g in gvars) for i in 1:n]
+    names_ = Tuple(_group_column_name(g) for g in gvars)
+    return [(_subset_result(r, findall(==(c), cell)), NamedTuple{names_}(c)) for c in unique(cell)]
+end
+
+# The rows `rows` of an effects result, with the same inference and metadata
+function _subset_result(r::EffectsResult, rows::Vector{Int})
+    ctx = r.context
+    sub_ctx = isnothing(ctx) ? nothing : ResultContext(map(c -> c[rows], ctx.columns), copy(ctx.kinds))
+    return EffectsResult(r.estimates[rows], r.standard_errors[rows], r.variables[rows], r.terms[rows],
+                         sub_ctx, r.gradients[rows, :], r.inference, r.metadata)
+end
 
 # ============================================================================
 # The covariance matrix is the result's
@@ -446,8 +481,8 @@ end
 # Second differences compare marginal *effects*; a PredictionsResult (type=:predictions) holds
 # predicted values, so point to the right call.
 function _predictions_error(fname)
-    error("$fname compares marginal effects across modifier levels, but this is a PredictionsResult " *
+    throw(ArgumentError("$fname compares marginal effects across modifier levels, but this is a PredictionsResult " *
           "(type=:predictions). Recompute with type=:effects (population_margins or profile_margins), " *
-          "or call second_differences(model, data, variables, modifier), which does it for you.")
+          "or call second_differences(model, data, variables, modifier), which does it for you."))
 end
 second_differences(::PredictionsResult, args...; kwargs...) = _predictions_error("second_differences")

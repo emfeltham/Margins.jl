@@ -1722,15 +1722,9 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     # Then, add typical values for missing model variables
     for (var, typical_val) in typical_values
         if !haskey(complete_cols, var)
-            # This variable is missing from reference grid, add typical values
-            if typical_val isa Real && !(typical_val isa Bool)
-                complete_cols[var] = fill(Float64(typical_val), n_rows)
-            elseif typical_val isa Bool
-                complete_cols[var] = fill(typical_val, n_rows)
-            else
-                # CategoricalMixture or other types
-                complete_cols[var] = fill(typical_val, n_rows)
-            end
+            # This variable is missing from reference grid: set it to its typical value
+            # (a real number as Float64; a Bool, CategoricalMixture or level as is)
+            complete_cols[var] = _counterfactual_column(SetTo(typical_val), n_rows)
         end
     end
     

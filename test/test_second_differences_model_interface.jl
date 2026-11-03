@@ -167,9 +167,9 @@ using Distributions: TDist, Normal, quantile
         @test second_differences(a1, :x, :t).ci_lower[1] ≈ narrow.ci_lower[1]            # inherits the result's alpha
         @test second_differences(a1, :x, :t; alpha=0.05).ci_lower[1] ≈ sd.ci_lower[1]   # explicit alpha wins
         @test Margins._second_difference(a1, :x, :t).ci_lower ≈ narrow.ci_lower[1]
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; alpha=0.0)
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; alpha=1.5)
-        @test_throws ErrorException second_differences(lmod, df, :x, :w; alpha=2)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; alpha=0.0)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; alpha=1.5)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; alpha=2)
     end
 
     @testset "multiple-testing adjustment" begin
@@ -180,7 +180,7 @@ using Distributions: TDist, Normal, quantile
         @test Margins._adjust_pvalues(p, :bh) ≈ [0.02, 0.04, 0.04, 0.02]
         @test Margins._adjust_pvalues([0.5, 0.9], :bonferroni) == [1.0, 1.0]
         @test Margins._adjust_pvalues(Float64[], :holm) == Float64[]
-        @test_throws ErrorException Margins._adjust_pvalues(p, :nope)
+        @test_throws ArgumentError Margins._adjust_pvalues(p, :nope)
 
         raw = second_differences(lmod, df, [:x, :z], :g; warn=false)
         @test :p_adjusted ∉ propertynames(raw)
@@ -212,8 +212,8 @@ using Distributions: TDist, Normal, quantile
               Margins._adjust_pvalues(rl.p_value[rt], :holm)
         pw = Margins._second_differences_pairwise(ames, :x, :g; p_adjust=:bonferroni)
         @test pw.p_adjusted ≈ min.(1, 3 .* pw.p_value)
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; p_adjust=:nope)
-        @test_throws ErrorException Margins._second_differences_local(lmod, df, :x, :w, vcov(lmod); p_adjust=:nope)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; p_adjust=:nope)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; vcov=vcov(lmod), modifier_type=:continuous, p_adjust=:nope)
     end
 
     @testset "gradients are opt-in, as in DataFrame(result)" begin
@@ -255,8 +255,8 @@ using Distributions: TDist, Normal, quantile
         @test :gradient in propertynames(Margins._second_differences_all_contrasts(ames, :x, :g; include_gradients=true))
         adj = second_differences(ames, [:x, :z], :g; p_adjust=:holm, include_gradients=true, warn=false)
         @test :gradient in propertynames(adj) && :p_adjusted in propertynames(adj)
-        @test :gradient ∉ propertynames(Margins._second_differences_local(lmod, df, :x, :w, V))
-        @test :gradient in propertynames(Margins._second_differences_local(lmod, df, :x, :w, V; include_gradients=true))
+        @test :gradient ∉ propertynames(second_differences(lmod, df, :x, :w; vcov=V, modifier_type=:continuous))
+        @test :gradient in propertynames(second_differences(lmod, df, :x, :w; vcov=V, modifier_type=:continuous, include_gradients=true))
         # the single-row API keeps it
         row = Margins._second_difference(population_margins(lmod, df; vars=:x, scenarios=(t=[0, 1],), type=:effects), :x, :t)
         @test row.gradient isa AbstractVector
@@ -285,16 +285,16 @@ using Distributions: TDist, Normal, quantile
         @test second_differences(pr, :x, :t).df[1] == dof_residual(lmod)   # D1: t with a robust vcov
         # a grid that varies another variable too is rejected, not mixed
         p2 = profile_margins(lmod, df, cartesian_grid(t=[0, 1], g=["a", "b"]); type=:effects, vars=[:x])
-        @test_throws ErrorException second_differences(p2, :x, :t)
+        @test_throws ArgumentError second_differences(p2, :x, :t)
         # predictions results get a pointer, not a MethodError
         pp = profile_margins(lmod, df, grid; type=:predictions)
         ap = population_margins(lmod, df; scenarios=(t=[0, 1],), type=:predictions)
         for r in (pp, ap)
             err = try second_differences(r, :x, :t); nothing catch e; e end
-            @test err isa ErrorException && occursin("type=:effects", err.msg)
+            @test err isa ArgumentError && occursin("type=:effects", err.msg)
         end
         err = try second_differences(ap, [:x], :t); nothing catch e; e end
-        @test err isa ErrorException && occursin("PredictionsResult", err.msg)
+        @test err isa ArgumentError && occursin("PredictionsResult", err.msg)
     end
 
     @testset "logit: model-level equals the hand-built result" begin
@@ -309,11 +309,11 @@ using Distributions: TDist, Normal, quantile
     end
 
     @testset "errors" begin
-        @test_throws ErrorException second_differences(lmod, df, :x, :nope)
-        @test_throws ErrorException second_differences(lmod, df, :x, :w; at=0.0, levels=[0.0, 1.0])
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; at=0.5)
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; modifier_type=:nonsense)
-        @test_throws ErrorException second_differences(lmod, df, :x, :t; levels=[1])
+        @test_throws ArgumentError second_differences(lmod, df, :x, :nope)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; at=0.0, levels=[0.0, 1.0])
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; at=0.5)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; modifier_type=:nonsense)
+        @test_throws ArgumentError second_differences(lmod, df, :x, :t; levels=[1])
         @test_throws Exception second_differences(lmod, df, :t, :t)
     end
 end

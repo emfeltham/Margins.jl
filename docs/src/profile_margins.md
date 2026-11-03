@@ -199,6 +199,12 @@ scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 pro
 - **Categorical effects**: Use baseline contrasts vs reference levels at each profile
 - **Profile interpretation**: More concrete than population averages, ideal for policy communication
 - **Computational efficiency**: Single compilation per analysis, reused across all profiles
+- **Derived columns**: the formula is evaluated at each grid row, so transforms written in the formula
+  (`x^2`, `log(x)`, `x & z`) follow the grid values, while a column precomputed outside the formula
+  (`x_sq`, a spline or polynomial basis) is held at its typical value unless the grid sets it.
+  `profile_margins` warns when a model column looks like such a transform of a grid or focal variable
+  (`warn=false` silences it); see
+  [Derived Columns](population_scenarios.md#Derived-Columns:-the-Formula-Defines-What-Changes).
 
 ## Output Structure and Result Multiplicity
 

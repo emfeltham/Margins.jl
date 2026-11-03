@@ -79,7 +79,7 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
         @test_throws ArgumentError profile_margins(m, d, means_grid(d); vars=[:x], contrasts=:foo)
         @test_throws ArgumentError second_differences(m, d, :x, :t; contrasts=:foo)    # was silently accepted
         @test_throws ArgumentError second_differences(m, d, :x, :w; contrasts=:foo)    # was an ErrorException
-        @test_throws ArgumentError Margins._second_differences_local(m, d, :x, :w, vcov(m); contrasts=:foo)
+        @test_throws ArgumentError second_differences(m, d, :x, :w; vcov=vcov(m), modifier_type=:continuous, contrasts=:foo)
         msg = try population_margins(m, d; vars=[:x], contrasts=:foo); "" catch e; sprint(showerror, e) end
         @test occursin("contrasts must be :baseline or :pairwise, got :foo", msg)
     end
@@ -95,7 +95,7 @@ using DataFrames, CategoricalArrays, GLM, StatsModels, Tables
                 @test isequal(second_differences(model, rt, :x, mod; warn=false, kw...), ref)
             end
         end
-        @test_throws ErrorException second_differences(m, nt, :x, :nope)
+        @test_throws ArgumentError second_differences(m, nt, :x, :nope)
         # profile_margins too
         pnt = profile_margins(m, nt, means_grid(d); vars=[:x])
         pdf = profile_margins(m, d, means_grid(d); vars=[:x])

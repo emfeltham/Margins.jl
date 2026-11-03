@@ -51,8 +51,8 @@ using Random
     end
 
     @testset "profile must not contain the modifier" begin
-        @test_throws ErrorException second_differences(lmod, df, :x, :w; profile = (w = 1.0,))
-        @test_throws ErrorException second_differences(lmod, df, :x, :z; profile = (z = true,))
+        @test_throws ArgumentError second_differences(lmod, df, :x, :w; profile = (w = 1.0,))
+        @test_throws ArgumentError second_differences(lmod, df, :x, :z; profile = (z = true,))
         err = try second_differences(lmod, df, :x, :w; profile = (w = 1.0,)) catch e; sprint(showerror, e) end
         @test occursin("contains the modifier", err)
     end
@@ -139,15 +139,15 @@ using Random
         @test second_differences(m, d, :x, :z; contrast = "dy/dx").contrast == ["dy/dx"]
         @test second_differences(m, d, :x, :z; contrast = "derivative").contrast == ["dy/dx"]
         @test second_differences(m, d, :x, :w; contrast = "dy/dx", at = 0.0).contrast == ["dy/dx"]
-        @test_throws ErrorException second_differences(m, d, :cg, :z; contrast = "c - b", warn = false)  # not built under :baseline
-        @test_throws ErrorException second_differences(m, d, :x, :w; contrast = "b - a")
+        @test_throws ArgumentError second_differences(m, d, :cg, :z; contrast = "c - b", warn = false)  # not built under :baseline
+        @test_throws ArgumentError second_differences(m, d, :x, :w; contrast = "b - a")
         @test second_differences(m, d, :cg, :z; contrast = "c - b", contrasts = :pairwise, warn = false).contrast == ["c - b"]
         # result-level form
         ames = population_margins(m, d; vars = :cg, scenarios = (z = [false, true],), type = :effects)
         r = second_differences(ames, :cg, :z; warn = false)
         @test nrow(r) == 2
         @test second_differences(ames, :cg, :z; contrast = "c - a", warn = false).contrast == ["c - a"]
-        @test_throws ErrorException second_differences(ames, :cg, :z; contrast = "dy/dx", warn = false)
+        @test_throws ArgumentError second_differences(ames, :cg, :z; contrast = "dy/dx", warn = false)
         err = try second_differences(ames, :cg, :z; all_contrasts = false) catch e; sprint(showerror, e) end
         @test occursin("all_contrasts", err) && occursin("contrast=", err)
     end
