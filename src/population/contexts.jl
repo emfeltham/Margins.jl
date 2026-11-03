@@ -128,7 +128,7 @@ function _population_margins_with_contexts(engine, req::MarginsRequest)
     G = isempty(gradients_list) ? Matrix{Float64}(undef, 0, length(engine.β)) : vcat(gradients_list...)
 
     # Build metadata
-    metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)),
+    metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=_n_used(1:length(first(data_nt)), weights),
                               model_type=typeof(engine.model), has_contexts=true)
 
     # Store scenarios and groups variable information for Context column
@@ -365,7 +365,7 @@ function _compute_all_continuous_context_effects_batch(
 ) where L
 
     n_vars = length(continuous_vars_to_compute)
-    n_obs = length(context_indices)
+    n_obs = _n_used(context_indices, weights)
     n_params = length(engine.β)
 
     # Pre-allocate accumulation buffers for ALL variables
@@ -476,7 +476,7 @@ function _compute_categorical_context_effect(
         contrast = ["$(pair.level2) - $(pair.level1)" for pair in contrast_pairs],
         estimate = ames,
         se = ses,
-        n = fill(length(context_indices), n_pairs)
+        n = fill(_n_used(context_indices, weights), n_pairs)
     )
 
     return (results, gradients_matrix)
@@ -532,7 +532,7 @@ function _compute_population_prediction_in_context(
     result_df = DataFrame(
         estimate = [pred_val],
         se = [se],
-        n = [length(context_indices)]
+        n = [_n_used(context_indices, weights)]
     )
 
     return (result_df, reshape(gβ_avg, 1, :))
@@ -550,7 +550,8 @@ produce a full Cartesian expansion across all supplied values.
 - Accepts a `NamedTuple` where each field is either a scalar or a collection.
 - Accepts a `Tuple` of `Pair{Symbol, Any}` for alternative syntax.
 - Scalars are promoted to length-1 vectors to unify the expansion logic.
-- The return order matches `Iterators.product`, guaranteeing deterministic ordering.
+- The first variable varies slowest and the last fastest (`_nested_product`), each in the
+  order its values were given.
 """
 function _parse_at_specification(scenarios)
     # Convert to NamedTuple for uniform processing
@@ -564,8 +565,9 @@ function _parse_at_specification(scenarios)
         end for name in var_names
     ]
 
+    # The first variable varies slowest (`_nested_product`, as for groups and reference grids)
     contexts = Vector{Dict{Symbol, Any}}()
-    for combo in Iterators.product(var_values...)
+    for combo in _nested_product(var_values)
         push!(contexts, Dict(zip(var_names, combo)))
     end
     return contexts
@@ -657,70 +659,39 @@ function _parse_groups_specification(groups, data_nt; weights=nothing)
     error("Invalid groups specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, Int), (Symbol, Vector), or outer => inner")
 end
 
-function _parse_over_specification(over, data_nt)
-    if over isa NamedTuple
-        # Enhanced flexible syntax
-        contexts = []
-
-        for (var, vals) in pairs(over)
-            if isnothing(vals)
-                # Unspecified - must be categorical, use all levels
-                if _is_continuous_variable(data_nt[var])
-                    error("Continuous variable $var in over() must specify values")
-                end
-                contexts = isempty(contexts) ? [Dict(var => v) for v in unique(data_nt[var])] :
-                          [merge(ctx, Dict(var => v)) for ctx in contexts for v in unique(data_nt[var])]
-            else
-                # Specified values
-                if _is_continuous_variable(data_nt[var])
-                    # For continuous: create subgroups around specified values
-                    subgroups = _create_continuous_subgroups(data_nt[var], vals)
-                    contexts = isempty(contexts) ? [Dict(var => sg) for sg in subgroups] :
-                              [merge(ctx, Dict(var => sg)) for ctx in contexts for sg in subgroups]
-                else
-                    # For categorical: use specified subset
-                    val_list = vals isa Vector ? vals : [vals]
-                    contexts = isempty(contexts) ? [Dict(var => v) for v in val_list] :
-                              [merge(ctx, Dict(var => v)) for ctx in contexts for v in val_list]
-                end
+# `over` is a vector of Symbols (`_parse_groups_specification` wraps a bare Symbol). The
+# 2.x NamedTuple form (with a hard-coded ±2.5-unit window for numeric values) was
+# unreachable from any public entry point and is gone (B13).
+function _parse_over_specification(over::AbstractVector, data_nt)
+    # Mixed vector syntax - handle both categorical and continuous variables
+    contexts = [Dict()]
+    for var in over
+        if _is_continuous_variable(data_nt[var])
+            # A bare Symbol does not say how to group a numeric column. This used to
+            # bin into quartiles silently, which meant `groups=:nkids` on an integer
+            # count returned quartiles of it rather than its levels -- an analysis the
+            # caller never asked for, with cutpoints invisible at the call site. Stata's
+            # over() and R marginaleffects' by() both require a discrete grouping
+            # variable for the same reason.
+            throw(MarginsError(
+                "Grouping variable '$(var)' is numeric, and `groups=$(repr(var))` does not " *
+                "say how to group it. Specify the binning explicitly -- " *
+                "groups=($(repr(var)), 4) for quartiles, or groups=($(repr(var)), [cut1, cut2]) " *
+                "for custom thresholds -- or convert '$(var)' to a categorical column if its " *
+                "distinct values are the groups you want."
+            ))
+        else
+            # For categorical variables, every observed level: in level order for a
+            # CategoricalArray, ascending otherwise (Bool, strings); crossed with the earlier
+            # variables, which vary slowest
+            new_contexts = []
+            for ctx in contexts, val in _ordered_values(data_nt[var])
+                push!(new_contexts, merge(ctx, Dict(var => val)))
             end
+            contexts = new_contexts
         end
-
-        return contexts
-    elseif over isa Vector
-        # Mixed vector syntax - handle both categorical and continuous variables
-        contexts = [Dict()]
-        for var in over
-            if _is_continuous_variable(data_nt[var])
-                # A bare Symbol does not say how to group a numeric column. This used to
-                # bin into quartiles silently, which meant `groups=:nkids` on an integer
-                # count returned quartiles of it rather than its levels -- an analysis the
-                # caller never asked for, with cutpoints invisible at the call site. Stata's
-                # over() and R marginaleffects' by() both require a discrete grouping
-                # variable for the same reason.
-                throw(MarginsError(
-                    "Grouping variable '$(var)' is numeric, and `groups=$(repr(var))` does not " *
-                    "say how to group it. Specify the binning explicitly -- " *
-                    "groups=($(repr(var)), 4) for quartiles, or groups=($(repr(var)), [cut1, cut2]) " *
-                    "for custom thresholds -- or convert '$(var)' to a categorical column if its " *
-                    "distinct values are the groups you want."
-                ))
-            else
-                # For categorical variables, use all unique levels
-                new_contexts = []
-                for ctx in contexts, val in unique(data_nt[var])
-                    push!(new_contexts, merge(ctx, Dict(var => val)))
-                end
-                contexts = new_contexts
-            end
-        end
-        return contexts
-    elseif over isa Symbol
-        # Single variable syntax - convert to vector and recurse
-        return _parse_over_specification([over], data_nt)
-    else
-        error("over parameter must be a NamedTuple, Vector, or Symbol")
     end
+    return contexts
 end
 
 # Row indices selected by one parsed group (a Dict of var => level / bin spec), using the same
@@ -881,17 +852,6 @@ function _create_threshold_groups(col, var, thresholds)
     end
 
     return groups
-end
-
-function _create_continuous_subgroups(col, specified_values)
-    val_list = specified_values isa Vector ? specified_values : [specified_values]
-    subgroups = []
-    for val in val_list
-        # Create subgroup of indices within range of this value
-        indices = findall(x -> abs(x - val) <= 2.5, col)  # ±2.5 units
-        push!(subgroups, (center=val, indices=indices, label="$(val)±2.5"))
-    end
-    return subgroups
 end
 
 """

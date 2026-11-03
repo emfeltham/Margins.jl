@@ -47,17 +47,17 @@ Population margins scale linearly with optimized per-row costs:
 @btime population_margins($model, $data_10k)   # with efficient per-row processing  
 @btime population_margins($model, $data_100k)  # minimal allocation overhead
 
-# Memory footprint remains zero (both backends)
-@allocated population_margins(model, data_1k; backend=:fd)    # 0 bytes
-@allocated population_margins(model, data_10k; backend=:fd)   # 0 bytes
-@allocated population_margins(model, data_100k; backend=:fd)  # 0 bytes
+# The per-row loop allocates nothing; a call allocates a constant amount (the result, Σ,
+# the engine's buffers), the same at every n (both backends; tens of KB for a small model)
+@allocated population_margins(model, data_1k; backend=:fd)    # c bytes
+@allocated population_margins(model, data_10k; backend=:fd)   # the same c
+@allocated population_margins(model, data_100k; backend=:fd)  # the same c
 
-@allocated population_margins(model, data_1k; backend=:ad)    # 0 bytes
-@allocated population_margins(model, data_10k; backend=:ad)   # 0 bytes
-@allocated population_margins(model, data_100k; backend=:ad)  # 0 bytes
+@allocated population_margins(model, data_1k; backend=:ad)    # c′ bytes
+@allocated population_margins(model, data_100k; backend=:ad)  # the same c′
 ```
 
-**Why this matters**: Population analysis maintains **constant allocation footprint** while delivering consistent per-row performance.
+**Why this matters**: Population analysis has a **constant allocation footprint** (it does not grow with the number of rows) while delivering consistent per-row performance. Categorical variables follow the same rule: their observed levels come from the reference codes, not from a per-row pass that allocates.
 
 ## Dataset Size Guidelines
 
@@ -116,12 +116,12 @@ population_margins(model, data; backend=:ad)  # Recommended for log(x), sqrt(x)
 
 #### Automatic Differentiation (`:ad`) - **RECOMMENDED DEFAULT**
 ```julia
-# Zero allocation after warmup
-population_margins(model, data; backend=:ad)  # 0 bytes allocated
+# Zero allocation per row after warmup (a call allocates a constant amount)
+population_margins(model, data; backend=:ad)
 ```
 
 **Advantages**:
-- Zero allocation after warmup
+- Zero allocation per row after warmup
 - Machine precision accuracy (exact derivatives)
 - Robust domain handling (handles log, sqrt, 1/x safely)
 - Suitable for complex formulas
@@ -130,12 +130,12 @@ population_margins(model, data; backend=:ad)  # 0 bytes allocated
 
 #### Finite Differences (`:fd`)
 ```julia
-# Zero allocation after warmup
-population_margins(model, data; backend=:fd)  # 0 bytes allocated
+# Zero allocation per row after warmup (a call allocates a constant amount)
+population_margins(model, data; backend=:fd)
 ```
 
 **Advantages**:
-- Zero allocation in production paths
+- Zero allocation per row
 - Simple numerical implementation
 - Good accuracy for well-conditioned functions
 
@@ -145,18 +145,18 @@ population_margins(model, data; backend=:fd)  # 0 bytes allocated
 
 ### Allocation Patterns
 
-Margins.jl achieves zero-allocation performance for computational workflows:
+The per-row kernels allocate nothing; each call allocates a constant amount that does not grow with the data:
 
 ```julia
 # Profile margins: constant allocation regardless of data size
 @allocated profile_margins(model, small_data, means_grid(small_data))  # small constant allocation
 @allocated profile_margins(model, large_data, means_grid(large_data))  # same allocation pattern
 
-# Population margins: zero allocation after warmup (both backends)
-@allocated population_margins(model, data_1k; backend=:fd)   # 0 bytes
-@allocated population_margins(model, data_10k; backend=:fd)  # 0 bytes
-@allocated population_margins(model, data_1k; backend=:ad)   # 0 bytes
-@allocated population_margins(model, data_10k; backend=:ad)  # 0 bytes
+# Population margins: the same constant at every n after warmup (both backends)
+@allocated population_margins(model, data_1k; backend=:fd)   # c bytes
+@allocated population_margins(model, data_10k; backend=:fd)  # the same c
+@allocated population_margins(model, data_1k; backend=:ad)   # c′ bytes
+@allocated population_margins(model, data_10k; backend=:ad)  # the same c′
 ```
 
 ### Memory Efficiency Best Practices
@@ -194,11 +194,9 @@ For optimal performance in production environments, follow these proven patterns
 
 #### Compilation and Caching
 ```julia
-# Good: Compile once, use multiple times
-compiled = FormulaCompiler.compile_formula(model, data)  # Expensive, do once
-de = FormulaCompiler.build_derivative_evaluator(compiled, data; vars=vars)  # Do once
-
-# Multiple analysis calls reuse compiled objects automatically
+# FormulaCompiler caches the compiled formula (keyed by model and data schema), so repeated
+# calls do not recompile. Margins keeps no cache of its own: each call builds its engine and
+# evaluators (cheap), so results always reflect the current model, data and vcov.
 result1 = population_margins(model, data; type=:effects)     
 result2 = profile_margins(model, data, means_grid(data); type=:effects)
 
@@ -241,7 +239,6 @@ population_margins(model, data; backend=:fd)  # Uses optimized accumulation
 
 # Good: Cache compiled objects for batch processing
 models = [model1, model2, model3]
-cached_compilations = Dict()
 
 for model in models
     # Compilation is cached automatically by model signature
@@ -256,9 +253,9 @@ end
 # Verify zero-allocation performance
 using BenchmarkTools
 
-# Both backends should show 0 allocation after warmup
-@allocated population_margins(model, data; backend=:ad)  # Expected: 0 bytes  
-@allocated population_margins(model, data; backend=:fd)  # Expected: 0 bytes
+# Both backends: a constant per call after warmup, the same for any number of rows
+@allocated population_margins(model, data; backend=:ad)
+@allocated population_margins(model, data; backend=:fd)
 
 # Profile margins should have constant allocation regardless of data size
 @allocated profile_margins(model, small_data, means_grid(small_data))  # Small constant
@@ -357,12 +354,12 @@ GC.gc()
 **Solution**: Verify zero-allocation backends and check for loops
 ```julia
 # Expected: constant allocation across dataset sizes
-@allocated population_margins(model, data_1k; backend=:ad)    # Should be 0 bytes
-@allocated population_margins(model, data_10k; backend=:ad)   # Should be 0 bytes  
-@allocated population_margins(model, data_100k; backend=:ad)  # Should be 0 bytes
+@allocated population_margins(model, data_1k; backend=:ad)    # c bytes
+@allocated population_margins(model, data_10k; backend=:ad)   # should be the same c
+@allocated population_margins(model, data_100k; backend=:ad)  # should be the same c
 
 # If allocations grow with n:
-# 1. Check backend selection (:ad and :fd both should be zero allocation)  
+# 1. Check backend selection (:ad and :fd both have zero-allocation row loops)
 # 2. Verify data format (Tables.jl-compatible)
 # 3. Check for custom vcov functions that may allocate
 ```
@@ -394,8 +391,8 @@ compiled = FormulaCompiler.compile_formula(model, data)  # Once
 #### Derivative Computation
 ```julia
 # Pre-built derivative evaluators
-de = FormulaCompiler.build_derivative_evaluator(compiled, data; vars=vars)  # Once  
-# Reused for all marginal effects - zero allocation per derivative
+de = FormulaCompiler.derivativeevaluator(:ad, compiled, Tables.columntable(data), vars)  # Once per call
+# Reused for every row of the call - zero allocation per derivative
 ```
 
 #### Buffer Management

@@ -38,16 +38,16 @@ compiled = FormulaCompiler.compile_formula(model, data)
 #### Derivative System
 ```julia
 # Automatic derivative evaluators for marginal effects
-de = FormulaCompiler.build_derivative_evaluator(compiled, data; vars=[:income, :age])
+de = FormulaCompiler.derivativeevaluator(:ad, compiled, data, [:income, :age])
 # Zero allocation per derivative computation
 ```
 
 #### Type-Safe Overrides
 ```julia
-# Efficient scenario analysis with fractional specifications
-overrides = Dict(:income => 50000, :treatment => 0.5)  # 50% treatment probability
-result = FormulaCompiler.evaluate_scenario(compiled, overrides)
-# Supports categorical mixtures and continuous overrides seamlessly
+# Counterfactual values replace a column in the evaluation (the data is not copied)
+population_margins(model, data; scenarios=(income=50000,))
+# A categorical variable can be held at a frequency mixture in a reference grid
+profile_margins(model, data, cartesian_grid(treatment=[mix("control" => 0.5, "treated" => 0.5)]))
 ```
 
 ## Computational Kernels

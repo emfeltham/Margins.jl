@@ -25,15 +25,9 @@ function _filter_data_to_model_variables(data_nt::NamedTuple, model)
     # Extract all variables used in model operations
     model_vars = extract_variable_names(compiled)   # every data column the formula reads
     
-    # Filter data to only include predictor variables (exclude response)
-    filtered_data = Dict{Symbol, Any}()
-    for var in model_vars
-        if haskey(data_nt, var)
-            filtered_data[var] = getproperty(data_nt, var)
-        end
-    end
-    
-    return NamedTuple(filtered_data)
+    # Filter data to only include predictor variables (exclude response), in the data's column order
+    keep = Tuple(k for k in keys(data_nt) if k in model_vars)
+    return NamedTuple{keep}(map(k -> getproperty(data_nt, k), keep))
 end
 
 
@@ -72,190 +66,116 @@ function _parse_numlist(str::String)
     return [start_val + k * step_val for k in 0:nsteps]  # empty if the range is backwards
 end
 
+# ---- shared grid helpers: weights, column types, order ----------------------------------------
+
 """
-    _build_reference_grid(at_spec, data_nt) -> DataFrame
+    _grid_weights(weights, data, data_nt, builder; model=nothing) -> Union{Nothing, Vector{Float64}}
 
-Build unified reference grid from at specification with efficient single-pass approach.
-
-Supports various input formats:
-- `:means` - Use sample means for continuous, first levels for categorical
-- `Dict` - Cartesian product of specified values, typical values for others  
-- `Vector{Dict}` - Explicit list of profiles
-- `DataFrame` - Use directly (most efficient)
-
-The unified approach ensures consistent typical value computation and efficient memory usage.
-
-# Arguments
-- `at_spec`: Profile specification in any supported format
-- `data_nt::NamedTuple`: Original data in columntable format
-
-# Returns
-- `DataFrame`: Reference grid ready for FormulaCompiler processing
-
-# Examples
-```julia
-# At sample means (most common case)
-_build_reference_grid(:means, data_nt)
-
-# Cartesian product specification
-_build_reference_grid(Dict(:x1 => [0, 1], :x2 => [2, 3]), data_nt) 
-
-# Explicit profiles for complex scenarios
-_build_reference_grid([Dict(:x1 => 0, :x2 => 2), Dict(:x1 => 1, :x2 => 3)], data_nt)
-
-# Pre-built DataFrame (zero additional processing)
-_build_reference_grid(existing_grid, data_nt)
-```
+Resolve the `weights` keyword of a reference-grid builder to one weight per row of `data_nt`
+(`nothing`: unweighted). The forms and checks are those of `population_margins`' `weights=`
+(`_resolve_weights`): a column name (`Symbol`) or a vector of real, finite, non-negative weights,
+not all zero; `nothing` and `:none` mean unweighted. `:model` (the fitted model's estimation
+weights) needs a model, so only `complete_reference_grid` accepts it.
 """
-function _build_reference_grid(at_spec, data_nt::NamedTuple, model, typical)
-    if isnothing(at_spec)
-        return _build_means_refgrid(data_nt, model, typical)
-    elseif at_spec isa Dict
-        # Validate that all variables in at_spec are in the model (via filtered data)
-        for var in keys(at_spec)
-            if !haskey(data_nt, var)
-                throw(ArgumentError("Variable :$var specified in 'at' is not in the model. Model variables: $(sort(collect(keys(data_nt))))"))
-            end
-        end
-        return _build_cartesian_refgrid(at_spec, data_nt, typical)
-    elseif at_spec isa Vector
-        return _build_explicit_refgrid(at_spec, data_nt, typical)
-    elseif at_spec isa DataFrame
-        return at_spec  # Use directly (most efficient path)
-    else
-        throw(ArgumentError("Invalid at specification: $(typeof(at_spec)). Must be :means, Dict, Vector{Dict}, or DataFrame"))
+function _grid_weights(weights, data, data_nt, builder; model=nothing)
+    (isnothing(weights) || weights === :none) && return nothing
+    if weights === :model
+        isnothing(model) && throw(ArgumentError(
+            "$builder(…; weights=:model): this builder has no model to read weights from. Pass the " *
+            "weights as a column name (weights=:w) or a vector, or complete a partial grid with " *
+            "complete_reference_grid(grid, model, data; weights=:model)."))
+        return first(_resolve_weights(:model, model, data, data_nt))
+    end
+    weights isa Union{Symbol, AbstractVector} || throw(ArgumentError(
+        "$builder: weights must be a column name (Symbol), a vector of weights, :none or nothing; got $(typeof(weights))"))
+    return first(_resolve_weights(weights, nothing, data, data_nt))
+end
+
+# The data with only the positively weighted rows, and their weights: a row with weight 0 is
+# dropped by every weighted builder (also where it would otherwise appear: observed levels,
+# :min/:max/:range, levels of a hierarchical group)
+function _drop_zero_weight_rows(data_nt::NamedTuple, w)
+    isnothing(w) && return (data_nt, nothing)
+    pos = findall(>(0), w)
+    length(pos) == length(w) && return (data_nt, w)
+    return (map(c -> c[pos], data_nt), w[pos])
+end
+
+# A grid column from the values of its rows: typed as the values when they share one type
+function _typed_grid_column(values::AbstractVector)
+    isempty(values) && return Any[]
+    first_val = first(values)
+    return all(v -> typeof(v) == typeof(first_val), values) ? typeof(first_val)[values...] : Vector{Any}(values)
+end
+
+# A one-row grid column holding a typical value (a real number as Float64)
+_typical_grid_column(v) = v isa Real && !(v isa Bool) ? Float64[v] : v isa Bool ? Bool[v] : [v]
+
+"""
+    _nested_product(value_lists) -> Vector{Tuple}
+
+The Cartesian product of `value_lists` in the reference grids' row order: the first list varies
+slowest and the last fastest (the order of nested `for` loops written in the same order, i.e.
+`Iterators.product` with the lists reversed), each list in its own order.
+"""
+_nested_product(value_lists) = vec([reverse(c) for c in Iterators.product(reverse(Tuple(value_lists))...)])
+
+"""
+    _ordered_values(col) -> Vector
+
+The distinct values of `col` in a deterministic order: categorical level order for a
+`CategoricalArray` (observed levels only), otherwise ascending (`false < true`, numbers, strings
+lexicographically). Values that cannot be compared keep their order of first appearance.
+"""
+function _ordered_values(col)
+    u = unique(col)
+    if col isa CategoricalArray
+        return sort!(u; by=v -> ismissing(v) ? typemax(Int) : CategoricalArrays.levelcode(v))
+    end
+    try
+        return sort!(u)
+    catch err
+        err isa MethodError || rethrow()
+        return u
     end
 end
 
 """
-    _build_means_refgrid(data_nt) -> DataFrame
+    _build_cartesian_refgrid(at_spec, data_nt, typical; weights=nothing) -> DataFrame
 
-Build reference grid with sample means for continuous variables and first levels for categorical.
-Uses unified typical value computation for consistency.
+The Cartesian product of the values in `at_spec` (an ordered collection of `var => values`
+pairs; a value that is not a vector is one value, a numlist string is expanded), with every other
+column of `data_nt` at its typical value. Columns in the data's order; rows nested by
+`_nested_product` in `at_spec`'s order.
 """
-function _build_means_refgrid(data_nt::NamedTuple, model, typical)
-    # Data is already filtered to model variables, so we can use it directly
-    typical_values = get_typical_values(data_nt; typical=typical)
-    
-    # Convert to DataFrame by creating columns with proper types
-    cols = Dict{Symbol, Vector}()
-    for (k, v) in typical_values
-        # Preserve type information by creating typed vectors
-        if v isa Real && !(v isa Bool)
-            cols[k] = Float64[v]
-        elseif v isa Bool  
-            cols[k] = Bool[v]
+function _build_cartesian_refgrid(at_spec, data_nt::NamedTuple, typical; weights=nothing)
+    spec = [Symbol(k) => v for (k, v) in at_spec]
+    spec_vars = first.(spec)
+    others = Tuple(k for k in keys(data_nt) if !(k in spec_vars))
+    base = get_typical_values(NamedTuple{others}(map(k -> data_nt[k], others)); typical, weights)
+    value_lists = [_grid_values(v) for (_, v) in spec]
+    combos = _nested_product(value_lists)
+    isempty(combos) && return DataFrame()
+    n = length(combos)
+    cols = Pair{Symbol, AbstractVector}[]
+    for k in keys(data_nt)
+        i = findfirst(==(k), spec_vars)
+        if isnothing(i)
+            push!(cols, k => _typed_grid_column(fill(base[k], n)))
         else
-            cols[k] = [v]  # Generic for strings, categoricals, etc.
+            push!(cols, k => _typed_grid_column([c[i] for c in combos]))
         end
     end
     df = DataFrame(cols)
-    return _mark_typical_values!(df, names(df))
+    return _mark_typical_values!(df, [String(k) for k in others])
 end
 
-"""
-    _build_cartesian_refgrid(at_spec::Dict, data_nt) -> DataFrame
-
-Build Cartesian product reference grid from Dict specification with optimized memory usage.
-Variables not specified use typical values (means/first levels).
-Uses unified approach for consistent typical value computation.
-"""
-function _build_cartesian_refgrid(at_spec::Dict, data_nt::NamedTuple, typical)
-    # Use unified typical value computation for base values
-    base_dict = get_typical_values(data_nt; typical=typical)
-    
-    # Extract specified variables and their values (optimized)
-    var_names = collect(keys(at_spec))
-    var_values = Vector{Vector{Any}}(undef, length(var_names))
-    
-    for (i, var) in enumerate(var_names)
-        vals = at_spec[var]
-        # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
-        if vals isa String && _is_numlist(vals)
-            vals = _parse_numlist(vals)
-        end
-        var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
+# The values of one grid variable: a vector as given, a numlist string expanded, anything else one value
+function _grid_values(vals)
+    if vals isa String && _is_numlist(vals)
+        vals = _parse_numlist(vals)
     end
-    
-    # Pre-calculate total number of combinations for efficient allocation
-    n_combinations = prod(length(vals) for vals in var_values)
-    
-    # Pre-allocate result vector for better performance
-    grid_rows = Vector{Dict{Symbol,Any}}(undef, n_combinations)
-    
-    # Generate Cartesian product with optimized allocation
-    combo_idx = 1
-    for combo in Iterators.product(var_values...)
-        row = copy(base_dict)  # Start with base values
-        for (i, var) in enumerate(var_names)
-            row[var] = combo[i]
-        end
-        grid_rows[combo_idx] = row
-        combo_idx += 1
-    end
-    
-    # Convert vector of dicts to DataFrame using columntable approach
-    if isempty(grid_rows)
-        return DataFrame()
-    end
-    # Convert to column table format for efficient DataFrame construction, preserving types
-    cols = Dict{Symbol, Vector}()
-    for key in keys(first(grid_rows))
-        # Get all values for this column
-        values = [row[key] for row in grid_rows]
-        # Create vector with proper type based on first value type
-        first_val = first(values)
-        if all(v -> typeof(v) == typeof(first_val), values)
-            # All same type - use specific type
-            cols[key] = typeof(first_val)[values...]
-        else
-            # Mixed types - fall back to Any
-            cols[key] = Vector{Any}(values)
-        end
-    end
-    return DataFrame(cols)
-end
-
-"""
-    _build_explicit_refgrid(at_spec::Vector, data_nt) -> DataFrame
-
-Build reference grid from explicit vector of profiles (Dicts or NamedTuples).
-Missing variables are filled with typical values using unified approach.
-"""
-function _build_explicit_refgrid(at_spec::Vector, data_nt::NamedTuple, typical)
-    # Use unified typical value computation for base values
-    base_dict = get_typical_values(data_nt; typical=typical)
-    
-    grid_rows = []
-    for profile in at_spec
-        row = copy(base_dict)
-        # Override with profile-specific values
-        for (k, v) in pairs(profile)
-            row[k] = v
-        end
-        push!(grid_rows, row)
-    end
-    
-    # Convert vector of dicts to DataFrame using columntable approach
-    if isempty(grid_rows)
-        return DataFrame()
-    end
-    # Convert to column table format for efficient DataFrame construction, preserving types
-    cols = Dict{Symbol, Vector}()
-    for key in keys(first(grid_rows))
-        # Get all values for this column
-        values = [row[key] for row in grid_rows]
-        # Create vector with proper type based on first value type
-        first_val = first(values)
-        if all(v -> typeof(v) == typeof(first_val), values)
-            # All same type - use specific type
-            cols[key] = typeof(first_val)[values...]
-        else
-            # Mixed types - fall back to Any
-            cols[key] = Vector{Any}(values)
-        end
-    end
-    return DataFrame(cols)
+    return vals isa AbstractVector ? collect(vals) : [vals]
 end
 
 
@@ -296,7 +216,7 @@ spec = :region => :education
 result = _parse_reference_grid_specification(spec, data_nt)
 ```
 """
-function _parse_reference_grid_specification(spec, data_nt)
+function _parse_reference_grid_specification(spec, data_nt; weights=nothing)
     # Simple categorical specification: :education
     if spec isa Symbol
         return _parse_categorical_reference_spec([spec], data_nt)
@@ -311,7 +231,7 @@ function _parse_reference_grid_specification(spec, data_nt)
             # Mixed vector - handle each spec and create cross-product
             all_specs = []
             for single_spec in spec
-                spec_results = _parse_reference_grid_specification(single_spec, data_nt)
+                spec_results = _parse_reference_grid_specification(single_spec, data_nt; weights)
                 if isempty(all_specs)
                     all_specs = spec_results
                 else
@@ -336,10 +256,10 @@ function _parse_reference_grid_specification(spec, data_nt)
         if var isa Symbol
             # Check if it's a mixture specification first
             if _is_mixture_specification(spec_val)
-                return _parse_mixture_reference_spec(var, spec_val, data_nt)
+                return _parse_mixture_reference_spec(var, spec_val, data_nt; weights)
             else
                 # Otherwise treat as continuous representative specification
-                return _parse_continuous_representative_spec(var, spec_val, data_nt)
+                return _parse_continuous_representative_spec(var, spec_val, data_nt; weights)
             end
         end
     end
@@ -348,7 +268,7 @@ function _parse_reference_grid_specification(spec, data_nt)
     if spec isa Pair
         outer_spec = spec.first
         inner_spec = spec.second
-        return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+        return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt; weights)
     end
     
     error("Invalid reference grid specification. Supported syntax: Symbol, Vector{Symbol}, (Symbol, representative_type), outer => inner, or (Symbol, mixture_spec)")
@@ -361,7 +281,8 @@ Parse categorical reference specification for cross-tabulation.
 Returns all combinations of categorical levels or mixture specifications.
 
 Supports:
-- Regular categorical variables: all unique levels
+- Regular categorical variables: all observed values, in level order (`_ordered_values`: categorical
+  level order, otherwise ascending); several variables are crossed with the first varying slowest
 - Mixture specifications: mix_proportional, direct CategoricalMixture objects
 """
 function _parse_categorical_reference_spec(vars, data_nt)
@@ -382,8 +303,8 @@ function _parse_categorical_reference_spec(vars, data_nt)
             error("Variable $var is continuous but used in categorical specification. Use (:$var, :mean) or (:$var, :quartiles) instead.")
         end
         
-        # Get all unique levels (no mixture support here - use hierarchical specs for mixtures)
-        levels = unique(col)
+        # Observed levels in level order (no mixture support here - use hierarchical specs for mixtures)
+        levels = _ordered_values(col)
         var_specs = [Dict(var => level) for level in levels]
         
         if isempty(specs)
@@ -410,7 +331,7 @@ end
 Parse continuous variable representative specification.
 Computes representative values (quartiles, mean, median, etc.) from data.
 """
-function _parse_continuous_representative_spec(var, rep_spec, data_nt)
+function _parse_continuous_representative_spec(var, rep_spec, data_nt; weights=nothing)
     if !haskey(data_nt, var)
         error("Variable $var not found in data")
     end
@@ -421,30 +342,32 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
     end
     
     representatives = []
+    # Quantiles (weighted with `weights`: `_typical_quantiles`)
+    q(ps) = _typical_quantiles(col, ps; weights)
     
     if rep_spec === :quartiles
-        quartile_values = [quantile(col, q) for q in [0.25, 0.50, 0.75, 1.0]]
+        quartile_values = q([0.25, 0.50, 0.75, 1.0])
         representatives = [Dict(var => val) for val in quartile_values]
     elseif rep_spec === :quintiles
-        quintile_values = [quantile(col, q) for q in [0.2, 0.4, 0.6, 0.8, 1.0]]
+        quintile_values = q([0.2, 0.4, 0.6, 0.8, 1.0])
         representatives = [Dict(var => val) for val in quintile_values]
     elseif rep_spec === :deciles
-        decile_values = [quantile(col, q) for q in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]]
+        decile_values = q([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
         representatives = [Dict(var => val) for val in decile_values]
     elseif rep_spec === :terciles || rep_spec === :tertiles
-        tercile_values = [quantile(col, q) for q in [1/3, 2/3, 1.0]]
+        tercile_values = q([1/3, 2/3, 1.0])
         representatives = [Dict(var => val) for val in tercile_values]
     elseif rep_spec === :mean
-        representatives = [Dict(var => mean(col))]
+        representatives = [Dict(var => typical_value(col, mean; weights))]
     elseif rep_spec === :median
-        representatives = [Dict(var => median(col))]
+        representatives = [Dict(var => typical_value(col, median; weights))]
     elseif rep_spec === :min
         representatives = [Dict(var => minimum(col))]
     elseif rep_spec === :max
         representatives = [Dict(var => maximum(col))]
     elseif rep_spec isa Vector{<:Real} && length(rep_spec) > 0 && all(0 ≤ q ≤ 1 for q in rep_spec)
         # Custom percentiles (values between 0 and 1)
-        percentile_values = [quantile(col, q) for q in rep_spec]
+        percentile_values = q(rep_spec)
         representatives = [Dict(var => val) for val in percentile_values]
     elseif rep_spec isa Vector{<:Real}
         # Fixed values specified
@@ -453,7 +376,7 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
         # Custom percentiles specification: (:percentiles, [0.1, 0.5, 0.9])
         percentiles = rep_spec[2]
         if percentiles isa Vector{<:Real} && all(0 ≤ q ≤ 1 for q in percentiles)
-            percentile_values = [quantile(col, q) for q in percentiles]
+            percentile_values = q(percentiles)
             representatives = [Dict(var => val) for val in percentile_values]
         else
             error("Percentiles must be a vector of values between 0 and 1: $percentiles")
@@ -462,7 +385,7 @@ function _parse_continuous_representative_spec(var, rep_spec, data_nt)
         # N-quantiles specification: (:quantiles, 7) for septiles
         n_quantiles = rep_spec[2]
         if n_quantiles isa Integer && n_quantiles > 1
-            quantile_values = [quantile(col, i/n_quantiles) for i in 1:n_quantiles]
+            quantile_values = q([i/n_quantiles for i in 1:n_quantiles])
             representatives = [Dict(var => val) for val in quantile_values]
         else
             error("Number of quantiles must be an integer > 1: $n_quantiles")
@@ -494,13 +417,13 @@ end
 Parse hierarchical specifications with support for 3+ level nesting.
 Includes grid size estimation and safety checks.
 """
-function _parse_deep_hierarchical_spec(spec, data_nt, max_depth)
+function _parse_deep_hierarchical_spec(spec, data_nt, max_depth; weights=nothing)
     # Estimate total grid size before parsing
     estimated_size = _estimate_grid_size(spec, data_nt)
     _validate_grid_size(estimated_size)
     
     # Parse with depth tracking
-    return _parse_hierarchical_recursive(spec, data_nt, 1, max_depth)
+    return _parse_hierarchical_recursive(spec, data_nt, 1, max_depth; weights)
 end
 
 """
@@ -508,7 +431,7 @@ end
 
 Recursively parse hierarchical specifications with depth tracking.
 """
-function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth)
+function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth; weights=nothing)
     if current_depth > max_depth
         error("Maximum nesting depth ($max_depth) exceeded at level $current_depth")
     end
@@ -517,7 +440,7 @@ function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth)
         outer_spec, inner_spec = spec.first, spec.second
         
         # Get outer combinations
-        outer_combinations = _parse_reference_grid_specification(outer_spec, data_nt)
+        outer_combinations = _parse_reference_grid_specification(outer_spec, data_nt; weights)
         
         # Check if inner_spec contains more nesting
         if inner_spec isa Pair
@@ -525,11 +448,11 @@ function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth)
             result_combinations = []
             for outer_combo in outer_combinations
                 # Filter data to this outer group
-                filtered_data = _filter_data_to_group(data_nt, outer_combo)
+                (filtered_data, filtered_w) = _filter_data_to_group(data_nt, outer_combo; weights)
                 
                 # Recursively parse inner specifications
                 inner_combinations = _parse_hierarchical_recursive(
-                    inner_spec, filtered_data, current_depth + 1, max_depth
+                    inner_spec, filtered_data, current_depth + 1, max_depth; weights=filtered_w
                 )
                 
                 # Merge outer and inner combinations
@@ -541,36 +464,32 @@ function _parse_hierarchical_recursive(spec, data_nt, current_depth, max_depth)
             return result_combinations
         else
             # Base case: use existing 2-level logic
-            return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+            return _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt; weights)
         end
     else
         # Not hierarchical - use standard parsing
-        return _parse_reference_grid_specification(spec, data_nt)
+        return _parse_reference_grid_specification(spec, data_nt; weights)
     end
 end
 
 """
-    _filter_data_to_group(data_nt, group_spec) -> NamedTuple
+    _filter_data_to_group(data_nt, group_spec; weights=nothing) -> (NamedTuple, weights)
 
-Filter data to a specific group defined by group_spec for recursive parsing.
+Filter data (and the row weights, if any) to a specific group defined by group_spec for
+recursive parsing.
 """
-function _filter_data_to_group(data_nt, group_spec)
+function _filter_data_to_group(data_nt, group_spec; weights=nothing)
     # Get indices of observations that match the group specification
     group_indices = _get_group_indices(group_spec, data_nt)
     
     if isempty(group_indices)
         @warn "Empty group found for specification $group_spec - using full data"
-        return data_nt
+        return (data_nt, weights)
     end
     
     # Create filtered data for this group
-    filtered_data = NamedTuple()
-    for (var, col) in pairs(data_nt)
-        filtered_col = col[group_indices]
-        filtered_data = merge(filtered_data, NamedTuple{(var,)}((filtered_col,)))
-    end
-    
-    return filtered_data
+    filtered_data = map(col -> col[group_indices], data_nt)
+    return (filtered_data, isnothing(weights) ? nothing : weights[group_indices])
 end
 
 """
@@ -579,9 +498,9 @@ end
 Create hierarchical reference specifications using => syntax for reference grids.
 Unlike group filtering, this computes representative values within each outer group.
 """
-function _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
+function _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt; weights=nothing)
     # Parse outer specification
-    outer_specs = _parse_reference_grid_specification(outer_spec, data_nt)
+    outer_specs = _parse_reference_grid_specification(outer_spec, data_nt; weights)
     
     # Handle inner specification - can be single spec or Vector of specs
     if inner_spec isa AbstractVector
@@ -589,7 +508,7 @@ function _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
         hierarchical_specs = []
         for outer_spec_dict in outer_specs
             for inner_single_spec in inner_spec
-                inner_specs = _compute_representative_values_within_group(inner_single_spec, outer_spec_dict, data_nt)
+                inner_specs = _compute_representative_values_within_group(inner_single_spec, outer_spec_dict, data_nt; weights)
                 for inner_spec_dict in inner_specs
                     # Merge outer and inner specifications
                     combined_spec = merge(outer_spec_dict, inner_spec_dict)
@@ -602,7 +521,7 @@ function _create_hierarchical_reference_specs(outer_spec, inner_spec, data_nt)
         # Single inner specification
         hierarchical_specs = []
         for outer_spec_dict in outer_specs
-            inner_specs = _compute_representative_values_within_group(inner_spec, outer_spec_dict, data_nt)
+            inner_specs = _compute_representative_values_within_group(inner_spec, outer_spec_dict, data_nt; weights)
             for inner_spec_dict in inner_specs
                 # Merge outer and inner specifications
                 combined_spec = merge(outer_spec_dict, inner_spec_dict)
@@ -620,7 +539,7 @@ Compute representative values within a specific group defined by group_spec.
 This enables hierarchical reference grid construction where inner representatives
 are computed within each outer group.
 """
-function _compute_representative_values_within_group(spec, group_spec, data_nt)
+function _compute_representative_values_within_group(spec, group_spec, data_nt; weights=nothing)
     # Filter data to the specified group
     group_indices = _get_group_indices(group_spec, data_nt)
     
@@ -629,15 +548,12 @@ function _compute_representative_values_within_group(spec, group_spec, data_nt)
         return []
     end
     
-    # Create filtered data for this group
-    filtered_data = NamedTuple()
-    for (var, col) in pairs(data_nt)
-        filtered_col = col[group_indices]
-        filtered_data = merge(filtered_data, NamedTuple{(var,)}((filtered_col,)))
-    end
+    # Create filtered data (and weights) for this group
+    filtered_data = map(col -> col[group_indices], data_nt)
+    filtered_w = isnothing(weights) ? nothing : weights[group_indices]
     
     # Parse the inner specification using the filtered group data
-    return _parse_reference_grid_specification(spec, filtered_data)
+    return _parse_reference_grid_specification(spec, filtered_data; weights=filtered_w)
 end
 
 """
@@ -839,7 +755,7 @@ Supports:
 - :mix_proportional - Use observed frequency proportions from data
 - CategoricalMixture objects - Direct mixture specification
 """
-function _parse_mixture_reference_spec(var, mixture_spec, data_nt)
+function _parse_mixture_reference_spec(var, mixture_spec, data_nt; weights=nothing)
     if !haskey(data_nt, var)
         error("Variable $var not found in data")
     end
@@ -852,8 +768,8 @@ function _parse_mixture_reference_spec(var, mixture_spec, data_nt)
     end
     
     if mixture_spec === :mix_proportional
-        # Use existing frequency mixture computation
-        mixture = _create_frequency_mixture(col)
+        # The (weighted) frequency mixture, as for a typical value
+        mixture = typical_value(col; weights)
         return [Dict(var => mixture)]
     elseif mixture_spec isa CategoricalMixture
         # Validate mixture against data
@@ -1026,7 +942,11 @@ function _validate_grid_combinations(combinations, data_nt)
         
         for combo in categorical_combinations
             # Only check categorical parts of the combination
-            categorical_parts = Dict(var => val for (var, val) in combo if haskey(data_nt, var) && !_is_continuous_variable(data_nt[var]))
+            # A frequency mixture (`:mix_proportional`, a `CategoricalMixture`) is a weighted
+            # combination of levels, not a level, so no row "matches" it: leave it out
+            categorical_parts = Dict(var => val for (var, val) in combo
+                                     if haskey(data_nt, var) && !_is_continuous_variable(data_nt[var]) &&
+                                        !(val isa CategoricalMixture))
             if !isempty(categorical_parts)
                 indices = _get_group_indices(categorical_parts, data_nt)
                 if isempty(indices)
@@ -1057,35 +977,32 @@ end
 
 
 """
-    _build_hierarchical_reference_grid(grid_combinations, data_nt) -> DataFrame
+    _build_hierarchical_reference_grid(grid_combinations, data_nt; weights=nothing) -> DataFrame
 
 Build reference grid DataFrame from parsed specifications.
 Converts vector of Dict specifications to a proper DataFrame structure.
-Uses typical values instead of missing for unspecified variables.
+Uses typical values (weighted with `weights`) instead of missing for unspecified variables.
+Columns are in the data's column order (any specified variable not in the data follows);
+rows are in the order of `grid_combinations`.
 """
-function _build_hierarchical_reference_grid(grid_combinations, data_nt)
+function _build_hierarchical_reference_grid(grid_combinations, data_nt; weights=nothing)
     if isempty(grid_combinations)
         return DataFrame()
     end
     
-    # Convert to DataFrame format
-    cols = Dict{Symbol, Vector}()
-    
-    # Get all possible columns from all combinations AND all data variables
-    all_keys = Set{Symbol}()
-    for combo in grid_combinations
-        union!(all_keys, keys(combo))
+    # All data variables (filled with typical values where a combination does not set them),
+    # in the data's column order, then any other variable a combination sets
+    all_keys = collect(Symbol, keys(data_nt))
+    for combo in grid_combinations, k in keys(combo)
+        k in all_keys || push!(all_keys, k)
     end
-    # Ensure all data variables are included (for filling with typical values)
-    union!(all_keys, keys(data_nt))
-    
-    # Initialize columns
-    for key in all_keys
-        cols[key] = Any[]
-    end
+    # (`AbstractVector`, so a categorical column is not converted to a plain `Vector` on assignment)
+    cols = Dict{Symbol, AbstractVector}(key => Any[] for key in all_keys)
     
     # Positions filled with a typical value (rather than specified by a combination)
     typical_mask = Dict{Symbol, BitVector}(key => falses(length(grid_combinations)) for key in all_keys)
+    # Each column's typical value, computed once (on the whole data, weighted with `weights`)
+    typical_cache = Dict{Symbol, Any}()
 
     # Fill in values - Phase 1.2: Use typical values instead of missing
     for (row, combo) in enumerate(grid_combinations)
@@ -1098,8 +1015,8 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
                 if !haskey(data_nt, key)
                     error("Variable $key not found in data when computing typical value")
                 end
-                typical_value = _get_typical_value(data_nt[key], mean)
-                push!(cols[key], typical_value)
+                tv = get!(() -> typical_value(data_nt[key], mean; weights), typical_cache, key)
+                push!(cols[key], tv)
             end
         end
     end
@@ -1127,21 +1044,19 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
             else
                 cols[key] = Bool[convert(Bool, val) for val in values]
             end
+        elseif all(val -> val isa CategoricalValue, non_missing_values)
+            # Levels of a categorical column (possibly with missing): a categorical column with
+            # the data column's levels and ordering, not their strings (checked before the
+            # string case: a `CategoricalValue{String}` is an `AbstractString`)
+            first_val = first(non_missing_values)
+            cols[key] = categorical([ismissing(val) ? missing : unwrap(val) for val in values];
+                                    levels=levels(first_val), ordered=isordered(first_val))
         elseif all(val -> val isa AbstractString, non_missing_values)
             # String values (possibly with missing)
             if has_missing
                 cols[key] = Vector{Union{Missing, String}}([ismissing(val) ? missing : string(val) for val in values])
             else
                 cols[key] = String[string(val) for val in values]
-            end
-        elseif all(val -> val isa CategoricalValue, non_missing_values)
-            # CategoricalValues (possibly with missing)
-            first_val = first(non_missing_values)
-            T = typeof(first_val)
-            if has_missing
-                cols[key] = Vector{Union{Missing, T}}(values)
-            else
-                cols[key] = T[val for val in values]
             end
         else
             # Mixed types - keep as Any
@@ -1153,7 +1068,7 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
         end
     end
     
-    df = DataFrame(cols)
+    df = DataFrame([key => cols[key] for key in all_keys])
     # Record which cells hold typical values: columns no combination specifies are marked
     # whole; columns some combinations specify and others leave to the typical value (e.g.
     # `:g => [(:k, [1, 3]), (:x, [0, 1])]`) are marked per row.
@@ -1170,7 +1085,7 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
 end
 
 """
-    hierarchical_grid(data, spec; max_depth=5, warn_large=true) -> DataFrame
+    hierarchical_grid(data, spec; max_depth=5, warn_large=true, weights=nothing) -> DataFrame
 
 Enhanced hierarchical reference grid builder with deep nesting support.
 Uses group nesting grammar for systematic reference grid construction with
@@ -1181,6 +1096,22 @@ support for 3+ level hierarchical specifications.
 - `spec`: Hierarchical specification using `=>` operator grammar
 - `max_depth::Int=5`: Maximum allowed nesting depth
 - `warn_large::Bool=true`: Show warnings for large grids
+- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
+  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
+  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
+  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
+  dropped. With `weights`, `(:x, :mean)` / `(:x, :median)` are the weighted mean / median,
+  `:mix_proportional` uses weighted shares, the quantile specifications (`:quartiles`,
+  `(:percentiles, …)`, `(:quantiles, n)`, a vector of probabilities, …) are weighted quantiles
+  (as for `quantile_grid`), and the variables a combination leaves out are filled with weighted
+  typical values (see `means_grid`). Within a group (`outer => inner`), the group's rows and
+  weights are used.
+
+# Order
+Columns follow the data's column order. Rows follow the specification: a categorical variable
+takes its observed levels in level order (`levels(col)`; ascending for Bool and string columns),
+a vector of specifications is crossed with the first varying slowest, and `outer => inner` lists
+each outer value's inner rows together.
 
 # Returns
 - `DataFrame`: Reference grid ready for use with profile_margins()
@@ -1280,8 +1211,10 @@ result = profile_margins(model, data, reference_grid; vars=[:treatment])
 This provides the most sophisticated reference grid system in any statistical software,
 enabling complex multi-dimensional policy analysis that is currently impossible elsewhere.
 """
-function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
+function hierarchical_grid(data, spec; max_depth=5, warn_large=true, weights=nothing)
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
+    # Weighted: the positively weighted rows only, and their weights
+    (data_nt, w) = _drop_zero_weight_rows(data_nt, _grid_weights(weights, data, data_nt, "hierarchical_grid"))
     
     # Enhanced validation with depth checking
     _validate_reference_specification(spec, data_nt, max_depth)
@@ -1291,10 +1224,10 @@ function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
     
     if actual_depth <= 2
         # Use optimized 2-level path for performance
-        parsed_specs = _parse_reference_grid_specification(spec, data_nt)
+        parsed_specs = _parse_reference_grid_specification(spec, data_nt; weights=w)
     else
         # Use new deep nesting parser
-        parsed_specs = _parse_deep_hierarchical_spec(spec, data_nt, max_depth)
+        parsed_specs = _parse_deep_hierarchical_spec(spec, data_nt, max_depth; weights=w)
     end
     
     # Grid size validation and warnings
@@ -1303,36 +1236,13 @@ function hierarchical_grid(data, spec; max_depth=5, warn_large=true)
     end
     
     # Build the reference grid DataFrame
-    return _build_hierarchical_reference_grid(parsed_specs, data_nt)
+    return _build_hierarchical_reference_grid(parsed_specs, data_nt; weights=w)
 end
 
 # =============================================================================
 # Reference Grid Builder Functions (NEW - AsBalanced Support)  
 # =============================================================================
 
-"""
-    means_grid(data; typical=mean) -> DataFrame
-
-Build reference grid with sample means for continuous variables and frequency-weighted 
-mixtures for categorical variables. This is the standard "at means" behavior.
-
-# Arguments
-- `data`: DataFrame or NamedTuple containing the data
-- `typical`: Function to compute typical values for continuous variables (default: mean)
-
-# Returns
-- `DataFrame`: Single-row reference grid with typical values
-
-# Examples
-```julia
-# Standard "at means" grid
-ref_grid = means_grid(data)
-result = profile_margins(model, data, ref_grid)
-
-# Using median instead of mean for continuous variables
-ref_grid = means_grid(data; typical=median)
-```
-"""
 const _TYPICAL_VALUE_KEY = "Margins.typical_value"
 
 """
@@ -1387,30 +1297,59 @@ function _typical_value_rows(df::DataFrame, col)
     return BitVector(mask)
 end
 
-function means_grid(data; typical=mean)
+"""
+    means_grid(data; typical=mean, weights=nothing) -> DataFrame
+
+A one-row reference grid with every column of `data` at its typical value: the mean (or
+`typical`) of numeric columns, the share of `true` for `Bool` columns, and the frequency mixture
+of categorical and string columns. This is the standard "at means" grid (MEM).
+
+# Arguments
+- `data`: DataFrame or any Tables.jl table
+- `typical`: function giving the typical value of a numeric column (default `mean`)
+- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
+  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
+  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
+  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
+  dropped. See *Typical values* below.
+
+# Typical values
+Numeric columns get `typical` (default `mean`; `median` also has a weighted version), `Bool`
+columns the share of `true`, and categorical and string columns a frequency mixture of their
+observed values. With `weights`, these are the weighted mean or median and weighted shares
+(`Margins.typical_value` defines them; the weighted median is the smallest value whose cumulative
+weight reaches half the total, the midpoint of two values on an exact tie, so equal weights give
+`median`). A custom `typical` function cannot be weighted: `weights` with a `typical` other than
+`mean`/`median` is an `ArgumentError`.
+
+Columns follow the data's column order.
+
+# Examples
+```julia
+ref_grid = means_grid(data)                     # unweighted means and shares
+result = profile_margins(model, data, ref_grid)
+
+ref_grid = means_grid(data; typical=median)     # medians for numeric columns
+ref_grid = means_grid(data; weights=:w)         # weighted means and shares (e.g. survey weights)
+```
+
+`profile_margins` evaluates the grid it is given: for a MEM at weighted means, build the grid
+with `weights` (`profile_margins` has no `weights` keyword).
+"""
+function means_grid(data; typical=mean, weights=nothing)
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
+    w = _grid_weights(weights, data, data_nt, "means_grid")
     
-    # Use existing infrastructure with frequency weighting
-    typical_values = get_typical_values(data_nt; typical=typical)
+    # Typical values (frequency mixtures for categorical columns), weighted with `w`
+    typical_values = get_typical_values(data_nt; typical=typical, weights=w)
     
-    # Convert to DataFrame format
-    cols = Dict{Symbol, Vector}()
-    for (k, v) in typical_values
-        if v isa Real && !(v isa Bool)
-            cols[k] = Float64[v]
-        elseif v isa Bool  
-            cols[k] = Bool[v]
-        else
-            cols[k] = [v]  # Generic for CategoricalMixture, strings, etc.
-        end
-    end
-    
-    df = DataFrame(cols)
+    # One column per data column, in the data's column order
+    df = DataFrame([k => _typical_grid_column(typical_values[k]) for k in keys(data_nt)])
     return _mark_typical_values!(df, names(df))
 end
 
 """
-    balanced_grid(data; vars...) -> DataFrame
+    balanced_grid(data; typical=mean, weights=nothing, vars...) -> DataFrame
 
 Build reference grid with balanced (equal weight) mixtures for specified categorical variables.
 This creates orthogonal factorial designs for AsBalanced analysis.
@@ -1420,9 +1359,19 @@ equal probability weights. Other categorical variables use frequency-weighted mi
 
 # Arguments
 - `data`: DataFrame or NamedTuple containing the data
+- `typical`: function giving the typical value of a numeric column (default `mean`)
+- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
+  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
+  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
+  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
+  dropped. `weights` applies to the typical values of the columns that are not balanced (as in
+  `means_grid`); the balanced mixtures keep equal shares. (`typical` and `weights` are keywords
+  of `balanced_grid`, so a data column with one of these names cannot be balanced.)
 - `vars...`: Keyword arguments specifying which variables to balance
   - Use `:all` to balance all categorical variables: `education=:all`
   - Use specific levels: `education=["high_school", "college"]`
+
+Columns follow the data's column order.
 
 # Returns  
 - `DataFrame`: Single-row reference grid with balanced categorical mixtures
@@ -1442,11 +1391,14 @@ ref_grid = balanced_grid(data; education=:all, region=:all)
 result = profile_margins(model, data, ref_grid)
 ```
 """
-function balanced_grid(data; typical=mean, vars...)
+function balanced_grid(data; typical=mean, weights=nothing, vars...)
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
+    # Weighted: the positively weighted rows only (so a value seen only in zero-weight rows is not
+    # a level to balance over), and their weights
+    (data_nt, w) = _drop_zero_weight_rows(data_nt, _grid_weights(weights, data, data_nt, "balanced_grid"))
 
     # Start with frequency-weighted typical values
-    typical_values = get_typical_values(data_nt; typical=typical)
+    typical_values = get_typical_values(data_nt; typical=typical, weights=w)
     
     # Override specified variables with balanced mixtures
     for (var, spec) in vars
@@ -1496,19 +1448,8 @@ function balanced_grid(data; typical=mean, vars...)
         end
     end
     
-    # Convert to DataFrame format
-    cols = Dict{Symbol, Vector}()
-    for (k, v) in typical_values
-        if v isa Real && !(v isa Bool)
-            cols[k] = Float64[v]
-        elseif v isa Bool  
-            cols[k] = Bool[v]
-        else
-            cols[k] = [v]  # CategoricalMixture objects, strings, etc.
-        end
-    end
-    
-    df = DataFrame(cols)
+    # One column per data column, in the data's column order
+    df = DataFrame([k => _typical_grid_column(typical_values[k]) for k in keys(data_nt)])
     balanced = Set(Symbol(k) for (k, _) in vars)
     return _mark_typical_values!(df, [c for c in names(df) if !(Symbol(c) in balanced)])
 end
@@ -1520,12 +1461,19 @@ end
 Build Cartesian product reference grid from variable specifications.
 This is a pure grid constructor that creates combinations from provided values
 without needing reference data. When used with `profile_margins()`, missing
-model variables are automatically completed with typical values.
+model variables are automatically completed with (unweighted) typical values; for weighted ones,
+complete the grid first with `complete_reference_grid(grid, model, data; weights=…)`.
+
+# Order
+Columns follow the order of the keywords; rows are nested with the first variable varying slowest
+and the last fastest (`cartesian_grid(a=[1, 2], b=[3, 4])` has rows `(1,3), (1,4), (2,3), (2,4)`),
+each variable's values in the order given. A `Dict` has no order, so its variables are taken in
+alphabetical order; use keywords to choose the order.
 
 # Arguments
 - `vars...`: Keyword arguments mapping variables to values
   - Single values: `age=45`
-  - Multiple values: `age=[25, 45, 65]`
+  - Multiple values: `age=[25, 45, 65]` (any vector, e.g. a range, is a list of values)
   - Numlist notation: `age="25(10)65"` (25, 35, 45, 55, 65)
 - `spec::Dict`: Dictionary mapping variable symbols to values
   - Example: `Dict(:age => [25, 45, 65], :treatment => [true, false])`
@@ -1555,84 +1503,47 @@ result = profile_margins(model, data, ref_grid)
 ```
 """
 function cartesian_grid(; vars...)
-    at_spec = Dict{Symbol, Any}(vars)
-    return _cartesian_grid_impl(at_spec)
+    return _cartesian_grid_impl([Symbol(k) => v for (k, v) in vars])
 end
 
-function cartesian_grid(spec::Dict)
-    # Convert keys to Symbols if they aren't already
-    at_spec = Dict{Symbol, Any}(Symbol(k) => v for (k, v) in spec)
-    return _cartesian_grid_impl(at_spec)
+# A Dict has no order of its own: its variables are taken in sorted (alphabetical) order
+function cartesian_grid(spec::AbstractDict)
+    return _cartesian_grid_impl(sort!([Symbol(k) => v for (k, v) in spec]; by=p -> String(first(p))))
 end
 
-# Internal implementation shared by both methods
-function _cartesian_grid_impl(at_spec::Dict{Symbol, Any})
-    if isempty(at_spec)
-        return DataFrame()
-    end
-
-    # Extract specified variables and their values
-    var_names = collect(keys(at_spec))
-    var_values = Vector{Vector{Any}}(undef, length(var_names))
-
-    for (i, var) in enumerate(var_names)
-        vals = at_spec[var]
-        # Handle numlist parsing for strings like "-2(2)2" -> [-2, 0, 2]
-        if vals isa String && _is_numlist(vals)
-            vals = _parse_numlist(vals)
-        end
-        var_values[i] = vals isa Vector ? vals : [vals]  # Convert single value to vector
-    end
-
-    # Pre-calculate total number of combinations for efficient allocation
-    n_combinations = prod(length(vals) for vals in var_values)
-
-    # Pre-allocate result vector for better performance
-    grid_rows = Vector{Dict{Symbol,Any}}(undef, n_combinations)
-
-    # Generate Cartesian product
-    combo_idx = 1
-    for combo in Iterators.product(var_values...)
-        row = Dict{Symbol,Any}()
-        for (i, var) in enumerate(var_names)
-            row[var] = combo[i]
-        end
-        grid_rows[combo_idx] = row
-        combo_idx += 1
-    end
-
-    # Convert to DataFrame
-    if isempty(grid_rows)
-        return DataFrame()
-    end
-
-    cols = Dict{Symbol, Vector}()
-    for key in keys(first(grid_rows))
-        values = [row[key] for row in grid_rows]
-        # Create vector with proper type based on first value type
-        first_val = first(values)
-        if all(v -> typeof(v) == typeof(first_val), values)
-            cols[key] = typeof(first_val)[values...]
-        else
-            cols[key] = Vector{Any}(values)
-        end
-    end
-
-    return DataFrame(cols)
+# Internal implementation shared by both methods: `spec` is an ordered vector of `var => values`.
+# Columns in that order; rows nested with the first variable varying slowest (`_nested_product`).
+function _cartesian_grid_impl(spec::Vector{<:Pair{Symbol}})
+    isempty(spec) && return DataFrame()
+    combos = _nested_product([_grid_values(v) for (_, v) in spec])
+    isempty(combos) && return DataFrame()
+    return DataFrame([var => _typed_grid_column([c[i] for c in combos]) for (i, (var, _)) in enumerate(spec)])
 end
 
 """
-    complete_reference_grid(reference_grid, model, data; typical=mean) -> DataFrame
+    complete_reference_grid(reference_grid, model, data; typical=mean, weights=nothing) -> DataFrame
 
 Complete a partial reference grid by adding typical values for missing model variables.
 This function takes a reference grid that may be missing some model variables and
-adds appropriate typical values for those missing variables.
+adds appropriate typical values for those missing variables. `profile_margins` does this itself,
+unweighted, for a grid that leaves model variables out; call it yourself for weighted fill-ins.
 
 # Arguments
 - `reference_grid`: DataFrame with partial reference grid (e.g., from cartesian_grid)
 - `model`: Fitted statistical model
 - `data`: Original data (DataFrame or NamedTuple) to compute typical values
 - `typical`: Function to compute typical values for continuous variables (default: mean)
+- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
+  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
+  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
+  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
+  dropped. `weights=:model` uses the model's estimation weights (as `population_margins`' default;
+  unweighted for an unweighted model). The weights apply to the filled-in values and to the
+  frequency mixture that replaces a typical-value cell of a variable the model treats as
+  categorical (see `means_grid`, *Typical values*).
+
+Columns: the grid's model-variable columns in the grid's order, then the filled-in variables in
+the data's column order. Rows: those of `reference_grid`.
 
 # Returns
 - `DataFrame`: Complete reference grid with all model variables
@@ -1645,13 +1556,19 @@ partial_grid = cartesian_grid(x1=[0, 1, 2], x2=[10, 20])
 # Complete it with typical values for other model variables
 complete_grid = complete_reference_grid(partial_grid, model, data)
 
+# ... with weighted typical values (the model's estimation weights, or a column)
+complete_grid = complete_reference_grid(partial_grid, model, data; weights=:model)
+
 # Use with profile_margins
 result = profile_margins(model, data, complete_grid)
 ```
 """
-function complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean)
+function complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean, weights=nothing)
     # Convert data to NamedTuple for consistency
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
+    # Weights for the typical values (`nothing`: unweighted, the default); `:model` reads the model's
+    w = _grid_weights(weights, data, data_nt, "complete_reference_grid"; model)
+    isnothing(w) || _check_weighted_typical(typical)
     
     # Columns the MODEL treats as categorical (e.g. integer codes fitted with
     # `contrasts = Dict(:k => DummyCoding())`) become CategoricalArrays, so their typical
@@ -1667,7 +1584,7 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     grid_syms = Set(Symbol.(names(reference_grid)))
     unspecified = Tuple(k for k in keys(filtered_data) if !(k in grid_syms))
     typical_values = get_typical_values(NamedTuple{unspecified}(map(k -> filtered_data[k], unspecified));
-                                        typical=typical)
+                                        typical=typical, weights=w)
 
     # Create complete reference grid
     n_rows = nrow(reference_grid)
@@ -1676,7 +1593,7 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     # Under CategoricalArrays >= 1.0 that conversion returns a plain Array of unwrapped values
     # (PR #420), silently stripping the categorical pool/levels and collapsing non-baseline
     # levels to the baseline downstream. Using AbstractVector preserves the categorical column.
-    complete_cols = Dict{Symbol, AbstractVector}()
+    complete_cols = Pair{Symbol, AbstractVector}[]
 
     # First, add only MODEL columns from the original reference grid
     # This prevents non-model variables from leaking through
@@ -1706,7 +1623,7 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
                         "weighted combination of levels.)"))
                 end
                 if !isnothing(trows) && any(trows)
-                    mixture = _create_frequency_mixture(dcol)
+                    mixture = typical_value(dcol; weights=w)
                     @debug "Variable $col_sym is categorical in the model; using its frequency mixture instead of the typical value(s) $(unique(gcol[trows]))."
                     # A column that mixes typical and user-specified cells holds the
                     # mixture in some rows and levels in others; `profile_margins` evaluates
@@ -1715,32 +1632,48 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
                         Any[trows[i] ? mixture : gcol[i] for i in eachindex(gcol)]
                 end
             end
-            complete_cols[col_sym] = gcol
+            push!(complete_cols, col_sym => gcol)
         end
     end
 
-    # Then, add typical values for missing model variables
-    for (var, typical_val) in typical_values
-        if !haskey(complete_cols, var)
-            # This variable is missing from reference grid: set it to its typical value
-            # (a real number as Float64; a Bool, CategoricalMixture or level as is)
-            complete_cols[var] = _counterfactual_column(SetTo(typical_val), n_rows)
-        end
+    # Then, add typical values for missing model variables, in the data's column order
+    for var in unspecified
+        # This variable is missing from reference grid: set it to its typical value
+        # (a real number as Float64; a Bool, CategoricalMixture or level as is)
+        push!(complete_cols, var => _counterfactual_column(SetTo(typical_values[var]), n_rows))
     end
     
     return DataFrame(complete_cols)
 end
 
 """
-    quantile_grid(data; vars...) -> DataFrame
+    quantile_grid(data; weights=nothing, vars...) -> DataFrame
 
-Build reference grid using quantiles of continuous variables.
+Build reference grid using quantiles of continuous variables. Every other column of `data` is
+at its typical value (as in `means_grid`).
 
 # Arguments
 - `data`: DataFrame or NamedTuple containing the data  
+- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
+  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
+  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
+  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
+  dropped. With `weights`, the quantiles are weighted quantiles and the other columns weighted typical
+  values. The weighted quantile is the weighted analogue of `Statistics.quantile`'s (type 7)
+  that `groups=(:x, n)` uses for weighted quantile bins: with equal weights it is
+  `Statistics.quantile`, and it does not depend on the weights' scale. It interpolates, so at
+  probability 0.5 it can differ from the weighted median of `means_grid(…; typical=median)`,
+  which does not. (`weights` is a keyword, so a data column named `weights` cannot be given a
+  quantile specification.)
 - `vars...`: Keyword arguments mapping variables to quantile specifications
   - Vector of quantiles: `income=[0.1, 0.5, 0.9]` (10th, 50th, 90th percentiles)
-  - Number of quantiles: `age=4` (quartiles: 25th, 50th, 75th percentiles)
+  - Number of quantiles `n` (an integer > 1): the `n - 1` cut points that divide the distribution
+    into `n` equal-probability groups, probabilities `i/n` for `i = 1, …, n-1`: `age=4` gives the
+    quartiles (25th, 50th, 75th percentiles), `income=5` the quintiles (20th, …, 80th), `x=2` the
+    median. (Before 3.0, `n` gave `n` values at probabilities `i/(n+1)`.)
+
+Columns follow the data's column order; rows are nested with the first keyword varying slowest
+(as in `cartesian_grid`).
 
 # Returns
 - `DataFrame`: Reference grid with quantile-based values
@@ -1750,18 +1683,19 @@ Build reference grid using quantiles of continuous variables.
 # Specific quantiles
 ref_grid = quantile_grid(data; income=[0.1, 0.5, 0.9])
 
-# Standard quantiles (quartiles, quintiles, etc.)
+# Standard quantiles: age quartiles (3 values) × income quintiles (4 values) = 12 rows
 ref_grid = quantile_grid(data; age=4, income=5)
 
 # Use with profile_margins
 result = profile_margins(model, data, ref_grid)
 ```
 """
-function quantile_grid(data; vars...)
+function quantile_grid(data; weights=nothing, vars...)
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
+    w = _grid_weights(weights, data, data_nt, "quantile_grid")
     
-    # Convert quantile specifications to actual values
-    at_dict = Dict{Symbol, Any}()
+    # Convert quantile specifications to actual values (in the order of the keywords)
+    at_spec = Pair{Symbol, Any}[]
     for (var, spec) in vars
         if !haskey(data_nt, var)
             throw(ArgumentError("Variable :$var not found in data"))
@@ -1772,20 +1706,21 @@ function quantile_grid(data; vars...)
             throw(ArgumentError("quantile_grid() only supports continuous variables. Variable :$var is $(eltype(col))"))
         end
         
-        if spec isa Number && spec > 1
-            # Number of quantiles (e.g., 4 for quartiles)
+        if spec isa Integer && spec > 1
+            # n-quantiles: the n - 1 cut points that divide the distribution into n groups of
+            # equal probability (4 → quartiles 0.25, 0.5, 0.75; 2 → the median)
             n_quantiles = Int(spec)
-            quantiles = [(i)/(n_quantiles+1) for i in 1:n_quantiles]
-            at_dict[var] = [quantile(col, q) for q in quantiles]
+            quantiles = [i / n_quantiles for i in 1:(n_quantiles - 1)]
+            push!(at_spec, var => _typical_quantiles(col, quantiles; weights=w))
         elseif spec isa Vector{<:Real} && all(0 .≤ spec .≤ 1)
             # Explicit quantiles
-            at_dict[var] = [quantile(col, q) for q in spec]
+            push!(at_spec, var => _typical_quantiles(col, spec; weights=w))
         else
-            throw(ArgumentError("Quantile specification for :$var must be number of quantiles (>1) or vector of quantile values in [0,1]"))
+            throw(ArgumentError("Quantile specification for :$var must be an integer number of quantiles n > 1 (the n - 1 cut points, e.g. 4 for quartiles) or a vector of probabilities in [0, 1]"))
         end
     end
     
-    return _build_cartesian_refgrid(at_dict, data_nt, mean)
+    return _build_cartesian_refgrid(at_spec, data_nt, mean; weights=w)
 end
 
 # =============================================================================

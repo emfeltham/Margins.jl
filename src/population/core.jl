@@ -68,8 +68,12 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
     weights there and warns (once per session); pass `weights=:w` (or `weights=:none`) explicitly.
   - `:none` - no weights (equal weight for all observations; the 2.x default). `nothing` means the same.
   - `Symbol` - column name containing weights (e.g., `:sampling_weight`); `:model` and `:none` are
-    reserved, so pass a column with one of those names as a vector
-  - `Vector` - weight vector matching number of observations
+    reserved, so pass a column with one of those names as a vector. A weight column that is also a
+    predictor is left out of the auto-detected `vars` (and naming it in `vars` is an error).
+  - `Vector` - weight vector matching number of observations. A vector is not matched to a column,
+    so `weights=data.z` does not exclude `z` from `vars`: with `z` a predictor, its effect is
+    reported (averaged with weights `z`).
+  - With weights, `n` (and `metadata[:n_obs]`) counts the rows with a positive weight.
   - `metadata[:weights_source]` records which applied: `:model`, `:user` or `:none`
   - Weights change the point estimates only. Standard errors come from `vcov` (by default the model's,
     which in GLM.jl treats `wts` as frequency weights); they are not design-based survey standard
@@ -232,7 +236,7 @@ function _population_result(req::MarginsRequest{:population})
 
     if type === :effects
         df, G = _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights_vec)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=_n_used(1:length(first(data_nt)), weights_vec), model_type=typeof(model))
     
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population
@@ -249,7 +253,7 @@ function _population_result(req::MarginsRequest{:population})
         return EffectsResult(estimates, standard_errors, variables, terms, nothing, G, _request_inference(req, engine), metadata)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=_n_used(1:length(first(data_nt)), weights_vec), model_type=typeof(model))
     
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :population

@@ -241,9 +241,8 @@ end
 
 # Where `at=:mean` / `:median` put the derivative: the (weighted) mean / median of the modifier values
 # `vals` (weights `w`, or `nothing`)
-_local_eval_point(at::Symbol, vals, w) = at === :mean ?
-    (isnothing(w) ? mean(vals) : _weighted_mean(vals, w)) :
-    (isnothing(w) ? median(vals) : _weighted_median(vals, w))
+# (`typical_value`, the one typical-value computation; zero-weight rows count as dropped)
+_local_eval_point(at::Symbol, vals, w) = Float64(typical_value(vals, at === :mean ? mean : median; weights=w))
 
 # The evaluation points of `at` other than :observed, for the modifier values `vals` (non-missing, with
 # weights `w` or `nothing`)

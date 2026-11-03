@@ -124,3 +124,29 @@ min_allocations(f) = float(minimum(@benchmark $f samples=10 evals=1).allocs)
         end
     end
 end
+
+@testset "Categorical effects: per-call bytes do not grow with n (step 10)" begin
+    # The observed levels come from the reference codes, not from a row-by-row Set of strings
+    # (which cost ~300 KB per categorical variable at 20K rows)
+    function cat_bytes(n)
+        rng = MersenneTwister(3)
+        d = DataFrame(x = randn(rng, n), g = categorical(rand(rng, ["a", "b", "c", "d"], n)),
+                      t = rand(rng, Bool, n))
+        d.y = d.x .+ (d.g .== "b") .+ randn(rng, n)
+        m = lm(@formula(y ~ x + g + t), d)
+        V = vcov(m)
+        population_margins(m, d; vars = [:g, :t], vcov = V)
+        nt = Margins.Tables.columntable(d)
+        Margins._model_contrast_levels(nt.g, m, :g, nt)
+        (minimum(@allocated(population_margins(m, d; vars = [:g, :t], vcov = V)) for _ in 1:3),
+         minimum(@allocated(Margins._model_contrast_levels(nt.g, m, :g, nt)) for _ in 1:3))
+    end
+    (a_small, l_small) = cat_bytes(2_000)
+    (a_large, l_large) = cat_bytes(40_000)
+    @test l_large == l_small
+    @test a_large <= a_small + 4096
+    # The observed levels are those present (unused pool levels and missing are skipped)
+    c = categorical(["b", "b", missing, "d"]; levels = ["a", "b", "c", "d"])
+    @test Margins._observed_level_strings(c) == Set(["b", "d"])
+    @test Margins._observed_level_strings(["x", "y", "x"]) == Set(["x", "y"])
+end

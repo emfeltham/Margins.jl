@@ -135,4 +135,35 @@ using Margins
         # Invalid interval symbol
         @test_throws "must be :confidence or :prediction" profile_margins(m, df, grid; type=:predictions, interval=:bogus)
     end
+
+    @testset "weighted lm: frequency-weight convention, new observation of weight 1" begin
+        # R reference (Rscript, 2026-10-29): with integer weights, Margins equals R's
+        # predict(lm(y ~ x + z), newdata, interval = "prediction") on the data with each row
+        # repeated w times; R's lm(..., weights = w) (precision weights) gives another interval.
+        rng = MersenneTwister(5); nw = 40
+        dw = DataFrame(x = randn(rng, nw), z = randn(rng, nw), w = Float64.(rand(rng, 1:4, nw)))
+        dw.y = 1 .+ 2 .* dw.x .- dw.z .+ randn(rng, nw)
+        mw = lm(@formula(y ~ x + z), dw; wts = dw.w)
+        de = dw[reduce(vcat, [fill(i, Int(dw.w[i])) for i in 1:nw]), :]
+        me = lm(@formula(y ~ x + z), de)
+        g = cartesian_grid(x = [0.0, 1.0], z = [0.5])
+        rw = @test_logs (:warn, r"weighted fit") match_mode=:any DataFrame(
+            profile_margins(mw, dw, g; type = :predictions, interval = :prediction))
+        re = DataFrame(profile_margins(me, de, g; type = :predictions, interval = :prediction))
+        @test rw.estimate ≈ re.estimate rtol = 1e-10
+        @test rw.ci_lower ≈ re.ci_lower rtol = 1e-10
+        @test rw.ci_upper ≈ re.ci_upper rtol = 1e-10
+        @test rw.df == re.df == fill(sum(dw.w) - 3, 2)
+        # The R values (frequency-expanded fit)
+        @test rw.ci_lower ≈ [-0.9522512, 1.3569178] atol = 1e-6
+        @test rw.ci_upper ≈ [2.797211, 5.141951] atol = 1e-6
+        # Hand computation: ŷ ± t(Σw − p)·√(SE² + Σwr²/(Σw − p))
+        X = [1.0 0.0 0.5; 1.0 1.0 0.5]
+        σ2 = deviance(mw) / (sum(dw.w) - 3)
+        half = quantile(TDist(sum(dw.w) - 3), 0.975) .* sqrt.([X[i, :]' * vcov(mw) * X[i, :] for i in 1:2] .+ σ2)
+        @test rw.ci_upper ≈ X * coef(mw) .+ half rtol = 1e-10
+        # Unweighted fits and confidence intervals do not warn
+        @test_logs profile_margins(me, de, g; type = :predictions, interval = :prediction)
+        @test_logs profile_margins(mw, dw, g; type = :predictions)
+    end
 end

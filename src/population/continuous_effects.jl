@@ -35,7 +35,7 @@ function _ame_calculate(
     n_continuous = length(continuous_requested)
     n_categorical = count_categorical_rows(categorical_requested, engine, contrasts)
     total_terms = n_continuous + n_categorical
-    n_obs = length(rows)
+    n_obs = _n_used(rows, weights)
     n_params = length(engine.β)
 
     # Step 4: Pre-allocate results using modular function
@@ -151,6 +151,23 @@ function _process_continuous_variables!(
     end
 
     return cont_idx
+end
+
+"""
+    _n_used(rows, weights) -> Int
+
+The number of `rows` that enter an average, reported as `n` (the `n` column, per group or
+stratum, and `metadata[:n_obs]`): every row when unweighted, otherwise the rows with a positive
+weight. A row with weight zero contributes nothing to a weighted average, so counting it would
+overstate the sample (ISSUES #3).
+"""
+_n_used(rows, ::Nothing) = length(rows)
+function _n_used(rows, weights::AbstractVector)
+    k = 0
+    @inbounds for row in rows
+        weights[row] > 0 && (k += 1)
+    end
+    return k
 end
 
 """

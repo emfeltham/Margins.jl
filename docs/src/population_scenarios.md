@@ -118,7 +118,9 @@ result = population_margins(model, data;
         policy=["low", "medium", "high"]
     )
 )
-# Result: 6 rows for all (treatment, policy) combinations
+# Result: 6 rows for all (treatment, policy) combinations, in the order
+# (0,"low"), (0,"medium"), (0,"high"), (1,"low"), …: the first scenario variable varies
+# slowest, and each variable's values are in the order given
 
 # 2×2×3 = 12 scenarios
 result = population_margins(model, data;
@@ -305,7 +307,7 @@ ate = df[df.at_treatment .== 1, :estimate][1] - df[df.at_treatment .== 0, :estim
 
 ### Combining with Weights
 
-Scenarios respect sampling weights:
+Scenarios use the averaging weights (the model's by default, or `weights=`); the standard errors still come from `vcov` (see [Weights](weights.md)):
 
 ```julia
 # Weighted scenarios (e.g., survey data)

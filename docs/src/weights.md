@@ -5,7 +5,7 @@ This guide explains how to use observation weights in `population_margins` (and 
 ## Scope and Policy
 
 - Weights are supported in `population_margins` and the model-level `second_differences` via the `weights` keyword. The default, `weights = :model`, uses the weights the model was fit with.
-- `profile_margins` does not accept weights, and its typical values are unweighted (see [Known limitation: profile margins](#Known-limitation:-profile-margins)).
+- `profile_margins` does not accept weights: it evaluates the grid it is given. Weighted typical values come from the grid builders' `weights=` (see [Profile margins: weighted typical values](#Profile-margins:-weighted-typical-values)).
 - Weighted quantities use proper normalization, and delta‑method SEs use the averaged gradient with the covariance matrix Σ given by `vcov` (see [What weights do not change](#What-weights-do-not-change)).
 
 ## Supported Forms
@@ -14,6 +14,14 @@ This guide explains how to use observation weights in `population_margins` (and 
 - `weights = :none`: unweighted analysis (the default before 3.0). `weights = nothing` means the same.
 - `weights = :colname` (Symbol): column in `data` with weights. `:model` and `:none` are reserved; pass a column with one of those names as a vector.
 - `weights = vector::AbstractVector{<:Real}`: vector of weights with `length == nrow(data)`.
+
+**A weight column that is also a predictor.** `weights = :z` names a column, so Margins knows `z` is the weight: it is left out of the auto-detected `vars` (and `vars = [:z]` with `weights = :z` is an `ArgumentError`, since one column cannot be both the averaging weight and a focal variable). A vector cannot be traced to a column, so `weights = data.z` gives the same weights but does **not** exclude `z`: if `z` is a predictor, its effect is reported too. Pass `vars` explicitly when the difference matters:
+
+```julia
+m = lm(@formula(y ~ x + z), data)
+population_margins(m, data; weights = :z)       # effects of x only
+population_margins(m, data; weights = data.z)   # effects of x and z (each averaged with weights z)
+```
 
 `metadata[:weights_source]` records which applied: `:model`, `:user` (a column or vector) or `:none`. A second-differences table records it as table metadata, `metadata(sd, "weights_source")`.
 
@@ -64,6 +72,10 @@ These formulas are used consistently in:
 
 Weights set the point estimates. The standard errors come from `Σ`, which is `vcov(model)` by default: for GLM.jl that is a frequency-weight covariance (multiplying `wts` by 10 divides every SE by √10). These are **not design-based survey standard errors**: there is no adjustment for strata, clusters or the sampling design. For design-based inference, pass an appropriate estimator or covariance matrix as `vcov` (for example a CovarianceMatrices.jl cluster-robust estimator, or a matrix you computed).
 
+### Prediction intervals with a weighted linear model
+
+`profile_margins(m, data, grid; type=:predictions, interval=:prediction)` on `lm(…; wts = w)` gives the interval for one new observation of **weight 1**, with GLM.jl's frequency-weight residual variance σ̂² = Σwᵢrᵢ²/(Σwᵢ − p) and t(Σwᵢ − p), the same convention as `vcov(m)` and the model's df. This equals R's `predict(lm(y ~ …), newdata, interval = "prediction")` fit to the data with each row repeated wᵢ times. R's `lm(…, weights = w)` treats `w` as precision weights (σ̂² = Σwᵢrᵢ²/(n − p), df n − p) and gives a different interval (and different SEs). The first such call in a session warns, as R's `predict.lm` does for a weighted fit.
+
 ## Examples
 
 ```julia
@@ -110,13 +122,26 @@ ame_0 = population_margins(wmodel, df; vars=[:x, :z], weights=:none)   # unweigh
 
 All results use weighted averaging with proper normalization by the total weight in each context and delta‑method SEs computed from the averaged gradient and Σ.
 
-## Known limitation: profile margins
+## Profile margins: weighted typical values
 
-`profile_margins` evaluates at reference points rather than averaging over the sample, and it has no `weights` keyword. The typical values it uses are **unweighted**, even for a weighted model: the means (or `typical` function) of `means_grid`, `balanced_grid` and `hierarchical_grid`, the fill-in values for variables a grid leaves out, and the frequency mixtures of categorical variables. Results report `weights_source = :none`. To evaluate at weighted typical values, compute them and give them in the grid, e.g. `cartesian_grid(x = [sum(df.w .* df.x) / sum(df.w)])`.
+`profile_margins` evaluates at reference points rather than averaging over the sample, and it has no `weights` keyword: it evaluates the grid it is given, and results report `weights_source = :none`. Weights enter through the **typical values in the grid**, which the grid builders compute. `means_grid`, `balanced_grid`, `quantile_grid`, `hierarchical_grid` and `complete_reference_grid` take a data-level `weights=` (a column name or a vector, checked as here; default unweighted), giving weighted means and medians, weighted shares for `Bool` columns and weighted frequency mixtures for categorical ones:
+
+```julia
+# MEM of a survey-weighted model at weighted means and shares
+m = glm(@formula(y ~ x + z + group), df, Binomial(), LogitLink(); wts = df.w)
+mem = profile_margins(m, df, means_grid(df; weights = :w))
+
+# A partial grid: profile_margins would fill z and group with UNWEIGHTED typical values;
+# complete it yourself to fill them with weighted ones (:model = the model's weights)
+grid = complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :model)
+res = profile_margins(m, df, grid)
+```
+
+Without `weights=`, the builders are unweighted, as is the completion `profile_margins` does for variables a grid leaves out. The definitions (weighted median, zero weights, the custom-`typical` limitation) are in [Typical values](reference_grids.md#Typical-values).
 
 ## Best Practices
 
-- Provide non‑negative weights; zero weights effectively drop observations.
+- Provide non‑negative weights; zero weights drop observations (also from weighted typical values), and `n` (the `n` column, per group, and `metadata[:n_obs]`) counts only the rows with a positive weight.
 - For grouped analyses, ensure the weight column/vector aligns with the original data (the implementation indexes weights by original row indices).
 - Confirm units/interpretation: sampling vs frequency weights may yield different magnitudes depending on the empirical distribution they imply.
 - Pass the data the model was fit to (its estimation sample) when relying on `weights = :model`.

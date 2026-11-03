@@ -421,6 +421,131 @@ tests.
 | per-subgroup second differences by subsetting the data and looping | `second_differences(m, d, :x, :t; groups=:g)` |
 | `Margins._second_differences_local(m, d, :x, :w, V; at=…)` (internal) | `second_differences(m, d, :x, :w; at=…, vcov=V, modifier_type=:continuous)` |
 
+### Weighted typical values (new `weights=` on the grid builders)
+
+- **New: `weights=` on `means_grid`, `balanced_grid`, `quantile_grid`, `hierarchical_grid` and
+  `complete_reference_grid`** (ISSUES #8, review E4). A column name (`weights=:w`) or a vector, checked
+  as `population_margins`' `weights=` (real, finite, non-negative, not all zero); `complete_reference_grid`
+  also takes `weights=:model` (the model's estimation weights). The typical values become weighted:
+  weighted means and medians, weighted shares of `true` for `Bool` columns, weighted frequency mixtures
+  for categorical and string columns, weighted quantiles for `quantile_grid` and `hierarchical_grid`'s
+  quantile specifications. The default `weights=nothing` gives the same grid as before (bit for bit; the
+  golden snapshot is unchanged). A row with weight 0 is dropped.
+- **One typical-value computation, `Margins.typical_value(col, typical=mean; weights=nothing)`**
+  (internal), now used by every builder, by reference-grid completion (including the frequency mixture
+  of a variable the model treats as categorical) and by the second differences' `at=:mean`/`:median`
+  (overall and per `groups` stratum), which had their own weighted mean and median.
+- **Weighted median:** the smallest value whose cumulative weight reaches half the total; on an exact
+  tie (cumulative weight = half the total), the midpoint of that value and the next. Equal weights give
+  `Statistics.median` exactly (the average of the two middle values for an even count), integer weights
+  give the median of the sample with each row repeated, and rescaling the weights changes nothing (ties
+  are detected up to the rounding bound of the cumulative sums). `StatsBase.median(x, weights(w))` was
+  not used: it interpolates, and it differs from `median` in the last digits for equal weights. The
+  second differences' weighted median (step 8) used the same rule, except that it compared the
+  cumulative weight with half the total exactly (so the tie could depend on the weights' scale) and
+  could take the midpoint with a zero-weight row's value; both are fixed. The weighted quantiles are the
+  weighted analogue of type 7 already used for weighted `groups=(:x, n)` bins; they interpolate, so at
+  probability 0.5 they can differ from the weighted median.
+- **A custom `typical` function cannot be weighted:** `weights` with a `typical` other than `mean` or
+  `median` is an `ArgumentError` (the weights are not silently ignored).
+- **`profile_margins` is unchanged:** it evaluates the grid it is given and takes no `weights`. For a MEM
+  at weighted typical values build the grid with weights (`profile_margins(m, d, means_grid(d;
+  weights=:w))`); the completion it does for variables a partial grid leaves out stays unweighted, so
+  complete a partial grid first (`complete_reference_grid(cartesian_grid(x=[0, 1]), m, d;
+  weights=:model)`). Docs: "Typical values" in `docs/src/reference_grids.md` and the Weights page.
+- Fixed along the way: `means_grid`'s docstring was attached to an internal constant, so `?means_grid`
+  showed nothing; `quantile_grid` now marks its filled-in columns as typical values (as `means_grid`
+  does), so an integer-coded variable the model treats as categorical gets its frequency mixture there
+  instead of an error; `cartesian_grid(x=1:3)` (a range, not a `Vector`) is three values, not one.
+- Removed: the unused internal `_build_reference_grid`, `_build_means_refgrid` and
+  `_build_explicit_refgrid`.
+- First-call latency (fresh process, median of 7, vs the previous 3.0 commit): AME (all) 4.31 → 4.28 s,
+  AME (one variable) 3.55 → 3.59 s, MEM (`means_grid`) 6.06 → 6.06 s, AAP 2.77 → 2.78 s, MEM with a partial
+  `cartesian_grid` completed by `profile_margins` 6.08 → 6.14 s (+1%; the ranges do not overlap).
+
+### Deterministic row and column order (output order changes; values do not)
+
+Reference grids, `groups=` strata and `scenarios=` combinations now have one documented order. Only the
+order of rows and columns changes; every estimate and standard error is the same (the 9740 golden rows,
+matched by key, are bitwise equal). Code that reads results by row position may need updating; reading
+by key (`contrast(result, (over_g = "b",), …)`, filtering on columns) is unaffected.
+
+- **One nesting convention: the first variable varies slowest** and the last fastest, each in the order
+  of its values. `scenarios=` and `second_differences(…; profile=)` used `Iterators.product` order (first
+  variable fastest); `groups=[:a, :b]` and `hierarchical_grid` vectors already nested this way.
+- **Categorical levels in level order; Bool, strings and numbers ascending.** `groups=` strata and
+  `hierarchical_grid` levels followed first appearance in the data.
+- **Grid columns:** `cartesian_grid` follows the keyword order (a `Dict` argument is taken
+  alphabetically); `means_grid`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` follow the data's
+  column order; `complete_reference_grid` keeps the grid's columns and appends the filled-in variables in
+  the data's order. All of them used to come from a `Dict`, so columns were alphabetical and
+  `cartesian_grid`'s rows nested in `Dict` order. `profile_margins` results follow the grid, so they change
+  accordingly.
+
+| call | before | 3.0 |
+|:--|:--|:--|
+| `cartesian_grid(z=[1, 2], x=[5, 6])` | columns `x, z` (alphabetical); rows `(x, z)` = (5,1), (5,2), (6,1), (6,2) (`Dict` order) | columns `z, x`; rows `(z, x)` = (1,5), (1,6), (2,5), (2,6) |
+| `profile_margins(m, d, cartesian_grid(z=[1, 2], x=[5, 6]))` | rows and columns as the grid above | `z, x` columns; z slowest |
+| `means_grid(d)` (data columns `y, x, g`) | columns `g, x, y` | columns `y, x, g` |
+| `population_margins(m, d; scenarios=(z=[1, 2], t=[0, 1]))` | (1,0), (2,0), (1,1), (2,1) | (1,0), (1,1), (2,0), (2,1) |
+| `population_margins(m, d; groups=:g)`, `levels(d.g) == ["lo", "mid", "hi"]`, data starting with "hi" | hi, … (first appearance) | lo, mid, hi |
+| `population_margins(m, d; groups=:t)` (Bool, data starting with `true`) | true, false | false, true |
+| `population_margins(m, d; groups=:s)` (strings "q", "p") | q, p (first appearance) | p, q |
+| `hierarchical_grid(d, :g)` | first appearance | level order |
+| `second_differences(m, d, :x, :z; groups=:g)` | strata in first appearance | level order |
+| `second_differences(m, d, :x, :z; profile=(a=[1, 2], b=[3, 4]))` | (1,3), (2,3), (1,4), (2,4) | (1,3), (1,4), (2,3), (2,4) |
+
+Migration: select rows by their context columns rather than by position; to keep a specific order,
+`sort` the `DataFrame(result)`.
+
+### Smaller fixes and clean-ups
+
+- **`n` counts only the rows with a positive weight** (behaviour change for weighted calls with zero
+  weights). A row with weight 0 contributes nothing to a weighted average, but `n` (the `n` column,
+  per `groups` stratum and per scenario, and `metadata[:n_obs]`) counted it: with 500 of 2000 weights
+  zero, `n` was 2000; it is now 1500. Applies to explicit weights and to `weights=:model`. Unweighted
+  calls and `weights=:none` are unchanged, and so are estimates and standard errors.
+- **Prediction intervals with a weighted `lm` are documented, and warn once per session.** The numbers
+  are unchanged: `interval=:prediction` on `lm(…; wts=w)` is the interval for a new observation of
+  weight 1 with GLM.jl's frequency-weight σ̂² = Σwᵢrᵢ²/(Σwᵢ − p) and t(Σwᵢ − p), the convention of
+  `vcov(m)` and the model's df. It equals R's `predict.lm(…, interval = "prediction")` on the data with
+  each row repeated wᵢ times (tested), not R's `lm(…, weights = w)`, which treats `w` as precision
+  weights. The first such call in a session warns, as R's `predict.lm` does for a weighted fit.
+- **`quantile_grid(data; x = n)` gives the `n − 1` cut points** (probabilities `i/n`, `i = 1, …, n−1`),
+  as its docstring said: `x = 4` is the quartiles (0.25, 0.5, 0.75), `x = 5` the quintiles, `x = 2`
+  the median. It gave `n` values at `i/(n+1)` (`x = 4` → 0.2, 0.4, 0.6, 0.8). A non-integer `n`
+  is an `ArgumentError` (was an `InexactError`). Vectors of probabilities are unchanged.
+- **`hierarchical_grid` keeps categorical columns categorical**, with the data column's levels
+  (including unused ones) and ordering; it returned `String` columns. Columns that mix levels with
+  frequency mixtures (e.g. `:r => [:g, (:x, :mean)]`) are unchanged (`Vector{Any}`).
+- **No spurious warning for mixtures in `hierarchical_grid`**: `(:g, :mix_proportional)` warned that
+  the combination "matches no observations"; a mixture is not a level and is no longer checked.
+- **Categorical effects no longer allocate O(n) per call.** The observed levels of each categorical
+  variable (`_model_contrast_levels`, `count_categorical_rows`) were collected as a `Set` of
+  per-row strings or with `unique` on the column: about 300 KB per variable at 20K rows and 1.2 MB at
+  50K. They now come from one pass over the reference codes (Bool columns: `any`/`all`), O(levels)
+  bytes. `population_margins(m, d; vars=[:g, :h, :t])` (two categoricals and a Bool): 657 KB → 67 KB
+  at 20K rows, 2.43 MB → 67 KB at 50K; time 7.8 → 7.4 ms and 19.3 → 18.7 ms.
+- **Tests (D4): every `test/*.jl` test file is now run or gone.** `statistical_validation/function_composition_tests.jl`
+  was already fixed and run (closed-form derivative checks). `test_second_diff_bool_fix.jl` (errored:
+  its scenario variable was not a predictor) is rewritten against a model where it is, with a
+  coefficient-based oracle, and wired in; `test_unified_api.jl` (joint call = separate calls, now
+  exact for every row, both contrasts and backends, and within groups) is wired in. Deleted, as
+  benchmarks/scripts without assertions, redundant with the allocation and performance suites, or using
+  removed APIs: `test_ad_vs_fd_actual.jl`, `test_complex_example.jl`,
+  `test_categorical_ame_allocations_bench.jl`, `test_full_dataset_optimization.jl`,
+  `test_performance_regression.jl` (wall-clock thresholds) and `test_utilities.jl` (unused copy of
+  FormulaCompiler test helpers). Tooling that is not a test stays: `support/` (golden snapshot and
+  synthetic-data generators), `r_compare*/` and `performance/benchmark_blas_opt.jl`.
+- **Docs:** `weights = :z` (a column) leaves `z` out of the auto-detected `vars`, `weights = data.z` (a
+  vector) does not (ISSUES #9), now stated in the `population_margins` docstring and the weights page;
+  the performance page no longer claims a whole call allocates 0 bytes (the row loops do; a call
+  allocates a constant that does not grow with n); removed FormulaCompiler names that no longer exist
+  (`build_derivative_evaluator`, `evaluate_scenario`) and a `(:var, :all)` hierarchical-grid spec that
+  never existed (a bare `:var` gives all levels).
+- Removed the unreachable NamedTuple branch of the internal `_parse_over_specification` and its
+  hard-coded ±2.5-unit window (`_create_continuous_subgroups`).
+
 ### Breaking / behaviour change
 
 - **Averages use the model's estimation weights by default (`weights=:model`).** `population_margins` and the model-level `second_differences` ignored the weights a model was fit with: `glm(…; wts=w)` followed by `population_margins(m, data)` gave unweighted AMEs and AAPs, silently, while the standard errors came from `vcov(m)`, which GLM.jl computes with `w` as frequency weights, so the estimate and its SE described different samples. The default is now `weights=:model`: the fit's weights if it has any, otherwise none. For a canonical-link GLM with an intercept, Σwᵢ(yᵢ − μ̂ᵢ) = 0, so the default AAP now equals the weighted mean of y, as in Stata (`margins` uses the estimation weights). `weights=:none` gives the 2.x unweighted result; `weights=nothing` means the same, so code that passed it explicitly is unchanged. A column name or a vector works as before, and explicit weights on an unweighted model are allowed without a warning. Results for unweighted models are unchanged.

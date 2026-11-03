@@ -26,8 +26,8 @@ _expand_profile_to_cartesian((socio4=[false, true],))
 # Multiple vectors
 _expand_profile_to_cartesian((socio4=[false, true], region=["north", "south"]))
 # → [(socio4=false, region="north"),
-#    (socio4=true,  region="north"),
 #    (socio4=false, region="south"),
+#    (socio4=true,  region="north"),
 #    (socio4=true,  region="south")]
 ```
 """
@@ -52,9 +52,9 @@ function _expand_profile_to_cartesian(profile::NamedTuple)
         end
     end
 
-    # Compute Cartesian product
-    # For example: [[:a, :b], [1, 2]] → [(:a, 1), (:b, 1), (:a, 2), (:b, 2)]
-    cartesian_indices = Iterators.product(value_vecs...)
+    # Compute Cartesian product, the first variable varying slowest (`_nested_product`)
+    # For example: [[:a, :b], [1, 2]] → [(:a, 1), (:a, 2), (:b, 1), (:b, 2)]
+    cartesian_indices = _nested_product(value_vecs)
 
     # Build NamedTuples from the product
     result = NamedTuple[]
@@ -72,16 +72,8 @@ end
 # The table-level metadata key under which a second-differences frame records `weights_source`
 const _SD_WEIGHTS_SOURCE_KEY = "weights_source"
 
-_weighted_mean(x, w) = sum(w .* x) / sum(w)
-
-# Smallest x whose cumulative weight reaches half the total (the midpoint of two x when it lands exactly on half).
-function _weighted_median(x, w)
-    p = sortperm(x)
-    xs, cw = x[p], cumsum(w[p])
-    half = cw[end] / 2
-    i = findfirst(c -> c >= half, cw)
-    return (cw[i] == half && i < length(xs)) ? (xs[i] + xs[i + 1]) / 2 : float(xs[i])
-end
+# `at=:mean` / `:median` use the shared `typical_value` (core/typical_values.jl), with the
+# weighted mean and the weighted median defined there.
 
 # Continuous effects are labelled "dy/dx" (v2.3.0; the scenarios/groups path used to say
 # "derivative"). "derivative" is still accepted wherever a contrast label is passed in.

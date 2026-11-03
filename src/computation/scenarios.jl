@@ -191,6 +191,34 @@ function _model_contrast_levels(var_col, model, var::Symbol, data_nt)
     cats = _model_categorical_levels(model, data_nt)
     model_levels = haskey(cats, var) ? collect(cats[var]) :
         CategoricalArrays.unwrap.(levels(var_col))
-    observed = Set{String}(string(var_col[i]) for i in eachindex(var_col))
-    return (model_levels, observed)
+    return (model_levels, _observed_level_strings(var_col))
+end
+
+"""
+    _observed_level_strings(col) -> Set{String}
+
+The distinct values of `col` as strings. For a `CategoricalArray` this scans the integer
+reference codes (refs code `i` is `levels(col)[i]`), so a call allocates O(levels), not O(rows):
+building the set from `string(col[i])` row by row cost ~300 KB per categorical variable at
+20K rows (and ~1.2 MB at 50K). Missing values (code 0) are skipped.
+"""
+function _observed_level_strings(col::CategoricalArrays.CategoricalArray)
+    seen = _observed_level_mask(col)
+    lv = CategoricalArrays.levels(col)
+    return Set{String}(string(CategoricalArrays.unwrap(lv[i])) for i in eachindex(seen) if seen[i])
+end
+_observed_level_strings(col) = Set{String}(string(x) for x in col)
+
+# Which of `levels(col)` occur in `col` (one pass over the reference codes, no per-row allocation)
+function _observed_level_mask(col::CategoricalArrays.CategoricalArray)
+    seen = falses(length(CategoricalArrays.levels(col)))
+    nseen = 0
+    @inbounds for r in CategoricalArrays.refs(col)
+        if r > 0 && !seen[r]
+            seen[r] = true
+            nseen += 1
+            nseen == length(seen) && break   # every level seen
+        end
+    end
+    return seen
 end

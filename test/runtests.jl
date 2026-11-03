@@ -35,6 +35,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_request_layer.jl")
     include("core/test_model_interface.jl")   # model-class interface: df rule, offsets, FixedEffectModels
     include("core/test_derived_columns.jl")   # SetTo/Shift counterfactuals and the derived-column warning
+    include("core/test_ordering.jl")          # deterministic grid, groups and scenarios order (step 9)
     include("statistical_validation/robust_se_validation.jl")
 end
 
@@ -48,6 +49,7 @@ end
     include("features/test_hierarchical_grids.jl")
     include("features/test_string_categorical_conversion.jl")
     include("features/test_balanced_grid.jl")
+    include("features/test_typical_values.jl")   # weighted typical values, grid builders' weights= (step 9)
     include("features/test_fixed_effect_models.jl")
     include("regression/test_bool_mixture_skip.jl")
     include("regression/test_unused_categorical_levels.jl")
@@ -75,6 +77,8 @@ end
     include("test_result_metadata_contract.jl")
     include("test_second_differences_observed.jl")
     include("test_second_differences_groups.jl")    # groups=, backend=, interaction-only variables (step 8)
+    include("test_second_diff_bool_fix.jl")         # categorical Bool focal variable, contrast found automatically
+    include("test_unified_api.jl")                  # mixed variable types: joint call equals separate calls
     include("test_profile_pairwise.jl")
 end
 

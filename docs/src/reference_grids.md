@@ -19,6 +19,48 @@ profile_margins(model, data, reference_grid; type=:effects, ...)
 
 The `reference_grid` parameter accepts DataFrame specifications that enumerate the covariate combinations where marginal effects are computed.
 
+## Typical values
+
+Builders fill variables with **typical values**, computed by one function (`Margins.typical_value`) everywhere: `means_grid`, `balanced_grid` (columns it does not balance), `quantile_grid` (other columns), `hierarchical_grid` (`(:x, :mean)`, `(:x, :median)`, `:mix_proportional` and the variables a combination leaves out), `complete_reference_grid` and the completion inside `profile_margins`, and the second differences' `at = :mean` / `:median`.
+
+| column | typical value |
+|:--|:--|
+| numeric | `typical(col)`: `mean` (default), `median`, or any function |
+| `Bool` | share of `true` (a number in [0, 1]) |
+| categorical, string | frequency mixture of the observed values, e.g. `mix("a" => 0.3, "b" => 0.7)` |
+
+**Weighted typical values.** With `weights = :w` (a column) or a vector, the builders compute:
+
+- the **weighted mean** `Σ wᵢxᵢ / Σ wᵢ`;
+- the **weighted median**: sort the positively weighted values, with cumulative weights Cₖ and total W; the median is the smallest value with Cₖ ≥ W/2, and when Cₖ equals W/2 exactly, the midpoint of that value and the next. With equal weights this is `Statistics.median` (including the average of the two middle values for an even count); with integer weights it is the median of the data with each row repeated wᵢ times; rescaling the weights does not change it;
+- **weighted shares** for `Bool` columns and categorical mixtures (the weight of each value over the total);
+- **weighted quantiles** (`quantile_grid`, `hierarchical_grid` quantile specifications): the weighted analogue of `Statistics.quantile` (type 7) that weighted `groups = (:x, n)` bins use. It equals `Statistics.quantile` with equal weights and interpolates, so at probability 0.5 it can differ from the weighted median.
+
+Weights are checked as in `population_margins`: real, finite, non‑negative, not all zero. A row with weight 0 contributes nothing (the result is the one without that row). With all weights equal, the result is the unweighted one.
+
+**Custom `typical` functions cannot be weighted.** Only `mean` and `median` have weighted versions; `weights` with any other `typical` is an `ArgumentError` rather than silently ignoring the weights. Compute such a value yourself and put it in the grid (`cartesian_grid(x = [my_stat(df.x, df.w)])`).
+
+**Weighted MEM for a survey-weighted model.** `profile_margins` evaluates the grid it is given and takes no `weights`. Build the grid with weights:
+
+```julia
+m = glm(@formula(y ~ x + z + group), df, Binomial(), LogitLink(); wts = df.w)
+profile_margins(m, df, means_grid(df; weights = :w))   # x, z at weighted means; group a weighted mixture
+
+# Partial grid: complete it with weighted values before profile_margins (which would fill unweighted)
+grid = complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :model)
+profile_margins(m, df, grid)
+```
+
+`weights = :model` (the model's estimation weights) is accepted by `complete_reference_grid` only, the one builder that takes a model. A `Symbol` names a column of the data; a vector is used as given.
+
+## Row and column order
+
+Grids have a documented, deterministic order:
+
+- **Columns:** `cartesian_grid` follows the keyword order (a `Dict` argument, which has no order, is taken alphabetically); `means_grid`, `balanced_grid`, `quantile_grid` and `hierarchical_grid`, which return every data column, follow the data's column order; `complete_reference_grid` keeps the grid's columns in their order and appends the filled-in variables in the data's column order.
+- **Rows:** a Cartesian product varies the **first variable slowest** and the last fastest (`cartesian_grid(a = [1, 2], b = [3, 4])` gives `(1,3), (1,4), (2,3), (2,4)`), each variable's values in the order given. Categorical levels (`hierarchical_grid(data, :g)`) are in level order (`levels(col)`); `Bool` and string columns ascending.
+- `profile_margins` results keep the grid's row order and column order.
+
 ## Reference Grid Builders
 
 ### 1. Sample Means - `means_grid(data)`
@@ -33,6 +75,9 @@ result = profile_margins(model, data, grid; type=:effects)
 # Custom typical value function (default is mean)
 grid = means_grid(data; typical=median)
 result = profile_margins(model, data, grid; type=:effects)
+
+# Weighted means, medians and shares (e.g. survey weights in column :w)
+grid = means_grid(data; weights=:w)
 ```
 
 **Output structure:**
@@ -234,7 +279,7 @@ When variables are unspecified in builder functions, they use actual data compos
 # - region: 75% Urban, 25% Rural
 # - treated: 60% true, 40% false
 
-# Builder uses realistic defaults
+# Completion (here by profile_margins) uses realistic defaults, unweighted
 grid = cartesian_grid(income=[30000, 50000, 70000])
 # → income varies as specified
 # → education: mix("HS" => 0.4, "College" => 0.45, "Graduate" => 0.15)
@@ -253,7 +298,7 @@ policy_spec = :state => (
         (:education, :mix_proportional),     # Actual education composition per county
         (:income, :quintiles),               # Income distribution per county
         (:age, [25, 45, 65]),               # Key demographic groups
-        (:employment_status, :all)           # All employment categories
+        :employment_status                   # All observed employment categories
     ]
 )
 grid = hierarchical_grid(data, policy_spec)

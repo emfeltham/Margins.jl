@@ -78,10 +78,14 @@ identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on th
 not need it.
 
 # Weights
-`profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
-function, and categorical frequency mixtures, as in `means_grid`/`balanced_grid`) are unweighted even
-for a model fit with weights; results record `metadata[:weights_source] = :none`. To evaluate at
-weighted typical values, put them in the grid yourself. See the Weights page of the documentation.
+`profile_margins` evaluates the grid it is given and takes no `weights`; results record
+`metadata[:weights_source] = :none`. The typical values in a grid come from the grid builder:
+`means_grid(data; weights=:w)`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a
+data-level `weights=` (unweighted by default). The values `profile_margins` fills in for model
+variables a grid leaves out (means and categorical frequency mixtures) are unweighted, even for a
+model fit with weights; for weighted fill-ins complete the grid first:
+`profile_margins(m, data, complete_reference_grid(cartesian_grid(x=[0, 1]), m, data; weights=:model))`.
+See "Typical values" in the Reference Grids documentation and the Weights page.
 
 # Returns
 `EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients, the
@@ -317,7 +321,11 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   - `:prediction` - interval for a single new observation, adding residual variance:
     `ŷ ± z·√(SE² + σ̂²)`. Only supported for Gaussian/identity-link (linear) models;
     errors for GLMs (no additive response-scale residual variance) and for
-    `type=:effects`. Matches R's `predict(lm, interval="prediction")`.
+    `type=:effects`. Matches R's `predict(lm, interval="prediction")`. With a weighted
+    fit (`lm(...; wts=w)`), the interval is for a new observation of weight 1, with GLM.jl's
+    frequency-weight σ̂² = Σwᵢrᵢ²/(Σwᵢ − p) and df Σwᵢ − p (the convention of `vcov(model)`):
+    R's `predict.lm` on the data with each row repeated wᵢ times, not R's `lm(..., weights=w)`
+    (precision weights, n − p). A weighted fit warns once per session.
 - `df=nothing`: degrees of freedom of the t reference distribution, overriding the model-class
   default (`Inf` for z); see `population_margins`, *Inference*.
 - `offset=nothing`: the η offset at each reference-grid row, for a model with an offset
@@ -347,10 +355,14 @@ identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on th
 not need it.
 
 # Weights
-`profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
-function, and categorical frequency mixtures, as in `means_grid`/`balanced_grid`) are unweighted even
-for a model fit with weights; results record `metadata[:weights_source] = :none`. To evaluate at
-weighted typical values, put them in the grid yourself. See the Weights page of the documentation.
+`profile_margins` evaluates the grid it is given and takes no `weights`; results record
+`metadata[:weights_source] = :none`. The typical values in a grid come from the grid builder:
+`means_grid(data; weights=:w)`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a
+data-level `weights=` (unweighted by default). The values `profile_margins` fills in for model
+variables a grid leaves out (means and categorical frequency mixtures) are unweighted, even for a
+model fit with weights; for weighted fill-ins complete the grid first:
+`profile_margins(m, data, complete_reference_grid(cartesian_grid(x=[0, 1]), m, data; weights=:model))`.
+See "Typical values" in the Reference Grids documentation and the Weights page.
 
 # Examples
 ```julia

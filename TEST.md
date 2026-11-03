@@ -35,8 +35,7 @@ The Margins.jl testing framework ensures:
 
 ```
 test/
-├── runtests.jl                          # Main test orchestrator
-├── test_utilities.jl                    # Shared infrastructure (models, formulas, data)
+├── runtests.jl                          # Main test orchestrator (every file it runs is listed there)
 │
 ├── core/                                # Core functionality (14 files)
 │   ├── test_glm_basic.jl               # GLM.jl integration
@@ -82,24 +81,13 @@ test/
     └── Makefile                         # Automated workflow
 ```
 
-### Test Utilities (`test/test_utilities.jl`)
+### Test Utilities (`test/statistical_validation/testing_utilities.jl`)
 
-Shared infrastructure for all test files:
-
-#### Data Generation
-- `make_test_data(n=500)`: Standard test dataset with mixed variable types
-- `generate_synthetic_dataset(n)`: Large-scale synthetic data for R comparison
-
-#### Formula Collections
-- Linear Models (`linear_formulas`): 16 formulas from simple to complex interactions
-- GLM Tests (`glm_tests`): 10 formulas across Binomial, Poisson, Gamma, Normal
-- LMM Tests (`lmm_formulas`): 6 formulas for linear mixed models
-- GLMM Tests (`glmm_tests`): 4 formulas for generalized linear mixed models
-
-#### Performance Testing Functions
-- `test_zero_allocation()`: Verify FormulaCompiler zero-allocation primitives
-- `test_allocation_performance()`: Allocation scaling analysis
-- `test_model_correctness()`: Mathematical correctness verification
+Loaded once by `runtests.jl`: data generators (`make_econometric_data`, `make_simple_test_data`,
+`make_glm_test_data`, `make_heteroskedastic_data`, `make_grunfeld_style_data`) and validation
+helpers (`test_2x2_framework_quadrants`, `test_backend_consistency`, `analytical_derivative`,
+`validate_all_finite_positive`). `test/support/generate_large_synthetic_data.jl`
+(`generate_synthetic_dataset(n)`) generates the large synthetic data for the R comparisons.
 
 ## R Cross-Validation
 

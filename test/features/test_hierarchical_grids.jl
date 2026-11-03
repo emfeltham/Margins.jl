@@ -571,3 +571,52 @@ end
         @test isempty(indices)
     end
 end
+
+@testset "hierarchical_grid keeps categorical columns; mixtures are not 'empty combinations' (step 10)" begin
+    rng = MersenneTwister(77); n = 300
+    d = DataFrame(x = randn(rng, n),
+                  g = categorical(rand(rng, ["lo", "mid", "hi"], n); levels = ["lo", "mid", "hi", "unused"]),
+                  o = categorical(rand(rng, ["a", "b"], n); levels = ["b", "a"], ordered = true),
+                  r = categorical(rand(rng, ["N", "S"], n)),
+                  s = rand(rng, ["p", "q"], n))
+    # (`:r => [:g, (:x, :mean)]` leaves g at its frequency mixture in the (:x, :mean) rows, so
+    # that column mixes levels and mixtures and is not a categorical column)
+    for spec in (:g, [:g, :r], :r => :g)
+        gr = hierarchical_grid(d, spec)
+        @test gr.g isa CategoricalVector
+        @test levels(gr.g) == levels(d.g)           # the data's levels, including unused ones
+        @test !isordered(gr.g)
+    end
+    go = hierarchical_grid(d, :o)
+    @test go.o isa CategoricalVector && isordered(go.o) && levels(go.o) == ["b", "a"]
+    @test hierarchical_grid(d, :r => :g).r isa CategoricalVector
+    @test hierarchical_grid(d, :s).s isa Vector{String}  # a string column stays a string column
+
+    # A frequency mixture is not a level, so it does not "match no observations"
+    @test_logs hierarchical_grid(d, (:g, :mix_proportional))
+    @test_logs hierarchical_grid(d, :r => (:g, :mix_proportional))
+    @test_logs hierarchical_grid(d, :r => [(:g, :mix_proportional), (:x, :mean)])
+    # A genuinely empty level combination still warns
+    d2 = DataFrame(x = randn(rng, 4), g = categorical(["lo", "lo", "hi", "hi"]), r = categorical(["N", "S", "N", "N"]))
+    @test_logs (:warn, r"matches no observations") match_mode = :any hierarchical_grid(d2, [:g, :r])
+
+    # The grid works in profile_margins and equals the cartesian_grid with the same levels
+    d.y = d.x .+ (d.g .== "mid") .+ randn(rng, n)
+    m = lm(@formula(y ~ x + g + r), d)
+    rh = DataFrame(profile_margins(m, d, hierarchical_grid(d, [:g, :r]); type = :predictions))
+    @test rh.g isa CategoricalVector
+    rc = DataFrame(profile_margins(m, d, cartesian_grid(g = ["lo", "mid", "hi"], r = ["N", "S"]); type = :predictions))
+    @test string.(rh.g) == string.(rc.g) && string.(rh.r) == string.(rc.r)
+end
+
+@testset "quantile_grid(data; x = n): the n - 1 cut points (step 10)" begin
+    rng = MersenneTwister(78)
+    d = DataFrame(x = randn(rng, 200), z = randn(rng, 200))
+    @test quantile_grid(d; x = 4).x == quantile(d.x, [0.25, 0.5, 0.75])   # quartiles
+    @test quantile_grid(d; x = 5).x == quantile(d.x, [0.2, 0.4, 0.6, 0.8]) # quintiles
+    @test quantile_grid(d; x = 2).x == [median(d.x)]
+    @test nrow(quantile_grid(d; x = 4, z = 5)) == 3 * 4
+    @test quantile_grid(d; x = 4).x == quantile_grid(d; x = [0.25, 0.5, 0.75]).x
+    @test_throws ArgumentError quantile_grid(d; x = 1)
+    @test_throws ArgumentError quantile_grid(d; x = 2.5)
+end

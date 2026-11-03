@@ -201,8 +201,8 @@ function _process_single_categorical_variable!(
     # Validate engine using function barriers
     validate_engine_for_computation(engine, backend)
 
-    # Hoist loop-invariant length call
-    n_rows = length(rows)
+    # Rows that enter the average (positive weight), reported as `n`
+    n_used = _n_used(rows, weights)
 
     # Estimate maximum contrasts for pre-allocation
     var_col = getproperty(engine.data_nt, var)
@@ -258,7 +258,7 @@ function _process_single_categorical_variable!(
             results, G, cont_idx, var, contrast_pairs[i],
             results_ame[i],
             view(gradient_matrix, i, :),
-            engine.Σ, n_rows
+            engine.Σ, n_used
         )
         cont_idx += 1
     end

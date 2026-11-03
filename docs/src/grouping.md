@@ -63,6 +63,14 @@ demographic_effects = population_margins(model, data;
 # Results: effects for (HS,Male), (HS,Female), (College,Male), (College,Female), etc.
 ```
 
+**Stratum order.** Strata are listed in a fixed order: a categorical variable in its level order
+(`levels(data.education)`, observed levels only), a `Bool` or string variable ascending (`false`
+before `true`), and bins in bin order (Q1, Q2, …; thresholds ascending). Crossed variables nest in
+the order given, the first varying slowest (`groups=[:education, :gender]` lists every gender
+within the first education level, then the next level); `outer => inner` lists each outer
+stratum's inner strata together. Before 3.0 the order followed first appearance in the data.
+Second differences with `groups=` use the same order.
+
 ## Advanced Hierarchical Grouping
 
 ### Nested Grouping with `=>` Operator
@@ -146,8 +154,8 @@ wealth_quintiles = population_margins(model, data;
     nothing. For frequency weights this approximates repeating each row `w` times (the
     difference is of order `1/n`). Rows with zero weight are ignored when placing cutpoints, so
     a zero-weight row outside the range of the positively weighted data belongs to no bin. Nested
-    bins (`:region => (:income, 4)`) use each region's own weights. The `n` column always counts
-    rows, including rows with zero weight.
+    bins (`:region => (:income, 4)`) use each region's own weights. With weights, the `n` column
+    counts the rows with a positive weight (the rows that enter the average).
 
 ### Custom Threshold Binning
 

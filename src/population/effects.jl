@@ -44,7 +44,7 @@ function _population_predictions(
     df = DataFrame(
         estimate = [mean_prediction],
         se = [se],
-        n = [n_obs]  # Add sample size
+        n = [_n_used(1:n_obs, weights)]  # rows that enter the average (positive weight)
     )
     
     return df, G

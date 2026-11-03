@@ -154,6 +154,13 @@ interval. For an ordinary linear model this is `RSS / (n − p)` via
 Throws an `ArgumentError` for any model that is not Gaussian with an identity
 link, rather than emitting a misleading symmetric interval.
 
+With estimation weights (`lm(...; wts=w)`), GLM.jl treats `w` as frequency weights:
+σ̂² = Σwᵢrᵢ²/(Σwᵢ − p), with t(Σwᵢ − p), the same convention as `vcov(model)` and the
+model's df. The interval is for one new observation of weight 1 (as R's `predict.lm`
+assumes by default). It equals R's `predict(lm(...), interval = "prediction")` on the data
+with each row repeated wᵢ times, and differs from R's `lm(..., weights = w)`, which treats `w`
+as precision weights (σ̂² = Σwᵢrᵢ²/(n − p), df n − p). A weighted fit warns once per session.
+
 Note: this is the homoskedastic residual variance. The resulting prediction
 interval assumes constant error variance; if a heteroskedasticity-robust `vcov`
 is supplied to widen the coefficient SEs, the residual term here is still the
@@ -174,8 +181,16 @@ function _prediction_residual_variance(model)::Float64
             "dof_residual = $dof_resid (no residual degrees of freedom to " *
             "estimate σ²). A saturated model has no residual variance to add."))
     end
+    _model_weights(model) isa AbstractVector && _warn_weighted_prediction_interval()
     return GLM.deviance(model) / dof_resid
 end
+
+# Once per session, like R's "Assuming constant prediction variance even though model fit is weighted"
+@noinline _warn_weighted_prediction_interval() =
+    @warn "interval=:prediction with a weighted fit: the interval is for a new observation of weight 1, " *
+          "with GLM.jl's frequency-weight residual variance Σwᵢrᵢ²/(Σwᵢ − p) and df Σwᵢ − p (the convention " *
+          "of vcov(model)). This equals R's predict.lm on the data with each row repeated wᵢ times; R's " *
+          "lm(..., weights = w) treats w as precision weights and gives a different interval." maxlog=1
 
 """
     contrast(result::MarginsResult, row1::Int, row2::Int; alpha=result.inference.alpha) -> ContrastResult

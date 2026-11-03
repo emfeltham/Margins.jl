@@ -21,7 +21,7 @@ The keys every `EffectsResult` / `PredictionsResult` carries in `metadata`, with
 | `:scale` | `Symbol` | `:response` or `:link` |
 | `:measure` | `Symbol` | `:effect`, `:elasticity`, … |
 | `:backend` | `Symbol` | `:ad` or `:fd` |
-| `:n_obs` | `Int` | rows of data used |
+| `:n_obs` | `Int` | rows of data that enter the averages: all rows unweighted, the rows with a positive weight when weighted |
 | `:weighted` | `Bool` | whether observation weights were used |
 | `:weights_source` | `Symbol` | where the weights came from: `:model` (the fit's estimation weights, the default), `:user` (`weights=` a column or vector) or `:none` |
 | `:has_contexts` | `Bool` | whether rows are split by `scenarios=` / `groups=` |

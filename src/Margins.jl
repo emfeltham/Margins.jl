@@ -60,7 +60,7 @@ using FormulaCompiler:
     link_derivatives         # (μ, dμ/dη, d²μ/dη²) for the prediction kernel
 using LinearAlgebra: dot, mul!, BLAS
 using LinearAlgebra
-using Statistics: mean, median
+using Statistics: mean, median, middle
 using CategoricalArrays
 using Printf: @sprintf
 using Distributions: Normal, TDist, cdf, ccdf, quantile
