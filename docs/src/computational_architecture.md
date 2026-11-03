@@ -93,7 +93,7 @@ Margins.jl pre-allocates computational buffers to achieve zero-allocation perfor
 ```julia
 # Pre-allocated in MarginsEngine struct
 struct MarginsEngine
-    η_buf::Vector{Float64}          # Linear predictor evaluations
+    me_ws::MEWorkspace              # Continuous-effects accumulator workspace
     g_buf::Vector{Float64}          # Gradient computations  
     gβ_accumulator::Vector{Float64} # Parameter gradient accumulation
     # ... other buffers
@@ -187,7 +187,7 @@ computational_cost = n_observations * 7ns  # Scales with data
 
 ```julia
 # Constant memory footprint regardless of dataset size:
-memory_usage = sizeof(η_buf) + sizeof(g_buf) + sizeof(gβ_accumulator) + compilation_cache
+memory_usage = sizeof(row_buf) + sizeof(g_buf) + sizeof(gβ_accumulator) + compilation_cache
 # Total: ~few KB, independent of whether you have 1k or 1M observations
 ```
 

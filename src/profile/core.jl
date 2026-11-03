@@ -804,11 +804,15 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     # These buffers are reused for ALL profiles to achieve 0 allocations
     n_params = length(engine.β)
 
-    # Continuous variable buffers
-    # IMPORTANT: Gβ second dimension MUST match length(refgrid_de.vars) for marginal_effects_eta!/mu!
-    n_refgrid_vars = !isnothing(refgrid_de) ? length(refgrid_de.vars) : 0
-    Gβ_continuous = n_refgrid_vars > 0 ? Matrix{Float64}(undef, n_params, n_refgrid_vars) : Matrix{Float64}(undef, 0, 0)
-    output_buf = Vector{Float64}(undef, length(refgrid_compiled))  # For measure transformations
+    # Continuous variables: accumulator workspace and per-profile results for all of them
+    n_cont = length(continuous_requested)
+    cont_ws = isnothing(refgrid_de) ? MEWorkspace() : MEWorkspace(refgrid_de, n_cont)
+    cont_vals = Vector{Float64}(undef, n_cont)
+    cont_grads = Matrix{Float64}(undef, n_cont, n_params)
+    cont_idx = collect(1:n_cont)   # refgrid_de.vars == continuous_requested
+    cont_xcols = (measure === :effect || n_cont == 0) ? () :
+                 Tuple(getproperty(refgrid_data, v) for v in continuous_requested)
+    s_scale = predscale(scale, engine.link)
 
     # Categorical variable buffers
     contrast_buf = Vector{Float64}(undef, length(refgrid_compiled))
@@ -821,13 +825,13 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     row_idx = 1
     for profile_idx in 1:n_profiles
         first_row_of_profile = row_idx
-        # Process continuous variables
-        for var in continuous_requested
-            row_idx = _process_profile_continuous_variable!(results, G, row_idx, engine, var,
-                                                          refgrid_de, refgrid_data, refgrid_compiled,
-                                                          reference_grid, profile_idx,
-                                                          scale, backend, measure, continuous_vars,
-                                                          Gβ_continuous, output_buf)
+        # Continuous variables, all at once at this grid row
+        if !isnothing(refgrid_de)
+            row_idx = _process_profile_continuous_variables!(results, G, row_idx, engine,
+                                                             continuous_requested, refgrid_de,
+                                                             cont_ws, cont_vals, cont_grads,
+                                                             cont_idx, cont_xcols, reference_grid,
+                                                             profile_idx, s_scale, measure)
         end
 
         # Process requested categorical variables
@@ -887,127 +891,53 @@ end
 """
     _build_refgrid_derivative_evaluator(refgrid_compiled, refgrid_data, continuous_requested, engine)
 
-Build derivative evaluator for reference grid if needed.
-Extracted from original lines 1300-1303.
+Derivative evaluator over the reference grid for the requested continuous variables, or
+`nothing` when there are none.
 """
 function _build_refgrid_derivative_evaluator(refgrid_compiled, refgrid_data, continuous_requested, engine, backend::Symbol)
     if !isempty(continuous_requested) && !isnothing(engine.de)
-        continuous_vars = continuous_variables(engine.compiled, engine.data_nt)
-        # Use FormulaCompiler's derivativeevaluator (dispatches to correct backend)
-        return derivativeevaluator(backend, refgrid_compiled, refgrid_data, continuous_vars)
+        # Differentiate with respect to the requested variables only (FormulaCompiler's
+        # derivativeevaluator dispatches to the backend). The other continuous variables stay
+        # at their grid values either way; this only narrows the Jacobian (and, for AD, the
+        # dual-number chunk), not its entries.
+        return derivativeevaluator(backend, refgrid_compiled, refgrid_data, continuous_requested)
     else
         return nothing
     end
 end
 
 """
-    _process_profile_continuous_variable!(results, G, row_idx, engine, var, refgrid_de, refgrid_data,
-                                        refgrid_compiled, reference_grid, profile_idx, scale, backend,
-                                        measure, continuous_vars) -> next_row_idx
+    _process_profile_continuous_variables!(results, G, row_idx, engine, continuous_requested,
+                                           refgrid_de, ws, vals, grads, var_idx, xcols,
+                                           reference_grid, profile_idx, s::PredScale, measure)
+        -> next_row_idx
 
-Process a single continuous variable at a single profile point.
-Extracted from original lines 1311-1375.
+Effects (or measures) of all requested continuous variables at grid row `profile_idx`, with
+the population accumulator over the single row `profile_idx:profile_idx` (weight 1): the
+unit quantity at the grid row and its delta-method gradient, including the quotient-rule
+term for measures that divide by ŷ. Writes one result row per variable.
 """
-function _process_profile_continuous_variable!(results, G, row_idx, engine, var, refgrid_de, refgrid_data,
-                                             refgrid_compiled, reference_grid, profile_idx, scale, backend,
-                                             measure, continuous_vars, Gβ::Matrix{Float64}, output_buf::Vector{Float64})
-    # Get marginal effects at profile point (extracted from lines 1312-1323)
-    g_buf_view = @view engine.g_buf[1:length(refgrid_de.vars)]
-    local_β = engine.β
-    local_link = engine.link
-
-    # Use passed Gβ buffer (0 bytes allocation - PHASE 3 FIX)
-
-    if scale === :response
-        marginal_effects_mu!(g_buf_view, Gβ, refgrid_de, local_β, local_link, profile_idx)
-    else
-        marginal_effects_eta!(g_buf_view, Gβ, refgrid_de, local_β, profile_idx)
-    end
-
-    var_idx = findfirst(==(var), continuous_vars)
-    if !isnothing(var_idx)
-        marginal_effect = g_buf_view[var_idx]
-
-        # Apply measure transformations (extracted from lines 1325-1334)
-        local estimate, transform_factor, ∂μ_∂β
-        if measure === :effect
-            estimate = marginal_effect
-            transform_factor = 1.0
-            ∂μ_∂β = nothing
-        else
-            var_value = refgrid_data[var][profile_idx]
-            # Compute predicted value at profile point
-            # Use passed output buffer (0 bytes allocation - PHASE 3 FIX)
-            refgrid_compiled(output_buf, refgrid_data, profile_idx)
-            η = dot(output_buf, local_β)  # Linear predictor = X'β
-            # Apply link inverse if on response scale
-            pred_value = scale === :response ? GLM.linkinv(local_link, η) : η
-            # Same guard as the population path: eyex/eydx divide by ŷ
-            if (measure === :elasticity || measure === :semielasticity_eydx) && iszero(pred_value)
-                _throw_zero_prediction(measure, profile_idx, scale)
-            end
-            (estimate, transform_factor) = apply_measure_transformation(marginal_effect, var_value, pred_value, measure)
-
-            # Compute ∂μ/∂β at this profile point for quotient rule correction
-            # For measures that divide by μ, we need this gradient for the quotient rule
-            if measure === :elasticity || measure === :semielasticity_eydx
-                ∂μ_∂β = if scale === :response
-                    # For response scale: μ = g⁻¹(η), so ∂μ/∂β = g⁻¹'(η) × X
-                    dμ_dη = _dmu_deta(local_link, η)
-                    dμ_dη .* output_buf  # Element-wise: creates vector
-                else
-                    # For linear scale: η = X'β, so ∂η/∂β = X
-                    copy(output_buf)  # X is already in output_buf
-                end
-            else
-                ∂μ_∂β = nothing
-            end
-        end
-
-        # Extract parameter gradients for this variable from Gβ matrix
-        # Gβ is already computed above by marginal_effects_eta!/marginal_effects_mu!
-        # Gβ has shape (n_params, n_vars), so column j contains gradient for variable j
-        gradient_view = view(Gβ, :, var_idx)
-
-        # Scale the gradient by the transformation factor and, for measures that divide by
-        # ŷ, apply the quotient-rule term. Both are applied whatever the factor's value: the
-        # correction used to sit inside `if transform_factor != 1.0`, so it was silently
-        # dropped when the factor happened to be exactly 1 (eyex with x == ŷ, eydx with
-        # ŷ == 1), leaving a correct estimate with a wrong SE.
-        #   ∂ε/∂β = k × ∂(∂μ/∂x)/∂β − (ε/μ) × ∂μ/∂β   (second term only when dividing by μ)
-        engine.gβ_accumulator .= gradient_view .* transform_factor
-        if !isnothing(∂μ_∂β)
-            quotient_correction = estimate / pred_value
-            @inbounds for j in eachindex(engine.gβ_accumulator)
-                engine.gβ_accumulator[j] -= quotient_correction * ∂μ_∂β[j]
-            end
-        end
-
-        # Store result (extracted from lines 1355-1374)
-        se = compute_se_only(engine.gβ_accumulator, engine.Σ)
-
-        profile_dict = Dict{Symbol,Any}()
-        for k in names(reference_grid)
-            val = reference_grid[profile_idx, k]
-            if val isa CategoricalMixture
-                profile_dict[Symbol(k)] = string(val)
-            else
-                profile_dict[Symbol(k)] = val
-            end
-        end
-        profile_nt = NamedTuple(profile_dict)
-
-        # Use column indexing for better performance
+function _process_profile_continuous_variables!(results, G, row_idx, engine, continuous_requested,
+                                                refgrid_de, ws::MEWorkspace,
+                                                vals::Vector{Float64}, grads::Matrix{Float64},
+                                                var_idx::Vector{Int}, xcols::Tuple,
+                                                reference_grid, profile_idx::Int,
+                                                s::PredScale, measure::Symbol)
+    fill!(vals, 0.0)
+    fill!(grads, 0.0)
+    _accumulate_measure!(vals, grads, ws, refgrid_de, engine.β, s, measure, var_idx, xcols,
+                         profile_idx:profile_idx, nothing, 1.0)
+    profile_nt = _profile_display_row(reference_grid, profile_idx)
+    for (k, var) in enumerate(continuous_requested)
+        engine.gβ_accumulator .= view(grads, k, :)
         results.variable[row_idx] = string(var)
         results.contrast[row_idx] = "dy/dx"
-        results.estimate[row_idx] = estimate
-        results.se[row_idx] = se
+        results.estimate[row_idx] = vals[k]
+        results.se[row_idx] = compute_se_only(engine.gβ_accumulator, engine.Σ)
         results.profile_desc[row_idx] = profile_nt
         G[row_idx, :] = engine.gβ_accumulator
-
-        return row_idx + 1
+        row_idx += 1
     end
-
     return row_idx
 end
 

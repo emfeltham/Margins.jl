@@ -15,7 +15,7 @@ See also: ../../PERFORMANCE_BEST_PRACTICES.md (same content).
 
 - Compile/cache FormulaCompiler artifacts outside loops
 - Move hot loops into helpers that take concrete arguments (`compiled`, `row_buf`, `β`, `link`, `de`)
-- Reuse `row_buf`, `η_buf`, `g_buf`, `gβ_accumulator`; avoid temporary vectors
+- Reuse `row_buf`, `g_buf`, `gβ_accumulator`, the `MEWorkspace`; avoid temporary vectors
 - Prefer scalar loops over broadcasts that allocate
 - Preallocate DataFrame columns and assign by index
 

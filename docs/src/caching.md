@@ -115,7 +115,6 @@ struct MarginsEngine{L, U, D}
     # Pre-allocated computation buffers
     g_buf::Vector{Float64}           # Gradient storage
     gβ_accumulator::Vector{Float64}  # Accumulator for averaged effects
-    η_buf::Vector{Float64}           # Linear predictor values
     row_buf::Vector{Float64}         # Design matrix row storage
 
     # Model parameters and metadata

@@ -93,9 +93,9 @@ include("types.jl")
 
 # Statistical inference modules
 include("inference/derivative_utilities.jl")             # _matrix_multiply_eta!, continuous_variables
-include("inference/marginal_effects.jl")                 # marginal_effects_eta!, marginal_effects_mu! (wrapper functions with dispatch)
-include("inference/marginal_effects_automatic_diff.jl")  # marginal_effects_eta!, marginal_effects_mu! (AD backend)
-include("inference/marginal_effects_finite_diff.jl")     # marginal_effects_eta!, marginal_effects_mu! (FD backend)
+include("inference/marginal_effects.jl")                 # marginal_effects_mu! (row-level; internal test oracle)
+include("inference/marginal_effects_automatic_diff.jl")  # marginal_effects_eta! (AD backend; test oracle)
+include("inference/marginal_effects_finite_diff.jl")     # marginal_effects_eta! (FD backend; test oracle)
 include("inference/delta_method.jl")                     # delta_method_se
 include("inference/mixture_utilities.jl")                # create_mixture_column, expand_mixture_grid, create_balanced_mixture
 
@@ -105,10 +105,9 @@ include("core/margins_validation.jl")
 include("core/typical_values.jl")
 include("computation/scenarios.jl")  # ContrastPair and scenario utilities
 include("computation/predictions.jl")
+include("computation/continuous_accumulator.jl")  # Measure, MEWorkspace, accumulate_continuous!
 include("computation/statistics.jl")
 include("computation/result_formatting.jl")  # Result DataFrame builders
-include("population/effects_buffers.jl")  # Must come before engine/core.jl
-include("engine/measures.jl")  # Measure transformation utilities
 include("engine/core.jl")  # Defines MarginsEngine
 include("core/engine_validation.jl")  # Uses MarginsEngine, must come after engine/core.jl
 include("core/variable_detection.jl")  # Uses MarginsEngine, must come after engine/core.jl

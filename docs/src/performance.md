@@ -401,7 +401,7 @@ de = FormulaCompiler.build_derivative_evaluator(compiled, data; vars=vars)  # On
 #### Buffer Management
 ```julia
 # Pre-allocated buffers prevent runtime allocation
-η_buf = Vector{Float64}(undef, n_profiles)      # Linear predictor buffer
+row_buf = Vector{Float64}(undef, n_coef)        # Model-row buffer
 g_buf = Vector{Float64}(undef, n_vars)          # Gradient buffer  
 gβ_accumulator = Vector{Float64}(undef, n_coef) # Parameter gradient buffer
 ```

@@ -116,10 +116,5 @@ function _validate_engine_consistency(engine::MarginsEngine)
         throw(ArgumentError("Batch gradient buffer has wrong parameter count: $(size(engine.batch_gradients, 2)) != $(length(engine.β))"))
     end
 
-    # Validate deta_dx_buf size matches derivative evaluator (if present)
-    if engine.de !== nothing && length(engine.deta_dx_buf) != length(engine.de.vars)
-        throw(ArgumentError("deta_dx_buf size mismatch: $(length(engine.deta_dx_buf)) != $(length(engine.de.vars))"))
-    end
-
     return nothing
 end

@@ -142,19 +142,15 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:Unif
     # Batch operation buffers (for zero-allocation batch marginal effects)
     batch_ame_values::Vector{Float64}   # Averaged marginal effects accumulator
     batch_gradients::Matrix{Float64}    # Parameter gradients accumulator (n_vars × n_params)
-    batch_var_indices::Vector{Int}      # Variable indices scratch buffer
-    deta_dx_buf::Vector{Float64}        # Marginal effects on linear predictor scale
     cont_var_indices_buf::Vector{Int}   # Scratch mapping for continuous variable indices
 
-    # Continuous effects buffers (for zero-allocation population marginal effects)
-    g_all_buf::Vector{Float64}          # Buffer for all continuous variable marginal effects
-    Gβ_all_buf::Matrix{Float64}         # Buffer for all continuous variable parameter gradients (n_params × n_de_vars)
+    # Workspace of the continuous-effects accumulator (Jacobian, model row, A/B gradient
+    # accumulators) for `de`; empty when there is no population derivative evaluator
+    me_ws::MEWorkspace
 
     # Categorical effects buffers (Phase 4 zero-allocation optimization)
     contrast_buf::Vector{Float64}           # Contrast vector buffer (length n_params)
 
-    # Phase 2.1: Persistent EffectsBuffers for zero-allocation population_margins_raw!
-    effects_buffers::EffectsBuffers  # Reusable buffer container for raw API
 
     # Cache continuous and categorical variable metadata
     continuous_vars::Vector{Symbol}
@@ -346,25 +342,15 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     # Size for continuous variables that may be requested for batch operations
     batch_ame_values = Vector{Float64}(undef, max(n_continuous, 1))
     batch_gradients = Matrix{Float64}(undef, max(n_continuous, 1), n_coef)
-    batch_var_indices = Vector{Int}(undef, max(n_continuous, 1))
 
-    # Allocate new buffer based on derivative evaluator size
-    n_de_vars = de === nothing ? 0 : length(de.vars)
-    deta_dx_buf = Vector{Float64}(undef, max(n_de_vars, 1))
-
-    # Initialize continuous effects buffers for zero-allocation population marginal effects
-    # These buffers hold marginal effects and gradients for ALL variables in the derivative evaluator
-    g_all_buf = Vector{Float64}(undef, max(n_de_vars, 1))
-    Gβ_all_buf = Matrix{Float64}(undef, n_coef, max(n_de_vars, 1))
+    # Continuous-effects accumulator workspace (population engines; profile engines build
+    # their own evaluator and workspace over the reference grid)
+    me_ws = (de === nothing || U <: ProfileUsage) ? MEWorkspace() : MEWorkspace(de, n_continuous)
 
     # Initialize categorical effects buffers (Phase 4 zero-allocation optimization)
     # These buffers enable zero-allocation categorical AME computation
     contrast_buf = Vector{Float64}(undef, n_coef)        # Contrast vector buffer
 
-    # Initialize persistent EffectsBuffers for zero-allocation raw API
-    # Size for maximum possible variables (all engine vars)
-    n_vars_max = max(length(vars), n_continuous, 1)
-    effects_buffers = EffectsBuffers(n_vars_max, n_coef)
     
     # vcov should always be a function or CovarianceMatrices estimator
     actual_vcov = vcov
@@ -381,11 +367,10 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     # Create engine instance
     engine = MarginsEngine{typeof(_auto_link(model)), U, D, typeof(compiled)}(
         compiled, de, var_index_map, contrast, g_buf, gβ_accumulator, row_buf,
-        batch_ame_values, batch_gradients, batch_var_indices, deta_dx_buf,
+        batch_ame_values, batch_gradients,
         Vector{Int}(undef, max(n_continuous, 1)),  # cont_var_indices_buf
-        g_all_buf, Gβ_all_buf,
+        me_ws,
         contrast_buf,  # Categorical contrast buffer
-        effects_buffers,  # persistent EffectsBuffers for zero-allocation raw API
         copy(continuous_vars), copy(categorical_vars),
         model, coef(model), covariance_matrix, _auto_link(model), vars, data_nt
     )
@@ -532,11 +517,9 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivati
         return MarginsEngine{L,U,HasDerivatives,C}(
             engine.compiled, new_de, engine.var_index_map, engine.contrast,
             engine.g_buf, engine.gβ_accumulator, engine.row_buf,
-            engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
-            engine.deta_dx_buf, engine.cont_var_indices_buf,
-            engine.g_all_buf, engine.Gβ_all_buf,
+            engine.batch_ame_values, engine.batch_gradients,
+            engine.cont_var_indices_buf, engine.me_ws,
             new_contrast_buf,  # Categorical contrast buffer
-            engine.effects_buffers,
             engine.continuous_vars, engine.categorical_vars,
             engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt
         )
@@ -570,11 +553,9 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivativ
         return MarginsEngine{L,U,NoDerivatives,C}(
             engine.compiled, engine.de, engine.var_index_map, engine.contrast,
             engine.g_buf, engine.gβ_accumulator, engine.row_buf,
-            engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
-            engine.deta_dx_buf, engine.cont_var_indices_buf,
-            engine.g_all_buf, engine.Gβ_all_buf,
+            engine.batch_ame_values, engine.batch_gradients,
+            engine.cont_var_indices_buf, engine.me_ws,
             new_contrast_buf,  # Categorical contrast buffer
-            engine.effects_buffers,
             engine.continuous_vars, engine.categorical_vars,
             engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt
         )

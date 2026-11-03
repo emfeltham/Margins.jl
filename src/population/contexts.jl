@@ -368,8 +368,8 @@ once per row and extract all requested variables.
 # Measure Handling
 Elasticity measures are averages of unit-level quantities (e.g. gᵢxᵢ/ŷᵢ) over
 `context_indices`, evaluated on `context_data` (scenario overrides applied), with the
-delta-method gradient accumulated row by row — identically to the no-context path in
-`_process_continuous_variables!` (see `_accumulate_continuous_measures!`).
+delta-method gradient accumulated row by row by the same accumulator as the no-context
+path (`accumulate_continuous!`).
 
 # Performance
 - OLD: n_vars loops × N rows × compute_all_derivs = O(N × n_vars²)
@@ -409,23 +409,15 @@ function _compute_all_continuous_context_effects_batch(
     # Total weight of this context's rows (errors if every weight in it is zero)
     total_weight = _total_weight(context_indices, weights)
 
-    # Single pass through the context's rows for ALL variables (same kernels as the
-    # no-context path). Elasticity measures average their unit-level quantity over this
+    # Single pass through the context's rows for ALL variables, with the accumulator the
+    # no-context path uses. Elasticity measures average their unit-level quantity over this
     # context's rows, with scenario overrides applied (`context_data`).
-    if measure === :effect
-        _batch_compute_continuous_effects!(
-            batch_ame_values, batch_gradients,
-            context_de, engine.β, engine.link, scale,
-            var_indices, context_indices, weights, total_weight
-        )
-    else
-        xcols = Tuple(getproperty(context_data, v) for v in continuous_vars_to_compute)
-        _batch_compute_continuous_measures!(
-            batch_ame_values, batch_gradients, context_de, engine.compiled, context_data,
-            engine.β, engine.link, scale, measure, var_indices, xcols,
-            context_indices, weights, total_weight
-        )
-    end
+    ws = MEWorkspace(context_de, n_vars)
+    xcols = measure === :effect ? () :
+            Tuple(getproperty(context_data, v) for v in continuous_vars_to_compute)
+    _accumulate_measure!(batch_ame_values, batch_gradients, ws, context_de, engine.β,
+                         predscale(scale, engine.link), measure, var_indices, xcols,
+                         context_indices, weights, total_weight)
 
     # Build results DataFrame and gradients matrix
     results = DataFrame(
@@ -436,28 +428,17 @@ function _compute_all_continuous_context_effects_batch(
         n = Int[]
     )
 
-    gradients_list = Matrix{Float64}[]
-
     for (i, var) in enumerate(continuous_vars_to_compute)
-        final_val = batch_ame_values[i]
-        gβ_avg = view(batch_gradients, i, :)
-
-        se = compute_se_only(gβ_avg, engine.Σ)
-
         push!(results, (
             variable = string(var),
             contrast = "dy/dx",
-            estimate = final_val,
-            se = se,
+            estimate = batch_ame_values[i],
+            se = compute_se_only(view(batch_gradients, i, :), engine.Σ),
             n = n_obs
         ))
-
-        push!(gradients_list, reshape(collect(gβ_avg), 1, :))
     end
 
-    gradients_matrix = vcat(gradients_list...)
-
-    return (results, gradients_matrix)
+    return (results, batch_gradients)
 end
 
 """
