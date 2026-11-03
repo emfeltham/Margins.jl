@@ -42,6 +42,7 @@ suite_phase("Core Functionality")
     include("core/test_derived_columns.jl")   # SetTo/Shift counterfactuals and the derived-column warning
     include("core/test_ordering.jl")          # deterministic grid, groups and scenarios order (step 9)
     include("core/test_rank_deficient.jl")    # dropped (collinear) coefficients fixed at 0 (ISSUES #10)
+    include("core/test_profile_fill_weights.jl") # profile fill-ins weighted by the model's estimation weights
     include("core/test_public_api.jl")        # API freeze: exported names, keywords, fields, result columns
     include("statistical_validation/robust_se_validation.jl")
 end

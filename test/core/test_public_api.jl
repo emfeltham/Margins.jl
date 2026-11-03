@@ -47,7 +47,7 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
             :cartesian_grid => Set([(0, [S("vars...")]), (1, Symbol[])]),
             :complete_reference_grid => Set([(3, [:typical, :weights])]),
             :hierarchical_grid => Set([(2, [:max_depth, :warn_large, :weights])]),
-            :means_grid => Set([(1, [:typical, :weights])]),
+            :means_grid => Set([(1, [:typical, :weights]), (2, [:typical, :weights])]),   # (data), (model, data)
             :quantile_grid => Set([(1, [S("vars..."), :weights])]),
             :create_balanced_mixture => Set([(1, Symbol[])]),
             :create_mixture_column => Set([(2, Symbol[])]),
@@ -121,6 +121,7 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
         "SD model at=:mean"     => () -> second_differences(api_logit, api_data, :x, :z; at=:mean),
         "SD model groups"       => () -> second_differences(api_logit, api_data, :x, :t; groups=:g),
         "SD model profile"      => () -> second_differences(api_logit, api_data, :x, :t; profile=(z=[0.25, 0.75],)),
+        "MEM means_grid(model)" => () -> DataFrame(profile_margins(api_lm, api_data, means_grid(api_lm, api_data); type=:effects)),
     ]
         stat = ["statistic", "df", "p_value", "ci_lower", "ci_upper"]
         sd = ["variable", "contrast", "modifier", "modifier_type", "modifier_level1", "modifier_level2",
@@ -147,6 +148,7 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
             "SD model at=:mean"    => [sd..., "eval_point", "delta_used"],
             "SD model groups"      => [sd..., "over_g"],
             "SD model profile"     => [sd..., "z"],
+            "MEM means_grid(model)" => ["x", "z", "t", "g", "type", "variable", "contrast", "estimate", "se", stat..., "n"],
         )
         @test Set(first.(api_calls)) == Set(keys(expected))
         Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
@@ -156,6 +158,12 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
                 got == expected[label] || @info "column pin differs" label got expected = expected[label]
             end
         end
+        # behaviour defaults: profile fill-ins and complete_reference_grid use the model's weights
+        wfit = lm(@formula(y ~ x * t + g + z), api_data; wts = 1 .+ api_data.z)
+        wres = profile_margins(wfit, api_data, cartesian_grid(x=[0.5]); type=:predictions)
+        @test wres.metadata[:weights_source] === :model
+        @test complete_reference_grid(cartesian_grid(x=[0.5]), wfit, api_data).z[1] ≈
+              sum((1 .+ api_data.z) .* api_data.z) / sum(1 .+ api_data.z)
         @test api_sc.context.kinds == [:scenario]
         @test keys(api_sc.context.columns) == (:t,)
         @test api_sc.inference isa Inference

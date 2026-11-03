@@ -184,6 +184,7 @@ function cases()
     _second_difference_cases!(out)
     _mixed_fem_second_difference_cases!(out)
     _rank_deficient_cases!(out)
+    _profile_fill_weight_cases!(out)
     return out
 end
 
@@ -441,6 +442,30 @@ function _rank_deficient_cases!(out)
                 _rd(() -> population_margins(f, d; vars=[:x, :z, :g, :b, :c], weights=:none))))
     push!(out, ("rank-deficient:fem/predictions", "population_predictions",
                 _rd(() -> population_margins(f, d; type=:predictions, weights=:none))))
+    return out
+end
+
+# Profile fill-ins weighted by the model's estimation weights (added at the 3.0 freeze, when
+# `complete_reference_grid`'s default became weights=:model): a partial grid on weighted fits, so
+# z, g and b are filled in; and the same with weights=:none (the 2.x values). Verified against a
+# hand-built grid of weighted means and shares before they were appended.
+function _profile_fill_weight_cases!(out)
+    cg() = cartesian_grid(x=[1.0, 2.0])
+    for linkname in ("identity", "logit")
+        d = matrix_data(linkname)
+        m = fit_matrix_model(linkname, d; wts=d.w)
+        for (wname, gridf) in (("model", () -> cg()),
+                               ("none", () -> complete_reference_grid(cg(), m, d; weights=:none)))
+            push!(out, ("fill-weights:$linkname/$wname/profile:cartesian_grid/effect/ad", "profile_effects",
+                        () -> profile_margins(m, d, gridf(); type=:effects, vars=[:x, :z, :b])))
+            push!(out, ("fill-weights:$linkname/$wname/profile:cartesian_grid/predictions", "profile_predictions",
+                        () -> profile_margins(m, d, gridf(); type=:predictions)))
+        end
+    end
+    d = matrix_data("identity")
+    lmm = fit(MixedModel, FM, d; progress=false, wts=d.w)
+    push!(out, ("fill-weights:lmm/model/profile:cartesian_grid/predictions", "profile_predictions",
+                () -> profile_margins(lmm, d, cg(); type=:predictions)))
     return out
 end
 

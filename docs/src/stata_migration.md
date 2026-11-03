@@ -10,9 +10,14 @@
 |---------------|----------------------|-------|
 | `margins` | `population_margins(model, data; type=:predictions)` | Average adjusted predictions |
 | `margins, dydx(*)` | `population_margins(model, data; type=:effects)` | Average marginal effects (AME) |
-| `margins, at(means)` | `profile_margins(model, data, means_grid(data); type=:predictions)` | Predictions at sample means |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type=:effects)` | Marginal effects at means (MEM) |
-| `margins, dydx(*) atmeans` | `profile_margins(model, data, means_grid(data); type=:effects)` | Alternative MEM syntax |
+| `margins, atmeans` | `profile_margins(model, data, means_grid(model, data); type=:predictions)` | Prediction at the means (APM) |
+| `margins, dydx(*) atmeans` | `profile_margins(model, data, means_grid(model, data); type=:effects)` | Marginal effects at the means (MEM); see the note on factor variables below |
+| `margins, noweights` | `population_margins(model, data; type=:predictions, weights=:none)` | Unweighted averages after a weighted fit |
+| `margins, dydx(*) atmeans noweights` | `profile_margins(model, data, means_grid(model, data; weights=:none); type=:effects)` | Unweighted means |
+
+**Weights and the estimation sample.** After a weighted fit (`[pw=w]`, `[fw=w]`, `[aw=w]`), Stata averages over the estimation sample `e(sample)` with the estimation weights, and computes `atmeans` and the other `at()` statistics the same way. Margins does too: `population_margins` averages with the model's weights by default (`weights=:model`) over the estimation rows (FixedEffectModels drops singletons and rows with missing values), and `means_grid(model, data)`, `complete_reference_grid(grid, model, data)` and the values `profile_margins` fills in for variables a grid leaves out use the model's weights over the estimation rows. The data-only `means_grid(data)` cannot see the model: it is unweighted and uses every row, so after a weighted or FixedEffectModels fit it does not reproduce `atmeans`. `weights=:none` (or `complete_reference_grid(…; weights=:none)`) is Stata's `noweights`. The standard errors come from `vcov` (frequency-weight based for GLM.jl; pass a design-based estimator as `vcov` for `pweight` semantics); the point estimates do not depend on the weight type.
+
+**Factor variables at the means.** `means_grid(model, data)` puts a categorical or `Bool` variable at its frequency mixture (share), as `atmeans` does for the variables it holds fixed, and `profile_margins` then reports no discrete contrast for it. Stata's `margins, dydx(*) atmeans` with factor variables (`i.g`) reports the discrete change of `g` with the other variables at their means: set `g`'s levels in the grid and let `profile_margins` fill in the rest (`profile_margins(model, data, cartesian_grid(g=levels(data.g)); type=:effects, vars=[:g])`).
 
 ### Variable Selection
 
@@ -28,18 +33,22 @@
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins education` | `population_margins(model, data; groups=:education)` | Group predictions |
-| `margins education, dydx(*)` | `population_margins(model, data; type=:effects, groups=:education)` | Group effects |
-| `margins, over(education)` | `population_margins(model, data; groups=:education)` | Alternative syntax |
-| `margins education gender` | `population_margins(model, data; groups=[:education, :gender])` | Cross-tabulation |
-| `margins education#gender` | `population_margins(model, data; groups=[:education, :gender])` | Interaction syntax |
+| `margins education` | `population_margins(model, data; scenarios=(education=levels(data.education),))` | Predictive margins: everyone set to each level in turn, averaged over the sample |
+| `margins education, dydx(x)` | `population_margins(model, data; type=:effects, vars=[:x], scenarios=(education=levels(data.education),))` | Effects with everyone at each level |
+| `margins, over(education)` | `population_margins(model, data; groups=:education)` | Subgroups: each level's own rows |
+| `margins, dydx(*) over(education)` | `population_margins(model, data; type=:effects, groups=:education)` | Effects within subgroups |
+| `margins education gender` | two calls, `scenarios=(education=…,)` and `scenarios=(gender=…,)` | One table per factor |
+| `margins education#gender` | `population_margins(model, data; scenarios=(education=…, gender=…))` | Every combination |
+| `margins, over(education gender)` | `population_margins(model, data; groups=[:education, :gender])` | Crossed subgroups |
+
+A factor in the marginlist (`margins education`) is a counterfactual (Stata sets every observation to each level), which is `scenarios=`; `over()` is a subgroup (each level's own observations), which is `groups=`. They differ whenever the other covariates differ across the levels.
 
 ### Nested Analysis
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `by region: margins education` | `population_margins(model, data; groups=:region => :education)` | Nested grouping |
-| `margins education, over(region)` | `population_margins(model, data; groups=[:education, :region])` | Cross-tabulation alternative |
+| `margins, over(region education)` (education within region) | `population_margins(model, data; groups=:region => :education)` | Nested grouping |
+| `margins education, over(region)` | `population_margins(model, data; groups=:region, scenarios=(education=levels(data.education),))` | Everyone at each education level, within each region |
 
 ## Scenario Analysis (`at()` Specification)
 
@@ -47,33 +56,38 @@
 
 | Stata Command | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins, at(x=0)` | `profile_margins(model, data, cartesian_grid(x=[0]); type=:predictions)` | Single scenario |
-| `margins, at(x=(0 1 2))` | `profile_margins(model, data, cartesian_grid(x=[0, 1, 2]); type=:predictions)` | Multiple values |
-| `margins, at(x=0 y=1)` | `profile_margins(model, data, cartesian_grid(x=[0], y=[1]); type=:predictions)` | Multiple variables |
+Stata's `at()` sets the named variables for every observation and leaves the others **as observed** (the default, `asobserved`), then averages over the estimation sample: that is `population_margins(…; scenarios=…)`. Only with `atmeans` are the other variables held at their means, which is `profile_margins` with a grid giving the `at()` values (the other variables are filled in at their model-weighted means over the estimation sample).
+
+| Stata Command | Margins.jl Equivalent | Notes |
+|---------------|----------------------|-------|
+| `margins, at(x=0)` | `population_margins(model, data; type=:predictions, scenarios=(x=[0],))` | Others as observed (Stata's default) |
+| `margins, at(x=(0 1 2))` | `population_margins(model, data; type=:predictions, scenarios=(x=[0, 1, 2],))` | Multiple values |
+| `margins, at(x=0 y=1)` | `population_margins(model, data; type=:predictions, scenarios=(x=[0], y=[1]))` | Multiple variables |
+| `margins, at(x=(0 1 2)) atmeans` | `profile_margins(model, data, cartesian_grid(x=[0, 1, 2]); type=:predictions)` | Others at their (model-weighted) means |
+| `margins, at(x=0 y=1) atmeans` | `profile_margins(model, data, cartesian_grid(x=[0], y=[1]); type=:predictions)` | |
+| `margins, at((median) x)` | `population_margins(model, data; type=:predictions, scenarios=(x=[means_grid(model, data; typical=median).x[1]],))` | `means_grid(model, data; typical=median)` gives the weighted median over the estimation sample (smallest value with half the weight, as Stata's `_pctile`; on an exact half Margins takes the midpoint) |
+| `margins, at((mean) x)` / `at((means) _all)` | `scenarios=(x=[means_grid(model, data).x[1]],)` / `means_grid(model, data)` with `profile_margins` | |
+| `margins, at((p25) x)` | `scenarios=(x=quantile_grid(data; x=[0.25], weights=:w).x,)` | Weighted quantiles interpolate (type 7), so they can differ from Stata's weighted percentile; `quantile_grid` uses every row of `data` (for a FixedEffectModels fit, pass `data[model.esample, :]`) |
+| `margins, at(x=0) noweights` | `population_margins(…; scenarios=(x=[0],), weights=:none)` | |
 
 ### Population-Level Counterfactuals
 
-**Key Difference**: Stata's `at()` creates evaluation points, while Margins.jl's `scenarios` creates population counterfactuals.
-
 | Stata Approach | Margins.jl Population Approach | Notes |
 |-----------------|-------------------------------|-------|
-| `margins, at(treatment=(0 1))` | `population_margins(model, data; scenarios=(treatment=[0, 1]))` | Everyone untreated vs everyone treated |
-| `margins education, at(policy=(0 1))` | `population_margins(model, data; groups=:education, scenarios=(policy=[0, 1]))` | Policy effects by education |
+| `margins, at(treatment=(0 1))` | `population_margins(model, data; scenarios=(treatment=[0, 1],))` | Everyone untreated vs everyone treated |
+| `margins, at(policy=(0 1)) over(education)` | `population_margins(model, data; groups=:education, scenarios=(policy=[0, 1],))` | Policy scenarios within education subgroups |
 
 ### Profile vs Population Interpretation
 
 ```julia
-# Stata: margins, at(treatment=(0 1))
-# → Effects at two evaluation points
-
-# Margins.jl Profile Equivalent
-profile_results = profile_margins(model, data, 
-    cartesian_grid(treatment=[0, 1]);
+# Stata: margins, dydx(*) at(treatment=(0 1))          (others as observed)
+population_results = population_margins(model, data;
+    scenarios=(treatment=[0, 1],),
     type=:effects)
 
-# Margins.jl Population Alternative (often more relevant)  
-population_results = population_margins(model, data;
-    scenarios=(treatment=[0, 1]),
+# Stata: margins, dydx(*) at(treatment=(0 1)) atmeans  (others at their means)
+profile_results = profile_margins(model, data,
+    cartesian_grid(treatment=[0, 1]);
     type=:effects)
 ```
 
@@ -115,7 +129,7 @@ effects_in_xbins = population_margins(model, data;
 # 4) Counterfactual predictions as x changes (not effects of x)
 preds_under_x = population_margins(model, data;
     type=:predictions,
-    scenarios=(x=[-2.0, 0.0, 2.0]))
+    scenarios=(x=[-2.0, 0.0, 2.0],))
 ```
 
 See also: the “Conflict Rule” section in the Population Grouping docs for rationale and guidance.
@@ -183,7 +197,7 @@ After `regress, vce(cluster c)` Stata uses `n_clusters − 1`; pass `df = G - 1`
 | `reghdfe y x1 x2, absorb(state year)` | `reg(df, @formula(y ~ x1 + x2 + fe(state) + fe(year)))` | Uses FixedEffectModels.jl |
 | `margins, dydx(*)` (after reghdfe) | `population_margins(model, df; type=:effects)` | AME with absorbed FEs |
 | `margins, dydx(x1)` (after reghdfe) | `population_margins(model, df; type=:effects, vars=[:x1])` | Single variable |
-| `margins, at(means) dydx(*)` | `profile_margins(model, df, means_grid(df); type=:effects)` | MEM with absorbed FEs |
+| `margins, dydx(*) atmeans` | `profile_margins(model, df, means_grid(model, df); type=:effects)` | MEM over `esample`; effects that do not depend on the FEs |
 
 ### Predictions with Fixed Effects
 
@@ -214,7 +228,7 @@ See [Fixed Effects Models](fixed_effects.md) for full documentation.
 
 | Stata Pattern | Margins.jl Equivalent | Notes |
 |---------------|----------------------|-------|
-| `margins education, at(treatment=(0 1))` | `population_margins(model, data; groups=:education, scenarios=(treatment=[0, 1]))` | Group × scenario analysis |
+| `margins, at(treatment=(0 1)) over(education)` | `population_margins(model, data; groups=:education, scenarios=(treatment=[0, 1],))` | Group × scenario analysis |
 | Multiple `margins` commands | Single comprehensive call | More efficient in Julia |
 
 ## Advanced Patterns Beyond Stata
@@ -259,9 +273,9 @@ population_margins(model, data; groups=(:income, [25000, 50000, 75000]))
 ### Hierarchical Grouping
 
 ```stata
-* Stata approach (requires multiple commands or complex by groups):
-by region: margins education
-* No native support for deep nesting
+* Stata approach: subgroups of region and education
+margins, over(region education)
+* No native support for bins computed within groups
 ```
 
 ```julia
@@ -285,7 +299,7 @@ margins, at(treatment=1 policy=1)
 population_margins(model, data; scenarios=(treatment=[0, 1], policy=[0, 1]))
 ```
 
-Note: `scenarios` in Julia are population‑level counterfactuals (everyone receives each setting in turn). For Stata’s point‑evaluation semantics of `at()`, use `profile_margins(model, data, reference_grid)` with a grid builder (e.g., `means_grid`, `cartesian_grid`) or an explicit DataFrame.
+Note: `scenarios` are population‑level counterfactuals (everyone receives each setting in turn, other variables as observed), which is what Stata's `at()` does by default. For `at(…) atmeans` (other variables at their means) use `profile_margins(model, data, cartesian_grid(…))`, or `means_grid(model, data)` for every variable at its mean.
 
 ## Complete Workflow Examples
 
@@ -299,12 +313,11 @@ logit outcome education income female urban policy_treatment
 * Basic effects
 margins, dydx(*)
 
-* Effects by education
-margins education, dydx(income)
+* Effects by education (subgroups)
+margins, dydx(income) over(education)
 
-* Policy scenarios (multiple commands required)
-margins education, at(policy_treatment=0)
-margins education, at(policy_treatment=1)
+* Policy scenarios within education subgroups
+margins, dydx(*) at(policy_treatment=(0 1)) over(education)
 
 * Manual difference calculation needed for treatment effects
 ```
@@ -328,7 +341,7 @@ education_effects = population_margins(model, data;
 policy_analysis = population_margins(model, data;
                                    type=:effects,
                                    groups=:education,
-                                   scenarios=(:policy_treatment => [0, 1]))
+                                   scenarios=(policy_treatment=[0, 1],))
 
 # All results readily available as DataFrames
 DataFrame(policy_analysis)
@@ -339,13 +352,13 @@ DataFrame(policy_analysis)
 #### Stata Approach (Cumbersome)
 ```stata
 * Multiple manual commands needed:
-margins education, over(region)
-margins gender, over(region)  
-margins education#gender, over(region)
+margins, dydx(*) over(region education)
+margins, dydx(*) over(region gender)
+margins, dydx(*) over(region education gender)
 
 * Income quartiles require manual creation:
 xtile income_q4 = income, nq(4)
-margins education, over(income_q4)
+margins, dydx(*) over(region income_q4)
 
 * No native support for hierarchical analysis
 ```
@@ -398,11 +411,11 @@ result = population_margins(model, data;
 # margins → population_margins(model, data; type=:predictions)
 
 # Pattern 2: Effects by groups → groups parameter  
-# margins education, dydx(*) → population_margins(model, data; type=:effects, groups=:education)
+# margins, dydx(*) over(education) → population_margins(model, data; type=:effects, groups=:education)
 
-# Pattern 3: Multiple at() values → scenarios or profile grids
-# margins, at(x=(0 1 2)) → profile_margins(model, data, cartesian_grid(x=[0, 1, 2]))
-# OR population_margins(model, data; scenarios=(x=[0, 1, 2]))  # for counterfactuals
+# Pattern 3: Multiple at() values → scenarios (Stata's default, others as observed)
+# margins, at(x=(0 1 2))         → population_margins(model, data; scenarios=(x=[0, 1, 2],))
+# margins, at(x=(0 1 2)) atmeans → profile_margins(model, data, cartesian_grid(x=[0, 1, 2]))
 
 # Pattern 4: Complex manual analysis → comprehensive single call
 # Multiple Stata commands → single population_margins with groups + scenarios

@@ -92,7 +92,7 @@ Evaluate effects or predictions at different values of one variable:
 # Compare predictions under treatment vs control
 result = population_margins(model, data;
     type=:predictions,
-    scenarios=(treatment=[0, 1])
+    scenarios=(treatment=[0, 1],)
 )
 # Result: 2 rows showing AAP when treatment=0 and treatment=1
 
@@ -100,7 +100,7 @@ result = population_margins(model, data;
 result = population_margins(model, data;
     type=:effects,
     vars=[:x],
-    scenarios=(policy=["baseline", "reform"])
+    scenarios=(policy=["baseline", "reform"],)
 )
 # Result: 2 rows showing AME of x under each policy scenario
 ```
@@ -145,7 +145,7 @@ result = population_margins(model, data;
     type=:effects,
     vars=[:x],
     groups=:gender,
-    scenarios=(policy=["none", "pilot", "full"])
+    scenarios=(policy=["none", "pilot", "full"],)
 )
 # Result: 6 rows (2 genders × 3 policies)
 
@@ -173,7 +173,7 @@ model = glm(@formula(health_score ~ age + income + insurance + education),
 
 policy_comparison = population_margins(model, health_data;
     type=:predictions,
-    scenarios=(insurance=["none", "basic", "comprehensive"])
+    scenarios=(insurance=["none", "basic", "comprehensive"],)
 )
 
 df = DataFrame(policy_comparison)
@@ -197,7 +197,7 @@ heterogeneous_effects = population_margins(model, student_data;
     type=:effects,
     vars=[:tutoring_hours],
     groups=:ses,
-    scenarios=(prior_score=[40, 50, 60, 70, 80])  # Standardize baseline
+    scenarios=(prior_score=[40, 50, 60, 70, 80],)  # Standardize baseline
 )
 
 df = DataFrame(heterogeneous_effects)
@@ -212,7 +212,7 @@ df = DataFrame(heterogeneous_effects)
 # Medication study: Predicted outcomes at different dosages
 dosage_response = population_margins(medication_model, patient_data;
     type=:predictions,
-    scenarios=(dosage=[0, 5, 10, 15, 20, 25])  # mg
+    scenarios=(dosage=[0, 5, 10, 15, 20, 25],)  # mg
 )
 
 df = DataFrame(dosage_response)
@@ -228,7 +228,7 @@ df = DataFrame(dosage_response)
 college_standardized = population_margins(wage_model, worker_data;
     type=:effects,
     vars=[:experience],
-    scenarios=(education=["College"])  # Everyone has college degree
+    scenarios=(education=["College"],)  # Everyone has college degree
 )
 
 # Compare to actual population (mixed education)
@@ -297,7 +297,7 @@ To compute differences between scenarios, use predictions:
 # Right: Use predictions with treatment scenarios
 predictions = population_margins(model, data;
     type=:predictions,
-    scenarios=(treatment=[0, 1])
+    scenarios=(treatment=[0, 1],)
 )
 
 df = DataFrame(predictions)
@@ -313,7 +313,7 @@ Scenarios use the averaging weights (the model's by default, or `weights=`); the
 # Weighted scenarios (e.g., survey data)
 result = population_margins(model, survey_data;
     type=:predictions,
-    scenarios=(income=[30000, 50000, 70000]),
+    scenarios=(income=[30000, 50000, 70000],),
     weights=:survey_weight
 )
 # Predictions are population-weighted averages
@@ -395,7 +395,7 @@ groups, scenarios = Margins.context_columns(result)
 ```julia
 # Wrong: Using scenarios for "effects at x=10"
 # This computes population-average effect when everyone has x=10 (not what you want)
-population_margins(model, data; type=:effects, vars=[:z], scenarios=(x=[10]))
+population_margins(model, data; type=:effects, vars=[:z], scenarios=(x=[10],))
 
 # Right: Use profile analysis for "effects at x=10"
 profile_margins(model, data, cartesian_grid(x=[10]); type=:effects, vars=[:z])
@@ -406,10 +406,10 @@ profile_margins(model, data, cartesian_grid(x=[10]); type=:effects, vars=[:z])
 ```julia
 # Wrong: x appears in both vars and scenarios
 # Result: ArgumentError - the whole call is rejected, not just x
-population_margins(model, data; type=:effects, vars=[:x, :z], scenarios=(x=[1, 2]))
+population_margins(model, data; type=:effects, vars=[:x, :z], scenarios=(x=[1, 2],))
 
 # Right: Use predictions to see how outcomes change as x varies
-population_margins(model, data; type=:predictions, scenarios=(x=[1, 2]))
+population_margins(model, data; type=:predictions, scenarios=(x=[1, 2],))
 ```
 
 #### Mistake 3: Too Many Scenario Combinations
@@ -495,9 +495,9 @@ groups, scenarios = Margins.context_columns(result)
 
 | Goal | Method |
 |------|--------|
-| "Average effect if everyone had X=10" | `population_margins` with `scenarios=(X=[10])` |
+| "Average effect if everyone had X=10" | `population_margins` with `scenarios=(X=[10],)` |
 | "Effect at X=10 for a typical individual" | `profile_margins` with `cartesian_grid(X=[10])` |
-| "Compare predictions across 3 policies" | `population_margins` with `scenarios=(policy=[...])` |
+| "Compare predictions across 3 policies" | `population_margins` with `scenarios=(policy=[...],)` |
 | "Effects at high/med/low values of X" | `profile_margins` with `cartesian_grid(X=[...])` |
 
 **Remember:** `profile_margins()` does **not accept** `scenarios` parameter. Use reference grid builders (`cartesian_grid`, `means_grid`, etc.) instead.

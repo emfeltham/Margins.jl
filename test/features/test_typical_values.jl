@@ -185,7 +185,7 @@ _grid_eq(a, b) = names(a) == names(b) && size(a) == size(b) &&
     @testset "complete_reference_grid(…; weights=), weighted MEM" begin
         m = lm(@formula(y ~ x + z + g + t), d; wts=d.w)
         part = cartesian_grid(x=[1.0, 2.0])
-        c0 = complete_reference_grid(part, m, d)
+        c0 = complete_reference_grid(part, m, d; weights=:none)                # unweighted
         @test _grid_eq(complete_reference_grid(part, m, d; weights=nothing), c0)
         cw = complete_reference_grid(part, m, d; weights=:w)
         @test all(cw.z .≈ wmean(d.z))
@@ -193,8 +193,10 @@ _grid_eq(a, b) = names(a) == names(b) && size(a) == size(b) &&
         @test _approx(_shares(cw.g[1]), Dict(l => sum(d.w[d.g .== l]) / wsum for l in ["a", "b", "c"]))
         # :model = the model's estimation weights; an unweighted model gives the unweighted fill
         @test _grid_eq(complete_reference_grid(part, m, d; weights=:model), cw)
+        @test _grid_eq(complete_reference_grid(part, m, d), cw)                # the default is :model
         mu = lm(@formula(y ~ x + z + g + t), d)
         @test _grid_eq(complete_reference_grid(part, mu, d; weights=:model), c0)
+        @test _grid_eq(complete_reference_grid(part, mu, d), c0)
         @test_throws ArgumentError complete_reference_grid(part, m, d; typical=v -> quantile(v, 0.9), weights=:w)
 
         # profile_margins evaluates the grid it is given: weighted MEM = MEM at the hand-weighted point
@@ -209,9 +211,10 @@ _grid_eq(a, b) = names(a) == names(b) && size(a) == size(b) &&
         pp_h = DataFrame(profile_margins(m, d, DataFrame(x=[1.0, 2.0], z=fill(wmean(d.z), 2), t=fill(wmean(d.t), 2),
                                                          g=fill(hand.g[1], 2)); type=:predictions))
         @test pp_w.estimate ≈ pp_h.estimate rtol=1e-12
-        # profile_margins' own completion stays unweighted
-        pp_0 = DataFrame(profile_margins(m, d, part; type=:predictions))
-        @test pp_0.estimate ≈ DataFrame(profile_margins(m, d, c0; type=:predictions)).estimate rtol=1e-14
+        # profile_margins' own completion uses the model's weights (the default of complete_reference_grid)
+        pp_d = DataFrame(profile_margins(m, d, part; type=:predictions))
+        @test pp_d.estimate == pp_w.estimate
+        @test DataFrame(profile_margins(m, d, c0; type=:predictions)).estimate != pp_d.estimate
         @test_throws MethodError profile_margins(m, d, part; weights=:w)
     end
 

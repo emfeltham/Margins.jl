@@ -83,7 +83,8 @@ using Random
         @test produced["weighted model"].metadata[:weights_source] === :model && produced["weighted model"].metadata[:weighted]
         @test produced["weighted model, contexts"].metadata[:weights_source] === :model
         @test produced["weighted model, :none"].metadata[:weights_source] === :none
-        @test produced["weighted model, profile"].metadata[:weights_source] === :none   # profile margins are unweighted
+        # profile_margins fills x, t and g in for this partial grid with the model's weights
+        @test produced["weighted model, profile"].metadata[:weights_source] === :model && produced["weighted model, profile"].metadata[:weighted]
         @test produced["profile effects"].metadata[:weights_source] === :none
         @test produced["scenarios+groups+weights"].metadata[:groups_vars] == [:g]
         @test produced["scenarios+groups+weights"].metadata[:scenarios_vars] == [:t]

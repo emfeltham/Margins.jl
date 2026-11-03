@@ -83,7 +83,7 @@ function _grid_weights(weights, data, data_nt, builder; model=nothing)
         isnothing(model) && throw(ArgumentError(
             "$builder(…; weights=:model): this builder has no model to read weights from. Pass the " *
             "weights as a column name (weights=:w) or a vector, or complete a partial grid with " *
-            "complete_reference_grid(grid, model, data; weights=:model)."))
+            "complete_reference_grid(grid, model, data), which uses the model weights by default."))
         return first(_resolve_weights(:model, model, data, data_nt))
     end
     weights isa Union{Symbol, AbstractVector} || throw(ArgumentError(
@@ -1322,6 +1322,12 @@ weight reaches half the total, the midpoint of two values on an exact tie, so eq
 `median`). A custom `typical` function cannot be weighted: `weights` with a `typical` other than
 `mean`/`median` is an `ArgumentError`.
 
+`means_grid` sees only the data, not the model, so it is unweighted unless you pass `weights=`,
+even for a model fit with weights. To match Stata's `margins, atmeans` after a weighted fit, pass
+the fit's weights (`means_grid(data; weights=:w)`), or give `profile_margins` a grid with only the
+variables you set (`cartesian_grid(x=[0, 1])`) and let it fill in the rest: its fill-ins use the
+model's estimation weights (see `complete_reference_grid`).
+
 Columns follow the data's column order.
 
 # Examples
@@ -1346,6 +1352,67 @@ function means_grid(data; typical=mean, weights=nothing)
     # One column per data column, in the data's column order
     df = DataFrame([k => _typical_grid_column(typical_values[k]) for k in keys(data_nt)])
     return _mark_typical_values!(df, names(df))
+end
+
+"""
+    means_grid(model, data; typical=mean, weights=:model) -> DataFrame
+
+A one-row reference grid with every variable of `model`'s formula at its typical value, computed
+as Stata's `margins, atmeans` computes it: over the model's estimation sample (Stata's
+`e(sample)`; FixedEffectModels drops singletons and rows with missing values, GLM.jl and
+MixedModels fits use every row) and weighted by the model's estimation weights by default.
+`profile_margins(model, data, means_grid(model, data))` is the marginal effect (or prediction) at
+means, MEM (APM).
+
+The typical values are those of `means_grid(data)` (mean or `typical` of numeric variables, share
+of `true` for `Bool` ones, frequency mixtures for categorical and string ones), except that a
+variable the model treats as categorical (an integer code fitted with `DummyCoding()`) gets its
+frequency mixture over the model's levels, and that only the variables the formula uses are
+included (not the response, not absorbed fixed effects).
+
+# Arguments
+- `model`: the fitted model.
+- `data`: the table the model was fit to (for FixedEffectModels the table given to `reg`).
+- `typical=mean`: the typical value of numeric variables (`median` also has a weighted version;
+  a custom function needs `weights=:none` for a weighted fit).
+- `weights=:model`: the model's estimation weights (none for an unweighted fit). `:none` or
+  `nothing`: unweighted (Stata's `noweights`). A column name or a vector (one entry per row of
+  `data`), checked as in `population_margins`. Rows with weight 0 contribute nothing.
+
+The data-only method `means_grid(data; weights=nothing)` cannot see the model: it is unweighted by
+default and uses every row and every column of `data`.
+
+Categorical and `Bool` variables are at their frequency mixture (share of `true`), so
+`profile_margins` reports no discrete contrasts for them at this grid (Stata's `atmeans` with factor
+variables does, holding the others at their means); for those, set the variable's levels in a grid
+and let `profile_margins` fill in the rest, e.g. `cartesian_grid(g=["a", "b"])`. The grid is passed
+to `profile_margins` fully specified, so the result's `metadata[:weights_source]`, which describes
+`profile_margins`' own fill-ins, is `:none`.
+
+# Examples
+```julia
+m = glm(@formula(y ~ x + z + g), df, Binomial(), LogitLink(); wts = df.w)
+profile_margins(m, df, means_grid(m, df); type=:effects)                 # Stata: margins, dydx(*) atmeans
+profile_margins(m, df, means_grid(m, df; weights=:none); type=:effects)  # ... atmeans noweights
+```
+"""
+function means_grid(model, data; typical=mean, weights=:model)
+    cols = data isa NamedTuple ? data : Tables.columntable(data)
+    n_full = length(first(cols))
+    rows = _estimation_rows(model, n_full)
+    if !isnothing(rows)
+        cols = map(c -> c[rows], cols)
+        weights isa AbstractVector && length(weights) == n_full && (weights = weights[rows])
+    end
+    data_nt = _narrow_missing_columns(cols)
+    w = _grid_weights(weights, cols, data_nt, "means_grid"; model)
+    isnothing(w) || _check_weighted_typical(typical)
+    # variables the model treats as categorical get frequency mixtures over the model's levels
+    model_nt = _filter_data_to_model_variables(_categorize_model_categoricals(data_nt, model), model)
+    rv = _response_name(model)
+    keep = Tuple(k for k in keys(model_nt) if k !== rv)
+    typical_values = get_typical_values(NamedTuple{keep}(map(k -> model_nt[k], keep)); typical, weights=w)
+    return DataFrame([k => _counterfactual_column(SetTo(typical_values[k]), 1) for k in keep])
 end
 
 """
@@ -1461,8 +1528,9 @@ end
 Build Cartesian product reference grid from variable specifications.
 This is a pure grid constructor that creates combinations from provided values
 without needing reference data. When used with `profile_margins()`, missing
-model variables are automatically completed with (unweighted) typical values; for weighted ones,
-complete the grid first with `complete_reference_grid(grid, model, data; weights=…)`.
+model variables are automatically completed with typical values, weighted by the model's
+estimation weights for a weighted fit (`complete_reference_grid`'s default `weights=:model`); for
+other weights, complete the grid first with `complete_reference_grid(grid, model, data; weights=…)`.
 
 # Order
 Columns follow the order of the keywords; rows are nested with the first variable varying slowest
@@ -1521,26 +1589,36 @@ function _cartesian_grid_impl(spec::Vector{<:Pair{Symbol}})
 end
 
 """
-    complete_reference_grid(reference_grid, model, data; typical=mean, weights=nothing) -> DataFrame
+    complete_reference_grid(reference_grid, model, data; typical=mean, weights=:model) -> DataFrame
 
 Complete a partial reference grid by adding typical values for missing model variables.
 This function takes a reference grid that may be missing some model variables and
 adds appropriate typical values for those missing variables. `profile_margins` does this itself,
-unweighted, for a grid that leaves model variables out; call it yourself for weighted fill-ins.
+with the defaults, for a grid that leaves model variables out; call it yourself to choose the
+weights or the typical function.
 
 # Arguments
 - `reference_grid`: DataFrame with partial reference grid (e.g., from cartesian_grid)
 - `model`: Fitted statistical model
-- `data`: Original data (DataFrame or NamedTuple) to compute typical values
+- `data`: the data the model was fit to (DataFrame or any Tables.jl table). The typical values are
+  computed over the model's estimation sample (Stata's `e(sample)`): every row for GLM.jl and
+  MixedModels fits; for a FixedEffectModels fit, the rows in `model.esample` (singletons and rows
+  with missing values dropped), so `data` must be the table given to `reg`, as for
+  `population_margins`. A weight vector with one entry per row of `data` is subset the same way.
 - `typical`: Function to compute typical values for continuous variables (default: mean)
-- `weights=nothing`: weights for the typical values: a column name (`weights=:w`) or a vector with
-  one weight per row, with the same checks as `population_margins`' `weights=` (real, finite,
-  non-negative, not all zero). `nothing` or `:none`: unweighted. A `Symbol` names a column of
-  `data`; a vector is used as given (it is not looked up in `data`). Rows with weight 0 are
-  dropped. `weights=:model` uses the model's estimation weights (as `population_margins`' default;
-  unweighted for an unweighted model). The weights apply to the filled-in values and to the
-  frequency mixture that replaces a typical-value cell of a variable the model treats as
-  categorical (see `means_grid`, *Typical values*).
+- `weights=:model`: weights for the filled-in values. `:model` (the default) uses the model's
+  estimation weights, as `population_margins`' `weights=:model` does, over the estimation sample:
+  a weighted fit gives weighted means, weighted shares of `true` and weighted frequency mixtures
+  (Stata's `margins` uses the estimation weights for the `at()` values it computes); an unweighted
+  fit gives unweighted values, exactly as before. `:none` or `nothing`: unweighted (Stata's
+  `noweights`; the 2.x default). A column name (`weights=:w`) or a vector with one weight per row,
+  with the same checks as `population_margins`' `weights=` (real, finite, non-negative, not all
+  zero); a `Symbol` names a column of `data`, a vector is used as given. Rows with weight 0
+  contribute nothing. The weights apply to the filled-in values and to the frequency mixture that
+  replaces a typical-value cell of a variable the model treats as categorical (see `means_grid`,
+  *Typical values*); they are read only when something is filled in. Weights work with
+  `typical=mean` and `typical=median`; a custom `typical` function needs `weights=:none` when
+  the fit is weighted.
 
 Columns: the grid's model-variable columns in the grid's order, then the filled-in variables in
 the data's column order. Rows: those of `reference_grid`.
@@ -1553,22 +1631,53 @@ the data's column order. Rows: those of `reference_grid`.
 # Create partial grid with only x1 and x2
 partial_grid = cartesian_grid(x1=[0, 1, 2], x2=[10, 20])
 
-# Complete it with typical values for other model variables
+# Complete it with typical values for other model variables (weighted by the model's
+# estimation weights when the fit has any)
 complete_grid = complete_reference_grid(partial_grid, model, data)
 
-# ... with weighted typical values (the model's estimation weights, or a column)
-complete_grid = complete_reference_grid(partial_grid, model, data; weights=:model)
+# ... unweighted, whatever the fit (Stata's noweights)
+complete_grid = complete_reference_grid(partial_grid, model, data; weights=:none)
 
 # Use with profile_margins
 result = profile_margins(model, data, complete_grid)
 ```
 """
-function complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean, weights=nothing)
+complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean, weights=:model) =
+    first(_complete_reference_grid(reference_grid, model, data; typical, weights))
+
+# The completed grid and the source of the weights its filled-in values used: `:model`, `:user` or
+# `:none` (`:none` also when nothing was filled in, or `:model` resolved to no weights). The weights
+# are resolved only when a value is filled in, so a grid that sets every model variable never
+# reads them (no length check, no warning for a model class whose weights are unknown).
+function _complete_reference_grid(reference_grid::DataFrame, model, data; typical=mean, weights=:model,
+                                  subset::Bool=true)
     # Convert data to NamedTuple for consistency
-    data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
-    # Weights for the typical values (`nothing`: unweighted, the default); `:model` reads the model's
-    w = _grid_weights(weights, data, data_nt, "complete_reference_grid"; model)
-    isnothing(w) || _check_weighted_typical(typical)
+    cols = data isa NamedTuple ? data : Tables.columntable(data)
+    # Typical values over the model's estimation sample (Stata's e(sample)): FixedEffectModels drops
+    # singletons and rows with missing values; GLM.jl fits use every row (`nothing`). A weight vector
+    # for every row of `data` is subset the same way. (`subset=false`: `data` already holds the
+    # estimation rows, as in the request layer.)
+    if subset
+        n_full = length(first(cols))
+        rows = _estimation_rows(model, n_full)
+        if !isnothing(rows)
+            cols = map(c -> c[rows], cols)
+            weights isa AbstractVector && length(weights) == n_full && (weights = weights[rows])
+            data = cols
+        end
+    end
+    data_nt = _narrow_missing_columns(cols)
+    # Weights for the typical values, resolved on first use (`:model`: the model's estimation weights,
+    # none for an unweighted fit; `nothing`/`:none`: unweighted)
+    wcache = Ref{Any}(missing)
+    function getw()
+        if ismissing(wcache[])
+            w = _grid_weights(weights, data, data_nt, "complete_reference_grid"; model)
+            isnothing(w) || _check_weighted_typical(typical)
+            wcache[] = w
+        end
+        return wcache[]
+    end
     
     # Columns the MODEL treats as categorical (e.g. integer codes fitted with
     # `contrasts = Dict(:k => DummyCoding())`) become CategoricalArrays, so their typical
@@ -1583,8 +1692,9 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
     # (including categorical frequency tables) over every grid-specified column.
     grid_syms = Set(Symbol.(names(reference_grid)))
     unspecified = Tuple(k for k in keys(filtered_data) if !(k in grid_syms))
-    typical_values = get_typical_values(NamedTuple{unspecified}(map(k -> filtered_data[k], unspecified));
-                                        typical=typical, weights=w)
+    typical_values = isempty(unspecified) ? (;) :
+        get_typical_values(NamedTuple{unspecified}(map(k -> filtered_data[k], unspecified));
+                           typical=typical, weights=getw())
 
     # Create complete reference grid
     n_rows = nrow(reference_grid)
@@ -1623,7 +1733,7 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
                         "weighted combination of levels.)"))
                 end
                 if !isnothing(trows) && any(trows)
-                    mixture = typical_value(dcol; weights=w)
+                    mixture = typical_value(dcol; weights=getw())
                     @debug "Variable $col_sym is categorical in the model; using its frequency mixture instead of the typical value(s) $(unique(gcol[trows]))."
                     # A column that mixes typical and user-specified cells holds the
                     # mixture in some rows and levels in others; `profile_margins` evaluates
@@ -1643,7 +1753,9 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
         push!(complete_cols, var => _counterfactual_column(SetTo(typical_values[var]), n_rows))
     end
     
-    return DataFrame(complete_cols)
+    source = ismissing(wcache[]) || isnothing(wcache[]) ? :none :
+             weights === :model ? :model : :user
+    return (DataFrame(complete_cols), source)
 end
 
 """

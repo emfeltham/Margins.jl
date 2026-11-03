@@ -40,18 +40,20 @@ Weights are checked as in `population_margins`: real, finite, non‑negative, no
 
 **Custom `typical` functions cannot be weighted.** Only `mean` and `median` have weighted versions; `weights` with any other `typical` is an `ArgumentError` rather than silently ignoring the weights. Compute such a value yourself and put it in the grid (`cartesian_grid(x = [my_stat(df.x, df.w)])`).
 
-**Weighted MEM for a survey-weighted model.** `profile_margins` evaluates the grid it is given and takes no `weights`. Build the grid with weights:
+**Weights and the model.** The builders see only the data, so they are unweighted unless you pass `weights=`, also for a model fit with weights. The values `profile_margins` fills in for model variables a grid leaves out are different: they use the model's estimation weights (`complete_reference_grid`'s default `weights = :model`), as Stata's `margins` uses the estimation weights for the `at()` values it computes. For an unweighted fit both are unweighted.
 
 ```julia
 m = glm(@formula(y ~ x + z + group), df, Binomial(), LogitLink(); wts = df.w)
-profile_margins(m, df, means_grid(df; weights = :w))   # x, z at weighted means; group a weighted mixture
 
-# Partial grid: complete it with weighted values before profile_margins (which would fill unweighted)
-grid = complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :model)
-profile_margins(m, df, grid)
+profile_margins(m, df, means_grid(df))                 # UNWEIGHTED means and shares (the builder has no model)
+profile_margins(m, df, means_grid(df; weights = :w))   # weighted means and shares (Stata's atmeans)
+profile_margins(m, df, cartesian_grid(x = [0, 1]))     # z and group filled in with model-weighted values
+
+# Unweighted fill-ins for a weighted fit (Stata's noweights; the 2.x behaviour)
+profile_margins(m, df, complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :none))
 ```
 
-`weights = :model` (the model's estimation weights) is accepted by `complete_reference_grid` only, the one builder that takes a model. A `Symbol` names a column of the data; a vector is used as given.
+`metadata[:weights_source]` of a profile result says what the filled-in values used: `:model` when model weights were applied to one, `:none` otherwise (an unweighted fit, a grid that sets every model variable, a model whose weights cannot be read). `weights = :model` is accepted by `complete_reference_grid` only, the one builder that takes a model; there it is the default. A `Symbol` names a column of the data; a vector is used as given.
 
 ## Row and column order
 
@@ -291,7 +293,8 @@ When variables are unspecified in builder functions, they use actual data compos
 # - region: 75% Urban, 25% Rural
 # - treated: 60% true, 40% false
 
-# Completion (here by profile_margins) uses realistic defaults, unweighted
+# Completion (here by profile_margins) uses the sample composition (weighted by the model's
+# estimation weights for a weighted fit; this example is unweighted)
 grid = cartesian_grid(income=[30000, 50000, 70000])
 # → income varies as specified
 # → education: mix("HS" => 0.4, "College" => 0.45, "Graduate" => 0.15)

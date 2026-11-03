@@ -64,6 +64,9 @@ and standard errors are unchanged; p-values and confidence intervals change for 
 | profile effects `df.lower`, `df.upper` | `df.ci_lower`, `df.ci_upper` |
 | `DataFrame(r; format=:stata).t` (always) | `.t` for linear models (any `vcov`) and FixedEffectModels, `.z` otherwise |
 | weighted models (`glm(…; wts=w)`, `fit(MixedModel, …; wts=w)`): `population_margins(m, data)` was unweighted | results are now weighted by the model's weights by default; pass `weights=:none` for the 2.x behaviour |
+| Stata `margins, dydx(*) atmeans` after a weighted or FixedEffectModels fit: `profile_margins(m, d, means_grid(d))` (unweighted, every row) | `profile_margins(m, d, means_grid(m, d))` (model weights, estimation sample) |
+| FixedEffectModels fit that dropped rows: `complete_reference_grid(grid, fe_model, data)` averaged over every row of `data` | averages over `model.esample` (as `profile_margins` and `population_margins`); `data` must be the table given to `reg` |
+| weighted models: `profile_margins(m, data, cartesian_grid(x=…))` filled the other variables with unweighted means and shares; `complete_reference_grid(grid, m, data)` likewise | filled in with model-weighted values; for the 2.x values `profile_margins(m, data, complete_reference_grid(grid, m, data; weights=:none))` |
 | `quantile_grid(d; x=4)` → 0.2, 0.4, 0.6, 0.8 (`i/(n+1)`) | 0.25, 0.5, 0.75; for the old values pass `x=[0.2, 0.4, 0.6, 0.8]` |
 | `hierarchical_grid(d, (:x, :quartiles))` → 0.25, 0.5, 0.75, 1.0; `(:x, (:quantiles, n))` → `i/n`, `i = 1…n` | the `n − 1` cut points (0.25, 0.5, 0.75); for the old rows pass `(:x, [0.25, 0.5, 0.75, 1.0])` |
 | rank-deficient fit (a coefficient dropped as collinear): every SE NaN | SEs as for the refit without the redundant term; the dropped variable's own effect has SE NaN; one warning per call (refit without the term to silence it) |
@@ -459,11 +462,53 @@ tests.
   probability 0.5 they can differ from the weighted median.
 - **A custom `typical` function cannot be weighted:** `weights` with a `typical` other than `mean` or
   `median` is an `ArgumentError` (the weights are not silently ignored).
-- **`profile_margins` is unchanged:** it evaluates the grid it is given and takes no `weights`. For a MEM
-  at weighted typical values build the grid with weights (`profile_margins(m, d, means_grid(d;
-  weights=:w))`); the completion it does for variables a partial grid leaves out stays unweighted, so
-  complete a partial grid first (`complete_reference_grid(cartesian_grid(x=[0, 1]), m, d;
-  weights=:model)`). Docs: "Typical values" in `docs/src/reference_grids.md` and the Weights page.
+- **Profile fill-ins use the model's estimation weights (behaviour change for weighted fits).** The
+  values `profile_margins` fills in for model variables a grid leaves out (means, shares of `true`,
+  categorical frequency mixtures, and the mixture that replaces a data-only builder's typical value
+  of a variable the model treats as categorical) are weighted by the model's estimation weights, as
+  Stata's `margins` computes `at()` values with the estimation weights. This is
+  `complete_reference_grid`'s new default `weights=:model` (it was `nothing`, unweighted), the same
+  resolution as `population_margins`' `weights=:model`; rows with weight 0 contribute nothing.
+  Unweighted fits are bitwise unchanged (an unweighted fit has no weights to apply). `weights=:none`
+  on `complete_reference_grid` gives the 2.x values (Stata's `noweights`). `profile_margins` itself
+  still has no `weights` keyword. The weights are read only when a value is filled in, so a grid that
+  sets every model variable is unaffected (and a weighted fit whose weights cannot be matched to the
+  data's rows errors only when a fill-in needs them). Profile results now record what the fill-ins
+  used: `metadata[:weights_source]` is `:model` and `metadata[:weighted]` `true` when model weights
+  were applied to a filled-in value, otherwise `:none`/`false` (an unweighted fit, a fully specified
+  grid, or a model class whose weights cannot be read, such as FixedEffectModels, which warns as for
+  `population_margins`). A custom `typical` function with a weighted fit needs `weights=:none` (a
+  custom function cannot be weighted). The grid builders (`means_grid`, `balanced_grid`,
+  `quantile_grid`, `hierarchical_grid`) cannot see the model and keep their unweighted default: with a
+  weighted fit, `means_grid(data)` holds unweighted means; for Stata's `atmeans` write
+  `means_grid(data; weights=:w)` or let `profile_margins` fill the values in. Tests:
+  `test/core/test_profile_fill_weights.jl` (hand-computed weighted means and shares, `:none` = the
+  unweighted values, unweighted fits bitwise unchanged, zero weights, MixedModels, FixedEffectModels,
+  metadata, errors). Golden snapshot: no existing row changes (its weighted-fit profile cases use
+  `means_grid`, which fills every column); 34 rows appended (`fill-weights:` cases: weighted lm,
+  logit and LMM with a partial grid, `:model` and `:none`), each equal to a hand-built grid of
+  weighted (or unweighted) means and shares. Docs: the `profile_margins` and `complete_reference_grid`
+  docstrings, "Typical values" in `docs/src/reference_grids.md`, the Weights page and the Stata
+  migration guide.
+- **New: `means_grid(model, data; typical=mean, weights=:model)`** (additive; `means_grid(data; …)` is
+  unchanged). A one-row grid with every formula variable at its typical value, computed as Stata's
+  `margins, atmeans` computes it: over the estimation sample and weighted by the model's estimation
+  weights (`weights=:none`: Stata's `noweights`); the response and absorbed fixed effects are left
+  out, and an integer code the model treats as categorical gets its frequency mixture over the
+  model's levels. `profile_margins(m, d, means_grid(m, d))` is the documented translation of
+  `margins, dydx(*) atmeans`. Tests: hand-computed weighted means and shares, the MEM equal to a
+  hand-built grid, FixedEffectModels over `esample`.
+- **`complete_reference_grid` computes typical values over the estimation sample** (Stata's
+  `e(sample)`; behaviour change for FixedEffectModels fits that drop rows). For a FixedEffectModels
+  fit it uses the rows in `model.esample` (singletons and rows with missing values dropped), for every
+  `weights` setting including `:none`, and subsets a weight vector given for every row of `data` the
+  same way; `data` must then be the table given to `reg` (a pre-subset table is an `ArgumentError`, as
+  in `population_margins`). GLM.jl and MixedModels fits use every row, so nothing changes for them.
+  `profile_margins`' own fill-ins already used the estimation rows (its request holds only those
+  rows), so no `profile_margins` result changes; the golden snapshot is unchanged. Tests: a
+  FixedEffectModels fit with singleton groups and missing values (fill-in = mean over `esample`,
+  weighted over `esample` with `weights=:w` or a full-length vector; equal to `profile_margins`' own
+  fill-in).
 - Fixed along the way: `means_grid`'s docstring was attached to an internal constant, so `?means_grid`
   showed nothing; `quantile_grid` now marks its filled-in columns as typical values (as `means_grid`
   does), so an integer-coded variable the model treats as categorical gets its frequency mixture there
@@ -641,6 +686,18 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
   `test_performance_regression.jl` (wall-clock thresholds) and `test_utilities.jl` (unused copy of
   FormulaCompiler test helpers). Tooling that is not a test stays: `support/` (golden snapshot and
   synthetic-data generators), `r_compare*/` and `performance/benchmark_blas_opt.jl`.
+- **Stata migration guide corrected.** It mapped `margins, at(x=…)` to `profile_margins` with a
+  `cartesian_grid` (other variables at their means); Stata's `at()` leaves the other variables as
+  observed and averages over the sample (`asobserved`, its default), which is `population_margins(…;
+  scenarios=…)`, and `profile_margins` is `at(…) atmeans`. It mapped `margins education` (a factor in
+  the marginlist: everyone set to each level) to `groups=:education`, which is `over(education)`
+  (subgroups); it is now `scenarios=(education=levels(…),)`, and the workflow examples use `over()`
+  where the Julia side uses `groups`. `atmeans` maps to `means_grid(model, data)`; new rows for
+  `noweights`, `at((median) x)`, `at((mean) x)`, `at((p25) x)`, and a note on weights and the
+  estimation sample and on factor variables at the means.
+- **Docs: 15 examples passed a vector as `scenarios`.** `scenarios=(x=[1, 2])` is an assignment in
+  parentheses, not a NamedTuple; it needs a trailing comma (`scenarios=(x=[1, 2],)`). Fixed in the
+  Population Scenarios page (14), the Weights page and the Stata migration guide.
 - **Docs:** `weights = :z` (a column) leaves `z` out of the auto-detected `vars`, `weights = data.z` (a
   vector) does not (ISSUES #9), now stated in the `population_margins` docstring and the weights page;
   the performance page no longer claims a whole call allocates 0 bytes (the row loops do; a call
@@ -658,7 +715,7 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
   - Weights are read with `Margins._model_weights(model)`: GLM.jl `lm`/`glm` (the response's `wts`), MixedModels.jl `LinearMixedModel` and `GeneralizedLinearMixedModel` (the `wts=` of the fit; `StatsAPI.weights` returns ones for an unweighted fit, so the stored field decides). A FixedEffectModels `reg(…; weights=:w)` stores no weights, so `:model` averages unweighted there and warns once per session (see "Model-class interface"): pass `weights=:w`. Other model classes are treated as unweighted. If a model carries StatsBase `AnalyticWeights`, `:model` is an error asking for an explicit choice (frequency and probability weights are used as is); GLM 1.9 stores a plain vector, treated as frequency weights.
   - If the model's weight vector does not have one entry per row of `data` (the fit dropped rows with missing values), `:model` raises an error asking for `weights=` explicitly; rows are not matched by guesswork.
   - **New metadata key `:weights_source`** (`:model`, `:user` or `:none`) in `result_metadata_keys()`, set by every producer, including the FixedEffectModels extension (whose `scenarios=`/`groups=` results also lacked `:weighted`). Model-level `second_differences` frames record it as table metadata, `metadata(sd, "weights_source")`.
-  - **`profile_margins` evaluates the grid it is given and has no `weights` keyword.** Results report `weights_source = :none`. For typical values weighted by the model's weights, build the grid with the grid builders' `weights=` (see "Weighted typical values"): `profile_margins(m, d, means_grid(d; weights=:w))`, or complete a partial grid with `complete_reference_grid(grid, m, d; weights=:model)`.
+  - **`profile_margins` has no `weights` keyword; its fill-ins use the model's weights.** The values it fills in for model variables a grid leaves out are weighted by the estimation weights (see "Profile fill-ins use the model's estimation weights" under "Weighted typical values"); the grid builders take a data-level `weights=` and are unweighted by default.
   - Docs: the `population_margins` docstring no longer says weights "enable proper survey inference". Weights change the point estimates; the standard errors come from `vcov` (by default the model's, frequency-weight based for GLM.jl) and are not design-based. Pass a design-based estimator or matrix as `vcov` for those.
 
 - **Continuous-effect contrast label is `"dy/dx"` everywhere.** The `scenarios`/`groups` path (`_compute_all_continuous_context_effects_batch`) and `store_continuous_result!` labelled continuous effects `"derivative"`, while the plain population path and profile margins used `"dy/dx"`. All now use `"dy/dx"`. Code that filters results with `contrast == "derivative"` must change. In `second_differences`, `contrast="derivative"` is accepted as an alias of `"dy/dx"`.

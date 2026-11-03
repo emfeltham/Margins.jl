@@ -204,7 +204,10 @@ function _normalize_request(model, data;
     # Profile requests: resolve, validate and complete the reference grid
     # (an `offset` column of the grid is the offset at its rows, not a variable: split it off)
     (grid_in, grid_offset) = _split_offset_column(model, reference_grid)
-    (grid, completed, grid_vars) = _prepare_reference_grid(model, data, data_nt, grid_in)
+    (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in)
+    # A profile request averages nothing; its weights are those of the values it fills in for model
+    # variables the grid leaves out (the model's estimation weights by default)
+    isnothing(completed) || (weights_source = fill_source)
 
     # The η offset at the rows the request evaluates, when the model has one that matters
     offset_vec = if _has_offset(model) && _offset_matters(_link(model), type, scale, measure)
@@ -377,10 +380,10 @@ end
 
 # ---- reference grid (profile requests) -----------------------------------------------------
 
-_prepare_reference_grid(model, data, data_nt, ::Nothing) = (nothing, nothing, Set{Symbol}())
+_prepare_reference_grid(model, data, data_nt, ::Nothing) = (nothing, nothing, Set{Symbol}(), :none)
 
 """
-    _prepare_reference_grid(model, data, data_nt, reference_grid) -> (grid, completed_grid, grid_vars)
+    _prepare_reference_grid(model, data, data_nt, reference_grid) -> (grid, completed_grid, grid_vars, fill_source)
 
 Resolve string levels of categorical columns (`process_reference_grid`), validate the grid, and
 complete it with typical values for the model variables it does not give. `grid_vars` are the
@@ -455,7 +458,10 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
 
     # Complete reference grid with typical values for missing model variables
     # Note: complete_reference_grid now filters to model variables internally
-    completed = complete_reference_grid(grid, model, data_nt)
+    # (filled-in values weighted by the model's estimation weights, as `complete_reference_grid`'s
+    # default; `fill_source` records which weights they used)
+    # (`data_nt` already holds the model's estimation rows)
+    (completed, fill_source) = _complete_reference_grid(grid, model, data_nt; subset=false)
     # Predictors outside the formula Margins evaluates (FixedEffectModels' absorbed fixed effects,
     # which a grid may set to choose their estimates) are kept, so they label the output rows
     if nrow(completed) == nrow(grid)
@@ -471,7 +477,7 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     # Filter grid_vars to only model variables for proper output display
     # Get model variables from the completed grid to know what was actually kept
     grid_vars = intersect(grid_vars, Set(Symbol.(names(completed))))
-    return (grid, completed, grid_vars)
+    return (grid, completed, grid_vars, fill_source)
 end
 
 # ---- offsets at reference-grid rows (decision D3) -------------------------------------------

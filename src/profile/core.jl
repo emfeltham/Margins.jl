@@ -78,14 +78,24 @@ identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on th
 not need it.
 
 # Weights
-`profile_margins` evaluates the grid it is given and takes no `weights`; results record
-`metadata[:weights_source] = :none`. The typical values in a grid come from the grid builder:
-`means_grid(data; weights=:w)`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a
-data-level `weights=` (unweighted by default). The values `profile_margins` fills in for model
-variables a grid leaves out (means and categorical frequency mixtures) are unweighted, even for a
-model fit with weights; for weighted fill-ins complete the grid first:
-`profile_margins(m, data, complete_reference_grid(cartesian_grid(x=[0, 1]), m, data; weights=:model))`.
-See "Typical values" in the Reference Grids documentation and the Weights page.
+`profile_margins` evaluates the grid it is given; it has no `weights` keyword. The values it fills
+in for model variables the grid leaves out (means of continuous variables, shares of `true` for
+Bool variables, frequency mixtures for categorical variables, and the frequency mixture that
+replaces a data-only builder's typical value of a variable the model treats as categorical) are
+weighted by the model's estimation weights, as Stata's `margins` uses the estimation weights for
+`at()` values it computes: `complete_reference_grid(grid, model, data)`'s default `weights=:model`.
+For an unweighted fit they are unweighted. Results record what the filled-in values used:
+`metadata[:weights_source]` is `:model` (and `metadata[:weighted]` `true`) when model weights were
+applied to a filled-in value, `:none` otherwise (an unweighted fit, a grid that sets every model
+variable, or a model class whose weights cannot be read). To fill in unweighted values for a
+weighted fit (Stata's `noweights`, and the 2.x behaviour), complete the grid yourself:
+`profile_margins(m, data, complete_reference_grid(grid, m, data; weights=:none))`.
+
+The grid builders cannot see the model, so their values are unweighted unless you pass
+`weights=`: with a weighted fit, `means_grid(data)` holds unweighted means. To evaluate at the
+weighted means (Stata's `atmeans`) write `means_grid(data; weights=:w)`, or give only the
+variables you set and let `profile_margins` fill in the rest (`cartesian_grid(x=[0, 1])`). See
+"Typical values" in the Reference Grids documentation and the Weights page.
 
 # Rank-deficient fits
 A coefficient the fit dropped as collinear is treated as fixed at 0, and a quantity that depends
@@ -245,6 +255,9 @@ function _profile_result(req::MarginsRequest{:profile})
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(completed_reference_grid)
+        # the weights of the values filled in for model variables the grid left out
+        metadata[:weighted] = req.weights_source !== :none
+        metadata[:weights_source] = req.weights_source
     
         # Extract raw components from DataFrame  
         estimates = df.estimate
@@ -268,6 +281,9 @@ function _profile_result(req::MarginsRequest{:profile})
         # Add analysis_type for format auto-detection
         metadata[:analysis_type] = :profile
         metadata[:n_profiles] = nrow(completed_reference_grid)
+        # the weights of the values filled in for model variables the grid left out
+        metadata[:weighted] = req.weights_source !== :none
+        metadata[:weights_source] = req.weights_source
 
         # Interval kind: :confidence (default) or :prediction. For prediction
         # intervals, store the residual variance σ̂² that widens the interval
@@ -362,14 +378,24 @@ identity-link `:effect` (and `:semielasticity_dyex`) results do not depend on th
 not need it.
 
 # Weights
-`profile_margins` evaluates the grid it is given and takes no `weights`; results record
-`metadata[:weights_source] = :none`. The typical values in a grid come from the grid builder:
-`means_grid(data; weights=:w)`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a
-data-level `weights=` (unweighted by default). The values `profile_margins` fills in for model
-variables a grid leaves out (means and categorical frequency mixtures) are unweighted, even for a
-model fit with weights; for weighted fill-ins complete the grid first:
-`profile_margins(m, data, complete_reference_grid(cartesian_grid(x=[0, 1]), m, data; weights=:model))`.
-See "Typical values" in the Reference Grids documentation and the Weights page.
+`profile_margins` evaluates the grid it is given; it has no `weights` keyword. The values it fills
+in for model variables the grid leaves out (means of continuous variables, shares of `true` for
+Bool variables, frequency mixtures for categorical variables, and the frequency mixture that
+replaces a data-only builder's typical value of a variable the model treats as categorical) are
+weighted by the model's estimation weights, as Stata's `margins` uses the estimation weights for
+`at()` values it computes: `complete_reference_grid(grid, model, data)`'s default `weights=:model`.
+For an unweighted fit they are unweighted. Results record what the filled-in values used:
+`metadata[:weights_source]` is `:model` (and `metadata[:weighted]` `true`) when model weights were
+applied to a filled-in value, `:none` otherwise (an unweighted fit, a grid that sets every model
+variable, or a model class whose weights cannot be read). To fill in unweighted values for a
+weighted fit (Stata's `noweights`, and the 2.x behaviour), complete the grid yourself:
+`profile_margins(m, data, complete_reference_grid(grid, m, data; weights=:none))`.
+
+The grid builders cannot see the model, so their values are unweighted unless you pass
+`weights=`: with a weighted fit, `means_grid(data)` holds unweighted means. To evaluate at the
+weighted means (Stata's `atmeans`) write `means_grid(data; weights=:w)`, or give only the
+variables you set and let `profile_margins` fill in the rest (`cartesian_grid(x=[0, 1])`). See
+"Typical values" in the Reference Grids documentation and the Weights page.
 
 # Examples
 ```julia

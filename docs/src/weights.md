@@ -5,7 +5,7 @@ This guide explains how to use observation weights in `population_margins` (and 
 ## Scope and Policy
 
 - Weights are supported in `population_margins` and the model-level `second_differences` via the `weights` keyword. The default, `weights = :model`, uses the weights the model was fit with.
-- `profile_margins` does not accept weights: it evaluates the grid it is given. Weighted typical values come from the grid builders' `weights=` (see [Profile margins: weighted typical values](#Profile-margins:-weighted-typical-values)).
+- `profile_margins` has no `weights` keyword: it evaluates the grid it is given. The values it fills in for model variables the grid leaves out use the model's estimation weights; the grid builders take a data-level `weights=` and are unweighted by default (see [Profile margins: weighted typical values](#Profile-margins:-weighted-typical-values)).
 - Weighted quantities use proper normalization, and delta‑method SEs use the averaged gradient with the covariance matrix Σ given by `vcov` (see [What weights do not change](#What-weights-do-not-change)).
 
 ## Supported Forms
@@ -112,7 +112,7 @@ ame_vec = population_margins(model, df; type=:effects, vars=[:x, :z], weights=wv
 grp_samp = population_margins(model, df; type=:effects, vars=[:x], groups=:group, weights=:samp_w)
 
 # 6) Scenarios with weights (counterfactual z values)
-scen_w = population_margins(model, df; type=:effects, vars=[:x], scenarios=(z=[-1.0, 0.0, 1.0]), weights=:samp_w)
+scen_w = population_margins(model, df; type=:effects, vars=[:x], scenarios=(z=[-1.0, 0.0, 1.0],), weights=:samp_w)
 
 # 7) A weighted fit: its weights are used by default
 wmodel = lm(@formula(y ~ x + z + group), df; wts=Float64.(df.freq_w))
@@ -124,20 +124,20 @@ All results use weighted averaging with proper normalization by the total weight
 
 ## Profile margins: weighted typical values
 
-`profile_margins` evaluates at reference points rather than averaging over the sample, and it has no `weights` keyword: it evaluates the grid it is given, and results report `weights_source = :none`. Weights enter through the **typical values in the grid**, which the grid builders compute. `means_grid`, `balanced_grid`, `quantile_grid`, `hierarchical_grid` and `complete_reference_grid` take a data-level `weights=` (a column name or a vector, checked as here; default unweighted), giving weighted means and medians, weighted shares for `Bool` columns and weighted frequency mixtures for categorical ones:
+`profile_margins` evaluates at reference points rather than averaging over the sample, and it has no `weights` keyword. Weights enter through the **typical values in the grid**, in two ways:
+
+- **Values `profile_margins` fills in** for model variables the grid leaves out (means, shares of `true`, categorical frequency mixtures) use the **model's estimation weights**, as Stata's `margins` does for the `at()` values it computes; for an unweighted fit they are unweighted. This is `complete_reference_grid(grid, model, data)`'s default `weights = :model`. Pass `weights = :none` there for unweighted fill-ins (Stata's `noweights`).
+- **The grid builders** cannot see the model. `means_grid`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a data-level `weights=` (a column name or a vector, checked as here) and are **unweighted by default, even for a weighted fit**: with a weighted fit, `means_grid(data)` holds unweighted means. For Stata's `atmeans` write `means_grid(data; weights = :w)`, or let `profile_margins` fill the values in.
 
 ```julia
-# MEM of a survey-weighted model at weighted means and shares
 m = glm(@formula(y ~ x + z + group), df, Binomial(), LogitLink(); wts = df.w)
-mem = profile_margins(m, df, means_grid(df; weights = :w))
 
-# A partial grid: profile_margins would fill z and group with UNWEIGHTED typical values;
-# complete it yourself to fill them with weighted ones (:model = the model's weights)
-grid = complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :model)
-res = profile_margins(m, df, grid)
+mem  = profile_margins(m, df, means_grid(df; weights = :w))  # at weighted means and shares
+res  = profile_margins(m, df, cartesian_grid(x = [0, 1]))    # z, group filled in, model-weighted
+res0 = profile_margins(m, df, complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :none))
 ```
 
-Without `weights=`, the builders are unweighted, as is the completion `profile_margins` does for variables a grid leaves out. The definitions (weighted median, zero weights, the custom-`typical` limitation) are in [Typical values](reference_grids.md#Typical-values).
+A profile result records what its filled-in values used in `metadata[:weights_source]` (`:model` or `:none`; `metadata[:weighted]` matches). The standard errors are unaffected by the choice (they come from `vcov`); only the point the model is evaluated at moves. The definitions (weighted median, zero weights, the custom-`typical` limitation) are in [Typical values](reference_grids.md#Typical-values).
 
 ## Best Practices
 
