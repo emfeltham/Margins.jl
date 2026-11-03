@@ -90,7 +90,7 @@ end
         for lev in ("a", "b", "c")
             rows = findall(==(lev), string.(d.g))
             (ge, gse) = _unit_measure_oracle(m, d, rows, measure, scale, w)
-            r = only(eachrow(grp[string.(grp.g) .== lev, :]))
+            r = only(eachrow(grp[string.(grp.over_g) .== lev, :]))
             @test r.estimate ≈ ge rtol=1e-6
             @test r.se ≈ gse rtol=1e-4
         end
@@ -106,7 +106,7 @@ end
             kw = r.weights == "w" ? merge(kw, (; weights=:w)) : kw
             kw = r.by == "g" ? merge(kw, (; groups=:g)) : kw
             res = DataFrame(population_margins(models[r.model], d; kw...))
-            row = r.by == "g" ? only(eachrow(res[string.(res.g) .== r.group, :])) : only(eachrow(res))
+            row = r.by == "g" ? only(eachrow(res[string.(res.over_g) .== r.group, :])) : only(eachrow(res))
             # Logit on the link scale divides by η, which is near 0 for some rows; R's
             # finite-difference slope is then the less accurate side (the closed-form
             # oracle above checks Margins exactly), so allow it a looser tolerance.

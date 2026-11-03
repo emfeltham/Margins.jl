@@ -49,6 +49,6 @@ using Margins
     for lev in ("a", "b")
         rows = findall(==(lev), string.(d.g))
         want = sum(wpart[rows] .* μ′[rows] .* β[ix]) / sum(wpart[rows])
-        @test only(res[string.(res.g) .== lev, :estimate]) ≈ want rtol=1e-10
+        @test only(res[string.(res.over_g) .== lev, :estimate]) ≈ want rtol=1e-10
     end
 end

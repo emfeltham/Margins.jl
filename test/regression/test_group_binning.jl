@@ -117,7 +117,7 @@ using Statistics
         # "< 25000" holds only 10000; "[25000, 50000)" holds 25000 and 40000;
         # ">= 50000" holds 50000 and 60000 -- each label read literally.
         @test res.n == [40, 80, 80]
-        @test res.income == ["< 25000", "[25000, 50000)", ">= 50000"]
+        @test res.over_income == ["< 25000", "[25000, 50000)", ">= 50000"]
     end
 
     @testset "Bare numeric groups is refused" begin

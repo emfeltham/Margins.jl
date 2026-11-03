@@ -46,7 +46,7 @@ using Random
     @testset "population_margins predictions (AAP) match predict()" begin
         pm = DataFrame(population_margins(model, df; type = :predictions, groups = :cat))
         for r in eachrow(pm)
-            @test isapprox(r.estimate, truth[r.cat]; atol = 1e-8)
+            @test isapprox(r.estimate, truth[r.over_cat]; atol = 1e-8)
         end
     end
 

@@ -55,7 +55,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
-  - Custom function for robust/clustered standard errors
+  - Custom function or CovarianceMatrices estimator (e.g. `HC1()`) for robust/clustered
+    standard errors (inference is then z-based; see *Inference* below)
 - `weights=nothing`: Observation weights for survey data or sampling corrections
   - `nothing` - No weights (equal weight for all observations, default)
   - `Symbol` - Column name containing weights (e.g., `:sampling_weight`)
@@ -63,10 +64,26 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - Weights enable proper survey inference: `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
 
 # Returns
-`EffectsResult` or `PredictionsResult` containing:
-- Results DataFrame with estimates, standard errors, t-statistics, p-values
-- Parameter gradients matrix for delta-method standard errors
-- Analysis metadata (options used, model info, etc.)
+`EffectsResult` or `PredictionsResult` containing estimates, delta-method standard errors,
+the parameter gradient matrix and analysis metadata (including `metadata[:df]`, the
+inference degrees of freedom). `DataFrame(result)` has the columns
+
+- effects: `[over_<g>…] [at_<s>…] type variable contrast estimate se statistic df p_value ci_lower ci_upper n`
+- predictions: `[over_<g>…] [at_<s>…] type estimate se statistic df p_value ci_lower ci_upper n`
+
+Group variables appear as `over_<var>` and scenario variables as `at_<var>`.
+
+# Inference
+`statistic = estimate / se`. Its reference distribution, used for `p_value` and the
+confidence interval, is t with `df` degrees of freedom, where (see `Margins._inference_df`):
+- `df = dof_residual(model)` for a linear model — GLM.jl `lm`, or a `glm` with a `Normal`
+  family and `IdentityLink` — with the default model-based `vcov`. Every margin of such a
+  model is a linear combination of β, so the t reference is exact (Stata's `margins` after
+  `regress`; `GLM.coeftable`).
+- `df = Inf` (standard Normal, z) for all other models (non-identity GLMs, mixed models,
+  FixedEffectModels) and for any robust, clustered or custom `vcov`. The `vcov` argument
+  does not carry the small-sample df conventions Stata uses after `vce(robust)` /
+  `vce(cluster)`, so robust and clustered inference is asymptotic.
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
@@ -181,7 +198,7 @@ function population_margins(
     try
         # Handle scenarios/groups parameters for counterfactual scenarios and grouping
         if !isnothing(scenarios) || !isnothing(groups)
-            return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
+            return _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov)
         end
     
         if type === :effects
@@ -203,7 +220,7 @@ function population_margins(
             variables = df.variable  # The "x" in dy/dx
             terms = df.contrast
         
-            return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+            return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov)
         else # :predictions  
             df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
             metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
@@ -221,7 +238,7 @@ function population_margins(
             estimates = df.estimate
             standard_errors = df.se
         
-            return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
+            return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov)
         end
     finally
         _checkin_engine!(engine_key, engine)

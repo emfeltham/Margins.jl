@@ -130,6 +130,15 @@ In GLMs with non-identity links, profile elasticity ≠ average elasticity, foll
 
 *For detailed elasticity examples and applications to policy analysis, see [Advanced Features](advanced.md).*
 
+## Statistical Inference
+
+Every estimate θ̂ (a marginal effect, an adjusted prediction, a contrast or a second difference) has a delta-method standard error SE(θ̂) = √(g′Σg), with g = ∂θ̂/∂β and Σ the parameter covariance. Margins reports the test statistic `statistic` = θ̂ / SE(θ̂) for H₀: θ = 0 and refers it to t with `df` degrees of freedom; p-values are 2·P(T_df > |statistic|) and confidence intervals are θ̂ ± t_{df, 1−α/2}·SE(θ̂). `df = Inf` is the standard Normal (z).
+
+- **Linear models** (`lm`, or a Gaussian `glm` with identity link) **with the model-based covariance**: θ̂ = c′β̂ for a fixed vector c, so under the classical linear-model assumptions θ̂/SE(θ̂) has an exact t distribution with the residual degrees of freedom n − p. Margins uses `df = dof_residual(model)`, as Stata's `margins` does after `regress` and as `GLM.coeftable` does for `lm`. With an identity link the link and response scales coincide.
+- **All other cases** — non-identity links, mixed models, FixedEffectModels, and robust, clustered or custom covariance estimators — use z (`df = Inf`): the delta-method standard errors (or the sandwich covariance) are justified asymptotically.
+
+Contrasts and second differences are linear combinations of the same estimates and use the same `df` as the result they are computed from. The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+
 ## Implementation in Margins.jl
 
 The package implements this framework through two main functions:

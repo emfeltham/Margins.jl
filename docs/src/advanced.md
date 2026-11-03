@@ -133,6 +133,15 @@ println("Profile elasticity: ", DataFrame(prof_elastic).estimate[1])
 
 Margins.jl integrates [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard error computation.
 
+!!! note "Inference with a robust or clustered `vcov` is z-based"
+    With the default covariance, a linear model (`lm`) reports t statistics with
+    `df = dof_residual(model)`. With any robust, clustered, HAC or custom `vcov`, Margins uses the
+    standard Normal (`df = Inf`) for p-values and confidence intervals, for every model type: the
+    covariance argument does not carry the small-sample df Stata uses (`e(df_r)` after
+    `vce(robust)`, `n_clusters − 1` after `vce(cluster)`). With few clusters, compute the t-based
+    p-value from the `statistic` column yourself. See
+    [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+
 ### Basic Robust Standard Errors
 
 #### Heteroskedasticity-Robust (White/Huber-White)

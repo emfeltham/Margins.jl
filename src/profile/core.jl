@@ -50,11 +50,13 @@ or adjusted predictions at specific profiles (APM/APR).
   - Custom function for robust/clustered standard errors
 
 # Returns
-`EffectsResult` or `PredictionsResult` containing:
-- Results DataFrame with estimates, standard errors, t-statistics, p-values
-- Profile columns (at_varname) showing covariate values for each estimate
-- Parameter gradients matrix for delta-method standard errors
-- Analysis metadata (options used, model info, etc.)
+`EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients,
+metadata incl. the inference df `metadata[:df]`). `DataFrame(result)` columns:
+- effects: `<grid vars…> type variable contrast estimate se statistic df p_value lower upper n`
+- predictions: `<grid vars…> type estimate se statistic df p_value ci_lower ci_upper n`
+Grid variables keep their bare names. `statistic = estimate / se`, referred to t(`df`):
+`df = dof_residual(model)` for a linear model with the default `vcov`, `Inf` (z) otherwise
+(see `population_margins`, *Inference*).
 
 # Statistical Notes
 - Standard errors computed via delta method using full model covariance matrix
@@ -481,7 +483,7 @@ function profile_margins(
     end
     
     # Route to single implementation with processed reference grid
-    return _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts; interval=interval)
+    return _attach_inference_df!(_profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts; interval=interval), model, vcov)
 end
 
 
@@ -601,8 +603,6 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     # engine overwrites
     results.estimate = predictions
     results.se = collect(se_vals)
-    results.t_stat = predictions ./ se_vals
-    results.p_value = 2 .* ccdf.(Normal(), abs.(predictions ./ se_vals))
     
     # Add profile columns to show which profile each prediction corresponds to
     for (col_name, col_data) in pairs(Tables.columns(reference_grid))

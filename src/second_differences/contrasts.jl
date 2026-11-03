@@ -38,7 +38,14 @@ Automatically routes to the appropriate specialized function based on:
 - `all_contrasts::Bool=true`: Compute for all focal variable contrasts (if applicable)
 
 # Returns
-- DataFrame with all applicable second differences (one row per variable × contrast × modifier pair)
+- DataFrame with all applicable second differences (one row per variable × contrast × modifier
+  pair). The columns are the same for every modifier type (see `Margins.SECOND_DIFFERENCE_COLUMNS`):
+  `variable, contrast, modifier, modifier_type, modifier_level1, modifier_level2, ame_at_level1,
+  ame_at_level2, second_diff, se, statistic, df, p_value, significant, gradient`.
+
+# Inference
+`statistic = second_diff / se`, referred to t(`df`) with `df` inherited from `ame_result`
+(`dof_residual(model)` for a linear model with the model-based covariance, `Inf` = z otherwise).
 
 # Examples
 ```julia
@@ -158,18 +165,11 @@ i.e., the interaction ∂²P / (∂variable ∂modifier).
 - `contrast`: The contrast type to filter on (default "dy/dx" for continuous vars; "derivative" is accepted as an alias)
 
 # Returns
-A NamedTuple with:
-- `variable`: Variable name
-- `modifier`: modifier variable name
-- `second_diff`: The second difference estimate (AME_level2 - AME_level1)
-- `se`: Standard error of the second difference (using proper delta method)
-- `z_stat`: Z-statistic
-- `p_value`: P-value for test that second difference ≠ 0
-- `ame_at_level1`: AME at first level of modifier
-- `ame_at_level2`: AME at second level of modifier
-- `modifier_level1`: Value of first modifier level
-- `modifier_level2`: Value of second modifier level
-- `gradient`: Gradient vector (∂second_diff/∂θ) for custom variance calculations
+A NamedTuple holding one row of the unified second-difference schema
+(`Margins.SECOND_DIFFERENCE_COLUMNS`): `variable, contrast, modifier, modifier_type (= :binary),
+modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff (= AME_level2 -
+AME_level1), se, statistic, df, p_value, significant, gradient`. Levels are sorted, so
+`modifier_level1 < modifier_level2`. `df` is inherited from `ame_result` (t when finite, z when `Inf`).
 
 # Example
 For socio4 as modifier (measuring accuracy/discrimination):
@@ -236,28 +236,10 @@ function second_difference(
     variance = dot(g_diff, vcov, g_diff)
     se_diff = sqrt(max(0.0, variance))  # Ensure non-negative due to numerical precision
 
-    # Calculate z-statistic and p-value
-    # Handle zero SE case (can occur when model has no interaction)
-    if se_diff ≈ 0.0
-        z_stat = second_diff ≈ 0.0 ? 0.0 : Inf
-        p_value = second_diff ≈ 0.0 ? 1.0 : 0.0
-    else
-        z_stat = second_diff / se_diff
-        p_value = 2 * ccdf(Normal(), abs(z_stat))
-    end
-
-    return (
-        variable = variable,
-        modifier = modifier,
-        second_diff = second_diff,
-        se = se_diff,
-        z_stat = z_stat,
-        p_value = p_value,
-        ame_at_level1 = est_level1,
-        ame_at_level2 = est_level2,
-        modifier_level1 = level1,
-        modifier_level2 = level2,
-        gradient = g_diff
+    return _second_difference_row(;
+        variable, contrast = contrast, modifier, modifier_type = :binary,
+        level1, level2, est1 = est_level1, est2 = est_level2,
+        second_diff, se = se_diff, gradient = g_diff, dof = _result_df(ame_result),
     )
 end
 
@@ -282,10 +264,8 @@ For categorical variables, returns results for all contrasts × all modifier pai
 - `modifier_type`: Modifier type (:auto, :binary, :categorical, :continuous)
 
 # Returns
-DataFrame with one row per (contrast × modifier pair), containing:
-- All standard second difference statistics
-- `contrast`: Variable contrast description
-- For >2 modifier levels: includes `modifier_level1`, `modifier_level2`, `modifier_type`
+DataFrame with one row per (contrast × modifier pair), with the unified second-difference
+columns (`Margins.SECOND_DIFFERENCE_COLUMNS`, identical for every modifier type).
 
 # Examples
 ```julia
@@ -357,14 +337,7 @@ function second_differences_all_contrasts(
             error("No valid contrasts found for variable $variable with modifier $modifier")
         end
 
-        df = DataFrame(results)
-        # Add contrast column for consistency
-        if !hasproperty(df, :contrast)
-            df.contrast = contrasts[1:nrow(df)]
-        end
-        df.significant = df.p_value .< 0.05
-
-        return df
+        return _second_difference_frame(results)
     else
         # For >2 modifier levels, use second_differences_pairwise() for each contrast
         all_results = DataFrame[]
@@ -414,21 +387,19 @@ computes all K(K-1)/2 pairwise contrasts. For continuous modifiers, scales diffe
 - `modifier_type::Symbol`: Modifier type (:binary, :categorical, :continuous, :auto for auto-detection)
 
 # Returns
-DataFrame with one row per pairwise contrast, containing:
-- `variable`: Focal variable name
-- `modifier`: Modifier variable name
-- `contrast`: Variable contrast type (for categorical focal variables)
-- `modifier_level1`: First modifier level in comparison
-- `modifier_level2`: Second modifier level in comparison
-- `second_diff`: Second difference estimate (for categorical) or slope (for continuous)
-- `se`: Standard error via delta method
-- `z_stat`: Z-statistic
-- `p_value`: P-value for H₀: second difference = 0
-- `ame_at_level1`: AME at first modifier level
-- `ame_at_level2`: AME at second modifier level
-- `modifier_type`: Detected or specified modifier type
-- `gradient`: Gradient vector (∂second_diff/∂θ) for custom variance calculations
-- `significant`: Boolean indicator (p < 0.05)
+DataFrame with one row per pairwise contrast and the unified second-difference columns
+(`Margins.SECOND_DIFFERENCE_COLUMNS`), the same for every modifier type:
+- `variable`, `contrast`, `modifier`: focal variable, its contrast, the modifier
+- `modifier_type`: detected or specified type (`:binary`, `:categorical`, `:continuous`)
+- `modifier_level1`, `modifier_level2`: modifier levels compared
+- `ame_at_level1`, `ame_at_level2`: focal effect at each level
+- `second_diff`: second difference (binary/categorical) or slope (continuous)
+- `se`: standard error via delta method
+- `statistic`, `df`: `second_diff / se` and its degrees of freedom (t when finite, z when `Inf`;
+  inherited from `ame_result`)
+- `p_value`: p-value for H₀: second difference = 0
+- `significant`: `p_value < 0.05`
+- `gradient`: gradient vector (∂second_diff/∂β) for custom variance calculations
 
 # Modifier Types
 - **Binary** (2 levels): Single contrast
@@ -574,30 +545,10 @@ function second_differences_pairwise(
             g_diff_scaled = g_diff
         end
 
-        # Statistical inference
-        # Handle zero SE case (can occur when model has no interaction)
-        if se_diff ≈ 0.0
-            z_stat = second_diff ≈ 0.0 ? 0.0 : Inf
-            p_value = second_diff ≈ 0.0 ? 1.0 : 0.0
-        else
-            z_stat = second_diff / se_diff
-            p_value = 2 * ccdf(Normal(), abs(z_stat))
-        end
-
-        push!(results, (
-            variable = variable,
-            modifier = modifier,
-            contrast = contrast,
-            modifier_level1 = level1,
-            modifier_level2 = level2,
-            second_diff = second_diff,
-            se = se_diff,
-            z_stat = z_stat,
-            p_value = p_value,
-            ame_at_level1 = est_level1,
-            ame_at_level2 = est_level2,
-            modifier_type = modifier_type,
-            gradient = g_diff_scaled
+        push!(results, _second_difference_row(;
+            variable, contrast, modifier, modifier_type,
+            level1, level2, est1 = est_level1, est2 = est_level2,
+            second_diff, se = se_diff, gradient = g_diff_scaled, dof = _result_df(ame_result),
         ))
     end
 
@@ -605,9 +556,5 @@ function second_differences_pairwise(
         error("No valid pairwise contrasts computed for variable $variable with modifier $modifier")
     end
 
-    # Convert to DataFrame
-    df = DataFrame(results)
-    df.significant = df.p_value .< 0.05
-
-    return df
+    return _second_difference_frame(results)
 end

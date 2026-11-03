@@ -74,6 +74,30 @@ where Σ is the model's parameter covariance matrix. This approach properly acco
 
 The delta-method computation ensures that hypothesis tests maintain appropriate Type I error rates and confidence intervals achieve nominal coverage probabilities, meeting the statistical validity standards required for econometric research.
 
+The test statistic is `statistic = second_diff / se`. A second difference is a linear combination of the same estimates as the AMEs it compares, so it uses the same reference distribution, recorded in the `df` column and inherited from the effects result: t with `df = dof_residual(model)` for a linear model (`lm`, or a Gaussian identity-link `glm`) with the default model-based covariance, and z (`df = Inf`) for every other model and for robust, clustered or custom covariance estimators (see [Inference](api.md#Output-Columns-and-Inference)).
+
+### Output Schema
+
+Since Margins 3.0 every second-difference function returns the same columns, in this order, whatever the modifier type:
+
+| column | meaning |
+|:-------|:--------|
+| `variable` | focal variable (`Symbol`) |
+| `contrast` | focal contrast (`"dy/dx"` for a continuous variable, `"B - A"` for levels) |
+| `modifier` | modifier variable (`Symbol`) |
+| `modifier_type` | `:binary`, `:categorical` or `:continuous` (always filled) |
+| `modifier_level1`, `modifier_level2` | modifier values compared |
+| `ame_at_level1`, `ame_at_level2` | focal effect at each modifier value |
+| `second_diff` | `ame_at_level2 - ame_at_level1`; for `:continuous`, divided by the modifier distance (a slope) |
+| `se` | delta-method standard error |
+| `statistic` | `second_diff / se` |
+| `df` | degrees of freedom of the reference distribution (`Inf` = z) |
+| `p_value` | two-sided p-value for H₀: second difference = 0 |
+| `significant` | `p_value < 0.05` |
+| `gradient` | ∂`second_diff`/∂β, for custom variance calculations |
+
+`second_differences_at()` returns the same columns (`modifier_type = :continuous`, `modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the local derivative ∂AME/∂modifier), followed by `eval_point`, `delta_used` and one column per `profile` variable. `second_difference()` (singular) returns one such row as a `NamedTuple`. The column names are also available as `Margins.SECOND_DIFFERENCE_COLUMNS`.
+
 ## Function Reference
 
 ### Main Interface
@@ -106,18 +130,7 @@ second_differences(
 - `modifier_type`: Modifier classification (:auto, :binary, :categorical, :continuous)
 - `all_contrasts`: Compute all focal variable contrasts when applicable (default: true)
 
-**Returns**: DataFrame with columns:
-- `variable`: Focal variable name
-- `modifier`: Modifier variable name
-- `contrast`: Contrast description (for categorical focal variables)
-- `modifier_level1`, `modifier_level2`: Levels being compared
-- `second_diff`: Second difference estimate (or slope for continuous)
-- `se`: Standard error (delta method)
-- `z_stat`: Z-statistic
-- `p_value`: P-value for H₀: second difference = 0
-- `ame_at_level1`, `ame_at_level2`: AME values at each level
-- `modifier_type`: Detected modifier type
-- `significant`: Boolean indicator (p < 0.05)
+**Returns**: DataFrame with the [unified schema](#Output-Schema): `variable, contrast, modifier, modifier_type, modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff, se, statistic, df, p_value, significant, gradient`.
 
 ### Specialized Functions
 
@@ -201,16 +214,12 @@ second_differences_at(
 - `delta`: Step size for finite difference (:auto or numeric value)
 - `scale`: Prediction scale (:link or :response)
 
-**Returns**: DataFrame with columns:
-- `variable`: Focal variable name
-- `contrast`: Contrast description
-- `modifier`: Modifier variable name
+**Returns**: DataFrame with the [unified schema](#Output-Schema) followed by:
 - `eval_point`: Evaluation point for modifier
-- `derivative`: ∂AME/∂modifier (per unit change in modifier)
-- `se`: Standard error of derivative
-- `z_stat`, `p_value`: Statistical inference
 - `delta_used`: Actual step size used
 - Additional columns for profile variables
+
+Here `second_diff` is ∂AME/∂modifier (per unit change in modifier; this column was called `derivative` before 3.0), `modifier_type` is `:continuous`, and `modifier_level1`/`modifier_level2` are `eval_point ∓ delta_used`. `df` follows the model and `vcov` as given: a matrix equal to `vcov(model)` counts as the model-based covariance.
 
 **Examples**:
 ```julia
@@ -283,11 +292,11 @@ DataFrame(sd)
 
 **Output structure**:
 ```
-1×12 DataFrame
- Row │ variable  modifier  contrast    modifier_level1  modifier_level2  second_diff  se        z_stat   p_value   ame_at_level1  ame_at_level2  significant
-     │ Symbol    Symbol    String      Int64           Int64            Float64      Float64   Float64  Float64   Float64        Float64        Bool
-─────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   1 │ x         treated   dy/dx                    0                1       0.152    0.0428    3.55    0.0004          0.298          0.450      true
+1×15 DataFrame (selected columns)
+ Row │ variable  contrast  modifier  modifier_type  modifier_level1  modifier_level2  second_diff  se       statistic  df       p_value  significant
+     │ Symbol    String    Symbol    Symbol         Int64            Int64            Float64      Float64  Float64    Float64  Float64  Bool
+─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   1 │ x         dy/dx     treated   binary                       0                1        0.152   0.0428       3.55    496.0   0.0004  true
 ```
 
 **Interpretation**: The marginal effect of `x` is 0.152 units larger when `treated=1` compared to `treated=0` (p < 0.001), indicating a significant positive interaction.
@@ -332,13 +341,13 @@ sd = second_differences(ames, :income, :education, vcov(model))
 
 **Output structure** (3 education levels → 3 pairwise comparisons):
 ```
-3×12 DataFrame
- Row │ variable  modifier   modifier_level1  modifier_level2  second_diff  se      z_stat  p_value  significant
-     │ Symbol    Symbol     String          String           Float64      Float64  Float64  Float64  Bool
-─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────
-   1 │ income    education  hs              college               0.152    0.042    3.62    0.0003   true
-   2 │ income    education  hs              grad                  0.243    0.051    4.76   <1e-5    true
-   3 │ income    education  college         grad                  0.091    0.048    1.90    0.058    false
+3×15 DataFrame (selected columns)
+ Row │ variable  modifier   modifier_type  modifier_level1  modifier_level2  second_diff  se       statistic  df       p_value  significant
+     │ Symbol    Symbol     Symbol         String           String           Float64      Float64  Float64    Float64  Float64  Bool
+─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   1 │ income    education  categorical    hs               college                0.152    0.042       3.62    994.0   0.0003  true
+   2 │ income    education  categorical    hs               grad                   0.243    0.051       4.76    994.0   <1e-5   true
+   3 │ income    education  categorical    college          grad                   0.091    0.048       1.90    994.0   0.058   false
 ```
 
 **Interpretation**: The marginal effect of income on consumption is 0.152 units higher for college graduates compared to high school graduates (p < 0.001). The effect continues to increase for graduate degree holders, though the college-to-grad increase (0.091) is not statistically significant.
@@ -386,13 +395,13 @@ sd = second_differences(ames, [:age, :education_yrs, :experience],
 
 **Output structure** (3 variables × 1 binary contrast = 3 rows):
 ```
-3×12 DataFrame
- Row │ variable       modifier  second_diff  se      z_stat  p_value  significant
-     │ Symbol         Symbol    Float64      Float64  Float64  Float64  Bool
-─────┼────────────────────────────────────────────────────────────────────────
-   1 │ age            treated        0.045    0.018    2.50    0.012    true
-   2 │ education_yrs  treated        0.123    0.031    3.97   <1e-4    true
-   3 │ experience     treated        0.012    0.024    0.50    0.617    false
+3×15 DataFrame (selected columns)
+ Row │ variable       modifier  modifier_type  second_diff  se       statistic  df       p_value  significant
+     │ Symbol         Symbol    Symbol         Float64      Float64  Float64    Float64  Float64  Bool
+─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────
+   1 │ age            treated   binary               0.045    0.018       2.50    995.0   0.012    true
+   2 │ education_yrs  treated   binary               0.123    0.031       3.97    995.0   <1e-4    true
+   3 │ experience     treated   binary               0.012    0.024       0.50    995.0   0.617    false
 ```
 
 **Interpretation**: Education effects show the strongest treatment heterogeneity (second diff = 0.123, p < 0.001), followed by age effects (0.045, p = 0.012). Experience effects do not significantly vary by treatment status.

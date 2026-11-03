@@ -134,7 +134,8 @@ Provides complete statistical inference for the difference between two rows.
 # Fields
 - `contrast::Float64`: Contrast estimate (difference between estimates)
 - `se::Float64`: Standard error of the contrast
-- `t_stat::Float64`: t-statistic
+- `statistic::Float64`: Test statistic `contrast / se` (t when `df` is finite, z when `df == Inf`)
+- `df::Float64`: Inference degrees of freedom (`Inf` for z; see `population_margins`)
 - `p_value::Float64`: Two-tailed p-value
 - `ci_lower::Float64`: Lower confidence interval bound
 - `ci_upper::Float64`: Upper confidence interval bound
@@ -168,7 +169,8 @@ println("95% CI: [", cr.ci_lower, ", ", cr.ci_upper, "]")
 struct ContrastResult
     contrast::Float64
     se::Float64
-    t_stat::Float64
+    statistic::Float64
+    df::Float64
     p_value::Float64
     ci_lower::Float64
     ci_upper::Float64
@@ -312,7 +314,8 @@ function Base.show(io::IO, cr::ContrastResult)
     # Main statistics
     println(io, rpad("  Contrast:", 25), lpad(format_number(cr.contrast), num_width))
     println(io, rpad("  Std. Error:", 25), lpad(format_number(cr.se), num_width))
-    println(io, rpad("  t-statistic:", 25), lpad(format_number(cr.t_stat), num_width))
+    stat_label = isfinite(cr.df) ? "  t (df = $(_format_df(cr.df))):" : "  z:"
+    println(io, rpad(stat_label, 25), lpad(format_number(cr.statistic), num_width))
     println(io, rpad("  p-value:", 25), lpad(format_number(cr.p_value), num_width))
     println(io, rpad("  $(ci_pct)% CI:", 25), "[", format_number(cr.ci_lower), ", ", format_number(cr.ci_upper), "]")
 
@@ -408,8 +411,11 @@ Extract group and scenario column names from a MarginsResult, identifying which 
 `profile_values` represent groups vs scenarios based on metadata.
 
 Returns two vectors:
-- `groups`: Variable names that represent grouping (e.g., from `over` parameter)
-- `scenarios`: Variable names that represent scenarios (e.g., from `at` parameter)
+- `groups`: Variable names that represent grouping (from the `groups` parameter)
+- `scenarios`: Variable names that represent scenarios (from the `scenarios` parameter)
+
+These are the raw variable names; in `DataFrame(result)` the corresponding columns are
+`over_<var>` (groups) and `at_<var>` (scenarios).
 
 Only includes variables that are actually present in `mr.profile_values`.
 
@@ -450,7 +456,8 @@ Add context columns (groups and scenarios) to a DataFrame with consistent naming
 
 Implements the core naming convention:
 - **Population contexts** (`mr.metadata[:has_contexts] == true`):
-  - Group columns: unprefixed names (e.g., `region`)
+  - Group columns: `over_<var>` prefix (e.g., `over_region`), as in Stata's `over()`
+    (this covers plain, binned and nested groups)
   - Scenario columns: `at_<var>` prefix (e.g., `at_x`)
 - **Profile analysis** (`mr.metadata[:analysis_type] == :profile`):
   - All profile/grid columns: bare names (e.g., `x`, `z`) with no prefixes
@@ -464,11 +471,11 @@ Dispatches on specific result types for type-safe behavior.
 
 # Examples
 ```julia
-# Population with contexts: groups unprefixed, scenarios prefixed
+# Population with contexts: groups over_-prefixed, scenarios at_-prefixed
 result = population_margins(model, data; groups=:region, scenarios=(x=[0, 1],))
 df = DataFrame()
 append_context_columns!(df, result)
-# Adds columns: region, at_x (groups first, then scenarios)
+# Adds columns: over_region, at_x (groups first, then scenarios)
 
 # Profile analysis: bare profile names
 result = profile_margins(model, data, means_grid(data))
@@ -477,6 +484,33 @@ append_context_columns!(df, result)
 # Adds columns: x, z (bare profile variable names)
 ```
 """
+# Output column names of population context variables (DataFrame and `show`)
+_group_column_name(var) = Symbol("over_", var)
+_scenario_column_name(var) = Symbol("at_", var)
+
+# Display name of a `profile_values` key: prefixed for population contexts, bare otherwise
+function _context_display_name(mr::MarginsResult, name::Symbol)
+    has_contexts = get(mr.metadata, :has_contexts, false) &&
+                   get(mr.metadata, :analysis_type, :unknown) == :population
+    has_contexts || return string(name)
+    name in get(mr.metadata, :groups_vars, Symbol[]) && return string(_group_column_name(name))
+    name in get(mr.metadata, :scenarios_vars, Symbol[]) && return string(_scenario_column_name(name))
+    return string(name)
+end
+
+# `profile_values` pairs in DataFrame column order: for population contexts, groups
+# (over_) first, then scenarios (at_); otherwise the stored order
+function _display_profile_pairs(mr::MarginsResult)
+    pv = mr.profile_values
+    has_contexts = get(mr.metadata, :has_contexts, false) &&
+                   get(mr.metadata, :analysis_type, :unknown) == :population
+    has_contexts || return collect(pairs(pv))
+    groups, scenarios = context_columns(mr)
+    ordered = Symbol[groups; scenarios]
+    rest = [k for k in keys(pv) if !(k in ordered)]
+    return [k => pv[k] for k in vcat(ordered, rest)]
+end
+
 function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol=:front)
     if isnothing(mr.profile_values)
         return df  # No context columns to add
@@ -489,10 +523,10 @@ function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol
         # Population contexts: distinguish groups from scenarios
         groups, scenarios = context_columns(mr)
         
-        # Add group columns first (unprefixed)
+        # Add group columns first (over_ prefix)
         for group_var in groups
             values = mr.profile_values[group_var]
-            col_name = group_var  # No prefix for groups
+            col_name = _group_column_name(group_var)  # over_ prefix for groups
             
             if order == :front
                 DataFrames.insertcols!(df, 1, col_name => values)
@@ -504,7 +538,7 @@ function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol
         # Add scenario columns next (with at_ prefix)
         for scenario_var in scenarios
             values = mr.profile_values[scenario_var]
-            col_name = Symbol("at_", scenario_var)  # at_ prefix for scenarios
+            col_name = _scenario_column_name(scenario_var)  # at_ prefix for scenarios
             
             if order == :front
                 # Insert after existing columns (groups are already added)
@@ -546,7 +580,7 @@ end
 function _show_stata_table(io::IO, mr::EffectsResult)
     # Calculate confidence intervals
     alpha = get(mr.metadata, :alpha, 0.05)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
     
     # Check if this is profile margins (has profile_values)
     has_profile = !isnothing(mr.profile_values)
@@ -577,22 +611,12 @@ function _show_stata_table(io::IO, mr::EffectsResult)
         scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
         groups_vars = get(mr.metadata, :groups_vars, Symbol[])
         
-        for (name, values) in pairs(mr.profile_values)
+        for (name, values) in _display_profile_pairs(mr)
             # Store raw name for data access
             push!(profile_raw_names, name)
             
-            # Determine proper column name based on scenarios vs groups
-            display_name = if has_contexts
-                # For population margins with contexts, use proper naming
-                if Symbol(name) in scenarios_vars
-                    "at_$(name)"  # Scenarios use at_ prefix
-                else
-                    string(name)  # Groups use no prefix  
-                end
-            else
-                # For regular profile margins, use as-is
-                string(name)
-            end
+            # Same names as the DataFrame: over_ for groups, at_ for scenarios, bare for profiles
+            display_name = _context_display_name(mr, Symbol(name))
             
             push!(profile_names, display_name)
             # Calculate width needed for this profile column
@@ -699,7 +723,7 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
     # Calculate confidence (or prediction) intervals
     alpha = get(mr.metadata, :alpha, 0.05)
     is_prediction_interval = get(mr.metadata, :interval, :confidence) === :prediction
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
     
     # Check if this is profile margins (has profile_values)
     has_profile = !isnothing(mr.profile_values)
@@ -712,11 +736,11 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
         scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
         groups_vars = get(mr.metadata, :groups_vars, Symbol[])
         
-        for (name, values) in pairs(mr.profile_values)
+        for (name, values) in _display_profile_pairs(mr)
             push!(profile_raw_names, name)
             
-            # For predictions, use clean column names (no at_ prefix)
-            display_name = string(name)
+            # Same names as the DataFrame: over_ for groups, at_ for scenarios, bare for profiles
+            display_name = _context_display_name(mr, Symbol(name))
             push!(profile_names, display_name)
             
             # Calculate width needed for this profile column
@@ -891,12 +915,13 @@ end
 #
 # `var_inflation` adds an observation-level (residual) variance term to the
 # interval half-width, turning a confidence interval into a prediction interval:
-#   CI:  est ± z·√(SE²)
-#   PI:  est ± z·√(SE² + var_inflation)
+#   CI:  est ± c·√(SE²)
+#   PI:  est ± c·√(SE² + var_inflation)
+# where c is the t(df) critical value (Normal when df == Inf; see `_inference_df`).
 # It defaults to 0.0, so all existing confidence-interval callers are unaffected.
-function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64; var_inflation::Float64=0.0)
-    z = quantile(Normal(), 1 - alpha/2)
-    half = z .* sqrt.(standard_errors .^ 2 .+ var_inflation)
+function _calculate_confidence_intervals(estimates::Vector{Float64}, standard_errors::Vector{Float64}, alpha::Float64; var_inflation::Float64=0.0, df::Real=Inf)
+    crit = _critical_value(alpha, df)  # t(df) quantile, or Normal when df == Inf
+    half = crit .* sqrt.(standard_errors .^ 2 .+ var_inflation)
     lower = estimates .- half
     upper = estimates .+ half
     return lower, upper
@@ -906,6 +931,17 @@ end
 # e.g. alpha=0.05 -> "95", alpha=0.025 -> "97.5". Uses %g rather than Int() so
 # fractional confidence levels do not raise InexactError.
 _format_level_pct(alpha::Real) = @sprintf("%g", 100 * (1 - alpha))
+
+# Degrees of freedom for display: integers without a trailing ".0".
+_format_df(df::Real) = isinteger(df) ? string(Int(df)) : @sprintf("%g", df)
+
+# Test statistics, their df column and two-sided p-values for a result's rows.
+function _inference_columns(mr::MarginsResult)
+    dof = _result_df(mr)
+    statistics = mr.estimates ./ mr.standard_errors
+    p_values = compute_p_value.(statistics, dof)
+    return statistics, fill(dof, length(statistics)), p_values
+end
 
 # Residual variance to add when a result requests prediction intervals.
 # Returns the stored residual variance when `interval=:prediction`, else 0.0
@@ -961,8 +997,7 @@ end
 # Format-specific table builders
 
 function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
-    t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
+    statistics, dfs, p_values = _inference_columns(mr)
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -981,15 +1016,16 @@ function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     df[!, :contrast] = mr.terms      # Human-readable contrast/label
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
-    df[!, :t_stat] = t_stats
+    df[!, :statistic] = statistics
+    df[!, :df] = dfs
     df[!, :p_value] = p_values
 
     # Add confidence (or prediction) intervals if alpha is specified in metadata.
-    # The reported `se`/`t_stat`/`p_value` always describe the mean estimate;
+    # The reported `se`/`statistic`/`p_value` always describe the mean estimate;
     # only the interval bounds widen when `interval=:prediction` (see metadata).
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end
@@ -1041,7 +1077,7 @@ end
 
 function _confidence_table(mr::EffectsResult; include_gradients::Bool=false)
     alpha = get(mr.metadata, :alpha, 0.05)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1059,8 +1095,8 @@ function _confidence_table(mr::EffectsResult; include_gradients::Bool=false)
     df[!, :variable] = mr.variables  # The "x" in dy/dx
     df[!, :contrast] = mr.terms
     df[!, :estimate] = mr.estimates
-    df[!, :lower] = lower
-    df[!, :upper] = upper
+    df[!, :ci_lower] = lower
+    df[!, :ci_upper] = upper
 
     # Add gradient vectors if requested
     if include_gradients
@@ -1073,7 +1109,7 @@ end
 function _profile_table(mr::EffectsResult; include_gradients::Bool=false)
     # Profile-first organization: reference grid with results attached
     alpha = get(mr.metadata, :alpha, 0.05)
-    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha)
+    lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1092,8 +1128,12 @@ function _profile_table(mr::EffectsResult; include_gradients::Bool=false)
     df[!, :contrast] = mr.terms  # Clean variable names
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
-    df[!, :lower] = lower
-    df[!, :upper] = upper
+    statistics, dfs, p_values = _inference_columns(mr)
+    df[!, :statistic] = statistics
+    df[!, :df] = dfs
+    df[!, :p_value] = p_values
+    df[!, :ci_lower] = lower
+    df[!, :ci_upper] = upper
 
     # Add sample size from metadata
     n_obs = get(mr.metadata, :n_obs, missing)
@@ -1109,8 +1149,7 @@ end
 
 function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false)
     # Predictions-specific format: omits variable/contrast columns
-    t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
+    statistics, dfs, p_values = _inference_columns(mr)
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1126,15 +1165,16 @@ function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false
     # Core statistical columns (no variable/contrast)
     df[!, :estimate] = mr.estimates
     df[!, :se] = mr.standard_errors
-    df[!, :t_stat] = t_stats
+    df[!, :statistic] = statistics
+    df[!, :df] = dfs
     df[!, :p_value] = p_values
 
     # Add confidence (or prediction) intervals if alpha is specified in metadata.
-    # The reported `se`/`t_stat`/`p_value` always describe the mean estimate;
+    # The reported `se`/`statistic`/`p_value` always describe the mean estimate;
     # only the interval bounds widen when `interval=:prediction` (see metadata).
     if haskey(mr.metadata, :alpha)
         alpha = mr.metadata[:alpha]
-        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr))
+        lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
         df[!, :ci_lower] = lower
         df[!, :ci_upper] = upper
     end
@@ -1158,8 +1198,9 @@ function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false
 end
 
 function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
-    t_stats = mr.estimates ./ mr.standard_errors
-    p_values = 2 .* ccdf.(Normal(), abs.(t_stats))
+    statistics, _, p_values = _inference_columns(mr)
+    # Stata labels the statistic `t` (P>|t|) for t inference and `z` (P>|z|) for z inference
+    t_based = isfinite(_result_df(mr))
 
     # Create self-describing type column
     analysis_type = get(mr.metadata, :analysis_type, :population)
@@ -1179,8 +1220,8 @@ function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
     # Add Stata-style statistical columns
     df[!, :margin] = mr.estimates      # Stata uses "margin" not "estimate"
     df[!, :std_err] = mr.standard_errors # "std_err" not "se"
-    df[!, :t] = t_stats
-    df[!, :P_t] = p_values            # "P>|t|" equivalent
+    df[!, t_based ? :t : :z] = statistics
+    df[!, t_based ? :P_t : :P_z] = p_values  # "P>|t|" / "P>|z|" equivalent
     df[!, :N] = fill(n_obs, length(mr.estimates))  # Add sample size (Stata uses uppercase N)
 
     # Add gradient vectors if requested

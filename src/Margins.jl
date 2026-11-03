@@ -64,7 +64,7 @@ using LinearAlgebra
 using Statistics: mean, median
 using CategoricalArrays
 using Printf: @sprintf
-using Distributions: Normal, cdf, ccdf, quantile
+using Distributions: Normal, TDist, cdf, ccdf, quantile
 using Dates: now
 
 # Version info

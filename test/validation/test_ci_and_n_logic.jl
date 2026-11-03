@@ -30,8 +30,9 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         @test all(df_result.ci_lower .< df_result.estimate)
         @test all(df_result.estimate .< df_result.ci_upper)
         
-        # CI width should be approximately 2 * z_crit * SE for 95% CI
-        z_crit = quantile(Normal(), 0.975)  # Exact critical value
+        # CI width is 2 * crit * SE; an lm with the default vcov uses t with the residual df
+        @test all(df_result.df .== dof_residual(m))
+        z_crit = quantile(TDist(dof_residual(m)), 0.975)  # Exact critical value
         expected_half_width = z_crit .* df_result.se
         actual_half_width = (df_result.ci_upper .- df_result.ci_lower) ./ 2
         @test all(abs.(actual_half_width .- expected_half_width) .< 1e-6)
@@ -47,10 +48,10 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         @test :ci_lower ∉ propertynames(df_result)  # not :ci_lower/:ci_upper
         @test :ci_upper ∉ propertynames(df_result)
         
-        # Should use 90% CI (z ≈ 1.645)
+        # Should use 90% CI (t(dof_residual) quantile for an lm)
         # Note: confidence format doesn't include :se column, so we need to get it from standard format
         df_std = DataFrame(res; format=:standard)
-        expected_half_width = 1.6449 .* df_std.se  # quantile(Normal(), 0.95)
+        expected_half_width = quantile(TDist(dof_residual(m)), 0.95) .* df_std.se
         actual_half_width = (df_result.upper .- df_result.lower) ./ 2
         @test all(abs.(actual_half_width .- expected_half_width) .< 1e-3)
     end
@@ -63,8 +64,8 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         @test :ci_lower in propertynames(df_result)  # CI columns always present
         @test :ci_upper in propertynames(df_result)
         
-        # Should be 95% CI (default alpha=0.05)
-        z_crit = quantile(Normal(), 0.975)  # Exact critical value
+        # Should be 95% CI (default alpha=0.05), t with the residual df for an lm
+        z_crit = quantile(TDist(dof_residual(m)), 0.975)  # Exact critical value
         expected_half_width = z_crit .* df_result.se
         actual_half_width = (df_result.ci_upper .- df_result.ci_lower) ./ 2
         @test all(abs.(actual_half_width .- expected_half_width) .< 1e-6)
@@ -104,9 +105,9 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         
         # Total across subgroups should equal full sample
         # (accounting for the fact that we may have multiple rows per subgroup for different effects)
-        unique_groups = unique(df_result.group1)
+        unique_groups = unique(df_result.over_group1)
         for group in unique_groups
-            group_rows = df_result[df_result.group1 .== group, :]
+            group_rows = df_result[df_result.over_group1 .== group, :]
             group_n = first(group_rows.n)  # All rows for same group should have same n
             @test all(group_rows.n .== group_n)
             
@@ -183,7 +184,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         col_names = names(df_result)
         
         # Context columns should be first
-        @test col_names[1] == "group1"
+        @test col_names[1] == "over_group1"
         @test col_names[2] == "type"
         
         # Statistical columns should follow

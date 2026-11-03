@@ -17,16 +17,16 @@ using Margins
     d.y = 1.0 .+ 0.5 .* d.x .+ 0.3 .* d.z .+ 0.9 .* sin.(i .* 2.9)   # |z| for x is ≈ 9–37
     m = lm(@formula(y ~ x + z), d)
 
-    # (the default profile-effects table has no p-value column; it is skipped)
     pz(r) = (df = DataFrame(r); hasproperty(df, :p_value) ?
              [(abs(e / s), p) for (e, s, p) in zip(df.estimate, df.se, df.p_value)] : [])
     results = [population_margins(m, d; vars=[:x]),
                population_margins(m, d; type=:predictions),
                profile_margins(m, d, cartesian_grid(x=[1.0]); vars=[:x]),
                profile_margins(m, d, cartesian_grid(x=[1.0]); type=:predictions)]
-    @test count(r -> !isempty(pz(r)), results) >= 3
+    @test count(r -> !isempty(pz(r)), results) == 4
     for r in results, (z, p) in pz(r)
-        @test p ≈ 2 * ccdf(Normal(), z) rtol=1e-10
+        # lm with the default vcov: t with the residual df (Margins 3.0)
+        @test p ≈ 2 * ccdf(TDist(dof_residual(m)), z) rtol=1e-10
     end
     (zx, px) = only(pz(results[1]))
     @test 8.5 < zx < 37        # in the range where 1 - cdf underflows to exactly 0

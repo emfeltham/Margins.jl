@@ -297,7 +297,7 @@ Key properties:
 
 ## Column Naming and Ordering
 
-- Group variables appear unprefixed (e.g., `education`).
+- Group variables appear with an `over_` prefix (e.g., `over_education`; since 3.0, previously unprefixed).
 - Scenario variables appear with `at_` prefix (e.g., `at_x`).
 - Column order: context columns first (groups, then scenarios), then statistical columns.
 
@@ -305,7 +305,8 @@ Key properties:
 
 ```julia
 groups, scenarios = Margins.context_columns(result)
-# groups == [:education, ...], scenarios == [:x, :policy, ...]
+# groups == [:education, ...], scenarios == [:x, :policy, ...]   (raw variable names;
+# the DataFrame columns are over_education, at_x, at_policy, ...)
 ```
 
 ## Best Practices
@@ -408,15 +409,16 @@ All scenarios maintain **publication-grade statistical validity**:
 ### Column Naming Convention
 
 Results use consistent naming:
-- **Group variables:** Unprefixed (e.g., `education`, `region`)
+- **Group variables:** `over_` prefix (e.g., `over_education`, `over_region`)
 - **Scenario variables:** `at_` prefix (e.g., `at_treatment`, `at_dosage`)
-- **Statistical columns:** `estimate`, `se`, `ci_lower`, `ci_upper`, etc.
+- **Statistical columns:** `estimate`, `se`, `statistic`, `df`, `p_value`, `ci_lower`, `ci_upper`, `n` (see [Output Columns and Inference](api.md#Output-Columns-and-Inference))
 
 **Programmatic Access:**
 ```julia
 # Identify which columns are groups vs scenarios
 groups, scenarios = Margins.context_columns(result)
-# groups == [:education, ...], scenarios == [:treatment, :dosage, ...]
+# groups == [:education, ...], scenarios == [:treatment, :dosage, ...]   (raw variable names;
+# the DataFrame columns are over_education, at_treatment, at_dosage, ...)
 ```
 
 ## Relationship to Profile Analysis

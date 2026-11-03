@@ -40,7 +40,7 @@ using Random
         @test isfinite(sd_orig.second_diff)
         @test isfinite(sd_orig.se)
         @test sd_orig.se > 0
-        @test isfinite(sd_orig.z_stat)
+        @test isfinite(sd_orig.statistic)
         @test 0 <= sd_orig.p_value <= 1
 
         # Test with new pairwise function
@@ -76,7 +76,7 @@ using Random
         # All should have valid statistics
         @test all(isfinite.(sd_df.second_diff))
         @test all(sd_df.se .>= 0)  # Can be zero if no interaction with modifier
-        @test all(isfinite.(sd_df.z_stat))
+        @test all(isfinite.(sd_df.statistic))
         @test all(0 .<= sd_df.p_value .<= 1)
         @test all(in.(sd_df.significant, Ref([true, false])))
     end
@@ -187,7 +187,7 @@ end
         @test sd.se[1] > 0
 
         # z-statistic and p-value should be computed correctly
-        @test abs(sd.z_stat[1]) ≈ abs(sd.second_diff[1]) / sd.se[1]
+        @test abs(sd.statistic[1]) ≈ abs(sd.second_diff[1]) / sd.se[1]
 
         # Should be statistically significant (large sample with true interaction)
         @test sd.p_value[1] < 0.05
@@ -221,7 +221,7 @@ end
 
             @test row.second_diff ≈ expected_slope
             @test row.se >= 0  # Can be zero but unlikely with interaction
-            @test isfinite(row.z_stat)
+            @test isfinite(row.statistic)
         end
     end
 

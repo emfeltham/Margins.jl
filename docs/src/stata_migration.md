@@ -154,6 +154,26 @@ res = population_margins(m, df;
 DataFrame(res)  # Shows dydx(x) by Q1..Q4
 ```
 
+## Output Columns and Test Statistics
+
+| Stata `margins` output | `DataFrame(result)` column |
+|:-----------------------|:---------------------------|
+| `Margin` / `dy/dx` | `estimate` |
+| `Std. err.` | `se` |
+| `t` or `z` | `statistic` (with `df`: finite for t, `Inf` for z) |
+| `P>|t|` / `P>|z|` | `p_value` |
+| `[95% conf. interval]` | `ci_lower`, `ci_upper` |
+| `over(g)` rows | `over_g` column |
+| `at(x=…)` rows | `at_x` (population scenarios) or bare `x` (profile grids) |
+
+As in Stata, t is used after a linear regression and z otherwise: for `lm` (Stata `regress`)
+with the default covariance, `df = dof_residual(model)` (Stata's `e(df_r)`); for `glm` with a
+non-identity link (`logit`, `probit`, `poisson`, …) and mixed models, `df = Inf`. One
+difference: after `regress, vce(robust)` Stata keeps `e(df_r)` and after `vce(cluster c)` it
+uses `n_clusters − 1`, while Margins uses z (`df = Inf`) for any robust or clustered `vcov`.
+`DataFrame(result; format=:stata)` uses Stata's labels (`margin, std_err, t, P_t` or
+`margin, std_err, z, P_z`). See [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+
 ## Fixed Effects Models (reghdfe / ivregress)
 
 ### Basic Fixed Effects

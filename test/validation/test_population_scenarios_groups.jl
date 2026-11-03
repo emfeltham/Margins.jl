@@ -108,7 +108,7 @@ end
         @test size(dfres, 1) == length(expected)
         @test eltype(dfres.at_x) <: Real
         @test eltype(dfres.at_z) <: Real
-        observed = Set([(dfres.at_x[i], dfres.at_z[i], dfres.segment[i]) for i in 1:size(dfres, 1)])
+        observed = Set([(dfres.at_x[i], dfres.at_z[i], dfres.over_segment[i]) for i in 1:size(dfres, 1)])
         @test observed == expected
     end
 end
@@ -363,7 +363,7 @@ end
 
         direct = DataFrame(population_margins(m2, dfb; type=:effects, vars=[:x], groups=(:x, 4)))
         derived = DataFrame(population_margins(m2, dfb; type=:effects, vars=[:x], groups=:xq))
-        sort!(direct, :x); sort!(derived, :xq)
+        sort!(direct, :over_x); sort!(derived, :over_xq)
         @test direct.n == derived.n
         @test direct.estimate ≈ derived.estimate
         @test direct.se ≈ derived.se

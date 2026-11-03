@@ -22,8 +22,8 @@ using Random
 
         # Test basic DataFrame conversion
         df_contrast = DataFrame(contrast_result)
-        @test size(df_contrast) == (1, 10)  # Updated: now includes row1 and row2
-        @test all(col in names(df_contrast) for col in ["contrast", "se", "t_stat", "p_value",
+        @test size(df_contrast) == (1, 11)  # contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, row1, row2
+        @test all(col in names(df_contrast) for col in ["contrast", "se", "statistic", "df", "p_value",
                                                          "ci_lower", "ci_upper", "estimate1", "estimate2",
                                                          "row1", "row2"])
         @test all(isfinite, df_contrast.contrast)
@@ -46,7 +46,7 @@ using Random
         # Convert without gradient
         df_contrast = DataFrame(contrast_result)
         @test size(df_contrast, 1) == 1
-        @test all(col in names(df_contrast) for col in ["contrast", "se", "t_stat", "p_value"])
+        @test all(col in names(df_contrast) for col in ["contrast", "se", "statistic", "df", "p_value"])
         @test !("gradient" in names(df_contrast))
 
         # Convert with gradient
@@ -97,15 +97,17 @@ using Random
         df_contrast = DataFrame(contrast_result)
 
         # Check confidence interval consistency
-        z_crit = 1.96  # approximately
-        manual_ci_lower = df_contrast.contrast[1] - z_crit * df_contrast.se[1]
-        manual_ci_upper = df_contrast.contrast[1] + z_crit * df_contrast.se[1]
-        @test df_contrast.ci_lower[1] ≈ manual_ci_lower atol=0.01
-        @test df_contrast.ci_upper[1] ≈ manual_ci_upper atol=0.01
+        # lm with the default vcov: t with the residual df (Margins 3.0)
+        @test df_contrast.df[1] == dof_residual(model)
+        crit = Distributions.quantile(Distributions.TDist(df_contrast.df[1]), 0.975)
+        manual_ci_lower = df_contrast.contrast[1] - crit * df_contrast.se[1]
+        manual_ci_upper = df_contrast.contrast[1] + crit * df_contrast.se[1]
+        @test df_contrast.ci_lower[1] ≈ manual_ci_lower
+        @test df_contrast.ci_upper[1] ≈ manual_ci_upper
 
         # Check t-statistic
         manual_t = df_contrast.contrast[1] / df_contrast.se[1]
-        @test df_contrast.t_stat[1] ≈ manual_t
+        @test df_contrast.statistic[1] ≈ manual_t
     end
 
     @testset "Edge cases" begin
@@ -118,7 +120,7 @@ using Random
         df_full = DataFrame(contrast_result; include_gradient=true)
 
         # Should have all possible columns
-        expected_cols = ["contrast", "se", "t_stat", "p_value", "ci_lower", "ci_upper",
+        expected_cols = ["contrast", "se", "statistic", "df", "p_value", "ci_lower", "ci_upper",
                         "estimate1", "estimate2", "row1", "row2", "gradient"]
         @test all(col in names(df_full) for col in expected_cols)
         @test size(df_full) == (1, length(expected_cols))

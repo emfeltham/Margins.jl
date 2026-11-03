@@ -23,6 +23,7 @@ include("statistical_validation/analytical_se_validation.jl")
 @testset "Core Functionality" begin
     include("core/test_grouping.jl")
     include("core/test_column_naming.jl")
+    include("core/test_output_schema.jl")
     include("core/test_contrasts.jl")
     include("core/test_contrast_dataframe.jl")
     include("core/test_errors.jl")

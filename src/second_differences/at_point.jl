@@ -194,26 +194,13 @@ function _process_variable_contrasts(
                       "This indicates an internal error. Please report this issue with a reproducible example.")
             end
 
-            # Extract slope and inference statistics
-            # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)
-            # This is the derivative ∂AME/∂modifier at eval_pt
-            slope = second_diff_result.second_diff[1]
-            se_slope = second_diff_result.se[1]
-            gradient = second_diff_result.gradient[1]  # For custom variance calculations
+            # The unified second-difference row: second_diff is the slope
+            # (AME[modifier + δ] - AME[modifier - δ]) / (2δ), i.e. ∂AME/∂modifier at eval_pt,
+            # with modifier_type = :continuous and modifier_level1/2 = eval_pt ∓ δ
+            sd_row = copy(second_diff_result[1, :])  # DataFrameRow → NamedTuple
 
-            # Build result tuple with all relevant information
-            base_result = (
-                variable = var,
-                contrast = contrast,
-                modifier = modifier,
-                eval_point = eval_pt,
-                derivative = slope,
-                se = se_slope,
-                z_stat = slope / se_slope,
-                p_value = second_diff_result.p_value[1],
-                delta_used = δ,
-                gradient = gradient
-            )
+            # Append the evaluation point and step to the shared schema
+            base_result = merge(sd_row, (eval_point = eval_pt, delta_used = δ))
 
             # Merge profile variables into result for stratification tracking
             # This allows users to see which profile configuration each derivative corresponds to
@@ -278,17 +265,23 @@ Supports:
   - Only affects categorical variables; continuous variables unaffected
 
 # Returns
-DataFrame with columns:
+DataFrame with the unified second-difference columns (`Margins.SECOND_DIFFERENCE_COLUMNS`,
+the same as `second_differences`), followed by the evaluation columns:
 - `variable`: Focal variable name
 - `contrast`: Contrast description (for categorical variables, e.g., "Protestant - Catholic"; "dy/dx" for continuous)
 - `modifier`: Modifier variable name
-- `eval_point`: Point where derivative is evaluated (for modifier)
-- `derivative`: ∂AME/∂modifier (per unit change in modifier)
-- `se`: Standard error of derivative
-- `z_stat`: Z-statistic
-- `p_value`: P-value for H₀: derivative = 0
+- `modifier_type`: Always `:continuous`
+- `modifier_level1`, `modifier_level2`: `eval_point - delta_used` and `eval_point + delta_used`
+- `ame_at_level1`, `ame_at_level2`: focal effect at those two modifier values
+- `second_diff`: ∂AME/∂modifier at `eval_point` (per unit change in modifier; was `derivative` before 3.0)
+- `se`: Standard error of `second_diff`
+- `statistic`, `df`: `second_diff / se` and its degrees of freedom (t when finite, z when `Inf`;
+  `dof_residual(model)` for a linear model whose `vcov` is `GLM.vcov` or equal to `vcov(model)`)
+- `p_value`: P-value for H₀: second_diff = 0
+- `significant`: `p_value < 0.05`
+- `gradient`: Gradient vector (∂second_diff/∂β) for custom variance calculations
+- `eval_point`: Point where the derivative is evaluated (for modifier)
 - `delta_used`: Actual delta used for FD
-- `gradient`: Gradient vector (∂derivative/∂θ) for custom variance calculations
 - Additional columns for each variable in `profile` (if specified)
 
 **Note**: For categorical focal variables, one row is returned per contrast × eval_point × profile combination
@@ -542,6 +535,8 @@ function second_differences_at(
         vcov  # Already a matrix
     end
 
+    inference_df = _inference_df(model, vcov)
+
     # 8. Main computation loop: iterate over all profile combinations and evaluation points
     # Overall algorithm:
     #   For each (profile_point, eval_point) combination:
@@ -573,6 +568,10 @@ function second_differences_at(
                 vcov=vcov_func,
                 contrasts=contrasts
             )
+
+            # Inference df from the model and the vcov as given (a matrix equal to vcov(model)
+            # counts as model-based); population_margins only saw the wrapped function
+            ames.metadata[:df] = inference_df
 
             # Extract derivatives for all variables and contrasts using symmetric FD formula
             # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)

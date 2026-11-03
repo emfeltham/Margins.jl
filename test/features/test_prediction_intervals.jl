@@ -5,9 +5,10 @@
 #
 # A prediction interval widens the confidence interval by the observation-level
 # residual variance:
-#   CI:  ŷ ± z·√(SE²)
-#   PI:  ŷ ± z·√(SE² + σ̂²),   σ̂² = RSS/(n−p) = deviance/dof_residual
-# matching R's predict(lm, interval = "prediction") (with a normal quantile).
+#   CI:  ŷ ± t·√(SE²)
+#   PI:  ŷ ± t·√(SE² + σ̂²),   σ̂² = RSS/(n−p) = deviance/dof_residual
+# with t the t(n−p) quantile (Margins 3.0: linear models use t with the residual df),
+# matching R's predict(lm, interval = "prediction").
 #
 # The core test validates against an INDEPENDENT linear-algebra construction
 # (design row + vcov + residual variance), not against the package's own
@@ -18,7 +19,7 @@ using Random
 using Statistics
 using LinearAlgebra: dot
 using DataFrames, GLM, StatsModels
-using Distributions: Normal, quantile
+using Distributions: Normal, TDist, quantile
 using Margins
 
 @testset "Prediction Intervals" begin
@@ -29,7 +30,7 @@ using Margins
     m = lm(@formula(y ~ x + z), df)
 
     grid = DataFrame(x = [-1.0, 0.0, 1.0], z = [0.5, 0.0, -0.5])
-    z975 = quantile(Normal(), 0.975)
+    z975 = quantile(TDist(dof_residual(m)), 0.975)  # t critical value (residual df)
 
     @testset "PI matches independent linear-algebra construction" begin
         # Independent ground truth: for ŷ₀ = x₀'β on a linear model,
@@ -96,7 +97,7 @@ using Margins
         # removing σ², so check directly against the analytical half-widths.
         σ² = deviance(m) / dof_residual(m)
         Σ = vcov(m); β = coef(m)
-        z90 = quantile(Normal(), 0.95)
+        z90 = quantile(TDist(dof_residual(m)), 0.95)
         for i in 1:nrow(grid)
             x0 = [1.0, grid.x[i], grid.z[i]]
             se = sqrt(dot(x0, Σ * x0))

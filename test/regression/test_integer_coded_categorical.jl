@@ -52,7 +52,7 @@ using Margins
         @test nrow(res) == 3
         for lev in 1:3
             dd = d[d.k .== lev, :]
-            chk(only(eachrow(res[string.(res.k) .== string(lev), :])), ame_x(dd))
+            chk(only(eachrow(res[string.(res.over_k) .== string(lev), :])), ame_x(dd))
         end
     end
 

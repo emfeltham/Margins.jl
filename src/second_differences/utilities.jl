@@ -123,3 +123,85 @@ end
 # Continuous effects are labelled "dy/dx" (v2.3.0; the scenarios/groups path used to say
 # "derivative"). "derivative" is still accepted wherever a contrast label is passed in.
 _contrast_label(c::AbstractString) = c == "derivative" ? "dy/dx" : String(c)
+
+# =============================================================================
+# Unified output schema
+# =============================================================================
+
+"""
+Columns of every second-difference DataFrame, in order (`second_differences`,
+`second_differences_pairwise`, `second_differences_all_contrasts`,
+`second_differences_table`; `second_difference` returns one such row as a NamedTuple):
+
+| column            | meaning                                                                  |
+|:------------------|:-------------------------------------------------------------------------|
+| `variable`        | focal variable (`Symbol`)                                                |
+| `contrast`        | focal contrast (`"dy/dx"` for a continuous variable, `"B - A"` levels)   |
+| `modifier`        | modifier variable (`Symbol`)                                             |
+| `modifier_type`   | `:binary`, `:categorical` or `:continuous`                               |
+| `modifier_level1` | first modifier value compared                                            |
+| `modifier_level2` | second modifier value compared                                           |
+| `ame_at_level1`   | focal effect at `modifier_level1`                                        |
+| `ame_at_level2`   | focal effect at `modifier_level2`                                        |
+| `second_diff`     | `ame_at_level2 - ame_at_level1`; for `:continuous`, divided by the modifier distance (a slope) |
+| `se`              | delta-method standard error                                              |
+| `statistic`       | `second_diff / se`                                                       |
+| `df`              | inference degrees of freedom (t when finite, z when `Inf`)               |
+| `p_value`         | two-sided p-value for H₀: `second_diff = 0`                              |
+| `significant`     | `p_value < 0.05`                                                         |
+| `gradient`        | ∂`second_diff`/∂β, for custom variance calculations                      |
+
+`second_differences_at` returns the same columns (with `modifier_type = :continuous`,
+`modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the local derivative
+∂AME/∂modifier), followed by `eval_point`, `delta_used` and one column per `profile`
+variable.
+
+`df` is inherited from the effects result (`ame_result.metadata[:df]`): a second difference is
+a linear combination of the same estimates, so it follows the same rule — the residual df for a
+linear model with the model-based covariance, `Inf` (z) otherwise.
+"""
+const SECOND_DIFFERENCE_COLUMNS = (
+    :variable, :contrast, :modifier, :modifier_type, :modifier_level1, :modifier_level2,
+    :ame_at_level1, :ame_at_level2, :second_diff, :se, :statistic, :df, :p_value,
+    :significant, :gradient,
+)
+
+# One row of the unified second-difference schema. A zero standard error (no interaction
+# in the model) gives statistic 0 / p 1 for a zero estimate and Inf / 0 otherwise.
+function _second_difference_row(;
+    variable::Symbol, contrast::AbstractString, modifier::Symbol, modifier_type::Symbol,
+    level1, level2, est1::Real, est2::Real, second_diff::Real, se::Real,
+    gradient::AbstractVector, dof::Real,
+)
+    if se ≈ 0.0
+        statistic = second_diff ≈ 0.0 ? 0.0 : Inf
+        p_value = second_diff ≈ 0.0 ? 1.0 : 0.0
+    else
+        statistic = second_diff / se
+        p_value = compute_p_value(Float64(statistic), dof)
+    end
+    return (
+        variable = variable,
+        contrast = _contrast_label(contrast),
+        modifier = modifier,
+        modifier_type = modifier_type,
+        modifier_level1 = level1,
+        modifier_level2 = level2,
+        ame_at_level1 = Float64(est1),
+        ame_at_level2 = Float64(est2),
+        second_diff = Float64(second_diff),
+        se = Float64(se),
+        statistic = Float64(statistic),
+        df = Float64(dof),
+        p_value = Float64(p_value),
+        significant = p_value < 0.05,
+        gradient = gradient,
+    )
+end
+
+# DataFrame with exactly the unified columns (plus any trailing extras), in schema order
+function _second_difference_frame(rows)
+    df = DataFrame(rows)
+    extras = [c for c in propertynames(df) if !(c in SECOND_DIFFERENCE_COLUMNS)]
+    return select(df, [SECOND_DIFFERENCE_COLUMNS..., extras...])
+end

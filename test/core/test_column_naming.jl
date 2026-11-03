@@ -26,16 +26,18 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         @test res.metadata[:groups_vars] == [:group1, :group2]
         @test res.metadata[:scenarios_vars] == Symbol[]
         
-        # Test column naming: groups should be unprefixed
-        @test :group1 in propertynames(df_result)
-        @test :group2 in propertynames(df_result)
+        # Test column naming: groups carry the over_ prefix (3.0)
+        @test :over_group1 in propertynames(df_result)
+        @test :over_group2 in propertynames(df_result)
+        @test :group1 ∉ propertynames(df_result)
+        @test :group2 ∉ propertynames(df_result)
         @test :at_group1 ∉ propertynames(df_result)
         @test :at_group2 ∉ propertynames(df_result)
         
         # Test column ordering: context columns come first
         col_names = names(df_result)
-        group1_pos = findfirst(==("group1"), col_names)
-        group2_pos = findfirst(==("group2"), col_names)
+        group1_pos = findfirst(==("over_group1"), col_names)
+        group2_pos = findfirst(==("over_group2"), col_names)
         type_pos = findfirst(==("type"), col_names)
         
         @test group1_pos < type_pos  # Groups before type
@@ -43,7 +45,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         
         # Test programmatic identification
         groups_vars = res.metadata[:groups_vars]
-        @test all(var -> var in propertynames(df_result), groups_vars)
+        @test all(var -> Symbol("over_", var) in propertynames(df_result), groups_vars)
     end
     
     @testset "Population Predictions with Groups Only" begin
@@ -54,13 +56,14 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         @test res.metadata[:groups_vars] == [:group1]
         @test res.metadata[:scenarios_vars] == Symbol[]
         
-        # Test column naming: groups should be unprefixed
-        @test :group1 in propertynames(df_result)
+        # Test column naming: groups carry the over_ prefix (3.0)
+        @test :over_group1 in propertynames(df_result)
+        @test :group1 ∉ propertynames(df_result)
         @test :at_group1 ∉ propertynames(df_result)
         
         # Test column ordering: context columns first
         col_names = names(df_result)
-        group1_pos = findfirst(==("group1"), col_names)
+        group1_pos = findfirst(==("over_group1"), col_names)
         type_pos = findfirst(==("type"), col_names)
         
         @test group1_pos < type_pos
@@ -82,7 +85,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         
         # Should have some profile columns from means_grid
         # (exact columns depend on means_grid implementation)
-        non_stats_columns = filter(name -> !(string(name) in ["type", "variable", "contrast", "estimate", "se", "t_stat", "p_value", "n"]), profile_columns)
+        non_stats_columns = filter(name -> !(string(name) in ["type", "variable", "contrast", "estimate", "se", "statistic", "df", "p_value", "n"]), profile_columns)
         @test length(non_stats_columns) > 0  # Should have at least some profile columns
     end
     
@@ -143,9 +146,9 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics
         df_effects = DataFrame(res_effects)
         df_predictions = DataFrame(res_predictions)
         
-        # Both should have group1 as first column
-        @test names(df_effects)[1] == "group1"
-        @test names(df_predictions)[1] == "group1"
+        # Both should have over_group1 as first column
+        @test names(df_effects)[1] == "over_group1"
+        @test names(df_predictions)[1] == "over_group1"
         
         # Both should have type as second column
         @test names(df_effects)[2] == "type"

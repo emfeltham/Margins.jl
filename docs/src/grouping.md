@@ -36,7 +36,18 @@ education_effects = population_margins(model, data;
 
 # Results: separate effects for each education category
 DataFrame(education_effects)
+# Columns: over_education, type, variable, contrast, estimate, se, statistic, df, p_value,
+#          ci_lower, ci_upper, n
 ```
+
+!!! note "Group columns are prefixed with `over_`"
+    Since Margins 3.0, every grouping variable appears in `DataFrame(result)` (and in the printed
+    table) as `over_<var>` — `over_education` here — as in Stata's `margins, over()`, and
+    consistent with the `at_` prefix of scenario columns. This holds for categorical, binned
+    (`groups=(:income, 4)` → `over_income` with labels `Q1`…`Q4`) and nested
+    (`groups=:region => :education` → `over_region`, `over_education`) groups. Select rows with
+    e.g. `df[df.over_education .== "College", :]` or
+    `contrast(df, (over_education="College",), (over_education="HS",), vcov(model))`.
 
 ### Cross-Tabulated Grouping
 

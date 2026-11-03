@@ -10,6 +10,79 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 
 Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It contains everything below.
 
+### Breaking: output schema
+
+Four changes to the columns of `DataFrame(result)` and of the second-difference tables. Estimates
+and standard errors are unchanged; p-values and confidence intervals change for linear models only.
+
+1. **`t_stat` is replaced by `statistic` and `df`.** The old column was always a z statistic
+   (p-values and CIs used the Normal) despite its name. Now `statistic = estimate / se`, and `df`
+   is the degrees of freedom of its reference distribution: **t with `dof_residual(model)` for a
+   linear model** (`lm`, or `glm(…, Normal(), IdentityLink())`) with the default `vcov`, and
+   **z (`df = Inf`)** for every other model (other GLMs, mixed models, FixedEffectModels) and for
+   any robust, clustered or custom `vcov` (`HC1()`, `CR1(cl)`, a function, or a matrix other than
+   `vcov(model)`), which does not carry the df Stata would use. `p_value`, `ci_lower`/`ci_upper`
+   and the printed intervals use t(`df`). The rule is defined once
+   (`Margins._inference_df(model, vcov)`), stored in `result.metadata[:df]`, and
+   inherited by `contrast(...)` and all second-difference functions. `ContrastResult`'s
+   `t_stat` field is now `statistic` plus `df`, and its `show` prints `t (df = …)` or `z`.
+   Profile effects (`format=:profile`, the default for `profile_margins` effects) now also include
+   `statistic`, `df` and `p_value`. `format=:stata` labels the statistic `t`/`P_t` for t inference
+   and `z`/`P_z` for z inference. Prediction intervals (`interval=:prediction`) for `lm` also use
+   the t quantile, matching R's `predict(lm, interval = "prediction")`.
+2. **Group columns get an `over_` prefix** (`groups=:g` gives column `over_g`, as in Stata's
+   `over()`), matching the `at_` prefix of scenario columns. This applies to categorical, binned
+   and nested groups, to the printed table, and to `contrast(df, (over_g = …,), …)` row lookups.
+   Profile (reference-grid) columns keep their bare names; `context_columns(result)` still returns
+   raw variable names.
+3. **One `second_differences` schema.** `second_differences`, `second_differences_pairwise`,
+   `second_differences_all_contrasts`, `second_differences_table` and `second_difference` (one
+   row, as a `NamedTuple`) return the same columns, in this order, for binary, categorical and
+   continuous modifiers (`Margins.SECOND_DIFFERENCE_COLUMNS`): `variable, contrast, modifier,
+   modifier_type, modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff, se,
+   statistic, df, p_value, significant, gradient`. The binary path used to omit `modifier_type`
+   (now `:binary`) and filled `contrast` after the fact. `second_differences_at` returns the same
+   columns (`modifier_type = :continuous`, `modifier_level1/2 = eval_point ∓ delta_used`, and the
+   local derivative in `second_diff`), followed by `eval_point`, `delta_used` and the `profile`
+   columns.
+4. **Profile-effects intervals are `ci_lower`/`ci_upper`** (were `lower`/`upper`), the same names
+   as every other table, in both the default profile table and `format=:confidence`.
+
+#### Migration guide
+
+| before (≤ 2.x) | 3.0 |
+|:---------------|:----|
+| `df.t_stat` | `df.statistic` (and `df.df` for its degrees of freedom) |
+| `cr.t_stat` (`ContrastResult`) | `cr.statistic`, `cr.df` |
+| `df.g` (group column from `groups=:g`) | `df.over_g` |
+| `contrast(df, (g = "b",), (g = "a",), Σ)` | `contrast(df, (over_g = "b",), (over_g = "a",), Σ)` |
+| second differences `sd.z_stat` | `sd.statistic` (and `sd.df`) |
+| `second_differences_at(...).derivative` | `.second_diff` |
+| `second_difference(...).z_stat` | `.statistic` |
+| profile effects `df.lower`, `df.upper` | `df.ci_lower`, `df.ci_upper` |
+| `DataFrame(r; format=:stata).t` (always) | `.t` for linear models with the default `vcov`, `.z` otherwise |
+
+```julia
+# before
+res = DataFrame(population_margins(m, data; groups = :g))
+res[res.g .== "b", :t_stat]
+sd = second_differences(ames, :x, :t, vcov(m)); sd.z_stat
+second_differences_at(m, data, :x, :z, vcov(m)).derivative
+
+# 3.0
+res = DataFrame(population_margins(m, data; groups = :g))
+res[res.over_g .== "b", :statistic]      # res.df: dof_residual(m) for lm, Inf otherwise
+sd = second_differences(ames, :x, :t, vcov(m)); sd.statistic
+second_differences_at(m, data, :x, :z, vcov(m)).second_diff
+```
+
+**Inference change for linear models.** For `lm` (and Gaussian identity GLMs) with the default
+`vcov`, p-values and confidence intervals now use t with the residual df instead of the Normal,
+so they are slightly wider than before — noticeably so in small samples (at n − p = 20 the 95%
+critical value is 2.086 instead of 1.960, about 6% wider; at n − p = 1000 the difference is
+0.1%). This matches `GLM.coeftable`, Stata's `margins` after `regress` and R's `emmeans`.
+Results for GLMs with non-identity links, mixed models and robust/clustered `vcov` are unchanged.
+
 ### Dependencies
 - Requires FormulaCompiler ≥ 1.5 (compat `"1.5"`). FormulaCompiler 1.5 resolves categorical codes through the fitted model's own levels (a `LevelIndex` on `ContrastOp`), so data pools that are reordered, rebuilt or smaller than the fitting data's evaluate correctly, and missing or unknown categorical values throw instead of silently mapping to the reference level. It also adds `categorical_levels` and the public mixture validators used here.
 - MixedModels.jl is now a weak dependency (compat `"4.35"`), loaded through the new `MixedModelsExt` extension. FormulaCompiler already depends on it, so nothing extra is installed.

@@ -41,10 +41,10 @@ using CategoricalArrays
         @test sd.variable[1] == :x1
         @test sd.modifier[1] == :age
         @test sd.eval_point[1] ≈ mean(df.age) rtol=0.01
-        @test isfinite(sd.derivative[1])
+        @test isfinite(sd.second_diff[1])
         @test isfinite(sd.se[1])
         @test sd.se[1] > 0
-        @test isfinite(sd.z_stat[1])
+        @test isfinite(sd.statistic[1])
         @test 0 <= sd.p_value[1] <= 1
         @test sd.delta_used[1] > 0
     end
@@ -79,7 +79,7 @@ using CategoricalArrays
         @test Set(sd.variable) == Set([:x1, :x2, :x3])
         @test all(sd.modifier .== :age)
         @test all(sd.eval_point .≈ mean(df.age))
-        @test all(isfinite.(sd.derivative))
+        @test all(isfinite.(sd.second_diff))
         @test all(sd.se .> 0)
     end
 
@@ -158,7 +158,7 @@ using CategoricalArrays
         @test sd2.delta_used[1] == 1.0
 
         # Derivatives may differ slightly due to different delta
-        @test sd1.derivative[1] != sd2.derivative[1]
+        @test sd1.second_diff[1] != sd2.second_diff[1]
     end
 
     @testset "Scale Parameter" begin
@@ -167,7 +167,7 @@ using CategoricalArrays
         sd_link = second_differences_at(model, df, :x1, :age, Σ; scale=:link)
 
         # For linear models, they should be the same
-        @test sd_response.derivative[1] ≈ sd_link.derivative[1]
+        @test sd_response.second_diff[1] ≈ sd_link.second_diff[1]
     end
 
     @testset "vcov as Function (Mixed Model Support)" begin
@@ -176,7 +176,7 @@ using CategoricalArrays
         sd_function = second_differences_at(model, df, :x1, :age, vcov)  # vcov is the function
 
         # Results should be identical
-        @test sd_matrix.derivative[1] ≈ sd_function.derivative[1]
+        @test sd_matrix.second_diff[1] ≈ sd_function.second_diff[1]
         @test sd_matrix.se[1] ≈ sd_function.se[1]
         @test sd_matrix.p_value[1] ≈ sd_function.p_value[1]
     end
@@ -250,7 +250,7 @@ using CategoricalArrays
         # second_differences uses (50-40)=10 as delta
         # second_differences_at uses auto delta around each point
         @test sd_discrete.second_diff[1] isa Real
-        @test sd_at.derivative[1] isa Real
+        @test sd_at.second_diff[1] isa Real
     end
 
     @testset "Real-World Example - Interaction Detection" begin
@@ -272,7 +272,7 @@ using CategoricalArrays
         sd = second_differences_at(model_interact, df_interact, :x, :m, vcov(model_interact))
 
         # Should detect significant interaction
-        @test abs(sd.z_stat[1]) > 2  # Statistically significant
+        @test abs(sd.statistic[1]) > 2  # Statistically significant
         @test sd.p_value[1] < 0.05
     end
 
@@ -311,7 +311,7 @@ using CategoricalArrays
             @test sd.eval_point == [45.0, 45.0]
             @test hasproperty(sd, :socio4)
             @test Set(sd.socio4) == Set([false, true])
-            @test all(isfinite.(sd.derivative))
+            @test all(isfinite.(sd.second_diff))
             @test all(sd.se .> 0)
         end
 
@@ -395,7 +395,7 @@ using CategoricalArrays
             @test length(unique(sd.gender)) == 2
 
             # All combinations should be present
-            @test all(isfinite.(sd.derivative))
+            @test all(isfinite.(sd.second_diff))
             @test all(sd.se .> 0)
         end
     end
@@ -442,7 +442,7 @@ using CategoricalArrays
             @test all(sd_pairwise.variable .== :religion)
 
             # All derivatives should be finite
-            @test all(isfinite.(sd_pairwise.derivative))
+            @test all(isfinite.(sd_pairwise.second_diff))
             @test all(sd_pairwise.se .> 0)
         end
 
@@ -471,7 +471,7 @@ using CategoricalArrays
             @test nrow(sd) >= 2  # At least 2 contrasts (depends on levels)
             @test hasproperty(sd, :contrast)
             @test hasproperty(sd, :variable)
-            @test hasproperty(sd, :derivative)
+            @test hasproperty(sd, :second_diff)
 
             # All contrasts should be for religion
             @test all(sd.variable .== :religion)
@@ -480,7 +480,7 @@ using CategoricalArrays
             @test !("dy/dx" in sd.contrast)
 
             # Statistical properties
-            @test all(isfinite.(sd.derivative))
+            @test all(isfinite.(sd.second_diff))
             @test all(sd.se .> 0)
             @test all(0 .<= sd.p_value .<= 1)
         end

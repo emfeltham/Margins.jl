@@ -17,7 +17,7 @@ providing a measure of the expected outcome for the population.
 - `weights::Union{Vector{Float64}, Nothing}`: Observation weights (nothing for equal weights)
 
 # Returns
-- `DataFrame`: Results with estimate, se, t_stat, p_value, n columns
+- `DataFrame`: Results with estimate, se, n columns (inference columns are added by `DataFrame(result)`)
 - `Matrix{Float64}`: Gradient matrix G for delta-method standard errors
 """
 function _population_predictions(
@@ -44,8 +44,6 @@ function _population_predictions(
     df = DataFrame(
         estimate = [mean_prediction],
         se = [se],
-        t_stat = [mean_prediction / se],
-        p_value = [2 * ccdf(Normal(), abs(mean_prediction / se))],
         n = [n_obs]  # Add sample size
     )
     

@@ -97,7 +97,7 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
             rows = findall(==(lev), string.(df.g))
             (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
                                                   measure, scale, nothing)
-            r = only(eachrow(res[string.(res.g) .== lev, :]))
+            r = only(eachrow(res[string.(res.over_g) .== lev, :]))
             @test r.estimate ≈ want_est atol=1e-9
             @test r.se ≈ want_se atol=1e-6 rtol=1e-6   # central difference on β (link-scale unit
             # elasticities divide by η, which can be near 0, so SEs can be large)
@@ -119,7 +119,7 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
             rows = findall(==(lev), string.(df.g))
             (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
                                                   measure, :response, df.w)
-            r = only(eachrow(res[string.(res.g) .== lev, :]))
+            r = only(eachrow(res[string.(res.over_g) .== lev, :]))
             @test r.estimate ≈ want_est atol=1e-9
             @test r.se ≈ want_se atol=1e-6
         end
@@ -168,7 +168,7 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
             rows = findall(==(lev), string.(df.h))
             (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
                                                   :elasticity, :response, nothing)
-            r = only(eachrow(res[string.(res.h) .== lev, :]))
+            r = only(eachrow(res[string.(res.over_h) .== lev, :]))
             @test r.estimate ≈ want_est atol=1e-9
             @test r.se ≈ want_se atol=1e-6
         end
@@ -185,8 +185,8 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
             transformed = DataFrame(population_margins(m, df; type=:effects, vars=[:x],
                                                        measure=measure, groups=:g))
             for lev in ("a", "b", "c")
-                a = only(eachrow(raw[string.(raw.g) .== lev, :]))
-                b = only(eachrow(transformed[string.(transformed.g) .== lev, :]))
+                a = only(eachrow(raw[string.(raw.over_g) .== lev, :]))
+                b = only(eachrow(transformed[string.(transformed.over_g) .== lev, :]))
                 @test !isapprox(a.estimate, b.estimate; atol=1e-8)
                 @test !isapprox(a.se, b.se; atol=1e-8)
             end
@@ -202,7 +202,7 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
                 rows = findall(==(lev), string.(df.g))
                 (want_est, want_se) = _measure_oracle(X, β, Σ, link, df.x, ix, rows,
                                                       :effect, scale, nothing)
-                row = only(eachrow(r[string.(r.g) .== lev, :]))
+                row = only(eachrow(r[string.(r.over_g) .== lev, :]))
                 @test row.estimate ≈ want_est atol=1e-9
                 @test row.se ≈ want_se atol=1e-6
             end
@@ -230,7 +230,7 @@ const _MEASURES = (:elasticity, :semielasticity_dyex, :semielasticity_eydx)
                     factor = scale === :response ? GLM.mueta(link, η[r]) : 1.0
                     grad .+= (df.w[r] * factor / W) .* @view X[r, :]
                 end
-                r = only(eachrow(res[string.(res.g) .== lev, :]))
+                r = only(eachrow(res[string.(res.over_g) .== lev, :]))
                 @test r.estimate ≈ want_est atol=1e-10
                 @test r.se ≈ sqrt(dot(grad, Σ, grad)) atol=1e-10
             end

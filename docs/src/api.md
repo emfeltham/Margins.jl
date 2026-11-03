@@ -129,6 +129,43 @@ CSV.write("effects.csv", effects_result)
 CSV.write("predictions.csv", predictions_result)
 ```
 
+## Output Columns and Inference
+
+### Columns of `DataFrame(result)`
+
+Margins 3.0 uses one set of column names across result types:
+
+| result | columns (default format) |
+|:-------|:-------------------------|
+| population effects (AME) | `type, variable, contrast, estimate, se, statistic, df, p_value, ci_lower, ci_upper, n` |
+| population effects with `groups`/`scenarios` | `over_<g>…, at_<s>…,` then as above |
+| population predictions (AAP) | `[over_<g>…, at_<s>…,] type, estimate, se, statistic, df, p_value, ci_lower, ci_upper, n` |
+| profile effects (MEM/MER) | `<grid vars…>, type, variable, contrast, estimate, se, statistic, df, p_value, ci_lower, ci_upper, n` |
+| profile predictions (APM/APR) | `<grid vars…>, type, estimate, se, statistic, df, p_value, ci_lower, ci_upper, n` |
+| `DataFrame(contrast(...))` | `contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, row1, row2` |
+| second differences | see [Second Differences](second_differences.md#Output-Schema) |
+
+- **Group columns** carry an `over_` prefix (`groups=:region` gives `over_region`, as in Stata's `over()`), for plain, binned and nested groups alike.
+- **Scenario columns** carry an `at_` prefix (`scenarios=(x=[0, 1],)` gives `at_x`).
+- **Profile (reference-grid) columns** keep their bare names.
+- `format=:stata` uses Stata's labels: `margin, std_err, t, P_t, N` for t inference and `margin, std_err, z, P_z, N` for z inference.
+
+### Test statistic and degrees of freedom
+
+`statistic = estimate / se`. Its reference distribution, used for `p_value` and the confidence interval, is t with `df` degrees of freedom (`df = Inf` is the standard Normal, i.e. z). The rule depends only on the model and the covariance estimator (`Margins._inference_df(model, vcov)`), and the same `df` is used for every row of a result, for contrasts between rows and for second differences:
+
+| model | `vcov` | `df` |
+|:------|:-------|:-----|
+| `lm(...)`, or `glm(..., Normal(), IdentityLink())` | default `GLM.vcov` (or a matrix equal to `vcov(model)`) | `dof_residual(model)` (t) |
+| the same linear models | robust / clustered / custom (`HC1()`, `CR1(cl)`, a function, another matrix) | `Inf` (z) |
+| other GLMs (logit, probit, Poisson, …), mixed models, FixedEffectModels | any | `Inf` (z) |
+
+For a linear model every marginal effect, adjusted prediction and contrast is a linear combination of β, so `estimate / se` has an exact t distribution with the residual degrees of freedom — the reference Stata's `margins` uses after `regress` and that `GLM.coeftable` reports for `lm`. For nonlinear models the delta-method standard errors are asymptotic, so z is used, as in Stata after `logit` and in R's marginaleffects. With an identity link the link and response scales coincide, so `scale` does not change `df`.
+
+Robust and clustered covariance: Stata uses the residual df after `vce(robust)` and `n_clusters − 1` after `vce(cluster)`. The `vcov` argument (a CovarianceMatrices estimator or a function) does not carry that information reliably, so Margins uses z for every non-default covariance estimator. With few clusters this is anti-conservative; compute the t-based p-value yourself if you need Stata's small-sample convention, e.g. `2 .* ccdf.(TDist(G - 1), abs.(df.statistic))`.
+
+The df is stored in `result.metadata[:df]`.
+
 ## Second Differences (Interaction Effects)
 
 Margins.jl provides comprehensive support for computing second differences—interaction effects on the predicted outcome scale. Second differences quantify how marginal effects vary across levels of a moderating variable, addressing the fundamental question: **"Does the effect of X depend on Z?"**
@@ -303,7 +340,7 @@ scenarios = cartesian_grid(x1=[0, 1, 2])
 elasticities = profile_margins(model, data, scenarios; 
     measure=:elasticity, vars=[:x2])
 
-# Robust standard errors (with CovarianceMatrices.jl)
+# Robust standard errors (with CovarianceMatrices.jl); inference is then z (df = Inf)
 using CovarianceMatrices
 robust_effects = population_margins(model, data; vcov=HC1(), type=:effects)
 
@@ -402,7 +439,7 @@ using DataFrames, CSV, Chain
 results_df = @chain begin
     population_margins(model, data; type=:effects)
     DataFrame(_)
-    select(_, :term, :estimate, :se, :p_value)
+    select(_, :variable, :contrast, :estimate, :se, :statistic, :df, :p_value)
     filter(row -> row.p_value < 0.05, _)  # Significant effects only
 end
 
