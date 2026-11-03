@@ -112,9 +112,10 @@ The numeric model columns that are, in `data_nt`, an exact function of one of th
 `sources` (see the rules at the top of `core/derived_columns.jl`). Each unordered pair of columns
 is reported once.
 """
-function _derived_columns(model, @nospecialize(data_nt::NamedTuple), sources::Vector{Symbol})
+function _derived_columns(model, @nospecialize(data_nt::NamedTuple), sources::Vector{Symbol},
+                          fvars=nothing)
     predictors = try
-        _formula_predictor_names(model)
+        isnothing(fvars) ? _formula_predictor_names(model) : _formula_predictor_names(model, fvars)
     catch
         return _DerivedColumn[]
     end
@@ -369,10 +370,11 @@ fixed), `changed` the variables set counterfactually, and `settings` the values 
 (`scenario_specs`, or the completed reference grid; `nothing` if not known): a derived column that
 the call also sets, consistently with its source at every setting, is not reported.
 """
-function _warn_derived_columns(model, @nospecialize(data_nt::NamedTuple), focal::Vector{Symbol}, changed::Vector{Symbol}, settings)
+function _warn_derived_columns(model, @nospecialize(data_nt::NamedTuple), focal::Vector{Symbol}, changed::Vector{Symbol}, settings,
+                               fvars=nothing)
     sources = unique!(Symbol[focal; changed])
     isempty(sources) && return nothing
-    found = _derived_columns(model, data_nt, sources)
+    found = _derived_columns(model, data_nt, sources, fvars)
     isempty(found) && return nothing
     return _report_derived_columns(found, focal, changed, settings)
 end

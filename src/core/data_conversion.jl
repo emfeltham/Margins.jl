@@ -160,8 +160,8 @@ formula is not a column of `data_nt`. Without this check the first evaluation of
 fails inside FormulaCompiler with a `FieldError` (Julia ≥ 1.12) or an `ErrorException`. The
 response is not required: Margins never evaluates it.
 """
-function _check_model_vars_present(data_nt::NamedTuple, model)
-    absent = sort!([v for v in _get_model_formula_variables(model) if !haskey(data_nt, v)])
+function _check_model_vars_present(data_nt::NamedTuple, model, fvars=_get_model_formula_variables(model))
+    absent = sort!([v for v in fvars if !haskey(data_nt, v)])
     isempty(absent) && return nothing
     throw(ArgumentError(
         "data is missing the model variable(s) $(join(repr.(absent), ", ")). Margins evaluates " *
@@ -211,8 +211,8 @@ Categorical pools that lack some of the model's levels need no handling here:
 FormulaCompiler resolves categorical values, and contrast endpoints, against the fitted
 model's levels.
 """
-function _prepare_margins_data(data_nt_raw::NamedTuple, model)
-    _check_model_vars_present(data_nt_raw, model)
+function _prepare_margins_data(data_nt_raw::NamedTuple, model, fvars=_get_model_formula_variables(model))
+    _check_model_vars_present(data_nt_raw, model, fvars)
     _check_model_vars_not_missing(data_nt_raw, model)
     data_nt = _categorize_model_categoricals(_narrow_missing_columns(data_nt_raw), model)
     return _convert_numeric_to_float64(data_nt)

@@ -376,9 +376,11 @@ effect_vars = _get_all_effect_variables(model, data_nt, :sampling_weight)
 This filtering ensures statistical validity by computing effects only for variables
 that actually influence the model predictions and have appropriate data types.
 """
-function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing)
-    # Get variables that are actually in the model formula
-    model_vars = _get_model_formula_variables(model)
+function _get_all_effect_variables(model, data_nt::NamedTuple, weight_col=nothing,
+                                   fvars=_get_model_formula_variables(model))
+    # Variables that are actually in the model formula (`fvars`: computed once per call by the
+    # request layer, see `_normalize_request`)
+    model_vars = fvars
     
     effect_vars = Symbol[]
     for (name, col) in pairs(data_nt)
@@ -603,8 +605,8 @@ Overriding such a column (a typo, the response, the weights column, or any unuse
 changes nothing, so every scenario would silently report the baseline estimate under an
 `at_<var>` label that looks like a "no effect" result.
 """
-function _validate_scenarios_are_predictors(model, scenario_vars)
-    bad = _nonpredictor_vars(model, scenario_vars)
+function _validate_scenarios_are_predictors(model, scenario_vars, fvars=_get_model_formula_variables(model))
+    bad = _nonpredictor_vars(model, scenario_vars, fvars)
     if !isempty(bad)
         throw(ArgumentError(
             "Scenario variable(s) $(join(bad, ", ")) are not predictors in the model, so " *
@@ -621,10 +623,12 @@ Sorted names of the model's predictors: formula variables other than the respons
 model class whose formula omits some predictors adds a method (FixedEffectModels adds its
 absorbed fixed effects, which a reference grid may set).
 """
-_predictor_names(model) = _formula_predictor_names(model)
+_predictor_names(model, fvars=_get_model_formula_variables(model)) = _formula_predictor_names(model, fvars)
 
-function _formula_predictor_names(model)
-    predictors = _get_model_formula_variables(model)
+# `fvars`: the formula's variables (`_get_model_formula_variables`), passed by the request layer,
+# which computes them once per call
+function _formula_predictor_names(model, fvars=_get_model_formula_variables(model))
+    predictors = fvars
     response = try
         Set{Symbol}(StatsModels.termvars(StatsModels.formula(model).lhs))
     catch
@@ -638,8 +642,8 @@ end
 
 The entries of `vars` that are not predictors of `model` (typos, unused columns, the response).
 """
-function _nonpredictor_vars(model, vars)
-    predictors = Set(_predictor_names(model))
+function _nonpredictor_vars(model, vars, fvars=_get_model_formula_variables(model))
+    predictors = Set(_predictor_names(model, fvars))
     return [Symbol(v) for v in vars if !(Symbol(v) in predictors)]
 end
 
@@ -790,10 +794,11 @@ vars = _process_vars_parameter(model, :all_continuous, data_nt)  # -> continuous
 - `MarginsError`: When no valid variables found for effects analysis
 - `ArgumentError`: When vars format is invalid or variables conflict with weights
 """
-function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing)
+function _process_vars_parameter(model, vars, data_nt::NamedTuple, weight_col=nothing,
+                                 fvars=_get_model_formula_variables(model))
     if isnothing(vars)
         # Auto-detect ALL variables (both continuous and categorical) for comprehensive effects analysis
-        effect_vars = _get_all_effect_variables(model, data_nt, weight_col)
+        effect_vars = _get_all_effect_variables(model, data_nt, weight_col, fvars)
         if isempty(effect_vars)
             throw(MarginsError("No explanatory variables found in data for effects analysis. Available variables: $(collect(keys(data_nt)))"))
         end

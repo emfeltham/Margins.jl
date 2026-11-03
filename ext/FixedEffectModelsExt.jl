@@ -189,8 +189,8 @@ end
 # prediction (the FE estimate of that level is looked up), and a scenario on one is rejected
 # below for predictions rather than as "not a predictor".
 # ---------------------------------------------------------------------------
-Margins._predictor_names(model::FixedEffectModel) =
-    sort!(unique!(vcat(_formula_predictor_names(model), _get_fe_variables(model))))
+Margins._predictor_names(model::FixedEffectModel, fvars=Margins._get_model_formula_variables(model)) =
+    sort!(unique!(vcat(_formula_predictor_names(model, fvars), _get_fe_variables(model))))
 
 # ---------------------------------------------------------------------------
 # _validate_focal_vars / _validate_request: the FE-specific constraints, in the shared validation of

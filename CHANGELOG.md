@@ -892,6 +892,15 @@ R's `avg_slopes` gives 0.0423, the SE of β_x.
 
 ### Performance
 
+- **The formula's variables are collected once per call.** The request layer walks the fitted
+  formula once (`_get_model_formula_variables`). It then passes the variables to the checks that
+  need them: the missing-predictor check, vars auto-detection, scenario and reference-grid
+  validation, and the derived-column detector. A call used to walk it up to five times, each walk
+  about 6 μs and 32 KB on the paper's 55-term formula.
+  - Against the code before the missing-predictor check was added (warm medians, n = 5,000):
+    APM −10%, MEM −2%, the AMEs within 1.6%, AAP +2%.
+  - AAP's one walk, for the missing-predictor check, is the only remaining extra cost.
+  - Results are unchanged.
 - **Per-call cost of removing the engine cache** (warm medians, the paper's 65-coefficient logit, Apple M-series; estimates and SEs bitwise identical). With the default `vcov`: +0.16 to +0.33 ms for APM, MEM, AAP, AME (one variable) and AME (scenario) at n = 5,000, +0.02 to +0.5 ms at n = 50,000; AME (all variables) +1.2 ms (+6%) at n = 5,000 and +8 to 13 ms (+4 to 7%) at n = 50,000. The setup Margins now repeats (validation and `vcov`, data preparation, engine build) costs about 0.3 ms; the rest of the AME (all) increase is not Margins work at all: it is `GLM.vcov`, now evaluated on every call. Its threaded LAPACK call (a 65 × 65 Cholesky inverse) wakes OpenBLAS's worker threads, which keep spinning for a while afterwards, and on Apple-silicon machines the single-threaded AME loop that follows runs about 5% slower while they spin. Any threaded LAPACK call has the same effect (an unrelated `inv(cholesky(A))` of the same size does too), and so does a pure-Julia loop. With `BLAS.set_num_threads(1)`, or with the covariance passed as a matrix (`vcov = V`, no LAPACK call per call), AME (all) takes 18.9 ms at n = 5,000 and 186–188 ms at n = 50,000, against 20.0 and 195–198 ms with the default `vcov`. That gap is the whole step-2 increase. A freshly built engine computes as fast as a reused one (189–192 ms either way at n = 50,000). `Int` columns are copied to `Float64` on every call (8 bytes per row per column; +2.8 MB per call at n = 50,000 for the 7 integer columns of that dataset). With a CovarianceMatrices estimator the estimator now runs on every call: +0.5 to 0.9 ms at n = 5,000 and +7 ms (`HC1()`) / +4 ms (`CR1(cluster)`) at n = 50,000, exactly `CovarianceMatrices.vcov`'s own cost (and ~27 MB, its n × p score matrix). To reuse a robust covariance across many calls, compute it once and pass the matrix: `V = CovarianceMatrices.vcov(HC1(), m); population_margins(m, data; vcov=V)` (same df as with the estimator: df depends on the model class, not on `vcov`; see "Model-class interface"). First-call latency is unchanged (AME (all) 4.8 s → 4.4 s, the others within ±0.1 s).
 
 - **Against 2.2.0 at the freeze** (the paper's 65-coefficient logit, Julia 1.13.0, warm medians, 2.2.0 with its

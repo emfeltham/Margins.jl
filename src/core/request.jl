@@ -132,6 +132,9 @@ function _normalize_request(model, data;
         warn::Bool=true)
     validate_required_args(model, data)
     validate_model_methods(model)
+    # The formula's variables, walked once per call and passed to every check that needs them
+    # (on a 55-term formula a walk costs about 6 μs and 32 KB, and a call needed up to five)
+    fvars = _get_model_formula_variables(model)
 
     # Scalar options
     validate_population_parameters(type, scale, backend, measure, vars)
@@ -154,7 +157,7 @@ function _normalize_request(model, data;
     elseif !isnothing(scenario_vars) && !isnothing(vars) && type === :effects
         _validate_vars_scenarios_overlap(vars, scenario_vars)
     end
-    isnothing(scenario_vars) || _validate_scenario_vars(model, scenario_vars, groups)
+    isnothing(scenario_vars) || _validate_scenario_vars(model, scenario_vars, groups, fvars)
     if !isnothing(groups)
         _validate_groups_parameter(groups)
         # Teaching validation: check for vars/groups overlap (mirrors the scenarios check
@@ -177,7 +180,7 @@ function _normalize_request(model, data;
     end
 
     # Single data conversion: a column table with Float64 numeric columns (type stability)
-    data_nt = _prepare_margins_data(cols, model)
+    data_nt = _prepare_margins_data(cols, model, fvars)
 
     # Averaging weights (:model default on population requests), where they came from, and the
     # weight column (if a name) to exclude from auto-detected variables
@@ -189,7 +192,7 @@ function _normalize_request(model, data;
     vars_explicit = !isnothing(vars)
     type === :effects && vars_explicit && _validate_focal_vars(model, vars)
     resolved_vars = if type === :effects
-        _filter_vars_for_measure(_process_vars_parameter(model, vars, data_nt, weight_col),
+        _filter_vars_for_measure(_process_vars_parameter(model, vars, data_nt, weight_col, fvars),
                                  data_nt, measure, vars_explicit)
     else
         nothing  # Not needed for predictions
@@ -204,7 +207,7 @@ function _normalize_request(model, data;
     # Profile requests: resolve, validate and complete the reference grid
     # (an `offset` column of the grid is the offset at its rows, not a variable: split it off)
     (grid_in, grid_offset) = _split_offset_column(model, reference_grid)
-    (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in)
+    (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in, fvars)
     # A profile request averages nothing; its weights are those of the values it fills in for model
     # variables the grid leaves out (the model's estimation weights by default)
     isnothing(completed) || (weights_source = fill_source)
@@ -233,7 +236,7 @@ function _normalize_request(model, data;
     if warn && !(isempty(changed) && (isnothing(resolved_vars) || isempty(resolved_vars)))
         settings = !isnothing(completed) ? completed : !isnothing(scenarios_nt) ? scenario_specs : nothing
         Base.invokelatest(_warn_derived_columns, model, data_nt,
-                          isnothing(resolved_vars) ? Symbol[] : resolved_vars, changed, settings)
+                          isnothing(resolved_vars) ? Symbol[] : resolved_vars, changed, settings, fvars)
     end
 
     req = MarginsRequest{_request_kind(reference_grid), typeof(model)}(
@@ -356,8 +359,8 @@ end
 Checks on the variables `scenarios` sets: each must be a predictor of the model, and none may
 also be used by `groups`.
 """
-function _validate_scenario_vars(model, scenario_vars, groups)
-    _validate_scenarios_are_predictors(model, scenario_vars)
+function _validate_scenario_vars(model, scenario_vars, groups, fvars=_get_model_formula_variables(model))
+    _validate_scenarios_are_predictors(model, scenario_vars, fvars)
     # A variable cannot be binned by groups and overridden by scenarios at once: the
     # bins come from its observed values, the override then discards them.
     isnothing(groups) || _validate_scenarios_groups_conflict(scenario_vars, groups)
@@ -380,7 +383,7 @@ end
 
 # ---- reference grid (profile requests) -----------------------------------------------------
 
-_prepare_reference_grid(model, data, data_nt, ::Nothing) = (nothing, nothing, Set{Symbol}(), :none)
+_prepare_reference_grid(model, data, data_nt, ::Nothing, fvars=nothing) = (nothing, nothing, Set{Symbol}(), :none)
 
 """
     _prepare_reference_grid(model, data, data_nt, reference_grid) -> (grid, completed_grid, grid_vars, fill_source)
@@ -389,7 +392,8 @@ Resolve string levels of categorical columns (`process_reference_grid`), validat
 complete it with typical values for the model variables it does not give. `grid_vars` are the
 grid columns shown in the output: the user's model variables, without the response.
 """
-function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_grid::DataFrame)
+function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_grid::DataFrame,
+                                 fvars=_get_model_formula_variables(model))
     # Process reference grid to convert string categorical specifications to proper categorical values
     # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
     grid = process_reference_grid(data, reference_grid)
@@ -439,7 +443,7 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     # every profile would silently report the same value. Constant extra columns are
     # harmless and common: means_grid(data) carries every data column.
     varying = [Symbol(c) for c in names(grid) if length(unique(grid[!, c])) > 1]
-    bad_cols = _nonpredictor_vars(model, varying)
+    bad_cols = _nonpredictor_vars(model, varying, fvars)
     if !isempty(bad_cols)
         throw(ArgumentError(
             "Reference grid variable(s) $(join(bad_cols, ", ")) vary across the grid but are " *
@@ -465,10 +469,11 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     # Predictors outside the formula Margins evaluates (FixedEffectModels' absorbed fixed effects,
     # which a grid may set to choose their estimates) are kept, so they label the output rows
     if nrow(completed) == nrow(grid)
-        formula_vars = Set(_formula_predictor_names(model))
+        formula_vars = Set(_formula_predictor_names(model, fvars))
+        predictors = _predictor_names(model, fvars)
         for c in names(grid)
             s = Symbol(c)
-            if !(c in names(completed)) && !(s in formula_vars) && s in _predictor_names(model)
+            if !(c in names(completed)) && !(s in formula_vars) && s in predictors
                 completed[!, c] = grid[!, c]
             end
         end
