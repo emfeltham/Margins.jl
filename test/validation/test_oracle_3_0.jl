@@ -318,13 +318,14 @@ _ocontrast(c) = c == "dY/dX" ? "dy/dx" : c
     end
 
     @testset "rank-deficient fits vs R (dropped coefficient fixed at 0)" begin
-        # v = x + z: lm and logit drop z (GLM.jl's pivoted Cholesky and R's QR, z last in R's
-        # formula); c is constant within g, so the FixedEffectModels fit with fe(g) drops c (fixest
+        # v = 2x + 3z: lm and logit drop z (GLM.jl's pivoted Cholesky and R's QR, z last in R's
+        # formula; unit coefficients would make x and z tie in the pivoted Cholesky, see
+        # test/core/test_rank_deficient.jl); c is constant within g, so the FixedEffectModels fit with fe(g) drops c (fixest
         # removes it). R's marginaleffects: a dropped coefficient is not in the Jacobian; the effect
         # of the dropped variable is 0 with SE NA. Margins: Σ's dropped rows/columns are 0, and a
         # quantity that loads only on dropped coefficients has a NaN SE.
         rd = copy(d)
-        rd.v = rd.x .+ rd.z
+        rd.v = 2 .* rd.x .+ 3 .* rd.z
         rd.c = [Dict("a" => 0.7, "b" => 1.9, "c" => -0.4)[string(l)] for l in rd.g]
         fits = Dict{String,Any}(
             "lm" => lm(@formula(yc ~ x * w + g + v + z), rd),
@@ -345,7 +346,7 @@ _ocontrast(c) = c == "dY/dX" ? "dy/dx" : c
             wk = fem ? (weights = :none,) : (;)   # a FixedEffectModels fit does not store weights
             res = if r.quantity == "mem"
                 grid = fem ? DataFrame(x = [1.5], w = [1.2], z = [0.1], c = [1.9], g = ["b"]) :
-                             DataFrame(x = [1.5], w = [1.2], z = [0.1], v = [1.6], g = ["b"])
+                             DataFrame(x = [1.5], w = [1.2], z = [0.1], v = [3.3], g = ["b"])
                 vars = fem ? [:x, :w, :z, :c] : [:x, :w, :v, :z]
                 rdcall(() -> DataFrame(profile_margins(m, rd, grid; vars, scale = sc)))
             else

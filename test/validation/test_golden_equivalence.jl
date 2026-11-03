@@ -22,7 +22,8 @@
 #
 # The snapshot depends on the fitted coefficients and on summation order, so it is only
 # comparable when GLM, StatsModels and CategoricalArrays have the versions recorded in
-# margins_golden_versions.txt AND the bounds-checking mode matches (the snapshot is made
+# margins_golden_versions.txt, the Julia minor version matches (its BLAS, and MixedModels'
+# optimizer path, change the last digits and the GLMM fits) AND the bounds-checking mode matches (the snapshot is made
 # with --check-bounds=yes, as `Pkg.test` uses; run standalone with the same flag). Otherwise
 # the value comparison is skipped (`@test_skip`) with a warning, but the case and key sets
 # are still checked.
@@ -91,6 +92,8 @@ include(joinpath(@__DIR__, "..", "support", "golden_cases.jl"))
         @test nrow(j) == nrow(golden)
     else
         @test_skip nrow(bad) == 0
+        # not a test, but visible: how far this platform is from the snapshot
+        @info "golden snapshot not compared on this platform (fingerprint differs); drift" over_tolerance=nrow(bad) worst=first(bad[:, [:case_id, :key, :rel]], 5)
     end
     @info "golden equivalence" rows=nrow(j) cases=length(unique(j.case_id)) max_rel_est=maximum(j.rel_est) max_rel_se=maximum(j.rel_se) bitwise_equal=count(r -> r.estimate_golden == r.estimate_now && r.se_golden == r.se_now, eachrow(j)) seconds=round(elapsed; digits=1)
 end

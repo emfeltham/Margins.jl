@@ -223,8 +223,20 @@ function _compute_continuous_effects!(engine::MarginsEngine, continuous_requeste
     return nothing
 end
 
-_compute_continuous_effects!(engine::MarginsEngine, continuous_requested::Vector{Symbol},
-                             data_nt::NamedTuple, rows, scale::Symbol, measure::Symbol,
-                             weights, total_weight::Float64) =
-    _compute_continuous_effects!(engine, continuous_requested, data_nt, rows, scale,
-                                 _measure_type(measure), weights, total_weight)
+# One static call per measure. Forwarding `_measure_type(measure)` (a union of four types) is a
+# dynamic call that Julia 1.10 does not union-split: it boxed the arguments, 320-450 bytes per
+# call. Julia ≥ 1.12 splits it; the explicit branches allocate nothing on every version.
+function _compute_continuous_effects!(engine::MarginsEngine, continuous_requested::Vector{Symbol},
+                                      data_nt::NamedTuple, rows, scale::Symbol, measure::Symbol,
+                                      weights, total_weight::Float64)
+    args = (engine, continuous_requested, data_nt, rows, scale)
+    measure === :effect &&
+        return _compute_continuous_effects!(args..., Effect(), weights, total_weight)
+    measure === :elasticity &&
+        return _compute_continuous_effects!(args..., Eyex(), weights, total_weight)
+    measure === :semielasticity_dyex &&
+        return _compute_continuous_effects!(args..., Dyex(), weights, total_weight)
+    measure === :semielasticity_eydx &&
+        return _compute_continuous_effects!(args..., Eydx(), weights, total_weight)
+    return _compute_continuous_effects!(args..., _measure_type(measure), weights, total_weight)  # throws
+end

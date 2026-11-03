@@ -94,6 +94,11 @@ function _aap_loop_allocs(engine, data_nt, rows, scale, weights)
     g = zeros(length(engine.β))
     s = Margins.predscale(scale, engine.link)
     tw = isnothing(weights) ? Float64(length(rows)) : sum(weights[rows])
+    # function barrier: `s` is a Union of the two scales here, and a closure over it would
+    # measure Julia 1.10's boxing of the dynamic call's Float64 result (16 B), not the loop
+    return _aap_loop_allocs(g, engine, data_nt, rows, s, weights, tw)
+end
+function _aap_loop_allocs(g, engine, data_nt, rows, s::Margins.PredScale, weights, tw)
     f() = Margins.average_prediction!(g, engine.row_buf, engine.compiled, data_nt, engine.β, s, rows,
                                       weights, tw, engine.offset)
     f()

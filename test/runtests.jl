@@ -12,6 +12,10 @@ using FixedEffectModels
 using RDatasets
 using Distributions
 
+# Run-environment header and a per-testset clock line (wall, CPU, time the machine was asleep)
+include("support/suite_clock.jl")
+print_suite_environment()
+
 # Start from an empty FormulaCompiler compiled-formula cache (Margins keeps no cache of its own)
 Margins.clear_engine_cache!()
 
@@ -20,6 +24,7 @@ include("statistical_validation/testing_utilities.jl")
 include("statistical_validation/bootstrap_se_validation.jl")
 include("statistical_validation/analytical_se_validation.jl")
 
+suite_phase("Core Functionality")
 @testset "Core Functionality" begin
     include("core/test_grouping.jl")
     include("core/test_column_naming.jl")
@@ -37,9 +42,11 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_derived_columns.jl")   # SetTo/Shift counterfactuals and the derived-column warning
     include("core/test_ordering.jl")          # deterministic grid, groups and scenarios order (step 9)
     include("core/test_rank_deficient.jl")    # dropped (collinear) coefficients fixed at 0 (ISSUES #10)
+    include("core/test_public_api.jl")        # API freeze: exported names, keywords, fields, result columns
     include("statistical_validation/robust_se_validation.jl")
 end
 
+suite_phase("Advanced Features")
 @testset "Advanced Features" begin
     include("features/test_elasticities.jl")
     include("features/test_categorical_mixtures.jl")
@@ -83,6 +90,7 @@ end
     include("test_profile_pairwise.jl")
 end
 
+suite_phase("Performance and Allocations")
 @testset "Performance and Allocations" begin
     include("performance/test_allocation_scaling.jl")
     include("performance/test_performance.jl")
@@ -94,6 +102,7 @@ end
     include("performance/test_population_aap_loop_zero_alloc.jl")
 end
 
+suite_phase("Statistical Correctness")
 @testset "Statistical Correctness" begin
     include("statistical_validation/backend_consistency.jl")
     include("statistical_validation/statistical_validation.jl")
@@ -108,6 +117,7 @@ end
     include("statistical_validation/function_composition_tests.jl")
 end
 
+suite_phase("Computational Primitives")
 @testset "Computational Primitives" begin
     include("primitives/test_derivatives.jl")
     include("primitives/test_links.jl")
@@ -118,6 +128,7 @@ end
     include("primitives/test_formulacompiler_public_api.jl")  # no FC internals; baseline from contrasts
 end
 
+suite_phase("Validation Tests")
 @testset "Validation Tests" begin
     include("validation/test_contrast_invariance.jl")
     include("validation/test_manual_counterfactual_validation.jl")
@@ -138,3 +149,4 @@ end
     include("validation/test_feature_matrix_oracle.jl")
     include("validation/test_golden_equivalence.jl")
 end
+suite_phase(nothing)

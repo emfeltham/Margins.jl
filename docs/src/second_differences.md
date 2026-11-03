@@ -527,7 +527,8 @@ ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effect
 sd = second_differences(ames, :x, :treated)
 ```
 
-The delta method then uses the robust covariance, and `df` is `Inf` (z inference).
+The delta method then uses the robust covariance. The degrees of freedom do not change with `vcov`: t with the residual
+df for a linear model (as Stata after `regress, vce(robust)`), z (`df = Inf`) otherwise; pass `df=` to override.
 
 ### Multiple Testing Considerations
 

@@ -35,7 +35,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
   Each is the (weighted) mean over observations of the unit-level quantity — gᵢxᵢ/ŷᵢ,
   gᵢxᵢ or gᵢ/ŷᵢ with gᵢ = ∂ŷᵢ/∂x — as in Stata `margins, eyex()/dyex()/eydx()` and R
-  `avg_slopes(slope = ...)`. (Before v2.3.0: a ratio of means such as (x̄/ȳ)·AME.)
+  `avg_slopes(slope = ...)`. (Before v3.0.0: a ratio of means such as (x̄/ȳ)·AME.)
   - Measures other than `:effect` apply to continuous variables only: naming a
     discrete variable in `vars` is an error, and auto-detected discrete variables
     are skipped with an informational message

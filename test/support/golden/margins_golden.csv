@@ -9795,72 +9795,72 @@ sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|va
 sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=z|contrast=d,0.0004801411126207529,0.003565934465241282,Inf
 sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=b - a,0.0026713903470641127,0.006327850658568642,Inf
 sd:glmm-logit/b,second_differences,modifier_level1=false|modifier_level2=true|var=g|contrast=c - a,0.006800799700233,0.013351363637089936,Inf
-rank-deficient:lm/population/effect/ad,population_effects,var=x|contrast=d,-0.02411436031492398,0.03360719535910783,391.0
-rank-deficient:lm/population/effect/ad,population_effects,var=z|contrast=d,0.13437533120215822,0.0490982691397659,391.0
-rank-deficient:lm/population/effect/ad,population_effects,var=v|contrast=d,0.31616056333234815,0.042934382798893105,391.0
-rank-deficient:lm/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877076886,0.03547081220790554,391.0
-rank-deficient:lm/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740696737,0.04334694635685702,391.0
-rank-deficient:lm/population/effect/ad,population_effects,var=b|contrast=true - false,0.29610116135484144,0.03229575560850119,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,-0.028558827429697214,0.03368085088904021,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.13101204771461694,0.049083495563008644,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=v|contrast=d,0.3161605633323508,0.0429343827988937,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.2542682686971822,0.035504337420989254,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.2094804066606305,0.043317560213618767,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.29610116135484277,0.03229575560850119,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,-0.01849564841435364,0.03393136842589665,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.13163779820737878,0.04908508070457457,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=v|contrast=d,0.3161605633323502,0.04293438279889363,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201156,0.03549545837609865,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472657,0.043319728174369986,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.2961011613548426,0.03229575560850119,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,-0.025330851054860687,0.033260566278849324,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,0.14049673063932672,0.04916454643937509,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=v|contrast=d,0.3161605633323508,0.0429343827988937,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.25440656496340464,0.035499431689807494,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257195315,0.04351191264677137,391.0
-rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.29610116135484255,0.03229575560850119,391.0
-rank-deficient:lm/predictions,population_predictions,all,5.619570819349344,0.01577188775002753,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=x|contrast=d",-0.02411436031492398,0.03360719535910781,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.13437533120215803,0.049098269139766386,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=v|contrast=d",0.31616056333235043,0.04293438279889355,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.2543173087707693,0.03547081220790554,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740696749,0.04334694635685702,391.0
-rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.29610116135484343,0.03229575560850119,391.0
-rank-deficient:logit/response/population/effect/ad,population_effects,var=x|contrast=d,-0.006084384070968944,0.03580302540776212,Inf
-rank-deficient:logit/response/population/effect/ad,population_effects,var=z|contrast=d,-0.05775625981444149,0.04936697802834879,Inf
-rank-deficient:logit/response/population/effect/ad,population_effects,var=v|contrast=d,0.05079450064745497,0.0439575155661148,Inf
-rank-deficient:logit/response/population/effect/ad,population_effects,var=g|contrast=b - a,-0.017509766872410994,0.03163932729417908,Inf
-rank-deficient:logit/response/population/effect/ad,population_effects,var=g|contrast=c - a,-0.04738273383016561,0.042991925072169916,Inf
-rank-deficient:logit/response/population/effect/ad,population_effects,var=b|contrast=true - false,0.0160703112206541,0.029226197950781234,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=x|contrast=d,-0.0060843840709498215,0.03580302540780565,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=z|contrast=d,-0.0577562598145305,0.049366978028435496,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=v|contrast=d,0.05079450064749055,0.04395751556614501,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=g|contrast=b - a,-0.017509766872410994,0.03163932729417908,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=g|contrast=c - a,-0.04738273383016561,0.042991925072169916,Inf
-rank-deficient:logit/response/population/effect/fd,population_effects,var=b|contrast=true - false,0.0160703112206541,0.029226197950781234,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=x|contrast=d,-0.02630676407495035,0.3907028732651217,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=z|contrast=d,-0.6297500579644756,0.5717100549213582,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=v|contrast=d,0.6021938979904152,0.5179509291001252,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=g|contrast=b - a,-0.14851262386667463,0.42721328918780455,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=g|contrast=c - a,-0.5632971136158251,0.4577751982256208,Inf
-rank-deficient:logit/link/population/effect/ad,population_effects,var=b|contrast=true - false,0.1935123275472665,0.35755160552848636,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=x|contrast=d,-0.026306764074897435,0.3907028732654436,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=z|contrast=d,-0.6297500579654509,0.5717100549223846,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=v|contrast=d,0.6021938979908117,0.5179509291004672,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=g|contrast=b - a,-0.14851262386667463,0.42721328918780455,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=g|contrast=c - a,-0.5632971136158251,0.4577751982256208,Inf
-rank-deficient:logit/link/population/effect/fd,population_effects,var=b|contrast=true - false,0.1935123275472665,0.35755160552848636,Inf
-rank-deficient:logit/response/predictions,population_predictions,h=p,0.9039248002990269,0.014817511157092149,Inf
-rank-deficient:logit/response/predictions,population_predictions,h=q,0.9051401494662622,0.014555761095130286,Inf
-rank-deficient:logit/response/predictions,population_predictions,h=r,0.9059339963632769,0.014567990611583214,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=x|contrast=d",-0.0021114559573463853,0.03134957172809924,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=z|contrast=d",-0.05054553679578065,0.04522279424498525,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=v|contrast=d",0.04833380075811982,0.04076948304940689,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.03165012263362479,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113601,0.04279936239537285,Inf
-rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=1.507573654|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.01529824137652136,0.02779208985149433,Inf
-"sd:rank-deficient:logit/x,v × z",second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,0.03133908263376662,0.05155753878635387,Inf
-"sd:rank-deficient:logit/x,v × z",second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=v|contrast=d,0.026649259665117123,0.04377259331296587,Inf
+rank-deficient:lm/population/effect/ad,population_effects,var=x|contrast=d,0.17715758523024813,0.05817082412761327,391.0
+rank-deficient:lm/population/effect/ad,population_effects,var=z|contrast=d,0.2782029678537581,0.0718498797118836,391.0
+rank-deficient:lm/population/effect/ad,population_effects,var=v|contrast=d,0.05744430889358185,0.025306468518478793,391.0
+rank-deficient:lm/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877076936,0.03547081220790548,391.0
+rank-deficient:lm/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740697018,0.043346946356857034,391.0
+rank-deficient:lm/population/effect/ad,population_effects,var=b|contrast=true - false,0.29610116135484077,0.0322957556085012,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.17271311811547468,0.05732743198447067,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.27483968436621664,0.07098126383808079,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=v|contrast=d,0.05744430889358253,0.025306468518479147,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.25426826869718233,0.035504337420989206,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.2094804066606335,0.04331756021361878,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.29610116135484077,0.0322957556085012,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.18277629713081897,0.059426578266801935,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.2754654348589786,0.0711428728172424,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=v|contrast=d,0.05744430889358256,0.02530646851847911,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201167,0.035495458376098604,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472976,0.04331972817437,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.29610116135484077,0.0322957556085012,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.17594109449031106,0.0577607823473524,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,0.2843243672909271,0.07343081832164049,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=v|contrast=d,0.05744430889358253,0.025306468518479147,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.2544065649634058,0.03549943168980743,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257195462,0.043511912646771386,391.0
+rank-deficient:lm/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.29610116135484077,0.0322957556085012,391.0
+rank-deficient:lm/predictions,population_predictions,all,5.619570819349345,0.015771887750027493,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.17715758523024813,0.05817082412761385,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.278202967853758,0.0718498797118835,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=v|contrast=d",0.057444308893582416,0.025306468518479057,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.2543173087707693,0.03547081220790548,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740697015,0.043346946356857034,391.0
+rank-deficient:lm/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.29610116135484077,0.0322957556085012,391.0
+rank-deficient:logit/response/population/effect/ad,population_effects,var=x|contrast=d,0.07962007967525225,0.053051941907410964,Inf
+rank-deficient:logit/response/population/effect/ad,population_effects,var=z|contrast=d,0.0454031854811629,0.06158527290177779,Inf
+rank-deficient:logit/response/population/effect/ad,population_effects,var=v|contrast=d,-0.01745498154938313,0.021923625734718503,Inf
+rank-deficient:logit/response/population/effect/ad,population_effects,var=g|contrast=b - a,-0.017509766872410976,0.031639327294179106,Inf
+rank-deficient:logit/response/population/effect/ad,population_effects,var=g|contrast=c - a,-0.047382733830165676,0.04299192507217002,Inf
+rank-deficient:logit/response/population/effect/ad,population_effects,var=b|contrast=true - false,0.01607031122065412,0.029226197950781248,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=x|contrast=d,0.07962007967537145,0.05305194190748693,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=z|contrast=d,0.04540318548125077,0.06158527290189939,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=v|contrast=d,-0.017454981549394163,0.02192362573473262,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=g|contrast=b - a,-0.017509766872410976,0.031639327294179106,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=g|contrast=c - a,-0.047382733830165676,0.04299192507217002,Inf
+rank-deficient:logit/response/population/effect/fd,population_effects,var=b|contrast=true - false,0.01607031122065412,0.029226197950781248,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=x|contrast=d,0.9897619922009632,0.6053253579338367,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=z|contrast=d,0.5932561274541844,0.8018568744729512,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=v|contrast=d,-0.20693742914274788,0.2594530248864222,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=g|contrast=b - a,-0.1485126238666747,0.4272132891878049,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=g|contrast=c - a,-0.5632971136158252,0.4577751982256209,Inf
+rank-deficient:logit/link/population/effect/ad,population_effects,var=b|contrast=true - false,0.1935123275472665,0.35755160552848647,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=x|contrast=d,0.9897619922017284,0.6053253579342341,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=z|contrast=d,0.5932561274553388,0.8018568744745108,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=v|contrast=d,-0.2069374291428468,0.25945302488655053,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=g|contrast=b - a,-0.1485126238666747,0.4272132891878049,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=g|contrast=c - a,-0.5632971136158252,0.4577751982256209,Inf
+rank-deficient:logit/link/population/effect/fd,population_effects,var=b|contrast=true - false,0.1935123275472665,0.35755160552848647,Inf
+rank-deficient:logit/response/predictions,population_predictions,h=p,0.9039248002990269,0.01481751115709212,Inf
+rank-deficient:logit/response/predictions,population_predictions,h=q,0.9051401494662623,0.014555761095130336,Inf
+rank-deficient:logit/response/predictions,population_predictions,h=r,0.9059339963632769,0.01456799061158314,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.07944112201841368,0.047368368053021595,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.04761642978879946,0.06408493404125286,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=v|contrast=d",-0.016609388608820098,0.020748530276959318,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.03165012263362486,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113612,0.0427993623953729,Inf
+rank-deficient:logit/response/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|v=3.021091472|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.015298241376521471,0.02779208985149438,Inf
+"sd:rank-deficient:logit/x,v × z",second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=x|contrast=d,2.658175790734589e-5,0.020512837411658394,Inf
+"sd:rank-deficient:logit/x,v × z",second_differences,eval_point=NaN|modifier_level1=NaN|modifier_level2=NaN|var=v|contrast=d,0.007487355666844595,0.019073129863594978,Inf
 rank-deficient:fem/population/effect/ad,population_effects,var=x|contrast=d,0.292984543886535,0.032944738035825136,2.0
 rank-deficient:fem/population/effect/ad,population_effects,var=z|contrast=d,0.4491816365757458,0.0410935617729206,2.0
 rank-deficient:fem/population/effect/ad,population_effects,var=c|contrast=d,0.0,NaN,2.0

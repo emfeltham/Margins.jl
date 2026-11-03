@@ -65,28 +65,49 @@ const GLEVELS = ["a", "b", "c"]
 # Data and models
 # ---------------------------------------------------------------------------------------
 
+# A version-independent generator for the data. Julia's MersenneTwister streams changed
+# between 1.10 and 1.11 (seeding, randn, sampling from a collection), so seeded data differed
+# by Julia version, and on 1.10 the probit fit put a cartesian grid point at η ≈ 5.9, where
+# this oracle's finite differences in β lose accuracy (SE 1e-3 off; Margins agreed with the
+# exact value to 1e-14). SplitMix64 gives the same numbers on every version.
+mutable struct _SplitMix
+    s::UInt64
+end
+function _next!(r::_SplitMix)
+    r.s += 0x9e3779b97f4a7c15
+    z = r.s
+    z = (z ⊻ (z >> 30)) * 0xbf58476d1ce4e5b9
+    z = (z ⊻ (z >> 27)) * 0x94d049bb133111eb
+    return z ⊻ (z >> 31)
+end
+_rand(r::_SplitMix) = (_next!(r) >> 11) * 0x1.0p-53                      # uniform on [0, 1)
+_rand(r::_SplitMix, n::Int) = [_rand(r) for _ in 1:n]
+_rand(r::_SplitMix, xs::AbstractVector, n::Int) = [xs[1 + floor(Int, length(xs) * _rand(r))] for _ in 1:n]
+_randn(r::_SplitMix) = sqrt(-2 * log(1 - _rand(r))) * cospi(2 * _rand(r))  # Box–Muller
+_randn(r::_SplitMix, n::Int) = [_randn(r) for _ in 1:n]
+
 function _poisson_draw(rng, λ)          # Knuth; λ is small here
     L = exp(-λ); k = 0; p = 1.0
     while true
-        p *= rand(rng); p <= L && return k; k += 1
+        p *= _rand(rng); p <= L && return k; k += 1
     end
 end
 
 """Covariates shared by every link, plus `y` drawn from a family-appropriate model."""
 function _make_data(linkname, seed)
-    rng = MersenneTwister(seed)
-    x = 0.5 .+ 2 .* rand(rng, N)
-    z = 2 .* rand(rng, N) .- 1
-    g = categorical(rand(rng, GLEVELS, N); levels=GLEVELS)
-    b = rand(rng, N) .< 0.4
-    h = categorical(rand(rng, ["p", "q", "r"], N); levels=["p", "q", "r"])
-    w = 0.3 .+ rand(rng, N)
-    w0 = copy(w); w0[rand(rng, N) .< 0.15] .= 0.0
+    rng = _SplitMix(UInt64(seed))
+    x = 0.5 .+ 2 .* _rand(rng, N)
+    z = 2 .* _rand(rng, N) .- 1
+    g = categorical(_rand(rng, GLEVELS, N); levels=GLEVELS)
+    b = _rand(rng, N) .< 0.4
+    h = categorical(_rand(rng, ["p", "q", "r"], N); levels=["p", "q", "r"])
+    w = 0.3 .+ _rand(rng, N)
+    w0 = copy(w); w0[_rand(rng, N) .< 0.15] .= 0.0
     gb = Float64.(g .== "b"); gc = Float64.(g .== "c")
     s(c0, k) = c0 .+ k .* (0.3 .* x .+ 0.2 .* z .+ 0.15 .* x .* z .+ 0.25 .* gb .- 0.15 .* x .* gc .+ 0.3 .* b)
-    u = rand(rng, N)
+    u = _rand(rng, N)
     y = if linkname == "identity"
-        s(5.0, 1.0) .+ 0.5 .* randn(rng, N)
+        s(5.0, 1.0) .+ 0.5 .* _randn(rng, N)
     elseif linkname == "logit"
         Float64.(u .< 1 ./ (1 .+ exp.(-s(2.0, 1.0))))
     elseif linkname == "probit"
@@ -97,9 +118,9 @@ function _make_data(linkname, seed)
         Float64.(_poisson_draw.(Ref(rng), exp.(s(1.3, 0.5))))
     elseif linkname == "inverse"
         μ = 1 ./ s(0.25, 0.1)
-        μ .* [sum(-log(rand(rng)) for _ in 1:6) / 6 for _ in 1:N]   # Gamma(shape 6) noise
+        μ .* [sum(-log(1 - _rand(rng)) for _ in 1:6) / 6 for _ in 1:N]   # Gamma(shape 6) noise
     elseif linkname == "negbin"
-        Float64.(_poisson_draw.(Ref(rng), exp.(s(1.3, 0.5)) .* (0.5 .+ rand(rng, N))))
+        Float64.(_poisson_draw.(Ref(rng), exp.(s(1.3, 0.5)) .* (0.5 .+ _rand(rng, N))))
     end
     return DataFrame(y=y, x=x, z=z, g=g, b=b, h=h, w=w, w0=w0)
 end

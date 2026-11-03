@@ -52,7 +52,11 @@ end
     # the deterministic data of the R oracles (test/validation/oracle_3_0_data.jl), 400 rows
     d = _oracle3_data()
     i = 1:nrow(d)
-    d.v = d.x .+ d.z                                   # collinear: v − x − z = 0
+    # collinear: v − 2x − 3z = 0. Not v = x + z: with unit coefficients the pivoted Cholesky that
+    # GLM.jl uses meets an exact tie between x and z once v is pivoted (their residuals are
+    # negatives of each other), and which one it drops then depends on rounding: Julia 1.10's
+    # OpenBLAS dropped x, 1.13's z. With 2 and 3 no two of x, z, v tie, and z is dropped everywhere.
+    d.v = 2 .* d.x .+ 3 .* d.z
     d.c = [Dict("a" => 0.7, "b" => 1.9, "c" => -0.4)[string(l)] for l in d.g]   # constant within g
     d.cl = mod.(i, 10)
 
@@ -61,7 +65,7 @@ end
     m_lg = glm(@formula(yb ~ x * w + g + v + z), d, Binomial(), LogitLink(); TIGHT...)
     r_lg = glm(@formula(yb ~ x * w + g + v), d, Binomial(), LogitLink(); TIGHT...)
     jz = findfirst(==("z"), coefnames(m_lm))
-    grid = DataFrame(x = [1.0, 2.0], w = [1.2, 1.2], z = [0.1, 0.1], v = [1.1, 2.1], g = ["b", "b"])
+    grid = DataFrame(x = [1.0, 2.0], w = [1.2, 1.2], z = [0.1, 0.1], v = [2.3, 4.3], g = ["b", "b"])
     rgrid = select(grid, Not(:z))
 
     @testset "detection: the model's own rank information" begin

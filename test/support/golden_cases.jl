@@ -399,15 +399,16 @@ function _mixed_fem_second_difference_cases!(out)
 end
 
 # Rank-deficient fits (added before the 3.0 API freeze, ISSUES #10, after the checks in
-# test/core/test_rank_deficient.jl and the R oracle rank_deficient_reference.csv): `v = x + z` makes
-# one of x, z, v redundant in lm and logit, and `c` (a value per level of h) is collinear with fe(h).
+# test/core/test_rank_deficient.jl and the R oracle rank_deficient_reference.csv): `v = 2x + 3z` makes
+# one of x, z, v redundant in lm and logit (z is dropped; `v = x + z` made x and z tie in the
+# pivoted Cholesky, so the dropped one depended on the BLAS version), and `c` (a value per level of h) is collinear with fe(h).
 # The dropped coefficient is fixed at 0 (Σ's rows and columns zeroed); a quantity that loads only on
 # it has SE NaN. Every call warns once (captured here, so the warnings do not reach the test log).
 const FRD = @formula(y ~ x * z + x * g + b + v)
 const FRD_FE = @formula(y ~ x * z + x * g + b + c + fe(h))
 function _rank_deficient_data(linkname)
     d = matrix_data(linkname)
-    d.v = d.x .+ d.z
+    d.v = 2 .* d.x .+ 3 .* d.z
     d.c = [Dict("p" => 0.7, "q" => 1.9, "r" => -0.4)[string(l)] for l in d.h]
     return d
 end
@@ -518,7 +519,12 @@ summation order (e.g. the means in `means_grid`) at the ulp level.
 function fingerprint()
     vers = join(["$(nameof(M))=$(pkgversion(M))" for M in (GLM, StatsModels, CategoricalArrays,
                                                          MixedModels, CovarianceMatrices, FixedEffectModels)], ";")
-    return vers * ";check_bounds=" * string(Base.JLOptions().check_bounds)
+    # Julia's minor version: the BLAS/LAPACK it ships (GLM fits), MixedModels' optimizer path and
+    # summation order differ, so another Julia gives last-digit differences everywhere and a
+    # slightly different GLMM fit (measured at the 3.0 freeze: Julia 1.12 and 1.10 agree with the
+    # 1.13 snapshot to 5.6e-13 and 8.6e-13 outside GLMMs, GLMM rows to 1.9e-2)
+    return vers * ";check_bounds=" * string(Base.JLOptions().check_bounds) *
+           ";julia=" * string(VERSION.major, ".", VERSION.minor)
 end
 
 end # module

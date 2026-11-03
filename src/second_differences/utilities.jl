@@ -75,7 +75,7 @@ const _SD_WEIGHTS_SOURCE_KEY = "weights_source"
 # `at=:mean` / `:median` use the shared `typical_value` (core/typical_values.jl), with the
 # weighted mean and the weighted median defined there.
 
-# Continuous effects are labelled "dy/dx" (v2.3.0; the scenarios/groups path used to say
+# Continuous effects are labelled "dy/dx" (v3.0.0; the scenarios/groups path used to say
 # "derivative"). "derivative" is still accepted wherever a contrast label is passed in.
 _contrast_label(c::AbstractString) = c == "derivative" ? "dy/dx" : String(c)
 

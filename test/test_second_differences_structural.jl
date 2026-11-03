@@ -53,7 +53,10 @@ using Random
     @testset "a real interaction is never flagged, even when its coefficient is ~0" begin
         sd = @test_logs second_differences(lmod, df, :x, :w)
         @test !isnan(sd.p_value[1]) && sd.se[1] > 0
-        d0 = copy(df); d0.y0 = 0.5 .+ 0.4d0.x .+ 0.3d0.z .+ 0.5d0.t .+ randn(n)    # true x:t effect is 0
+        # true x:t effect is 0. The noise has its own RNG: a bare randn(n) here replays the
+        # testset's seeded stream, which gave df.x again, so y0 was exactly linear in the
+        # regressors and the interaction was 0 ± 1e-17 (it passed or failed on rounding)
+        d0 = copy(df); d0.y0 = 0.5 .+ 0.4d0.x .+ 0.3d0.z .+ 0.5d0.t .+ randn(Random.MersenneTwister(12), n)
         m0 = lm(@formula(y0 ~ x * t + z + w + g), d0)
         s0 = @test_logs second_differences(m0, d0, :x, :t)                          # estimated ≈ 0, but estimable
         @test !isnan(s0.p_value[1]) && s0.se[1] > 0 && abs(s0.second_diff[1]) < 5 * s0.se[1]

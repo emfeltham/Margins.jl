@@ -5,8 +5,9 @@
 # dropped coefficient as fixed at 0 (it is not in the Jacobian), and reports a quantity whose
 # standard error is then 0 (one that depends only on the dropped coefficient) with SE NA.
 #
-#   v = x + z           (lm, logit: `z` is dropped; GLM.jl's pivoted Cholesky drops `z` too, and
-#                        R drops the last aliased column, so `z` is placed last in the formula)
+#   v = 2x + 3z         (lm, logit: `z` is dropped; GLM.jl's pivoted Cholesky drops `z` too, and
+#                        R drops the last aliased column, so `z` is placed last in the formula;
+#                        with v = x + z, x and z tie in GLM.jl's pivoting and the BLAS decides)
 #   c = level value of g (feols with `| g`: `c` is collinear with the fixed effect and removed)
 #
 # Quantities: AME of every variable (the dropped `z` / `c` included: estimate 0, SE NA), AME within
@@ -24,7 +25,7 @@ suppressPackageStartupMessages({library(marginaleffects); library(fixest)})
 options(marginaleffects_safe = FALSE, warn = -1)   # the rank-deficiency warnings are expected
 source("oracle_data.R")
 d <- oracle_data()
-d$v <- d$x + d$z
+d$v <- 2 * d$x + 3 * d$z
 d$c <- c(a = 0.7, b = 1.9, c = -0.4)[as.character(d$g)]
 # glm's QR rank tolerance is min(1e-7, epsilon / 1000): at the 1e-14 of the other scripts (1e-17) the
 # collinear column is not detected, so epsilon is 1e-11 here (QR tolerance 1e-14; the IRLS iterate is
@@ -64,7 +65,7 @@ quantities <- function(m, mn, tp, drop) {
   r <- do.call(avg_predictions, c(common, list(by = "g")))
   add("aap", r, as.character(r$g))
   # effects at one grid row (every variable given, so nothing is filled in)
-  nd <- data.frame(x = 1.5, w = 1.2, z = 0.1, v = 1.6, g = factor("b", levels = levels(d$g)), c = 1.9)
+  nd <- data.frame(x = 1.5, w = 1.2, z = 0.1, v = 3.3, g = factor("b", levels = levels(d$g)), c = 1.9)
   vars <- if (mn == "fem") c("x", "w", "z", "c") else c("x", "w", "v", "z")
   r <- do.call(slopes, list(m, type = tp, numderiv = "richardson", eps = 1e-4, variables = keep(vars), newdata = nd))
   add("mem", r, "all")

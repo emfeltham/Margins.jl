@@ -137,12 +137,15 @@ using Margins
     end
 
     @testset "weighted lm: frequency-weight convention, new observation of weight 1" begin
-        # R reference (Rscript, 2026-10-29): with integer weights, Margins equals R's
+        # R reference (R 4.6.1, 2026-10-30): with integer weights, Margins equals R's
         # predict(lm(y ~ x + z), newdata, interval = "prediction") on the data with each row
         # repeated w times; R's lm(..., weights = w) (precision weights) gives another interval.
-        rng = MersenneTwister(5); nw = 40
-        dw = DataFrame(x = randn(rng, nw), z = randn(rng, nw), w = Float64.(rand(rng, 1:4, nw)))
-        dw.y = 1 .+ 2 .* dw.x .- dw.z .+ randn(rng, nw)
+        # Deterministic data: the R values hold on every Julia version (MersenneTwister's randn
+        # stream differs between Julia 1.10 and 1.11+, which broke a seeded version of this test).
+        fr(t) = t - floor(t); nw = 40; iw = 1:nw
+        dw = DataFrame(x = 2 .* fr.(iw .* 0.6180339887498949) .- 1, z = 2 .* fr.(iw .* 0.7548776662466927) .- 1,
+                       w = Float64.(1 .+ mod.(iw .* 7 .+ div.(iw, 3), 4)))
+        dw.y = 1 .+ 2 .* dw.x .- dw.z .+ (fr.(iw .* iw .* 0.1234567891234) .- 0.5) .* 2
         mw = lm(@formula(y ~ x + z), dw; wts = dw.w)
         de = dw[reduce(vcat, [fill(i, Int(dw.w[i])) for i in 1:nw]), :]
         me = lm(@formula(y ~ x + z), de)
@@ -155,8 +158,8 @@ using Margins
         @test rw.ci_upper ≈ re.ci_upper rtol = 1e-10
         @test rw.df == re.df == fill(sum(dw.w) - 3, 2)
         # The R values (frequency-expanded fit)
-        @test rw.ci_lower ≈ [-0.9522512, 1.3569178] atol = 1e-6
-        @test rw.ci_upper ≈ [2.797211, 5.141951] atol = 1e-6
+        @test rw.ci_lower ≈ [-0.8333157888, 0.9090820055] atol = 1e-9
+        @test rw.ci_upper ≈ [1.5516867982, 3.3361728605] atol = 1e-9
         # Hand computation: ŷ ± t(Σw − p)·√(SE² + Σwr²/(Σw − p))
         X = [1.0 0.0 0.5; 1.0 1.0 0.5]
         σ2 = deviance(mw) / (sum(dw.w) - 3)
