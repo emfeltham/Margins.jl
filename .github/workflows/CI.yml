@@ -17,7 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1'    # This will use the latest stable 1.x release (currently 1.11)
+          - '1.10' # Lowest supported version ([compat] julia = "1.10")
+          - '1'    # Latest stable 1.x release
           - 'nightly'
         os:
           - ubuntu-latest

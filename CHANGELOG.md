@@ -12,6 +12,18 @@ Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It co
 
 Highlights: a new output schema (`statistic` + `df` with t inference for linear models, `over_` group columns, one second-difference schema); population elasticities now match Stata and R; a single model-level `second_differences`; concurrent calls are safe and Margins keeps no engine cache (no stale results after `refit!` or in-place `vcov` edits); a warning when a precomputed column (`x2 = x.^2`) would be held fixed by a counterfactual; numerous correctness fixes. FormulaCompiler ≥ 1.5 is required.
 
+### Compat: raised lower bounds, all tested
+
+Every lower bound in `[compat]` is now one the full test suite passes at: Julia 1.10 with each dependency at its lowest allowed version (Margins 34,041 tests, FormulaCompiler 2,881). The old bounds had never been tested, and several did not work:
+
+| Package | Was | Now | Why |
+|---|---|---|---|
+| CategoricalArrays | `"0.10, 1"` | `"1.0.1"` | Under 0.10, `groups = :g` with a categorical `g` failed with `MethodError: levelcode(::String)` (`unique` returns plain values there). Under 1.0.0, MixedModels fits with a categorical grouping factor fail upstream. |
+| StatsModels | `"0.7"` | `"0.7.9"` | Below 0.7.5, no model with a CategoricalArrays 1.x column can be fitted (`ContrastsMatrix` `MethodError`, upstream); MixedModels grouping needs 0.7.9. |
+| CovarianceMatrices | `"0.30"` | `"0.30.3"` | Clustered `CR1` fails upstream below 0.30.3 (`ArgumentError: tuple must be non-empty`). |
+| FixedEffectModels | `"1.11"` | `"1.13.2"` | FixedEffectModels' residual df changed: 1.11–1.12 count one more absorbed degree of freedom than 1.13.2+, and 1.13.0–1.13.1 give clustered fits G − 2. Margins takes the t df from the model, so its intervals followed; 1.13.2+ is the convention validated against fixest. |
+| StatsBase | `"0.33, 0.34"` | `"0.34"` | 0.33 cannot be installed together with MixedModels 4.35 or FixedEffectModels 1.13. |
+
 ### Breaking: output schema
 
 Five changes to the columns of `DataFrame(result)` and of the second-difference tables. Estimates
