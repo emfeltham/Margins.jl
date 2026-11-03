@@ -502,53 +502,25 @@ function _compute_categorical_context_effect(
         var_col, context_indices, contrasts, engine.model, var, context_data
     )
 
-    # Pre-allocate buffers for kernel
-    contrast_buf = Vector{Float64}(undef, length(engine.β))
-    gradient_buf = Vector{Float64}(undef, length(engine.β))
-    gradient_accum = Vector{Float64}(undef, length(engine.β))
-
-    # Build results
-    results = DataFrame(
-        variable = String[],
-        contrast = String[],
-        estimate = Float64[],
-        se = Float64[],
-        n = Int[]
+    # All pairs in one pass over the context's rows (shared categorical kernel)
+    n_pairs = length(contrast_pairs)
+    ames = Vector{Float64}(undef, n_pairs)
+    ses = Vector{Float64}(undef, n_pairs)
+    gradients_matrix = Matrix{Float64}(undef, n_pairs, length(engine.β))
+    categorical_contrast_ame_batch!(
+        ames, ses, gradients_matrix, engine.contrast_buf,
+        context_evaluator, var, contrast_pairs,
+        engine.β, engine.Σ, predscale(scale, engine.link),
+        context_indices, weights
     )
 
-    gradients_matrix = Matrix{Float64}(undef, length(contrast_pairs), length(engine.β))
-
-    # Compute each contrast
-    # The kernel selects the computation scale from its link argument: `nothing` ⇒ link
-    # scale (Δη), a link object ⇒ response scale (Δμ). Resolve it once, concretely.
-    for (i, pair) in enumerate(contrast_pairs)
-        # Use the zero-allocation categorical kernel
-        ame, se = if scale === :link
-            categorical_contrast_ame!(
-                contrast_buf, gradient_buf, gradient_accum,
-                context_evaluator, var, pair.level1, pair.level2,
-                engine.β, engine.Σ, nothing,
-                context_indices, weights
-            )
-        else
-            categorical_contrast_ame!(
-                contrast_buf, gradient_buf, gradient_accum,
-                context_evaluator, var, pair.level1, pair.level2,
-                engine.β, engine.Σ, engine.link,
-                context_indices, weights
-            )
-        end
-
-        # Store results
-        push!(results.variable, string(var))
-        push!(results.contrast, "$(pair.level2) - $(pair.level1)")
-        push!(results.estimate, ame)
-        push!(results.se, se)
-        push!(results.n, length(context_indices))
-
-        # Store gradient (already computed in gradient_accum by kernel)
-        gradients_matrix[i, :] = gradient_accum
-    end
+    results = DataFrame(
+        variable = fill(string(var), n_pairs),
+        contrast = ["$(pair.level2) - $(pair.level1)" for pair in contrast_pairs],
+        estimate = ames,
+        se = ses,
+        n = fill(length(context_indices), n_pairs)
+    )
 
     return (results, gradients_matrix)
 end

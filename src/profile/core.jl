@@ -812,8 +812,6 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
 
     # Categorical variable buffers
     contrast_buf = Vector{Float64}(undef, length(refgrid_compiled))
-    η_baseline_buf = Vector{Float64}(undef, length(refgrid_compiled))
-    gradient_buf = Vector{Float64}(undef, n_params)
 
     # Step 5: Process each profile (extracted from original lines 1305-1446)
     # Process only variables that should be computed (continuous + non-mixture categorical)
@@ -838,7 +836,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
                                                            refgrid_contrasts[var], reference_grid, profile_idx,
                                                            scale, categorical_modes[var],
                                                            categorical_pairs[var],
-                                                           contrast_buf, η_baseline_buf, gradient_buf)
+                                                           contrast_buf)
         end
 
         if row_idx > first_row_of_profile
@@ -1025,8 +1023,7 @@ Extracted from original lines 1377-1444.
 function _process_profile_categorical_variable!(results, G, row_idx, engine, var,
                                               refgrid_contrast, reference_grid, profile_idx,
                                               scale::Symbol, mode::Symbol, contrast_pairs,
-                                              contrast_buf::Vector{Float64}, η_baseline_buf::Vector{Float64},
-                                              gradient_buf::Vector{Float64})
+                                              contrast_buf::Vector{Float64})
     # Which contrasts does this grid row contribute?
     #   :row_specific — the row pins a level, so the only contrast is that level against the
     #                   baseline; a row already at the baseline contributes nothing.
@@ -1042,23 +1039,13 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
     profile_nt = _profile_display_row(reference_grid, profile_idx)
 
     for (from_level, to_level) in pairs_for_row
-        # Reuse the population categorical kernel over the single grid row. It selects the
-        # computation scale from its link argument (`nothing` ⇒ link scale) and leaves the
-        # parameter gradient in engine.gβ_accumulator, so estimate and SE always come from
-        # the same scale.
-        (effect, se) = if scale === :link
-            categorical_contrast_ame!(
-                contrast_buf, gradient_buf, engine.gβ_accumulator,
-                refgrid_contrast, var, from_level, to_level,
-                engine.β, engine.Σ, nothing, profile_idx:profile_idx, nothing
-            )
-        else
-            categorical_contrast_ame!(
-                contrast_buf, gradient_buf, engine.gβ_accumulator,
-                refgrid_contrast, var, from_level, to_level,
-                engine.β, engine.Σ, engine.link, profile_idx:profile_idx, nothing
-            )
-        end
+        # The categorical kernel over the single grid row, on the requested scale; it leaves
+        # the parameter gradient in engine.gβ_accumulator.
+        (effect, se) = categorical_contrast_ame!(
+            contrast_buf, engine.gβ_accumulator,
+            refgrid_contrast, var, from_level, to_level,
+            engine.β, engine.Σ, predscale(scale, engine.link), profile_idx:profile_idx, nothing
+        )
 
         results.variable[row_idx] = string(var)
         results.contrast[row_idx] = "$(to_level) - $(from_level)"

@@ -96,8 +96,6 @@ Fields:
 - `gβ_accumulator::Vector{Float64}`: Pre-allocated buffer for AME gradient accumulation
 - `row_buf::Vector{Float64}`: Pre-allocated buffer for model row (design matrix row) computations
 - `contrast_buf::Vector{Float64}`: Pre-allocated buffer for categorical contrast vectors (Phase 4)
-- `contrast_grad_buf::Vector{Float64}`: Pre-allocated buffer for per-row categorical gradients (Phase 4)
-- `contrast_grad_accum::Vector{Float64}`: Pre-allocated buffer for accumulated categorical gradients (Phase 4)
 - `continuous_vars::Vector{Symbol}`: Detected continuous variables
 - `categorical_vars::Vector{Symbol}`: Detected categorical variables
 - `model::Any`: Reference to original model
@@ -154,8 +152,6 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, D<:DerivativeSupport, C<:Unif
 
     # Categorical effects buffers (Phase 4 zero-allocation optimization)
     contrast_buf::Vector{Float64}           # Contrast vector buffer (length n_params)
-    contrast_grad_buf::Vector{Float64}      # Per-row gradient buffer (length n_params)
-    contrast_grad_accum::Vector{Float64}    # Accumulated gradient across rows (length n_params)
 
     # Phase 2.1: Persistent EffectsBuffers for zero-allocation population_margins_raw!
     effects_buffers::EffectsBuffers  # Reusable buffer container for raw API
@@ -364,8 +360,6 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     # Initialize categorical effects buffers (Phase 4 zero-allocation optimization)
     # These buffers enable zero-allocation categorical AME computation
     contrast_buf = Vector{Float64}(undef, n_coef)        # Contrast vector buffer
-    contrast_grad_buf = Vector{Float64}(undef, n_coef)   # Per-row gradient buffer
-    contrast_grad_accum = Vector{Float64}(undef, n_coef) # Accumulated gradient buffer
 
     # Initialize persistent EffectsBuffers for zero-allocation raw API
     # Size for maximum possible variables (all engine vars)
@@ -390,7 +384,7 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
         batch_ame_values, batch_gradients, batch_var_indices, deta_dx_buf,
         Vector{Int}(undef, max(n_continuous, 1)),  # cont_var_indices_buf
         g_all_buf, Gβ_all_buf,
-        contrast_buf, contrast_grad_buf, contrast_grad_accum,  # Categorical buffers (Phase 4)
+        contrast_buf,  # Categorical contrast buffer
         effects_buffers,  # persistent EffectsBuffers for zero-allocation raw API
         copy(continuous_vars), copy(categorical_vars),
         model, coef(model), covariance_matrix, _auto_link(model), vars, data_nt
@@ -509,8 +503,6 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivati
     needs_rebuild = false
     new_de = engine.de
     new_contrast_buf = engine.contrast_buf
-    new_contrast_grad_buf = engine.contrast_grad_buf
-    new_contrast_grad_accum = engine.contrast_grad_accum
 
     # Validate derivative evaluator buffers
     if !isnothing(engine.de)
@@ -535,18 +527,6 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivati
         new_contrast_buf = Vector{Float64}(undef, required_size)
     end
 
-    if length(engine.contrast_grad_buf) != required_size
-        @warn "Categorical contrast_grad_buf incorrectly sized: $(length(engine.contrast_grad_buf)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_grad_buf = Vector{Float64}(undef, required_size)
-    end
-
-    if length(engine.contrast_grad_accum) != required_size
-        @warn "Categorical contrast_grad_accum incorrectly sized: $(length(engine.contrast_grad_accum)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_grad_accum = Vector{Float64}(undef, required_size)
-    end
-
     # Rebuild engine if any buffers were invalid
     if needs_rebuild
         return MarginsEngine{L,U,HasDerivatives,C}(
@@ -555,7 +535,7 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,HasDerivati
             engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
             engine.deta_dx_buf, engine.cont_var_indices_buf,
             engine.g_all_buf, engine.Gβ_all_buf,
-            new_contrast_buf, new_contrast_grad_buf, new_contrast_grad_accum,  # Categorical buffers (Phase 4)
+            new_contrast_buf,  # Categorical contrast buffer
             engine.effects_buffers,
             engine.continuous_vars, engine.categorical_vars,
             engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt
@@ -577,26 +557,12 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivativ
     required_size = length(engine.β)
     needs_rebuild = false
     new_contrast_buf = engine.contrast_buf
-    new_contrast_grad_buf = engine.contrast_grad_buf
-    new_contrast_grad_accum = engine.contrast_grad_accum
 
     # Validate categorical buffers (Phase 4)
     if length(engine.contrast_buf) != required_size
         @warn "Categorical contrast_buf incorrectly sized: $(length(engine.contrast_buf)) != $required_size. Rebuilding."
         needs_rebuild = true
         new_contrast_buf = Vector{Float64}(undef, required_size)
-    end
-
-    if length(engine.contrast_grad_buf) != required_size
-        @warn "Categorical contrast_grad_buf incorrectly sized: $(length(engine.contrast_grad_buf)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_grad_buf = Vector{Float64}(undef, required_size)
-    end
-
-    if length(engine.contrast_grad_accum) != required_size
-        @warn "Categorical contrast_grad_accum incorrectly sized: $(length(engine.contrast_grad_accum)) != $required_size. Rebuilding."
-        needs_rebuild = true
-        new_contrast_grad_accum = Vector{Float64}(undef, required_size)
     end
 
     # Rebuild engine if any buffers were invalid
@@ -607,7 +573,7 @@ function verify_and_repair_engine_buffers!(engine::MarginsEngine{L,U,NoDerivativ
             engine.batch_ame_values, engine.batch_gradients, engine.batch_var_indices,
             engine.deta_dx_buf, engine.cont_var_indices_buf,
             engine.g_all_buf, engine.Gβ_all_buf,
-            new_contrast_buf, new_contrast_grad_buf, new_contrast_grad_accum,  # Categorical buffers (Phase 4)
+            new_contrast_buf,  # Categorical contrast buffer
             engine.effects_buffers,
             engine.continuous_vars, engine.categorical_vars,
             engine.model, engine.β, engine.Σ, engine.link, engine.vars, engine.data_nt

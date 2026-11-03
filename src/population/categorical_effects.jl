@@ -40,13 +40,9 @@ Zero-allocation architecture (Phase 4 complete):
 5. Return count and pairs (no intermediate allocations)
 
 # Scale Handling
-The kernel selects the computation scale from its `link` argument, not from a symbol:
-- `scale === :link` ⇒ pass `nothing`: AME = mean(Δη) = mean(ΔX'β), ∇β = mean(ΔX)
-- `scale === :response` ⇒ pass `engine.link`: AME = mean(g⁻¹(η₁) - g⁻¹(η₀)),
-  ∇β = mean(g'(η₁)X₁ - g'(η₀)X₀)
-
-Both the estimate and the delta-method gradient must come from the same scale, so the
-branch below covers them together. On the link scale a baseline contrast for a categorical
+`scale` becomes a `PredScale` (`predscale(scale, engine.link)`): on the link scale
+AME = mean(ΔX'β), ∇β = mean(ΔX); on the response scale AME = mean(g⁻¹(η₁) − g⁻¹(η₀)),
+∇β = mean(g′(η₁)X₁ − g′(η₀)X₀). On the link scale a baseline contrast for a categorical
 that does not interact with anything equals its coefficient exactly, which is what the
 regression tests assert.
 
@@ -54,7 +50,6 @@ regression tests assert.
 - **0 bytes allocated** when arrays are pre-sized correctly
 - ContrastEvaluator reused from engine (no construction overhead)
 - contrast_modelrow! uses pre-allocated engine buffers (0 bytes)
-- contrast_gradient! uses pre-allocated engine buffers (0 bytes)
 - categorical_contrast_ame_batch! stores results in-place (0 bytes)
 - Uses views to avoid array copies
 
@@ -100,31 +95,16 @@ function _compute_categorical_contrasts!(
         error("Pre-allocated gradient matrix wrong size: need ($n_contrasts, $(length(engine.β))), got $(size(gradient_matrix))")
     end
 
-    # Zero-allocation computation using views (Phase 4 optimization)
-    # The kernel selects the computation scale from its link argument: `nothing` ⇒ link
-    # scale, a link object ⇒ response scale. Branch here (rather than passing a
-    # Union{Nothing,L}) so the batch call is a concrete, fully-specialized dispatch.
-    if scale === :link
-        categorical_contrast_ame_batch!(
-            view(results_ame, 1:n_contrasts),
-            view(results_se, 1:n_contrasts),
-            view(gradient_matrix, 1:n_contrasts, :),
-            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
-            engine.contrast, var, contrast_pairs,
-            engine.β, engine.Σ, nothing,
-            rows, weights
-        )
-    else
-        categorical_contrast_ame_batch!(
-            view(results_ame, 1:n_contrasts),
-            view(results_se, 1:n_contrasts),
-            view(gradient_matrix, 1:n_contrasts, :),
-            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
-            engine.contrast, var, contrast_pairs,
-            engine.β, engine.Σ, engine.link,
-            rows, weights
-        )
-    end
+    # All pairs in one pass over the rows (X₀ evaluated once per row and level), on the
+    # requested scale: estimate and delta-method gradient always come from the same scale
+    categorical_contrast_ame_batch!(
+        view(results_ame, 1:n_contrasts),
+        view(results_se, 1:n_contrasts),
+        view(gradient_matrix, 1:n_contrasts, :),
+        engine.contrast_buf, engine.contrast, var, contrast_pairs,
+        engine.β, engine.Σ, predscale(scale, engine.link),
+        rows, weights
+    )
 
     return n_contrasts, contrast_pairs
 end

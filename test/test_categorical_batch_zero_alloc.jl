@@ -35,9 +35,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         for _ in 1:10
             categorical_contrast_ame_batch!(
                 results_ame, results_se, gradient_matrix,
-                engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+                engine.contrast_buf,
                 engine.contrast, :treatment, contrast_pairs,
-                engine.β, engine.Σ, engine.link,
+                engine.β, engine.Σ, Margins.ResponseScale(engine.link),
                 rows, nothing
             )
         end
@@ -45,9 +45,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         # Benchmark for zero allocations
         b = @benchmark categorical_contrast_ame_batch!(
             $results_ame, $results_se, $gradient_matrix,
-            $(engine.contrast_buf), $(engine.contrast_grad_buf), $(engine.contrast_grad_accum),
+            $(engine.contrast_buf),
             $(engine.contrast), :treatment, $contrast_pairs,
-            $(engine.β), $(engine.Σ), $(engine.link),
+            $(engine.β), $(engine.Σ), $(Margins.ResponseScale(engine.link)),
             $rows, nothing
         ) samples=100
 
@@ -82,9 +82,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         for _ in 1:10
             categorical_contrast_ame_batch!(
                 results_ame, results_se, gradient_matrix,
-                engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+                engine.contrast_buf,
                 engine.contrast, :treatment, contrast_pairs,
-                engine.β, engine.Σ, engine.link,
+                engine.β, engine.Σ, Margins.ResponseScale(engine.link),
                 rows, weights
             )
         end
@@ -92,9 +92,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         # Benchmark
         b = @benchmark categorical_contrast_ame_batch!(
             $results_ame, $results_se, $gradient_matrix,
-            $(engine.contrast_buf), $(engine.contrast_grad_buf), $(engine.contrast_grad_accum),
+            $(engine.contrast_buf),
             $(engine.contrast), :treatment, $contrast_pairs,
-            $(engine.β), $(engine.Σ), $(engine.link),
+            $(engine.β), $(engine.Σ), $(Margins.ResponseScale(engine.link)),
             $rows, $weights
         ) samples=100
 
@@ -133,9 +133,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         for _ in 1:10
             categorical_contrast_ame_batch!(
                 results_ame, results_se, gradient_matrix,
-                engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+                engine.contrast_buf,
                 engine.contrast, :treated, contrast_pairs,
-                engine.β, engine.Σ, engine.link,
+                engine.β, engine.Σ, Margins.ResponseScale(engine.link),
                 rows, nothing
             )
         end
@@ -143,9 +143,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         # Benchmark
         b = @benchmark categorical_contrast_ame_batch!(
             $results_ame, $results_se, $gradient_matrix,
-            $(engine.contrast_buf), $(engine.contrast_grad_buf), $(engine.contrast_grad_accum),
+            $(engine.contrast_buf),
             $(engine.contrast), :treated, $contrast_pairs,
-            $(engine.β), $(engine.Σ), $(engine.link),
+            $(engine.β), $(engine.Σ), $(Margins.ResponseScale(engine.link)),
             $rows, nothing
         ) samples=100
 
@@ -179,18 +179,18 @@ using Margins: generate_contrast_pairs, ContrastPair
 
         categorical_contrast_ame_batch!(
             results_ame_batch, results_se_batch, gradient_matrix_batch,
-            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+            engine.contrast_buf,
             engine.contrast, :treatment, contrast_pairs,
-            engine.β, engine.Σ, engine.link,
+            engine.β, engine.Σ, Margins.ResponseScale(engine.link),
             rows, nothing
         )
 
         # Call single contrast function for each pair
         for (i, pair) in enumerate(contrast_pairs)
             ame, se = Margins.categorical_contrast_ame!(
-                engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+                engine.contrast_buf, engine.gβ_accumulator,
                 engine.contrast, :treatment, pair.level1, pair.level2,
-                engine.β, engine.Σ, engine.link, rows, nothing
+                engine.β, engine.Σ, Margins.ResponseScale(engine.link), rows, nothing
             )
 
             # Check results match
@@ -198,7 +198,7 @@ using Margins: generate_contrast_pairs, ContrastPair
             @test results_se_batch[i] ≈ se rtol=1e-10
 
             # Check gradient matches
-            @test all(gradient_matrix_batch[i, :] .≈ engine.contrast_grad_accum)
+            @test all(gradient_matrix_batch[i, :] .≈ engine.gβ_accumulator)
         end
     end
 
@@ -217,9 +217,9 @@ using Margins: generate_contrast_pairs, ContrastPair
         # Should not error with correctly sized arrays
         @test_nowarn categorical_contrast_ame_batch!(
             results_ame, results_se, gradient_matrix,
-            engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
+            engine.contrast_buf,
             engine.contrast, :treatment, contrast_pairs,
-            engine.β, engine.Σ, engine.link,
+            engine.β, engine.Σ, Margins.ResponseScale(engine.link),
             rows, nothing
         )
 
@@ -227,5 +227,30 @@ using Margins: generate_contrast_pairs, ContrastPair
         @test all(!isnan, results_ame)
         @test all(!isnan, results_se)
         @test all(!isnan, gradient_matrix)
+    end
+
+    @testset "Batched pairs reproduce the single-pair kernel (pairwise, both scales, weights)" begin
+        # The batch evaluates X₀ once per row and level; the arithmetic per pair is the same
+        # as the single-pair kernel's, so estimates and gradients agree exactly.
+        engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
+        var_col = getproperty(data_nt, :treatment)
+        rows = collect(1:n)
+        w = rand(n); w[1:5:end] .= 0.0
+        for contrasts in (:baseline, :pairwise), s in (Margins.LinkScale(), Margins.ResponseScale(engine.link)),
+            weights in (nothing, w)
+            pairs = generate_contrast_pairs(var_col, rows, contrasts, model, :treatment, data_nt)
+            k = length(pairs)
+            ame_b = zeros(k); se_b = zeros(k); G_b = zeros(k, n_coef)
+            categorical_contrast_ame_batch!(ame_b, se_b, G_b, engine.contrast_buf, engine.contrast,
+                                            :treatment, pairs, engine.β, engine.Σ, s, rows, weights)
+            for (i, pair) in enumerate(pairs)
+                ame, se = Margins.categorical_contrast_ame!(
+                    engine.contrast_buf, engine.gβ_accumulator, engine.contrast, :treatment,
+                    pair.level1, pair.level2, engine.β, engine.Σ, s, rows, weights)
+                @test ame_b[i] == ame
+                @test G_b[i, :] == engine.gβ_accumulator
+                @test se_b[i] ≈ se rtol = 1e-14
+            end
+        end
     end
 end

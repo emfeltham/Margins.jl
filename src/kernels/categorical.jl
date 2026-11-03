@@ -1,118 +1,81 @@
 # kernels/categorical.jl
-# Zero-allocation categorical effects kernel using FormulaCompiler primitives
 #
-# This module implements the categorical kernel layer (MARGINS_PLAN.md Section 4.2)
-# using FormulaCompiler's ContrastEvaluator for zero-allocation contrast computation.
+# The categorical-contrast kernel shared by the population, scenarios/groups and profile
+# paths: the (weighted) average over rows of a discrete change ΔŷX = ŷ(X₁) − ŷ(X₀), where
+# X₀ / X₁ are the model row with the variable set to the "from" / "to" level, on a
+# `PredScale` (link: Δη = (X₁ − X₀)'β; response: g⁻¹(η₁) − g⁻¹(η₀)), with its delta-method
+# gradient and standard error.
 
-using FormulaCompiler: contrast_modelrow!
-# contrast_gradient! is FormulaCompiler's (see src/inference/delta_method.jl)
+using FormulaCompiler: contrast_modelrow!, reset_all_counterfactuals!, update_counterfactual_for_var!
 using LinearAlgebra: dot
-using GLM: linkinv
 
 """
-    _accumulate_contrast_gradient!(acc, w, contrast_buf, evaluator, β, link)
+    _level_modelrow!(buf, evaluator::ContrastEvaluator, row, var, level) -> buf
 
-Add `w × ∇β` of one row's contrast to `acc`, reusing the X₀/X₁ rows that
-`contrast_modelrow!` already left in `evaluator.y_from_buf` / `evaluator.y_to_buf`.
-Equivalent to `contrast_gradient!` followed by `acc .+= w .* ∇β`, without evaluating
-the model rows a second time.
-
-- Link scale (`link === nothing`): ∇β = X₁ - X₀ (`contrast_buf`)
-- Response scale: ∇β = g'(η₁) X₁ - g'(η₀) X₀
+The model row at `row` with `var` set to `level`, evaluated exactly as
+`contrast_modelrow!` evaluates each endpoint of a contrast (all counterfactuals reset
+before and after), so the batched kernel below reproduces its rows bitwise.
 """
-@inline function _accumulate_contrast_gradient!(acc::Vector{Float64}, w::Float64,
-                                                contrast_buf::Vector{Float64}, evaluator,
-                                                β::Vector{Float64}, ::Nothing)
-    @inbounds @simd for i in eachindex(acc)
-        acc[i] += w * contrast_buf[i]
-    end
-    return acc
+@inline function _level_modelrow!(buf::Vector{Float64}, evaluator::ContrastEvaluator,
+                                  row::Int, var::Symbol, level)
+    reset_all_counterfactuals!(evaluator.counterfactuals)
+    update_counterfactual_for_var!(evaluator, var, row, level)
+    evaluator.compiled(buf, evaluator.data_counterfactual, row)
+    reset_all_counterfactuals!(evaluator.counterfactuals)
+    return buf
 end
 
-@inline function _accumulate_contrast_gradient!(acc::Vector{Float64}, w::Float64,
-                                                contrast_buf::Vector{Float64}, evaluator,
-                                                β::Vector{Float64}, link)
-    x₀ = evaluator.y_from_buf
-    x₁ = evaluator.y_to_buf
-    g₀ = _dmu_deta(link, dot(β, x₀))
-    g₁ = _dmu_deta(link, dot(β, x₁))
+# ŷ(X₀) and dŷ/dη at X₀, which every contrast from the same level shares within a row
+# (the link scale needs neither: its contrast is linear in X₁ − X₀)
+@inline _contrast_base(::LinkScale, x₀, β) = (0.0, 0.0)
+@inline _contrast_base(s::ResponseScale, x₀, β) = yhat(s, dot(x₀, β))
+
+"""
+    _contrast_row!(acc, w, Δx, x₀, x₁, base, β, s::PredScale) -> Δŷ
+
+One row's contrast on scale `s`, adding `w × ∇β` of it to `acc`. `Δx = x₁ − x₀` and
+`base = _contrast_base(s, x₀, β)`.
+
+- Link scale: Δŷ = Δx'β, ∇β = Δx
+- Response scale: Δŷ = g⁻¹(η₁) − g⁻¹(η₀), ∇β = g′(η₁) x₁ − g′(η₀) x₀
+"""
+@inline function _contrast_row!(acc::AbstractVector{Float64}, w::Float64, Δx::Vector{Float64},
+                                x₀::Vector{Float64}, x₁::Vector{Float64}, base,
+                                β::Vector{Float64}, ::LinkScale)
+    @inbounds @simd for i in eachindex(acc)
+        acc[i] += w * Δx[i]
+    end
+    return dot(Δx, β)
+end
+
+@inline function _contrast_row!(acc::AbstractVector{Float64}, w::Float64, Δx::Vector{Float64},
+                                x₀::Vector{Float64}, x₁::Vector{Float64}, base,
+                                β::Vector{Float64}, s::ResponseScale)
+    μ₀, g₀ = base
+    μ₁, g₁ = yhat(s, dot(x₁, β))
     @inbounds @simd for i in eachindex(acc)
         acc[i] += w * (g₁ * x₁[i] - g₀ * x₀[i])
     end
-    return acc
+    return μ₁ - μ₀
 end
 
 """
-    categorical_contrast_ame!(
-        contrast_buf::Vector{Float64},
-        gradient_buf::Vector{Float64},
-        gradient_accum::Vector{Float64},
-        evaluator::ContrastEvaluator,
-        var::Symbol,
-        from_level,
-        to_level,
-        β::Vector{Float64},
-        vcov::Matrix{Float64},
-        link,
-        rows::AbstractVector{Int},
-        weights::Union{Nothing, Vector{Float64}} = nothing
-    ) -> (ame::Float64, se::Float64)
+    categorical_contrast_ame!(contrast_buf, gradient_accum, evaluator, var, from_level,
+                              to_level, β, vcov, s::PredScale, rows, weights=nothing)
+        -> (ame, se)
 
-Compute population average marginal effect for a categorical contrast using pre-allocated buffers.
+(Weighted) average over `rows` of the contrast `to_level − from_level` of `var` on scale
+`s`, with its delta-method SE. The parameter gradient is left in `gradient_accum`.
+`contrast_buf` (length n_params) is scratch. Rows with weight ≤ 0 are skipped; when weights
+are given and every row's weight is zero, a `MarginsError` is thrown.
 
-**In-place operation**: Uses pre-allocated buffers from MarginsEngine for zero-allocation computation.
-The gradient is stored in-place in `gradient_accum` and not returned.
+Allocation-free. Used for a single contrast (profile margins); the population and context
+paths use [`categorical_contrast_ame_batch!`](@ref).
 
-Uses FormulaCompiler's zero-allocation primitives:
-- `contrast_modelrow!` for per-row contrasts
-- `contrast_gradient!` for parameter gradients
-- `delta_method_se` for standard errors
-
-# Arguments
-- `contrast_buf::Vector{Float64}`: Pre-allocated buffer for contrast vectors (length n_params)
-- `gradient_buf::Vector{Float64}`: Pre-allocated buffer for per-row gradients (length n_params)
-- `gradient_accum::Vector{Float64}`: Pre-allocated buffer for accumulated gradients (length n_params)
-- `evaluator::ContrastEvaluator`: Pre-built contrast evaluator from engine
-- `var::Symbol`: Categorical variable name
-- `from_level`: Baseline level (typically reference category)
-- `to_level`: Treatment level (level to contrast against baseline)
-- `β::Vector{Float64}`: Model coefficients
-- `vcov::Matrix{Float64}`: Parameter covariance matrix
-- `link`: GLM link function (for response-scale effects)
-- `rows::AbstractVector{Int}`: Rows to average over
-- `weights::Union{Nothing, Vector{Float64}}`: Optional observation weights
-
-# Returns
-- `ame::Float64`: Average marginal effect (population contrast)
-- `se::Float64`: Standard error via delta method
-
-Note: The parameter gradient is stored in-place in `gradient_accum` (not returned)
-
-# Performance
-- **0 bytes allocated** for unweighted computation (pre-allocated buffers)
-- **O(n) time complexity** where n = length(rows)
-- **Type-stable** through concrete ContrastEvaluator
-
-# Mathematical Details
-**Linear scale (link=nothing)**:
-AME = (1/n) Σᵢ [η(xᵢ, var=to) - η(xᵢ, var=from)] = (1/n) Σᵢ [(X₁'β) - (X₀'β)]
-
-**Response scale (with link function)**:
-AME = (1/n) Σᵢ [μ(xᵢ, var=to) - μ(xᵢ, var=from)] = (1/n) Σᵢ [g⁻¹(η₁) - g⁻¹(η₀)]
-
-Where:
-- η = Xβ is the linear predictor
-- μ = g⁻¹(η) is the response via link inverse function
-- X₀ and X₁ are model matrix rows at baseline and treatment levels
-- g is the link function (e.g., logit for binomial models)
-
-Gradient: ∂AME/∂β = (1/n) Σᵢ [∂μ(xᵢ, var=to)/∂β - ∂μ(xᵢ, var=from)/∂β]
-
-Standard error: SE = √(∂AME/∂β' × Σ × ∂AME/∂β)
+    AME = Σᵢ wᵢ Δŷᵢ / Σᵢ wᵢ,  ∇β AME = Σᵢ wᵢ ∇β Δŷᵢ / Σᵢ wᵢ,  SE = √(∇'Σ∇)
 """
 function categorical_contrast_ame!(
     contrast_buf::Vector{Float64},
-    gradient_buf::Vector{Float64},
     gradient_accum::Vector{Float64},
     evaluator::ContrastEvaluator,
     var::Symbol,
@@ -120,202 +83,93 @@ function categorical_contrast_ame!(
     to_level,
     β::Vector{Float64},
     vcov::Matrix{Float64},
-    link,
+    s::PredScale,
     rows::AbstractVector{Int},
     weights::Union{Nothing, Vector{Float64}} = nothing
 )
-    # Use pre-allocated buffers from engine (zero allocations)
-    # Initialize gradient accumulator
     fill!(gradient_accum, 0.0)
-
-    # Accumulators for AME
+    x₀ = evaluator.y_from_buf
+    x₁ = evaluator.y_to_buf
     ame_sum = 0.0
     total_weight = 0.0
-
-    if isnothing(weights)
-        # Unweighted computation (most common case)
-        for row in rows
-            # Compute contrast on model matrix scale (0 bytes)
-            # This populates evaluator.y_from_buf (X₀) and evaluator.y_to_buf (X₁)
-            contrast_modelrow!(contrast_buf, evaluator, row, var, from_level, to_level)
-
-            # Compute effect on appropriate scale
-            if link === nothing
-                # Linear scale: Δη = ΔX'β = (X₁ - X₀)'β
-                contrast_effect = dot(contrast_buf, β)
-            else
-                # Response scale: Δμ = g⁻¹(η₁) - g⁻¹(η₀)
-                # After contrast_modelrow!, evaluator has X₀ in y_from_buf and X₁ in y_to_buf
-                η₀ = dot(evaluator.y_from_buf, β)  # Linear predictor at baseline
-                η₁ = dot(evaluator.y_to_buf, β)    # Linear predictor at treatment
-                μ₀ = linkinv(link, η₀)              # Transform to response scale
-                μ₁ = linkinv(link, η₁)              # Transform to response scale
-                contrast_effect = μ₁ - μ₀           # Contrast on response scale
-            end
-            ame_sum += contrast_effect
-
-            # Gradient (0 bytes), reusing X₀/X₁ from contrast_modelrow!
-            _accumulate_contrast_gradient!(gradient_accum, 1.0, contrast_buf, evaluator, β, link)
-        end
-
-        # Average over observations
-        n = length(rows)
-        ame = ame_sum / n
-        gradient_accum .= gradient_accum ./ n
-
-    else
-        # Weighted computation
-        for row in rows
-            w = weights[row]
-            if w > 0
-                # Compute contrast on model matrix scale (0 bytes)
-                # This populates evaluator.y_from_buf (X₀) and evaluator.y_to_buf (X₁)
-                contrast_modelrow!(contrast_buf, evaluator, row, var, from_level, to_level)
-
-                # Compute effect on appropriate scale
-                if link === nothing
-                    # Linear scale: Δη = ΔX'β = (X₁ - X₀)'β
-                    contrast_effect = dot(contrast_buf, β)
-                else
-                    # Response scale: Δμ = g⁻¹(η₁) - g⁻¹(η₀)
-                    η₀ = dot(evaluator.y_from_buf, β)  # Linear predictor at baseline
-                    η₁ = dot(evaluator.y_to_buf, β)    # Linear predictor at treatment
-                    μ₀ = linkinv(link, η₀)              # Transform to response scale
-                    μ₁ = linkinv(link, η₁)              # Transform to response scale
-                    contrast_effect = μ₁ - μ₀           # Contrast on response scale
-                end
-                ame_sum += w * contrast_effect
-
-                # Weighted gradient (0 bytes), reusing X₀/X₁ from contrast_modelrow!
-                _accumulate_contrast_gradient!(gradient_accum, Float64(w), contrast_buf, evaluator, β, link)
-
-                total_weight += w
-            end
-        end
-
-        if total_weight <= 0
-            _throw_zero_weights("contrast $(to_level) - $(from_level)")
-        end
-
-        # Weighted average
-        ame = ame_sum / total_weight
-        gradient_accum .= gradient_accum ./ total_weight
+    for row in rows
+        w = rowweight(weights, row)
+        w > 0 || continue
+        # Δx = X₁ − X₀, leaving X₀ / X₁ in the evaluator's y_from_buf / y_to_buf
+        contrast_modelrow!(contrast_buf, evaluator, row, var, from_level, to_level)
+        ame_sum += w * _contrast_row!(gradient_accum, w, contrast_buf, x₀, x₁,
+                                      _contrast_base(s, x₀, β), β, s)
+        total_weight += w
     end
-
-    # Compute standard error via delta method: SE = √(g'Σg)
+    if !isnothing(weights) && total_weight <= 0
+        _throw_zero_weights("contrast $(to_level) - $(from_level)")
+    end
+    ame = ame_sum / total_weight
+    gradient_accum .= gradient_accum ./ total_weight
     se = sqrt(max(0.0, dot(gradient_accum, vcov, gradient_accum)))
-
-    # gradient_accum already contains the accumulated gradient (in-place)
     return (ame, se)
 end
 
 """
-    categorical_contrast_ame_batch!(
-        results_ame::Vector{Float64},
-        results_se::Vector{Float64},
-        gradient_matrix::Matrix{Float64},
-        contrast_buf::Vector{Float64},
-        gradient_buf::Vector{Float64},
-        gradient_accum::Vector{Float64},
-        evaluator::ContrastEvaluator,
-        var::Symbol,
-        contrast_pairs::Vector{ContrastPair{T}},
-        β::Vector{Float64},
-        vcov::Matrix{Float64},
-        link,
-        rows::AbstractVector{Int},
-        weights::Union{Nothing, Vector{Float64}} = nothing
-    ) where T -> Nothing
+    categorical_contrast_ame_batch!(results_ame, results_se, gradient_matrix, contrast_buf,
+                                    evaluator, var, contrast_pairs, β, vcov, s::PredScale,
+                                    rows, weights=nothing) -> nothing
 
-Compute multiple categorical contrasts efficiently in a single batch with zero allocations.
+All contrasts `contrast_pairs[k]` (`level2 − level1`) of `var` in one pass over `rows`:
+`results_ame[k]`, `results_se[k]` and row `k` of `gradient_matrix` (n_pairs × n_params)
+receive what [`categorical_contrast_ame!`](@ref) would compute for that pair, with the same
+arithmetic. Within a row, X₀ (and ŷ, g′ there) is evaluated once for each run of consecutive
+pairs sharing their `level1` — once per row for baseline contrasts — instead of once per
+pair.
 
-**In-place operation**: Uses pre-allocated result arrays and buffers from MarginsEngine.
-All results are stored in-place in the provided arrays; nothing is returned.
-
-Processes all contrast pairs for a single variable with shared infrastructure:
-- Single ContrastEvaluator reused across all pairs
-- Pre-allocated buffers from engine (zero allocations)
-- Efficient row traversal
-
-# Arguments
-- `results_ame::Vector{Float64}`: Pre-allocated array for AME results [length(contrast_pairs)]
-- `results_se::Vector{Float64}`: Pre-allocated array for standard errors [length(contrast_pairs)]
-- `gradient_matrix::Matrix{Float64}`: Pre-allocated matrix for gradients [length(contrast_pairs) × n_params]
-- `contrast_buf::Vector{Float64}`: Pre-allocated contrast buffer from engine [n_params]
-- `gradient_buf::Vector{Float64}`: Pre-allocated gradient buffer from engine [n_params]
-- `gradient_accum::Vector{Float64}`: Pre-allocated accumulator from engine [n_params]
-- `evaluator::ContrastEvaluator`: Pre-built contrast evaluator
-- `var::Symbol`: Categorical variable name
-- `contrast_pairs::Vector{ContrastPair{T}}`: Pairs of (from, to) levels to contrast
-- `β::Vector{Float64}`: Model coefficients
-- `vcov::Matrix{Float64}`: Parameter covariance matrix
-- `link`: GLM link function
-- `rows::AbstractVector{Int}`: Rows to average over
-- `weights::Union{Nothing, Vector{Float64}}`: Optional weights
-
-# Returns
-- `Nothing`: All results stored in-place in pre-allocated arrays
-
-# Performance
-- **0 bytes allocated** (all buffers pre-allocated)
-- **Single evaluator** reused for all pairs
-- **Type-stable** dispatch through ContrastPair{T}
-- **O(n × k)** time where n=length(rows), k=length(contrast_pairs)
-
-# Use Cases
-- **Baseline contrasts**: Each level minus reference (typical for AME)
-- **Pairwise contrasts**: All unique pairs (comprehensive analysis)
-
-# Example
-```julia
-# Pre-allocate at outer scope
-n_contrasts = length(contrast_pairs)
-results_ame = Vector{Float64}(undef, n_contrasts)
-results_se = Vector{Float64}(undef, n_contrasts)
-gradient_matrix = Matrix{Float64}(undef, n_contrasts, length(β))
-
-# Zero-allocation batch computation
-categorical_contrast_ame_batch!(
-    results_ame, results_se, gradient_matrix,
-    engine.contrast_buf, engine.contrast_grad_buf, engine.contrast_grad_accum,
-    engine.contrast, var, contrast_pairs,
-    engine.β, engine.Σ, engine.link, rows, weights
-)
-```
+Allocation-free (`contrast_buf` is scratch of length n_params).
 """
 function categorical_contrast_ame_batch!(
     results_ame::AbstractVector{Float64},
     results_se::AbstractVector{Float64},
     gradient_matrix::AbstractMatrix{Float64},
     contrast_buf::Vector{Float64},
-    gradient_buf::Vector{Float64},
-    gradient_accum::Vector{Float64},
     evaluator::ContrastEvaluator,
     var::Symbol,
     contrast_pairs::Vector{ContrastPair{T}},
     β::Vector{Float64},
     vcov::Matrix{Float64},
-    link,
+    s::PredScale,
     rows::AbstractVector{Int},
     weights::Union{Nothing, Vector{Float64}} = nothing
 ) where T
-
-    # Process each contrast pair, storing results in-place
-    for (i, pair) in enumerate(contrast_pairs)
-        # Compute single contrast using zero-allocation kernel
-        ame, se = categorical_contrast_ame!(
-            contrast_buf, gradient_buf, gradient_accum,
-            evaluator, var, pair.level1, pair.level2,
-            β, vcov, link, rows, weights
-        )
-
-        # Store results in pre-allocated arrays (0 bytes)
-        results_ame[i] = ame
-        results_se[i] = se
-
-        # Copy gradient to matrix using view (0 bytes)
-        copyto!(view(gradient_matrix, i, :), gradient_accum)
+    n_pairs = length(contrast_pairs)
+    fill!(results_ame, 0.0)
+    fill!(gradient_matrix, 0.0)
+    x₀ = evaluator.y_from_buf
+    x₁ = evaluator.y_to_buf
+    total_weight = 0.0
+    for row in rows
+        w = rowweight(weights, row)
+        w > 0 || continue
+        base = (0.0, 0.0)   # set with X₀ at k = 1
+        for k in 1:n_pairs
+            pair = contrast_pairs[k]
+            if k == 1 || pair.level1 != contrast_pairs[k - 1].level1
+                _level_modelrow!(x₀, evaluator, row, var, pair.level1)
+                base = _contrast_base(s, x₀, β)
+            end
+            _level_modelrow!(x₁, evaluator, row, var, pair.level2)
+            contrast_buf .= x₁ .- x₀
+            results_ame[k] += w * _contrast_row!(view(gradient_matrix, k, :), w, contrast_buf,
+                                                 x₀, x₁, base, β, s)
+        end
+        total_weight += w
     end
-
+    if !isnothing(weights) && total_weight <= 0 && n_pairs > 0
+        p = first(contrast_pairs)
+        _throw_zero_weights("contrast $(p.level2) - $(p.level1)")
+    end
+    for k in 1:n_pairs
+        results_ame[k] /= total_weight
+        g = view(gradient_matrix, k, :)
+        g .= g ./ total_weight
+        results_se[k] = sqrt(max(0.0, dot(g, vcov, g)))
+    end
     return nothing
 end

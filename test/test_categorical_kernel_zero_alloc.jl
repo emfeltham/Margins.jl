@@ -47,14 +47,16 @@ using LinearAlgebra: dot
         # Build engine
         engine = build_engine(PopulationUsage, HasDerivatives, model, data_nt, [:treatment], GLM.vcov, :ad)
 
+        grad_buf = Vector{Float64}(undef, length(engine.β))
+
         # Warmup
         for i in 1:50
-            contrast_gradient!(engine.contrast_grad_buf, engine.contrast, i, :treatment, "Control", "Drug_A", engine.β, engine.link)
+            contrast_gradient!(grad_buf, engine.contrast, i, :treatment, "Control", "Drug_A", engine.β, engine.link)
         end
 
         # Benchmark for zero allocations
         b = @benchmark contrast_gradient!(
-            $(engine.contrast_grad_buf),
+            $grad_buf,
             $(engine.contrast),
             1,
             :treatment,
@@ -78,15 +80,14 @@ using LinearAlgebra: dot
         for _ in 1:10
             categorical_contrast_ame!(
                 engine.contrast_buf,
-                engine.contrast_grad_buf,
-                engine.contrast_grad_accum,
+                engine.gβ_accumulator,
                 engine.contrast,
                 :treatment,
                 "Control",
                 "Drug_A",
                 engine.β,
                 engine.Σ,
-                engine.link,
+                Margins.ResponseScale(engine.link),
                 rows,
                 nothing
             )
@@ -95,15 +96,14 @@ using LinearAlgebra: dot
         # Benchmark for zero allocations
         b = @benchmark categorical_contrast_ame!(
             $(engine.contrast_buf),
-            $(engine.contrast_grad_buf),
-            $(engine.contrast_grad_accum),
+            $(engine.gβ_accumulator),
             $(engine.contrast),
             :treatment,
             "Control",
             "Drug_A",
             $(engine.β),
             $(engine.Σ),
-            $(engine.link),
+            $(Margins.ResponseScale(engine.link)),
             $rows,
             nothing
         ) samples=100
@@ -114,15 +114,14 @@ using LinearAlgebra: dot
         # Verify results are reasonable
         ame, se = categorical_contrast_ame!(
             engine.contrast_buf,
-            engine.contrast_grad_buf,
-            engine.contrast_grad_accum,
+            engine.gβ_accumulator,
             engine.contrast,
             :treatment,
             "Control",
             "Drug_A",
             engine.β,
             engine.Σ,
-            engine.link,
+            Margins.ResponseScale(engine.link),
             rows,
             nothing
         )
@@ -142,15 +141,14 @@ using LinearAlgebra: dot
         for _ in 1:10
             categorical_contrast_ame!(
                 engine.contrast_buf,
-                engine.contrast_grad_buf,
-                engine.contrast_grad_accum,
+                engine.gβ_accumulator,
                 engine.contrast,
                 :treatment,
                 "Control",
                 "Drug_A",
                 engine.β,
                 engine.Σ,
-                engine.link,
+                Margins.ResponseScale(engine.link),
                 rows,
                 weights
             )
@@ -159,15 +157,14 @@ using LinearAlgebra: dot
         # Benchmark for zero allocations
         b = @benchmark categorical_contrast_ame!(
             $(engine.contrast_buf),
-            $(engine.contrast_grad_buf),
-            $(engine.contrast_grad_accum),
+            $(engine.gβ_accumulator),
             $(engine.contrast),
             :treatment,
             "Control",
             "Drug_A",
             $(engine.β),
             $(engine.Σ),
-            $(engine.link),
+            $(Margins.ResponseScale(engine.link)),
             $rows,
             $weights
         ) samples=100
@@ -178,15 +175,14 @@ using LinearAlgebra: dot
         # Verify results
         ame, se = categorical_contrast_ame!(
             engine.contrast_buf,
-            engine.contrast_grad_buf,
-            engine.contrast_grad_accum,
+            engine.gβ_accumulator,
             engine.contrast,
             :treatment,
             "Control",
             "Drug_A",
             engine.β,
             engine.Σ,
-            engine.link,
+            Margins.ResponseScale(engine.link),
             rows,
             weights
         )
@@ -214,15 +210,14 @@ using LinearAlgebra: dot
         for _ in 1:10
             categorical_contrast_ame!(
                 engine.contrast_buf,
-                engine.contrast_grad_buf,
-                engine.contrast_grad_accum,
+                engine.gβ_accumulator,
                 engine.contrast,
                 :treated,
                 false,
                 true,
                 engine.β,
                 engine.Σ,
-                engine.link,
+                Margins.ResponseScale(engine.link),
                 rows,
                 nothing
             )
@@ -231,15 +226,14 @@ using LinearAlgebra: dot
         # Benchmark for zero allocations
         b = @benchmark categorical_contrast_ame!(
             $(engine.contrast_buf),
-            $(engine.contrast_grad_buf),
-            $(engine.contrast_grad_accum),
+            $(engine.gβ_accumulator),
             $(engine.contrast),
             :treated,
             false,
             true,
             $(engine.β),
             $(engine.Σ),
-            $(engine.link),
+            $(Margins.ResponseScale(engine.link)),
             $rows,
             nothing
         ) samples=100
@@ -250,15 +244,14 @@ using LinearAlgebra: dot
 
         ame, se = categorical_contrast_ame!(
             engine.contrast_buf,
-            engine.contrast_grad_buf,
-            engine.contrast_grad_accum,
+            engine.gβ_accumulator,
             engine.contrast,
             :treated,
             false,
             true,
             engine.β,
             engine.Σ,
-            engine.link,
+            Margins.ResponseScale(engine.link),
             rows,
             nothing
         )
@@ -275,15 +268,14 @@ using LinearAlgebra: dot
         for _ in 1:10
             categorical_contrast_ame!(
                 engine.contrast_buf,
-                engine.contrast_grad_buf,
-                engine.contrast_grad_accum,
+                engine.gβ_accumulator,
                 engine.contrast,
                 :treatment,
                 "Control",
                 "Drug_A",
                 engine.β,
                 engine.Σ,
-                engine.link,
+                Margins.ResponseScale(engine.link),
                 rows,
                 nothing
             )
@@ -292,15 +284,14 @@ using LinearAlgebra: dot
         # Benchmark
         b = @benchmark categorical_contrast_ame!(
             $(engine.contrast_buf),
-            $(engine.contrast_grad_buf),
-            $(engine.contrast_grad_accum),
+            $(engine.gβ_accumulator),
             $(engine.contrast),
             :treatment,
             "Control",
             "Drug_A",
             $(engine.β),
             $(engine.Σ),
-            $(engine.link),
+            $(Margins.ResponseScale(engine.link)),
             $rows,
             nothing
         ) samples=1000
@@ -322,31 +313,30 @@ using LinearAlgebra: dot
         rows = collect(1:10)
 
         # Clear gradient accumulator
-        fill!(engine.contrast_grad_accum, 0.0)
+        fill!(engine.gβ_accumulator, 0.0)
 
         # Compute AME
         ame, se = categorical_contrast_ame!(
             engine.contrast_buf,
-            engine.contrast_grad_buf,
-            engine.contrast_grad_accum,
+            engine.gβ_accumulator,
             engine.contrast,
             :treatment,
             "Control",
             "Drug_A",
             engine.β,
             engine.Σ,
-            engine.link,
+            Margins.ResponseScale(engine.link),
             rows,
             nothing
         )
 
         # Verify gradient was populated
-        @test !all(engine.contrast_grad_accum .== 0.0)
-        @test all(!isnan, engine.contrast_grad_accum)
-        @test length(engine.contrast_grad_accum) == length(engine.β)
+        @test !all(engine.gβ_accumulator .== 0.0)
+        @test all(!isnan, engine.gβ_accumulator)
+        @test length(engine.gβ_accumulator) == length(engine.β)
 
         # Verify SE is consistent with gradient
-        manual_se = sqrt(max(0.0, dot(engine.contrast_grad_accum, engine.Σ, engine.contrast_grad_accum)))
+        manual_se = sqrt(max(0.0, dot(engine.gβ_accumulator, engine.Σ, engine.gβ_accumulator)))
         @test se ≈ manual_se rtol=1e-10
     end
 end
