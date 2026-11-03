@@ -42,12 +42,12 @@ The function implements profile-specific inference through evaluation of margina
 **Methodological Applications:**  
 Profile analysis provides representative case inference suitable for policy targeting specific demographic or economic profiles. The approach facilitates clear communication of quantitative results through concrete scenario interpretation, making it particularly valuable for stakeholder communication and policy applications requiring specific target group analysis.
 
-**Computational Characteristics**: Constant-time complexity independent of dataset size through optimized evaluation algorithms that avoid full dataset traversal.
+**Computational Characteristics**: The model is evaluated only at the reference-grid rows, so the cost is dominated by the grid size. Each call also does a small amount of O(n) work on the data (column conversion, the derived-column check, and typical values over the estimation sample for variables the grid leaves out).
 *Comprehensive performance benchmarking and memory allocation analysis are detailed in the [Performance Guide](performance.md)*
 
 ## Result Type Specifications
 
-### Type-Safe Result System (v2.0)
+### Type-Safe Result System
 
 Margins.jl implements a specialized type system that provides type safety and optimized DataFrame formatting through distinct result containers for different analysis types.
 
@@ -224,8 +224,8 @@ delta-method standard errors are handled internally. `vcov` takes the same forms
 `population_margins` and defaults to `GLM.vcov`.
 
 If you already hold an `EffectsResult` from `population_margins(...; scenarios=..., type=:effects)`,
-the same comparison is available on its rows, with `vcov` defaulting to the covariance the result
-was computed with:
+the same comparison is available on its rows, using the covariance matrix and df the result was
+computed with (`result.inference`; for another estimator, compute the result with `vcov=…`):
 
 ```julia
 ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effects)
@@ -279,7 +279,6 @@ All main functions support these core parameters:
 
 #### Variable Selection (`vars`)
 - `nothing` - Auto-detect continuous variables (default for effects)
-- `:all_continuous` - Explicit selection of all continuous variables
 - `:variable_name` - Single variable
 - `[:var1, :var2]` - Multiple specific variables
 
@@ -298,7 +297,8 @@ All main functions support these core parameters:
 - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (% change in Y per unit change in X)
 
 Measures other than `:effect` are defined for continuous variables only — they scale a
-derivative ∂y/∂x by x̄ and/or ȳ, which a discrete level contrast does not have. Naming a
+derivative ∂y/∂x by x and/or 1/ŷ (row by row; population measures average the unit-level
+quantities), which a discrete level contrast does not have. Naming a
 categorical or boolean variable in `vars` together with an elasticity measure raises an
 `ArgumentError`; when `vars` is auto-detected, discrete variables are skipped with an
 informational message. Request them separately with `measure=:effect`.
@@ -330,8 +330,9 @@ See [Reference Grids](reference_grids.md) for full documentation of grid builder
 
 #### Grouping (`groups`)
 - `Symbol` - Single grouping variable
-- `Vector{Symbol}` - Multiple grouping variables  
-- `NamedTuple` - Advanced grouping with value specifications
+- `Vector{Symbol}` - Multiple grouping variables (crossed)
+- `(:var, n)` / `(:var, [cuts])` - Bins of a continuous variable (quantile bins or thresholds)
+- `outer => inner` - Nested grouping
 
 **Examples:**
 ```julia
@@ -375,9 +376,9 @@ DataFrame(ame)
 # Maximum performance configuration
 fast_result = population_margins(model, data; backend=:fd, scale=:link)
 
-# Profile analysis is O(1) - efficient regardless of data size
+# Profile analysis: cost dominated by the grid size, plus a small per-call O(n) part
 grid = cartesian_grid(x1=[0,1,2])
-profile_result = profile_margins(model, huge_data, grid; type=:effects)  # ~300μs regardless of data size
+profile_result = profile_margins(model, huge_data, grid; type=:effects)
 ```
 
 ### Advanced Analysis Patterns
@@ -387,7 +388,7 @@ scenarios = cartesian_grid(x1=[0, 1, 2])
 elasticities = profile_margins(model, data, scenarios; 
     measure=:elasticity, vars=[:x2])
 
-# Robust standard errors (with CovarianceMatrices.jl); inference is then z (df = Inf)
+# Robust standard errors (with CovarianceMatrices.jl); df is unchanged (t for this lm, z for other GLMs)
 using CovarianceMatrices
 robust_effects = population_margins(model, data; vcov=HC1(), type=:effects)
 
@@ -408,10 +409,6 @@ policy_scenario = profile_margins(model, data, policy_grid; type=:predictions)
 # Error: Variable not found
 population_margins(model, data; vars=[:nonexistent_var])
 # → Clear error message with available variables
-
-# Error: Wrong variable type for effects  
-population_margins(model, data; vars=[:categorical_var], type=:effects)
-# → Suggests using categorical contrasts or predictions
 ```
 
 #### Profile Specification Errors
@@ -420,18 +417,10 @@ population_margins(model, data; vars=[:categorical_var], type=:effects)
 profile_margins(model, data, "invalid")
 # → Clear guidance on valid reference grid specifications
 
-# Error: Reference grid missing model variables
+# Not an error: model variables missing from the grid are filled in
 incomplete_grid = DataFrame(x1=[0,1])  # Missing x2, group from model
 profile_margins(model, data, incomplete_grid)
-# → Error with list of missing variables
-```
-
-#### Statistical Validity Errors
-```julia
-# Error: Insufficient data for robust estimation
-tiny_data = data[1:5, :]
-population_margins(model, tiny_data)
-# → Warning about statistical reliability with small samples
+# → x2 at its mean, group at its frequency mixture (model-weighted, estimation sample)
 ```
 
 ### Error Recovery Patterns
@@ -474,8 +463,8 @@ using CovarianceMatrices
 # Apply different estimators via vcov parameter
 ame_hc1 = population_margins(model, data; vcov=HC1())
 ame_hc3 = population_margins(model, data; vcov=HC3())
-ame_clustered = population_margins(model, data; vcov=Clustered(:cluster_var))
-ame_hac = population_margins(model, data; vcov=HAC(Bartlett()))
+ame_clustered = population_margins(model, data; vcov=CR1(data.cluster_var))
+ame_hac = population_margins(model, data; vcov=Bartlett{Andrews}())  # HAC, Andrews bandwidth
 ```
 
 ### With DataFrames Ecosystem

@@ -54,8 +54,6 @@ A factor in the marginlist (`margins education`) is a counterfactual (Stata sets
 
 ### Basic Scenarios
 
-| Stata Command | Margins.jl Equivalent | Notes |
-|---------------|----------------------|-------|
 Stata's `at()` sets the named variables for every observation and leaves the others **as observed** (the default, `asobserved`), then averages over the estimation sample: that is `population_margins(…; scenarios=…)`. Only with `atmeans` are the other variables held at their means, which is `profile_margins` with a grid giving the `at()` values (the other variables are filled in at their model-weighted means over the estimation sample).
 
 | Stata Command | Margins.jl Equivalent | Notes |
@@ -238,18 +236,13 @@ Margins.jl extends far beyond Stata's capabilities with features unavailable in 
 ### Continuous Variable Binning
 
 ```stata
-* Stata approach (manual and cumbersome):
-gen income_q = .
-_pctile income, nq(4)
-replace income_q = 1 if income <= r(r1)
-replace income_q = 2 if income > r(r1) & income <= r(r2)
-replace income_q = 3 if income > r(r2) & income <= r(r3)
-replace income_q = 4 if income > r(r3)
-margins income_q
+* Stata: create the bin variable, then use over() (it is not a model variable)
+xtile income_q = income if e(sample), nq(4)
+margins, over(income_q)
 ```
 
 ```julia
-# Julia approach (automatic):
+# Margins.jl: the bins are computed within the call
 population_margins(model, data; groups=(:income, 4))  # Automatic Q1-Q4 quartiles
 ```
 
@@ -262,7 +255,7 @@ replace income_bracket = 1 if income < 25000
 replace income_bracket = 2 if income >= 25000 & income < 50000
 replace income_bracket = 3 if income >= 50000 & income < 75000
 replace income_bracket = 4 if income >= 75000
-margins income_bracket
+margins, over(income_bracket)
 ```
 
 ```julia
@@ -287,15 +280,12 @@ population_margins(model, data; groups=:country => (:region => :education))  # D
 ### Multi-Variable Scenarios
 
 ```stata
-* Stata approach (requires multiple separate commands):
-margins, at(treatment=0 policy=0)
-margins, at(treatment=0 policy=1) 
-margins, at(treatment=1 policy=0)
-margins, at(treatment=1 policy=1)
+* Stata: at() with several variables crosses their values (4 scenarios)
+margins, at(treatment=(0 1) policy=(0 1))
 ```
 
 ```julia
-# Julia approach (automatic Cartesian product):
+# Margins.jl: scenarios also cross their values (4 scenarios)
 population_margins(model, data; scenarios=(treatment=[0, 1], policy=[0, 1]))
 ```
 
@@ -376,30 +366,25 @@ comprehensive_results = population_margins(model, data;
 DataFrame(comprehensive_results)
 ```
 
-## Performance Comparisons
+## Workflow Differences
 
-### Computational Advantages
+| Task | Stata | Margins.jl |
+|------|-------|------------|
+| **Quantile or threshold bins** | Create the bin variable (`xtile`, `recode`), then `over()` | `groups=(:x, 4)` or `groups=(:x, [cuts])`, labeled bins computed in the call |
+| **Nested subgroups** | `over(a b)` (every a × b cell) | `groups=:a => :b`, deeper nesting `:a => (:b => :c)` |
+| **Several breakdowns at once** | One `margins` command per breakdown | `groups=:a => [:b, (:x, 4)]` in one call |
+| **Scenarios within subgroups** | `at()` with `over()` | `scenarios=` with `groups=` |
 
-| Aspect | Stata | Margins.jl |
-|--------|-------|------------|
-| **Complex grouping** | Multiple manual commands | Single comprehensive call |
-| **Scenario analysis** | Manual looping/multiple commands | Automatic Cartesian products |
-| **Large datasets** | Memory limitations | Efficient O(n) scaling |
-| **Custom thresholds** | Manual variable creation | Automatic binning with labels |
-| **Hierarchical analysis** | Limited native support | Unlimited nesting depth |
-
-### Stata Command Count Reduction
+### Several breakdowns in one call
 
 ```julia
-# This single Julia command:
 result = population_margins(model, data;
     groups=:region => [:education, (:income, 4)],
     scenarios=(treatment=[0, 1], policy=["old", "new"])
 )
-
-# Replaces ~30 individual Stata margins commands:
-# 4 regions × 3 education × 4 income × 2 treatment × 2 policy = 192 combinations
-# Plus manual variable creation, looping, and results compilation
+# Two breakdowns within each region: by education, and by income quartile, each under the
+# 4 treatment × policy scenarios. In Stata: xtile the income quartile, then one
+# margins, over(region education) at(...) and one margins, over(region income_q) at(...).
 ```
 
 ## Migration Best Practices

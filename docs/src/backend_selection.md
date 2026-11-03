@@ -5,7 +5,7 @@
 ## Recommendation: Use AD (Automatic Differentiation)
 
 **TL;DR:** Use `backend=:ad` (the default) for all marginal effects computations. It provides:
-- **Zero allocation** performance after warmup
+- **Zero per-row allocation** after warmup
 - **Machine precision** accuracy
 - **Domain safety** for log(), sqrt(), and other sensitive functions
 - **3-5x faster** than FD in most cases
@@ -88,29 +88,23 @@ population_margins(model, data; backend=:ad)   # Same statistical results
 
 # Simple transformations - no domain issues
 model = lm(@formula(y ~ x/10 + z*2), data)
-population_margins(model, data; backend=:fd)   # Zero allocation
+population_margins(model, data; backend=:fd)   # No per-row allocation
 ```
 
 ## Performance Characteristics
 
 ### Memory Usage Analysis
 
-**Both backends now achieve zero allocation performance:**
+**Both backends evaluate rows without allocating:** the per-row derivative loops allocate nothing, on either backend. A whole `population_margins` call allocates a fixed amount for its setup (engine, buffers, result) that does not grow with the number of rows, plus a `Float64` copy of each integer-typed model column (8 bytes per row per column):
 
 ```julia
-# FD: Zero allocation after warmup
-@allocated population_margins(model, data_100; backend=:fd)    # 0 bytes
-@allocated population_margins(model, data_1000; backend=:fd)   # 0 bytes  
-@allocated population_margins(model, data_5000; backend=:fd)   # 0 bytes
-
-# AD: Zero allocation after warmup
-@allocated population_margins(model, data_100; backend=:ad)    # 0 bytes
-@allocated population_margins(model, data_1000; backend=:ad)   # 0 bytes
-@allocated population_margins(model, data_5000; backend=:ad)   # 0 bytes
+# Allocation per warm call does not grow with n (all-Float64 data):
+@allocated population_margins(model, data_1000; backend=:fd)   # about the same as for data_50000
+@allocated population_margins(model, data_1000; backend=:ad)   # about the same as for data_50000
 ```
 
 **Memory Usage Decision:**
-- **All dataset sizes**: Both backends achieve zero allocation performance
+- **All dataset sizes**: Neither backend allocates per row
 - **Choice based on reliability and accuracy**: AD provides superior domain handling
 - **Construction cost**: AD requires slightly more memory during evaluator setup (amortized over many evaluations)
 
@@ -171,8 +165,8 @@ DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
 | **Use Case** | **Backend** | **Rationale** |
 |--------------|-------------|---------------|
 | **Domain-sensitive functions** (log, sqrt, 1/x) | `:ad` | **Required** - FD fails with DomainError |
-| **General production workflows** | `:ad` | Zero allocation + reliability + 3-5x faster |
-| **Large datasets (>10k observations)** | `:ad` | Zero allocation + superior performance |
+| **General production workflows** | `:ad` | No per-row allocation + reliability + 3-5x faster |
+| **Large datasets (>10k observations)** | `:ad` | No per-row allocation + superior performance |
 | **Development/testing** | `:ad` | Higher reliability + machine precision |
 | **High-precision requirements** | `:ad` | Exact derivatives vs numerical approximation |
 | **Legacy code maintenance** | `:fd` | Only if existing code explicitly uses FD |
@@ -180,7 +174,7 @@ DataFrame(fd_glm).estimate ≈ DataFrame(ad_glm).estimate  # rtol=1e-10 PASS
 
 ### Production Configuration Guidance
 
-- Default to `backend=:ad` for reliability and accuracy (also zero allocation).
+- Default to `backend=:ad` for reliability and accuracy (also no per-row allocation).
 - Use `backend=:fd` only for simple, well-conditioned formulas and when you explicitly want FD.
 - For domain-sensitive functions (log, sqrt, 1/x near 0), always use `:ad`.
 
@@ -238,12 +232,12 @@ Both backends leverage FormulaCompiler.jl's optimized evaluation:
 
 ```julia
 # FD: Uses finite difference approximation with compiled evaluators
-# - Zero allocation after warmup
+# - Zero allocation per row after warmup
 # - Reuses pre-allocated buffers
 # - Scalar operations avoid broadcast allocations
 
 # AD: Uses dual number arithmetic with compiled evaluators (OPTIMIZED)
-# - Zero allocation after warmup via pre-conversion strategy
+# - Zero allocation per row after warmup (columns are read as Float64 and converted to duals on read)
 # - Exact derivative computation with machine precision
 # - 3-5x performance improvement over previous AD implementation
 # - Composition via chain rule with type homogeneity
@@ -264,7 +258,7 @@ For functions near domain boundaries, you may need custom tolerances:
 ### **Default Strategy (Recommended):**
 
 **Use `backend=:ad` for everything.** The AD backend is now the recommended default for all use cases, providing:
-- Zero allocation performance (equal to FD)
+- No per-row allocation (as FD)
 - Superior speed (3-5x faster than FD)
 - Domain safety (handles log, sqrt, 1/x correctly)
 - Machine precision accuracy

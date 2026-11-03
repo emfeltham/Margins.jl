@@ -57,6 +57,7 @@ partial_grid = cartesian_grid(
 # Complete the grid with typical values for missing variables
 complete_grid = complete_reference_grid(partial_grid, model, data)
 # Result: 6 rows with x1, x2 specified AND x3=mean(data.x3), x4=mean(data.x4), etc.
+# (means weighted by the model's estimation weights for a weighted fit; weights=:none for unweighted)
 
 # Use directly with profile_margins
 result = profile_margins(model, data, complete_grid; type=:effects)
@@ -181,16 +182,16 @@ result = profile_margins(model, data,
 
 ## Computational Performance Analysis
 
-Profile-specific marginal effects analysis exhibits constant-time computational complexity with execution time independent of dataset dimensionality:
+The cost of a profile call is dominated by the size of the reference grid: the model is evaluated at the grid rows, not at the n data rows. Each call also does a small amount of O(n) work: `Float64` copies of integer-typed model columns (8 bytes per row per column), the derived-column check, and, for variables the grid leaves out, typical values over the estimation sample. So the time grows with n, but slowly:
 
 ```julia
-# Computational cost remains invariant to dataset size
-@time profile_margins(model, small_data, means_grid(small_data))   # ~100μs
-@time profile_margins(model, large_data, means_grid(large_data))   # ~100μs
-
-# Complex factorial designs maintain constant-time scaling properties
+# Measured (Apple M4 Pro, Margins 3.0, 65-coefficient logit, 4 grid rows),
+# at n = 5,000 / 50,000 / 500,000:
+#   predictions:  0.27 / 0.59 / 1.8 ms    (0.78 / 3.2 / 27 MiB)
+#   effects:      0.69 / 0.91 / 3.4 ms
+# (an average marginal effect over all rows of the same model: 18 ms / 182 ms / 1.8 s)
 scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
-@time profile_margins(model, huge_data, scenarios)  # Maintains ~100μs complexity
+profile_margins(model, data, scenarios)  # cost grows with the 18 rows; n adds a small O(n) part
 ```
 
 ## Statistical Notes

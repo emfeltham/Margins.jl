@@ -24,7 +24,7 @@ or adjusted predictions at specific profiles (APM/APR).
 - `type::Symbol=:effects`: Analysis type
   - `:effects` - Marginal Effects at profiles (MEM/MER): derivatives/contrasts at specific points
   - `:predictions` - Adjusted Predictions at profiles (APM/APR): fitted values at specific points
-- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or nothing)
   - Only required when `type=:effects`
   - Defaults to all explanatory variables from the model formula (not all data columns)
   - Only variables that appear in both the model specification and data are considered
@@ -33,8 +33,8 @@ or adjusted predictions at specific profiles (APM/APR).
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
 - `backend::Symbol=:ad`: Computational backend
-  - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
-  - `:fd` - Finite differences (zero allocation, production-ready)
+  - `:ad` - Automatic differentiation (exact derivatives; recommended)
+  - `:fd` - Finite differences
 - `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
   - `:effect` - Marginal effects (default, current behavior)
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
@@ -44,7 +44,7 @@ or adjusted predictions at specific profiles (APM/APR).
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels
 - `alpha::Real=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α), in (0, 1)
-  - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
+  - Sets the level of the `ci_lower` and `ci_upper` columns of the DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator for robust/clustered standard errors, or a covariance
@@ -93,7 +93,8 @@ weighted fit (Stata's `noweights`, and the 2.x behaviour), complete the grid you
 
 The grid builders cannot see the model, so their values are unweighted unless you pass
 `weights=`: with a weighted fit, `means_grid(data)` holds unweighted means. To evaluate at the
-weighted means (Stata's `atmeans`) write `means_grid(data; weights=:w)`, or give only the
+weighted means (Stata's `atmeans`) write `means_grid(model, data)` (model weights over the
+estimation sample) or `means_grid(data; weights=:w)`, or give only the
 variables you set and let `profile_margins` fill in the rest (`cartesian_grid(x=[0, 1])`). See
 "Typical values" in the Reference Grids documentation and the Weights page.
 
@@ -326,7 +327,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
 - `type::Symbol=:effects`: Analysis type
   - `:effects` - Marginal Effects at profiles: derivatives/contrasts at specific points
   - `:predictions` - Adjusted Predictions at profiles: fitted values at specific points
-- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or :all_continuous)
+- `vars=nothing`: Variables for effects analysis (Symbol, Vector{Symbol}, or nothing)
   - Defaults to all explanatory variables from the model formula (not all data columns)
   - Only variables that appear in both the model specification and data are considered
   - Extra columns in data that aren't in the model are automatically ignored
@@ -393,7 +394,8 @@ weighted fit (Stata's `noweights`, and the 2.x behaviour), complete the grid you
 
 The grid builders cannot see the model, so their values are unweighted unless you pass
 `weights=`: with a weighted fit, `means_grid(data)` holds unweighted means. To evaluate at the
-weighted means (Stata's `atmeans`) write `means_grid(data; weights=:w)`, or give only the
+weighted means (Stata's `atmeans`) write `means_grid(model, data)` (model weights over the
+estimation sample) or `means_grid(data; weights=:w)`, or give only the
 variables you set and let `profile_margins` fill in the rest (`cartesian_grid(x=[0, 1])`). See
 "Typical values" in the Reference Grids documentation and the Weights page.
 

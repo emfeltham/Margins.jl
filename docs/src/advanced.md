@@ -133,14 +133,14 @@ println("Profile elasticity: ", DataFrame(prof_elastic).estimate[1])
 
 Margins.jl integrates [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard error computation.
 
-!!! note "Inference with a robust or clustered `vcov` is z-based"
-    With the default covariance, a linear model (`lm`) reports t statistics with
-    `df = dof_residual(model)`. With any robust, clustered, HAC or custom `vcov`, Margins uses the
-    standard Normal (`df = Inf`) for p-values and confidence intervals, for every model type: the
-    covariance argument does not carry the small-sample df Stata uses (`e(df_r)` after
-    `vce(robust)`, `n_clusters − 1` after `vce(cluster)`). With few clusters, compute the t-based
-    p-value from the `statistic` column yourself. See
-    [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+!!! note "Degrees of freedom with a robust or clustered `vcov`"
+    The reference distribution depends on the model class, not on `vcov`. A linear model (`lm`, or
+    a Gaussian identity-link `glm`) reports t statistics with `df = dof_residual(model)` with any
+    `vcov`, robust, clustered, HAC or custom, as Stata does after `regress, vce(robust)`; a
+    FixedEffectModels fit uses its own `dof_residual` (cluster-adjusted); other GLMs and mixed
+    models use the standard Normal (`df = Inf`). After `vce(cluster c)` Stata uses
+    `n_clusters − 1`; the `vcov` argument does not carry the cluster count, so pass it with
+    `df = G - 1`. See [Output Columns and Inference](api.md#Output-Columns-and-Inference).
 
 ### Basic Robust Standard Errors
 
@@ -174,13 +174,13 @@ result = population_margins(model, data; vcov=HC3())
 ```julia
 # Cluster by firm ID
 clustered_effects = population_margins(model, data;
-    vcov=Clustered(:firm_id), type=:effects)
+    vcov=CR1(data.firm_id), type=:effects)
 ```
 
 #### Multi-Level Clustering  
 ```julia
 # Two-way clustering (firm and year)
-result = population_margins(model, data; vcov=Clustered([:firm_id, :year]))
+result = population_margins(model, data; vcov=CR1((data.firm_id, data.year)))
 ```
 
 ### HAC (Heteroskedasticity and Autocorrelation Consistent) Standard Errors
@@ -188,7 +188,7 @@ result = population_margins(model, data; vcov=Clustered([:firm_id, :year]))
 ```julia
 # Newey-West HAC estimator
 effects_hac = population_margins(model, data;
-    vcov=HAC(Bartlett()), type=:effects)
+    vcov=Bartlett{NeweyWest}(), type=:effects)
 ```
 
 ### Custom Covariance Providers
@@ -217,7 +217,7 @@ robust_elasticities = population_margins(model, data;
 
 # Profile elasticities with clustered SEs
 profile_elasticities = profile_margins(model, data,
-    means_grid(data); vcov = Clustered(:cluster_var),
+    means_grid(data); vcov = CR1(data.cluster_var),
     measure = :elasticity)
 ```
 

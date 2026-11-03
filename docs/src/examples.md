@@ -352,19 +352,19 @@ println(DataFrame(robust_effects))
 ```julia
 using BenchmarkTools
 
-# Profile margins: O(1) constant time
-println("Profile margins performance (constant time):")
+# Profile margins: cost dominated by the grid size (plus a small per-call O(n) part)
+println("Profile margins performance:")
 @btime profile_margins($wage_model, $data, means_grid($data); type=:effects)
 
 # Population margins: O(n) scaling  
 println("Population margins performance (scales with n):")
 @btime population_margins($wage_model, $data; type=:effects)
 
-# Complex scenario analysis (still O(1) for profiles)
+# Complex scenario analysis (cost grows with the number of profiles)
 complex_scenarios = cartesian_grid(age=[25, 35, 45, 55],
                                    education=["HS", "College", "Graduate"],
                                    urban=[0, 1])
-println("Complex scenario performance (24 profiles, still O(1)):")
+println("Complex scenario performance (24 profiles):")
 @btime profile_margins($wage_model, $data, $complex_scenarios; type=:effects)
 ```
 
@@ -376,14 +376,18 @@ Direct equivalency for economists familiar with Stata:
 # Stata: margins, dydx(*)
 stata_ame = population_margins(wage_model, data; type=:effects)
 
-# Stata: margins, at(means) dydx(*)  
-stata_mem = profile_margins(wage_model, data, means_grid(data); type=:effects)
+# Stata: margins, dydx(*) atmeans
+stata_mem = profile_margins(wage_model, data, means_grid(wage_model, data); type=:effects)
 
-# Stata: margins, at(age=(25 35 45) education=(1 2 3))
+# Stata: margins, at(age=(25 35 45) education=(1 2 3))   (others as observed)
+stata_scenarios = population_margins(wage_model, data; type=:predictions,
+    scenarios=(age=[25, 35, 45], education=["HS", "College", "Graduate"]))
+
+# Stata: margins, at(age=(25 35 45) education=(1 2 3)) atmeans   (others at their means)
 stata_grid = cartesian_grid(age=[25, 35, 45], education=["HS", "College", "Graduate"]) 
-stata_scenarios = profile_margins(wage_model, data, stata_grid; type=:effects)
+stata_profiles = profile_margins(wage_model, data, stata_grid; type=:predictions)
 
-# Stata: margins, over(female)
+# Stata: margins, dydx(*) over(female)
 stata_subgroups = population_margins(wage_model, data; 
                                    type=:effects, 
                                    groups=:female)
@@ -445,7 +449,7 @@ prob_effects_glmm = population_margins(glmm, df_bin; type=:effects, vars=[:x], s
 
 ```julia
 # For large datasets (>100k observations)
-# Profile margins remain fast regardless of size
+# Profile margins remain fast: cost dominated by the grid, with a small per-call O(n) part
 large_data_profiles = profile_margins(model, large_data, means_grid(large_data); type=:effects)
 
 # Population margins scale linearly - use selectively for very large data

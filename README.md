@@ -151,7 +151,7 @@ quantile_grid(data; income = [0.25, 0.5, 0.75])
 # Automatic differentiation (default) — exact derivatives
 population_margins(model, data; type = :effects, backend = :ad)
 
-# Finite differences — zero allocations in hot path
+# Finite differences (both backends allocate nothing in the per-row loops)
 population_margins(model, data; type = :effects, backend = :fd)
 ```
 
@@ -222,12 +222,12 @@ Pkg.add("Margins")
 - Contrast-coding invariance guaranteed across dummy/effects/helmert schemes
 
 ### Performance Characteristics
-- O(1) allocation scaling: Constant memory usage regardless of dataset size
-- Zero-allocation kernels: All computational cores achieve 0 bytes after warmup
-- Profile margins: Constant-time complexity independent of data size
+- Zero-allocation kernels: the per-row loops allocate nothing after warmup
+- Population margins: O(n) time; per-call allocations do not grow with n, apart from per-call copies of columns that need conversion (e.g. `Int` columns copied to `Float64`, about 8 bytes per row per column)
+- Profile margins: cost dominated by the size of the reference grid; each call also does a small amount of O(n) work (column conversion, the derived-column check, typical values over the estimation sample for variables the grid leaves out)
 
 ### System Integration
-- Support for GLM.jl and MixedModels.jl fitted models
+- Support for GLM.jl, MixedModels.jl and [FixedEffectModels.jl](https://github.com/FixedEffects/FixedEffectModels.jl) (1.13.2 or later, and 2.x; via a package extension) fitted models
 - Tables.jl interface for flexible data input and result output
 - [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) integration for robust standard error computation
 - [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) backend for high-performance evaluation
@@ -238,12 +238,15 @@ Pkg.add("Margins")
 
 | Stata Command | Margins.jl Equivalent |
 |---------------|----------------------|
-| `margins, dydx(*)` | `population_margins(model, data; type = :effects)` |
-| `margins, at(means) dydx(*)` | `profile_margins(model, data, means_grid(data); type = :effects)` |
-| `margins, at(x=0 1 2)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type = :predictions)` |
-| `margins, at(x=0 1 2) dydx(*)` | `profile_margins(model, data, cartesian_grid(x=[0,1,2]); type = :effects)` |
 | `margins` | `population_margins(model, data; type = :predictions)` |
-| `margins, at(means)` | `profile_margins(model, data, means_grid(data); type = :predictions)` |
+| `margins, dydx(*)` | `population_margins(model, data; type = :effects)` |
+| `margins, atmeans` | `profile_margins(model, data, means_grid(model, data); type = :predictions)` |
+| `margins, dydx(*) atmeans` | `profile_margins(model, data, means_grid(model, data); type = :effects)` |
+| `margins, at(x=(0 1 2))` | `population_margins(model, data; type = :predictions, scenarios = (x = [0, 1, 2],))` |
+| `margins, at(x=(0 1 2)) atmeans` | `profile_margins(model, data, cartesian_grid(x = [0, 1, 2]); type = :predictions)` |
+| `margins, over(g)` | `population_margins(model, data; groups = :g)` |
+
+`means_grid(model, data)` computes the means over the estimation sample, weighted by the model's weights, as Stata's `atmeans` does; the data-only `means_grid(data)` is unweighted and uses every row. Stata's `at()` leaves the other variables as observed (`population_margins` with `scenarios`); only with `atmeans` are they held at their means (`profile_margins`). See the [Stata migration guide](https://emfeltham.github.io/Margins.jl/stable/stata_migration/).
 
 ## Citation
 
@@ -261,8 +264,6 @@ If you use Margins.jl in your research, please cite:
   primaryclass = {stat},
   publisher = {arXiv},
   doi = {10.48550/arXiv.2601.07065},
-  urldate = {2026-01-13},
-  abstract = {Marginal effects analysis is fundamental to interpreting statistical models, yet existing implementations face computational constraints that limit analysis at scale. We introduce two Julia packages that address this gap. Margins.jl provides a clean two-function API organizing analysis around a 2-by-2 framework: evaluation context (population vs profile) by analytical target (effects vs predictions). The package supports interaction analysis through second differences, elasticity measures, categorical mixtures for representative profiles, and robust standard errors. FormulaCompiler.jl provides the computational foundation, transforming statistical formulas into zero-allocation, type-specialized evaluators that enable O(p) per-row computation independent of dataset size. Together, these packages achieve 622x average speedup and 460x memory reduction compared to R's marginaleffects package, with successful computation of average marginal effects and delta-method standard errors on 500,000 observations where R fails due to memory exhaustion, providing the first comprehensive and efficient marginal effects implementation for Julia's statistical ecosystem.},
   archiveprefix = {arXiv},
   keywords = {Statistics - Computation},
 }

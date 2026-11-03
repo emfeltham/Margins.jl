@@ -378,19 +378,19 @@ plot(25:5:65, DataFrame(age_effects).estimate,
 
 ### Grid Size and Efficiency
 
-Reference grid size affects performance linearly, but is independent of dataset size:
+The model is evaluated at the grid rows, so the cost of a profile call is dominated by the grid size. Each call also does a small amount of O(n) work on the data (`Float64` copies of integer-typed model columns, the derived-column check, and typical values for variables the grid leaves out), so the time grows slowly with the number of observations:
 
 ```julia
 # Small grid: 3 scenarios
 small_grid = cartesian_grid(x=[0, 1, 2])
-@time profile_margins(model, huge_data, small_grid)  # ~150μs
+@time profile_margins(model, data, small_grid)
 
-# Large grid: 27 scenarios  
+# Large grid: 27 scenarios: roughly proportional to the number of grid rows
 large_grid = cartesian_grid(x=[0,1,2], y=[0,1,2], z=[0,1,2])
-@time profile_margins(model, huge_data, large_grid)  # ~400μs
+@time profile_margins(model, data, large_grid)
 
-# Dataset size doesn't matter
-@time profile_margins(model, small_data, large_grid)  # Still ~400μs
+# Measured (Apple M4 Pro, Margins 3.0, 65-coefficient logit, 4 grid rows), predictions at
+# n = 5,000 / 50,000 / 500,000: 0.27 / 0.59 / 1.8 ms; effects: 0.69 / 0.91 / 3.4 ms
 ```
 
 ### Hierarchical Grid Performance
@@ -410,16 +410,16 @@ grid = hierarchical_grid(data, deep_spec; max_depth=5)
 
 # Efficient construction through systematic generation
 complex_spec = :region => [(:income, :quartiles), (:age, :mean), :education]
-@time hierarchical_grid(data, complex_spec)  # ~50μs regardless of data size
+@time hierarchical_grid(data, complex_spec)  # one pass over the data per quantile or mean (O(n))
 ```
 
 ### Memory Management
 
-Builder functions are optimized for memory efficiency:
+Builder functions return only the grid rows:
 
 ```julia
 # Efficient: builders avoid unnecessary allocations
-grid = means_grid(large_data)  # O(1) memory for typical values
+grid = means_grid(large_data)  # one row; typical values computed in a pass over the data
 
 # Less efficient: explicit grids require full materialization  
 explicit_grid = DataFrame(

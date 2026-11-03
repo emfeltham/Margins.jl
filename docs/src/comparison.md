@@ -105,6 +105,7 @@ DataFrame(age_effects)
 
 **Ecosystem integration**: Julia's statistical ecosystem provides:
 - Mixed models via MixedModels.jl
+- Absorbed fixed effects via FixedEffectModels.jl
 - Robust standard errors via CovarianceMatrices.jl
 - Custom model types via StatsAPI
 

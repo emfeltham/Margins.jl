@@ -26,8 +26,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:response` - Response scale (default, applies inverse link function)  
   - `:link` - Linear predictor scale (link scale)
 - `backend::Symbol=:ad`: Computational backend
-  - `:ad` - Automatic differentiation (higher accuracy, small memory cost)
-  - `:fd` - Finite differences (zero allocation, production-ready)
+  - `:ad` - Automatic differentiation (exact derivatives; recommended)
+  - `:fd` - Finite differences
 - `measure::Symbol=:effect`: Effect measure (only for `type=:effects`)
   - `:effect` - Marginal effects (default, current behavior)
   - `:elasticity` - Elasticities (percent change in y for percent change in x)
@@ -52,7 +52,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels  
 - `alpha::Real=0.05`: significance level α, in (0, 1): confidence intervals have level 1-α (the same keyword as `contrast` and `second_differences`; it was `ci_alpha` before 3.0)
-  - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
+  - Sets the level of the `ci_lower` and `ci_upper` columns of the DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   (a function of the model, a CovarianceMatrices estimator, or a covariance matrix; a matrix must be square,
   finite, symmetric and match the coefficients). It is evaluated once per call (nothing is cached

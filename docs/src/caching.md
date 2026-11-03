@@ -50,7 +50,7 @@ Removing the cache fixed all three and deleted the locks, the engine pool and th
 Each engine holds pre-allocated buffers sized for its usage pattern:
 
 ```julia
-struct MarginsEngine{L, U, C, E, CE}
+struct MarginsEngine{L, U, C, E, CE, O}
     compiled::C                      # private copy of the compiled formula (own scratch)
     de::E                            # derivative evaluator, or nothing
     contrast::CE                     # categorical contrast evaluator, or nothing
@@ -67,6 +67,7 @@ struct MarginsEngine{L, U, C, E, CE}
     link::L
     vars::Vector{Symbol}
     data_nt::NamedTuple
+    offset::O                        # η offset per row, or nothing
 end
 ```
 

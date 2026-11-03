@@ -2,7 +2,7 @@
     Margins.jl
 
 A Julia package for computing marginal effects with Stata-like functionality.
-Built on jl for high-performance zero-allocation evaluation.
+Built on FormulaCompiler.jl, whose row evaluation allocates nothing.
 
 # 2×2 Framework
 

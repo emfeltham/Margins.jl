@@ -4,7 +4,7 @@
 
 ## Overview
 
-Margins.jl supports [FixedEffectModels.jl](https://github.com/FixedEffects/FixedEffectModels.jl) via a package extension. When you load both packages, marginal effects and predictions become available for models with high-dimensional absorbed fixed effects.
+Margins.jl supports [FixedEffectModels.jl](https://github.com/FixedEffects/FixedEffectModels.jl) (1.13.2 or later, and 2.x) via a package extension. When you load both packages, marginal effects and predictions become available for models with high-dimensional absorbed fixed effects.
 
 ```julia
 using Margins, FixedEffectModels, DataFrames
@@ -37,7 +37,7 @@ where ``\alpha_{g(i)}`` are the absorbed fixed effects. The marginal effect of a
 \frac{\partial y}{\partial x_k} = \beta_k + \sum_j \beta_{kj} x_j
 ```
 
-This depends only on the non-FE coefficients ``\beta``, not on the absorbed ``\alpha``. Similarly, delta-method standard errors use only ``\text{Var}(\hat{\beta})``, which is what `vcov(model)` returns. This means marginal effects are valid without saving the fixed-effect estimates.
+This depends only on the non-FE coefficients ``\beta``, not on the absorbed ``\alpha``. Similarly, delta-method standard errors use only ``\text{Var}(\hat{\beta})``, which is what `vcov(model)` returns. This means marginal effects are valid without saving the fixed-effect estimates. (The exception is a variable with absorbed slopes, `fe(g)&x`; see [Restrictions](#Restrictions).)
 
 ### Average Marginal Effects (AME)
 
@@ -55,7 +55,7 @@ result = population_margins(model, df; type=:effects, vars=[:x1])
 ### Marginal Effects at Means (MEM)
 
 ```julia
-grid = means_grid(df)
+grid = means_grid(model, df)   # means over the estimation sample (esample)
 result = profile_margins(model, df, grid; type=:effects, vars=[:x1, :x2])
 DataFrame(result)
 ```
@@ -83,7 +83,7 @@ Both computation backends are supported:
 # Automatic differentiation (default)
 population_margins(model, df; type=:effects, backend=:ad)
 
-# Finite differences (zero allocation)
+# Finite differences
 population_margins(model, df; type=:effects, backend=:fd)
 ```
 
@@ -142,6 +142,8 @@ A grid without them is an error. (Before Margins 3.0 the sample-average fixed ef
 
 The reference distribution is t with `dof_residual(model)` degrees of freedom: FixedEffectModels' own value, net of the absorbed fixed effects and, with a cluster covariance (`Vcov.cluster(:state)`), G − 1, as `coeftable(model)` uses. So the AME of a variable entering additively reproduces `coeftable`'s estimate, standard error and confidence interval. Pass `df=` to use another reference distribution.
 
+Because `dof_residual` is FixedEffectModels' own value, it depends on the installed version. FixedEffectModels 2.2 changed how absorbed degrees of freedom are counted: fixed-effect levels that are redundant across fixed effects, or nested in the cluster variable, are no longer counted. Degrees of freedom, and with them confidence intervals and p-values (and standard errors that use a small-sample correction), can therefore differ slightly between FixedEffectModels versions; from 2.2 on they match R's fixest.
+
 ## Weights
 
 A `FixedEffectModel` does not store the weights it was fit with, so the default `weights=:model` cannot read them: it averages without weights and logs a warning once per session. For a weighted `reg(...; weights=:w)` pass `weights=:w` to Margins; for an unweighted fit pass `weights=:none` to silence the warning.
@@ -171,6 +173,21 @@ population_margins(model, df; type=:effects, vars=[:state])
 population_margins(model, df; type=:effects, vars=[:x1, :x2])
 ```
 
+### Variables with Absorbed Slopes Cannot Be in `vars`
+
+In a model with a fixed effect interacted with a continuous variable (`fe(state)&x` or `fe(state)*x`), the derivative with respect to `x` includes each state's slope. FixedEffectModels absorbs these slopes, so they are in neither `coef(model)` nor `vcov(model)`, and an effect computed from the coefficients would leave them out. Effects of such a variable are an error, whether it is named in `vars` or auto-detected; effects of the other variables do not involve the slopes and are computed as usual. Predictions for these models are also unavailable (see Predictions).
+
+```julia
+model = reg(df, @formula(y ~ z + x&z + fe(state)*x))
+
+# These error (x has absorbed state-specific slopes):
+population_margins(model, df; type=:effects, vars=[:x])
+population_margins(model, df; type=:effects)        # x is auto-detected; the message lists vars = [:z]
+
+# This works:
+population_margins(model, df; type=:effects, vars=[:z])
+```
+
 ### Counterfactual Scenarios on FE Variables
 
 For predictions, counterfactual scenarios on absorbed FE variables are blocked. Setting everyone to a specific FE group conflates causal effects with unobserved heterogeneity:
@@ -194,5 +211,5 @@ Standard errors for predictions reflect uncertainty in ``\hat{\beta}`` only. The
 | `margins, dydx(*)` | `population_margins(model, df; type=:effects)` |
 | `margins, dydx(x1)` | `population_margins(model, df; type=:effects, vars=[:x1])` |
 | `margins, at(x1=(0 1 2))` | `population_margins(model, df; type=:predictions, scenarios=(x1=[0, 1, 2],))` |
-| `margins, at(means) dydx(*)` | `profile_margins(model, df, means_grid(df); type=:effects)` |
-| `ivregress 2sls y x2 (x1=z), absorb(state)` | `reg(df, @formula(y ~ x2 + (x1 ~ z) + fe(state)))` |
+| `margins, dydx(*) atmeans` | `profile_margins(model, df, means_grid(model, df); type=:effects)` |
+| `ivreghdfe y x2 (x1=z), absorb(state)` (SSC) | `reg(df, @formula(y ~ x2 + (x1 ~ z) + fe(state)))` |

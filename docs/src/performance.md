@@ -10,7 +10,7 @@ Margins.jl achieves computational efficiency through architectural design that r
 
 ### Algorithmic Complexity Characteristics
 
-- **Profile Analysis**: O(1) constant-time complexity independent of dataset size
+- **Profile Analysis**: cost dominated by the reference-grid size, plus a small per-call O(n) part
 - **Population Analysis**: O(n) linear scaling with optimized per-observation computational cost
 - **Statistical Integrity**: All performance optimizations maintain mathematical validity
 
@@ -18,24 +18,30 @@ Margins.jl achieves computational efficiency through architectural design that r
 
 ## Performance Characteristics
 
-### Profile Analysis: O(1) Constant Time
+### Profile Analysis: Cost Dominated by the Grid
 
-Profile margins achieve **constant-time performance** regardless of dataset size:
+Profile margins evaluate the model only at the reference-grid rows, so their cost is dominated by the grid size. Each call also does a small amount of O(n) work on the data: integer columns are copied to `Float64` (about 8 bytes per row per column), the derived-column check scans the columns, and variables the grid leaves out are filled in with their typical values over the estimation sample (weighted when the model has weights). For FixedEffectModels the data is also subset to the estimation sample.
+
+Measured on a 65-coefficient logit (Apple M4 Pro, Margins 3.0):
+
+| Rows | Profile predictions (4 grid rows) | Profile effects (4 grid rows) | AME, all variables |
+|------|-----------------------------------|-------------------------------|--------------------|
+| 5,000 | 0.27 ms, 0.78 MiB | 0.69 ms | 18 ms, 0.95 MiB |
+| 50,000 | 0.59 ms, 3.2 MiB | 0.91 ms | 182 ms, 3.4 MiB |
+| 500,000 | 1.8 ms, 27 MiB | 3.4 ms | 1.8 s, 27 MiB |
 
 ```julia
 using BenchmarkTools, Margins
 
-# Performance is independent of dataset size
-@btime profile_margins($model, $data_1k, means_grid($data_1k); type=:effects)     # constant time
-@btime profile_margins($model, $data_100k, means_grid($data_100k); type=:effects) # same complexity
-@btime profile_margins($model, data_1M, means_grid(data_1M); type=:effects)       # same complexity
+# Cost grows with the number of grid rows; the per-call O(n) part is small
+@btime profile_margins($model, $data_1k, means_grid($data_1k); type=:effects)
+@btime profile_margins($model, $data_100k, means_grid($data_100k); type=:effects)
 
-# Complex scenarios also O(1)
 scenarios = cartesian_grid(x1=[0,1,2], x2=[10,20,30], group=["A","B"])  # 18 profiles
-@btime profile_margins($model, $huge_data, scenarios)                       # still constant time
+@btime profile_margins($model, $huge_data, $scenarios)
 ```
 
-**Why this matters**: Profile analysis cost is **independent of sample size**, making it efficient for large-scale econometric analysis.
+**Why this matters**: Profile analysis stays fast on large datasets: going from 5,000 to 500,000 rows multiplies the data by 100 and the profile time by about 5 to 7 in the measurements above.
 
 ### Population Analysis: Optimized O(n) Scaling
 
@@ -47,8 +53,10 @@ Population margins scale linearly with optimized per-row costs:
 @btime population_margins($model, $data_10k)   # with efficient per-row processing  
 @btime population_margins($model, $data_100k)  # minimal allocation overhead
 
-# The per-row loop allocates nothing; a call allocates a constant amount (the result, Σ,
-# the engine's buffers), the same at every n (both backends; tens of KB for a small model)
+# The per-row loop allocates nothing; with Float64 data a call allocates a constant amount
+# (the result, Σ, the engine's buffers), the same at every n (both backends; tens of KB for a
+# small model). Integer columns add a per-call Float64 copy (about 8 bytes per row per column),
+# as do the columns a scenario replaces.
 @allocated population_margins(model, data_1k; backend=:fd)    # c bytes
 @allocated population_margins(model, data_10k; backend=:fd)   # the same c
 @allocated population_margins(model, data_100k; backend=:fd)  # the same c
@@ -57,7 +65,7 @@ Population margins scale linearly with optimized per-row costs:
 @allocated population_margins(model, data_100k; backend=:ad)  # the same c′
 ```
 
-**Why this matters**: Population analysis has a **constant allocation footprint** (it does not grow with the number of rows) while delivering consistent per-row performance. Categorical variables follow the same rule: their observed levels come from the reference codes, not from a per-row pass that allocates.
+**Why this matters**: Apart from those column copies, population analysis has a **constant allocation footprint** (it does not grow with the number of rows) while delivering consistent per-row performance. Categorical variables follow the same rule: their observed levels come from the reference codes, not from a per-row pass that allocates.
 
 ## Dataset Size Guidelines
 
@@ -65,11 +73,11 @@ Population margins scale linearly with optimized per-row costs:
 
 | Dataset Size | Population Margins | Profile Margins | Recommended Workflow |
 |--------------|-------------------|-----------------|---------------------|
-| **< 1k** | Fast | Constant time | Use either approach freely |
-| **1k-10k** | Fast | Constant time | Profile preferred for scenarios |
-| **10k-100k** | Scales linearly | Constant time | Profile for exploration, population for final analysis |
-| **100k-1M** | Scales appropriately | Constant time | Profile strongly preferred |
-| **> 1M** | Scales with dataset size | Constant time | Profile analysis, selective population |
+| **< 1k** | Fast | Fast (grid-dominated) | Use either approach freely |
+| **1k-10k** | Fast | Fast (grid-dominated) | Profile preferred for scenarios |
+| **10k-100k** | Scales linearly | Fast (grid-dominated) | Profile for exploration, population for final analysis |
+| **100k-1M** | Scales appropriately | Small O(n) part becomes visible (ms) | Profile strongly preferred |
+| **> 1M** | Scales with dataset size | Small O(n) part becomes visible | Profile analysis, selective population |
 
 ### Backend Selection by Use Case
 
@@ -103,8 +111,8 @@ population_margins(model, data; backend=:ad)  # Recommended for log(x), sqrt(x)
 **Zero-Allocation Patterns**: Eliminate unnecessary memory allocations
 - Pre-allocated buffers reused across computations
 - FormulaCompiler.jl provides zero-allocation evaluation primitives
-- Constant memory footprint regardless of dataset size
-- O(1) allocations in production paths: constant allocation count w.r.t. sample size
+- Row loops allocate nothing, whatever the dataset size
+- Per-call allocations do not grow with n, apart from per-call column copies (integer columns converted to Float64, columns a scenario replaces)
 
 **Computational Efficiency**: Optimize hot paths without changing methodology
 - Compiled formula evaluation with caching
@@ -145,14 +153,15 @@ population_margins(model, data; backend=:fd)
 
 ### Allocation Patterns
 
-The per-row kernels allocate nothing; each call allocates a constant amount that does not grow with the data:
+The per-row kernels allocate nothing. Apart from per-call copies of columns that need conversion (integer columns copied to `Float64`, columns a scenario replaces), each call allocates an amount that does not grow with the data:
 
 ```julia
-# Profile margins: constant allocation regardless of data size
-@allocated profile_margins(model, small_data, means_grid(small_data))  # small constant allocation
-@allocated profile_margins(model, large_data, means_grid(large_data))  # same allocation pattern
+# Profile margins: small, but not constant: the column copies and typical-value
+# computations are O(n) (0.78, 3.2, 27 MiB at 5K, 50K, 500K rows in the table above)
+@allocated profile_margins(model, small_data, means_grid(small_data))
+@allocated profile_margins(model, large_data, means_grid(large_data))
 
-# Population margins: the same constant at every n after warmup (both backends)
+# Population margins on Float64 data: the same constant at every n after warmup (both backends)
 @allocated population_margins(model, data_1k; backend=:fd)   # c bytes
 @allocated population_margins(model, data_10k; backend=:fd)  # the same c
 @allocated population_margins(model, data_1k; backend=:ad)   # c′ bytes
@@ -163,7 +172,7 @@ The per-row kernels allocate nothing; each call allocates a constant amount that
 
 #### For Large Datasets
 ```julia
-# Use profile analysis for exploration (O(1) memory)
+# Use profile analysis for exploration (cost dominated by the grid)
 scenarios = cartesian_grid(x1=[-1, 0, 1], treatment=[0, 1])
 results = profile_margins(model, large_data, scenarios)
 
@@ -175,13 +184,13 @@ key_effects = population_margins(model, large_data; vars=[:treatment], backend=:
 
 #### For Batch Processing
 ```julia
-# Process multiple models with zero allocation
+# Process multiple models (allocation-free row loops)
 models = [model1, model2, model3]
 results = []
 
 for model in models
-    # Each call has zero allocation (either backend)
-    result = population_margins(model, data; backend=:ad)  # Recommended: zero allocation
+    # The row loops allocate nothing (either backend)
+    result = population_margins(model, data; backend=:ad)  # Recommended
     push!(results, DataFrame(result))
 end
 ```
@@ -257,9 +266,9 @@ using BenchmarkTools
 @allocated population_margins(model, data; backend=:ad)
 @allocated population_margins(model, data; backend=:fd)
 
-# Profile margins should have constant allocation regardless of data size
-@allocated profile_margins(model, small_data, means_grid(small_data))  # Small constant
-@allocated profile_margins(model, large_data, means_grid(large_data))  # Same constant
+# Profile margins allocate little, but the per-call column work is O(n)
+@allocated profile_margins(model, small_data, means_grid(small_data))  # Small
+@allocated profile_margins(model, large_data, means_grid(large_data))  # Larger, still small
 ```
 
 #### Performance Monitoring
@@ -290,7 +299,7 @@ end
 using BenchmarkTools
 
 # Check allocation patterns
-@allocated population_margins(model, data)  # Should be constant across dataset sizes
+@allocated population_margins(model, data)  # Constant across dataset sizes for Float64 data
 
 # Benchmark performance
 @btime population_margins($model, $data)     # Timing analysis
@@ -313,7 +322,7 @@ Profile.print()
 **Diagnosis**: Reference grid specification or DataFrame dispatch issues
 **Solution**: Use proper reference grid builders
 ```julia
-# Correct: O(1) performance with reference grids
+# Correct: cost dominated by the grid size
 profile_margins(model, data, means_grid(data); type=:effects)
 profile_margins(model, data, cartesian_grid(x=[0,1,2]); type=:effects)
 
@@ -353,15 +362,17 @@ GC.gc()
 **Diagnosis**: O(n) allocation pattern indicating performance regression
 **Solution**: Verify zero-allocation backends and check for loops
 ```julia
-# Expected: constant allocation across dataset sizes
+# Expected (Float64 data): constant allocation across dataset sizes
 @allocated population_margins(model, data_1k; backend=:ad)    # c bytes
 @allocated population_margins(model, data_10k; backend=:ad)   # should be the same c
 @allocated population_margins(model, data_100k; backend=:ad)  # should be the same c
 
 # If allocations grow with n:
-# 1. Check backend selection (:ad and :fd both have zero-allocation row loops)
-# 2. Verify data format (Tables.jl-compatible)
-# 3. Check for custom vcov functions that may allocate
+# 1. Integer columns are copied to Float64 on every call (8 bytes per row per column):
+#    convert them once beforehand if this matters
+# 2. Check backend selection (:ad and :fd both have zero-allocation row loops)
+# 3. Verify data format (Tables.jl-compatible)
+# 4. Check for custom vcov functions that may allocate
 ```
 
 #### Issue: Slow compilation on first run
@@ -384,7 +395,7 @@ Margins.jl achieves performance through tight integration with FormulaCompiler.j
 #### Compiled Formula Evaluation
 ```julia
 # Single compilation, multiple evaluations
-compiled = FormulaCompiler.compile_formula(model, data)  # Once
+compiled = FormulaCompiler.compile_formula(model, Tables.columntable(data))  # Once
 # Reused across all margin computations - zero allocation per evaluation
 ```
 

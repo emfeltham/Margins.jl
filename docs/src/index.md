@@ -4,7 +4,7 @@
 
 ## Overview
 
-Margins.jl provides a general and high-performance framework for marginal effects analysis in julia. The package is organized around both population- and profile-based approaches. The computational architecture achieves constant-time performance for profile analysis with correct uncertainty handling.
+Margins.jl provides a general and high-performance framework for marginal effects analysis in julia. The package is organized around both population- and profile-based approaches. The cost of profile analysis is dominated by the size of the reference grid rather than the dataset, and every result carries delta-method standard errors.
 
 The package integrates seamlessly with the established JuliaStats ecosystem, providing compatibility with [StatsModels.jl](https://github.com/JuliaStats/StatsModels.jl) for model specification, [GLM.jl](https://github.com/JuliaStats/GLM.jl) for generalized linear models, [FixedEffectModels.jl](https://github.com/FixedEffects/FixedEffectModels.jl) for high-dimensional fixed effects, and [CovarianceMatrices.jl](https://github.com/gragusa/CovarianceMatrices.jl) for robust standard errors. The implementation builds upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl) to achieve efficient and accurate results.
 
@@ -69,7 +69,7 @@ profile_margins(model, data, means_grid(data); type=:predictions) # Predictions 
 
 ### Performance Characteristics
 
-The computational implementation achieves constant-time complexity for profile analysis through optimized evaluation algorithms that scale independently of dataset size. Population analysis exhibits linear scaling with respect to sample size while maintaining minimal per-observation computational overhead through zero-allocation implementations built upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl). The architecture has been empirically validated across datasets ranging from small-scale experimental studies to large administrative datasets exceeding one million observations. Detailed performance analysis is provided in the [Performance Guide](performance.md).
+The cost of profile analysis is dominated by the number of reference-grid rows; each call also does a small amount of O(n) work (converting integer columns to `Float64`, checking for precomputed transforms of the variables it changes, and computing typical values over the estimation sample for variables the grid leaves out). Population analysis exhibits linear scaling with respect to sample size while maintaining minimal per-observation computational overhead through zero-allocation implementations built upon [FormulaCompiler.jl](https://github.com/emfeltham/FormulaCompiler.jl). The architecture has been empirically validated across datasets ranging from small-scale experimental studies to large administrative datasets exceeding one million observations. Detailed performance analysis is provided in the [Performance Guide](performance.md).
 
 ### Statistical Inference Framework
 
@@ -138,7 +138,7 @@ population_margins(
 
 # Complex nested grouping
 population_margins(
-  model, data; type = :effects, groups = [:region, :income_quartile]
+  model, data; type = :effects, groups = :region => (:income, 4)
 )
 ```
 
@@ -160,7 +160,7 @@ sd = second_differences(model, data, :age, :income; at = [20_000, 50_000])
 
 ### Model Compatibility
 
-The package provides comprehensive compatibility with models following the StatsModels.jl interface specifications. Support encompasses linear models, logistic regression, Poisson models, and other generalized linear model families through GLM.jl integration. Mixed effects modeling is accommodated through MixedModels.jl compatibility for both linear and generalized linear mixed model specifications. Extensions to custom model types are supported provided they implement the standard `coef()` and `vcov()` accessor methods and rely on the `@formula` approach.
+The package provides comprehensive compatibility with models following the StatsModels.jl interface specifications. Support encompasses linear models, logistic regression, Poisson models, and other generalized linear model families through GLM.jl integration. Mixed effects modeling is accommodated through MixedModels.jl compatibility for both linear and generalized linear mixed model specifications, and models with absorbed fixed effects through FixedEffectModels.jl (1.13.2 or later, and 2.x; see [Fixed Effects Models](fixed_effects.md)). Extensions to custom model types are supported provided they implement the standard `coef()` and `vcov()` accessor methods and rely on the `@formula` approach.
 
 ### Data Integration Framework
 
@@ -176,37 +176,25 @@ population_margins(model, data; vcov = HC1())
 
 # Clustered standard errors
 population_margins(
-  model, data; vcov = Clustered(:firm_id)
+  model, data; vcov = CR1(data.firm_id)
 )
 ```
 
 ## Computational Performance Analysis
 
-### Constant-Time Profile Evaluation
+### Profile Evaluation
 
-Profile analysis achieves computational complexity independent of dataset size through optimized algorithms that evaluate marginal effects at specified covariate combinations without full dataset traversal. This constant-time property holds across diverse scenario specifications, enabling efficient analysis of complex policy counterfactuals and sensitivity analyses regardless of the underlying sample size.
+Profile analysis evaluates the model only at the reference-grid rows, so its cost is dominated by the grid size. Each call still does a small amount of O(n) work on the data: integer columns are copied to `Float64`, the derived-column check scans the columns, and variables the grid leaves out are filled in with their (model-weighted) typical values over the estimation sample. On a 65-coefficient logit (Apple M4 Pro), profile predictions at 4 grid rows take 0.27, 0.59 and 1.8 ms at 5,000, 50,000 and 500,000 rows.
 
 ```julia
-# Profile margins exhibit O(1) complexity characteristics
-# baseline timing:
-@time profile_margins(model, small_data, means_grid(small_data))
-# identical complexity:
-@time profile_margins(model, large_data, means_grid(large_data))
-
-# Complex scenario specifications maintain constant-time properties:
-scenarios = (
-  x1 = [0, 1, 2], x2 = [10, 20, 30], group = ["A", "B"]
-) # 18 profiles
-scenarios = cartesian_grid(
-  x1 = [0, 1, 2], x2 = [10, 20, 30], group = ["A","B"]
-) # 18 profiles
-# remains constant time: 
-@time profile_margins(model, huge_data, scenarios) 
+# Cost grows with the number of grid rows (here 18 profiles)
+grid = cartesian_grid(x1 = [0, 1, 2], x2 = [10, 20, 30], group = ["A", "B"])
+profile_margins(model, data, grid)
 ```
 
 ### Linear Scaling in Population Analysis
 
-Population analysis exhibits linear scaling characteristics with respect to sample size while maintaining minimal per-observation computational overhead through zero-allocation implementations. The computational architecture ensures predictable performance scaling suitable for large-scale statistical applications and administrative dataset analysis.
+Population analysis exhibits linear scaling with respect to sample size; the per-row loops allocate nothing, so a call's allocations do not grow with n apart from per-call copies of columns that need conversion. On the same logit, the AME of all variables takes 18 ms, 182 ms and 1.8 s at 5,000, 50,000 and 500,000 rows. The computational architecture ensures predictable performance scaling suitable for large-scale statistical applications and administrative dataset analysis.
 
 ```julia
 # Population margins demonstrate O(n) scaling with optimized
@@ -263,8 +251,6 @@ If you use Margins.jl in your research, please cite:
   primaryclass = {stat},
   publisher = {arXiv},
   doi = {10.48550/arXiv.2601.07065},
-  urldate = {2026-01-13},
-  abstract = {Marginal effects analysis is fundamental to interpreting statistical models, yet existing implementations face computational constraints that limit analysis at scale. We introduce two Julia packages that address this gap. Margins.jl provides a clean two-function API organizing analysis around a 2-by-2 framework: evaluation context (population vs profile) by analytical target (effects vs predictions). The package supports interaction analysis through second differences, elasticity measures, categorical mixtures for representative profiles, and robust standard errors. FormulaCompiler.jl provides the computational foundation, transforming statistical formulas into zero-allocation, type-specialized evaluators that enable O(p) per-row computation independent of dataset size. Together, these packages achieve 622x average speedup and 460x memory reduction compared to R's marginaleffects package, with successful computation of average marginal effects and delta-method standard errors on 500,000 observations where R fails due to memory exhaustion, providing the first comprehensive and efficient marginal effects implementation for Julia's statistical ecosystem.},
   archiveprefix = {arXiv},
   keywords = {Statistics - Computation},
 }

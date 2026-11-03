@@ -127,12 +127,13 @@ All results use weighted averaging with proper normalization by the total weight
 `profile_margins` evaluates at reference points rather than averaging over the sample, and it has no `weights` keyword. Weights enter through the **typical values in the grid**, in two ways:
 
 - **Values `profile_margins` fills in** for model variables the grid leaves out (means, shares of `true`, categorical frequency mixtures) use the **model's estimation weights**, as Stata's `margins` does for the `at()` values it computes; for an unweighted fit they are unweighted. This is `complete_reference_grid(grid, model, data)`'s default `weights = :model`. Pass `weights = :none` there for unweighted fill-ins (Stata's `noweights`).
-- **The grid builders** cannot see the model. `means_grid`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a data-level `weights=` (a column name or a vector, checked as here) and are **unweighted by default, even for a weighted fit**: with a weighted fit, `means_grid(data)` holds unweighted means. For Stata's `atmeans` write `means_grid(data; weights = :w)`, or let `profile_margins` fill the values in.
+- **The grid builders** cannot see the model. `means_grid`, `balanced_grid`, `quantile_grid` and `hierarchical_grid` take a data-level `weights=` (a column name or a vector, checked as here) and are **unweighted by default, even for a weighted fit**: with a weighted fit, `means_grid(data)` holds unweighted means. For Stata's `atmeans` write `means_grid(model, data)` (the model's estimation weights over its estimation sample), or `means_grid(data; weights = :w)`, or let `profile_margins` fill the values in.
 
 ```julia
 m = glm(@formula(y ~ x + z + group), df, Binomial(), LogitLink(); wts = df.w)
 
 mem  = profile_margins(m, df, means_grid(df; weights = :w))  # at weighted means and shares
+mem2 = profile_margins(m, df, means_grid(m, df))              # the same, from the model's weights
 res  = profile_margins(m, df, cartesian_grid(x = [0, 1]))    # z, group filled in, model-weighted
 res0 = profile_margins(m, df, complete_reference_grid(cartesian_grid(x = [0, 1]), m, df; weights = :none))
 ```

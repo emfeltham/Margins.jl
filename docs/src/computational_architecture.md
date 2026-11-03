@@ -10,10 +10,10 @@ Margins.jl is built on [FormulaCompiler.jl](https://github.com/emfeltham/Formula
 
 FormulaCompiler.jl provides the **zero-allocation computational core** that enables Margins.jl to:
 
-1. **Process large econometric datasets efficiently**: O(1) profile margins regardless of dataset size
+1. **Process large econometric datasets efficiently**: allocation-free row evaluation whose per-row cost does not depend on the dataset size; profile margins evaluate only the grid rows
 2. **Maintain statistical rigor**: Exact derivatives for delta-method standard errors  
 3. **Support complex formulas**: Nested functions like `log(1 + income)` with proper differentiation
-4. **Handle mixed data types**: Automatic Float64 conversion for derivatives without runtime cost
+4. **Handle mixed data types**: Integer columns are converted to Float64 once per call (about 8 bytes per row per column)
 5. **Ensure numerical stability**: Machine-precision accuracy for gradient computations
 
 **Without FormulaCompiler.jl**, marginal effects computation would require either:
@@ -44,7 +44,8 @@ de = FormulaCompiler.derivativeevaluator(:ad, compiled, data, [:income, :age])
 
 #### Type-Safe Overrides
 ```julia
-# Counterfactual values replace a column in the evaluation (the data is not copied)
+# Counterfactual values replace a column in the evaluation (that column is rebuilt with the new
+# value; the rest of the data is not copied)
 population_margins(model, data; scenarios=(income=50000,))
 # A categorical variable can be held at a frequency mixture in a reference grid
 profile_margins(model, data, cartesian_grid(treatment=[mix("control" => 0.5, "treated" => 0.5)]))
@@ -68,7 +69,7 @@ for j in 1:n_scenarios
 end
 ```
 
-**Key insight**: Profile margins achieve **O(1) scaling** because they evaluate formulas only at specified scenarios, not across the entire dataset.
+**Key insight**: Profile margins evaluate formulas only at the reference-grid rows, not across the entire dataset, so their cost is dominated by the grid size. Each call still does a small amount of O(n) work on the data (see [Performance Implications of Architecture](#Performance-Implications-of-Architecture)).
 
 ### Derivative Computation
 
@@ -109,8 +110,8 @@ These buffers are **reused across the rows of a call**, eliminating per-row allo
 FormulaCompiler.jl automatically handles the mixed data types common in econometric analysis:
 
 #### Integer Variables
-- **Runtime behavior**: Automatic Float64 conversion during derivative computation
-- **Performance impact**: Zero (conversion happens during compilation, not evaluation)
+- **Runtime behavior**: Margins copies integer columns to Float64 at the start of each call
+- **Performance impact**: One O(n) copy per call (about 8 bytes per row per integer column); evaluation itself is unaffected
 - **Mathematical correctness**: Preserves exact derivative computation
 - **Example**: `age::Int64` treated as continuous for marginal effects
 
@@ -151,8 +152,8 @@ The statistical rigor of Margins.jl depends on proper delta-method computation:
 # Delta-method formula: Var(g(β)) = g'(β) Σ g'(β)ᵀ
 # Where g'(β) = ∂(marginal_effect)/∂β and Σ = vcov(model)
 
-# FormulaCompiler.jl computes g'(β) with zero allocation:
-gradient = FormulaCompiler.compute_parameter_gradient(compiled, β, data_point)
+# Margins accumulates g'(β) from FormulaCompiler's model rows and Jacobians
+# (derivative_modelrow!) with zero allocation per row; then
 variance = gradient' * vcov_matrix * gradient
 standard_error = sqrt(variance)
 ```
@@ -170,26 +171,23 @@ FormulaCompiler.jl integrates seamlessly with Julia's covariance matrix ecosyste
 
 ## Performance Implications of Architecture
 
-### Why Profile Margins Are O(1)
+### Profile and Population Cost
 
 ```julia
-# Profile margins evaluate k scenarios (typically 1-50)
-n_scenarios = length(expand_scenarios(at_specification))
-computational_cost = n_scenarios * 7ns  # Independent of dataset size
+# Profile margins evaluate the k grid rows (typically 1-50)
+computational_cost = k * cost_per_row          # the model evaluations
+# plus a small per-call O(n) part: integer columns copied to Float64, the derived-column
+# check, and typical values over the estimation sample for variables the grid leaves out
 
-# Population margins evaluate n observations  
-computational_cost = n_observations * 7ns  # Scales with data
+# Population margins evaluate n observations
+computational_cost = n * cost_per_row          # scales with data
 ```
 
-**Architectural insight**: Profile margins achieve constant-time performance because FormulaCompiler.jl **decouples** formula evaluation from data size.
+FormulaCompiler.jl's per-row cost does not depend on the dataset size, so profile margins are dominated by the grid size. Measured on a 65-coefficient logit (Apple M4 Pro), profile predictions at 4 grid rows take 0.27, 0.59 and 1.8 ms at 5,000, 50,000 and 500,000 rows, and the AME of all variables 18 ms, 182 ms and 1.8 s.
 
 ### Memory Architecture
 
-```julia
-# Constant memory footprint regardless of dataset size:
-memory_usage = sizeof(row_buf) + sizeof(g_buf) + sizeof(gβ_accumulator) + compilation_cache
-# Total: ~few KB, independent of whether you have 1k or 1M observations
-```
+The row loops allocate nothing: the engine's buffers (`g_buf`, `gβ_accumulator`, the `MEWorkspace`) are sized by the number of coefficients and variables, not by n. A call's allocations still include O(n) column copies made per call: integer columns converted to Float64 (about 8 bytes per row per column), the columns a scenario replaces, and, for FixedEffectModels, the subset to the estimation sample. In the measurements above, profile predictions allocate 0.78, 3.2 and 27 MiB and the AME of all variables 0.95, 3.4 and 27 MiB at 5,000, 50,000 and 500,000 rows.
 
 ### Compilation Caching
 
@@ -197,7 +195,7 @@ FormulaCompiler.jl automatically caches compiled evaluators:
 
 ```julia
 # First call: compilation cost
-result1 = population_margins(model, data)  # ~milliseconds (compile + compute)
+result1 = population_margins(model, data)  # seconds in a fresh session (JIT compilation + compute)
 
 # Subsequent calls reuse the compiled formula; the engine (buffers, evaluators, Σ) is
 # rebuilt per call, a fraction of a millisecond
@@ -215,7 +213,7 @@ FormulaCompiler.jl directly processes StatsModels.jl formulas:
 formula = @formula(log_wage ~ education + experience + education&experience)
 
 # ...to compiled computational kernel with proper derivatives
-compiled = FormulaCompiler.compile_formula(formula, model, data)
+compiled = FormulaCompiler.compile_formula(model, Tables.columntable(data))
 # Handles interaction terms, transformations, and categorical expansions
 ```
 
@@ -229,8 +227,8 @@ Link functions are handled transparently:
 # Where μ = linkinv(η) and ∂μ/∂η computed by FormulaCompiler.jl
 
 # Both link scale (:link) and response scale (:response) supported
-margin_link = compute_margin(compiled, :link)      # Direct derivative
-margin_response = compute_margin(compiled, :response)  # Chain rule applied
+margin_link = population_margins(model, data; scale=:link)          # Direct derivative
+margin_response = population_margins(model, data; scale=:response)  # Chain rule applied
 ```
 
 ### MixedModels.jl Integration
@@ -248,16 +246,16 @@ V_fixed = vcov(mixed_model)  # Fixed effects covariance only
 
 ## Extensibility Architecture
 
-### Custom Function Support
+### Function Support
 
-FormulaCompiler.jl supports user-defined functions with automatic differentiation:
+FormulaCompiler.jl differentiates the functions it has operations for (`log`, `exp`, `sqrt`, powers, and the others listed in its user guide under "Supported Functions"). A formula that calls any other function, including a user-defined one, fails in `compile_formula` with an `ArgumentError` naming the term:
 
 ```julia
-# Custom transformations with exact derivatives
 my_transform(x) = log(1 + exp(x))  # Softplus function
-
-# Automatic differentiation handles custom functions:
-@formula(y ~ my_transform(income) + age)  # Works seamlessly
+@formula(y ~ my_transform(income) + age)  # ArgumentError: unsupported function
+# Precompute the column instead (it is then held fixed by counterfactuals; see
+# "Derived Columns" in Population Scenarios), or write it with supported functions:
+@formula(y ~ log(1 + exp(income)) + age)
 ```
 
 ### Backend Extensibility

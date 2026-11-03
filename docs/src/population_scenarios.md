@@ -442,7 +442,7 @@ result = population_margins(model, data;
 
 **Memory:**
 - Zero per-row allocations (efficient)
-- Memory scales with number of unique scenarios, not observations
+- Each scenario stores one new column of n values per variable it overrides; result storage grows with the number of scenarios
 - Large scenario counts use O(scenarios) memory for result storage
 
 ## Technical Implementation Notes
@@ -468,7 +468,7 @@ All scenarios maintain **publication-grade statistical validity**:
 - O(n) time per scenario where n = observations
 - Scenarios evaluated sequentially within a call (separate Margins calls may run concurrently; see the caching documentation)
 - FD backend: minimal override sets constructed
-- AD backend: exact derivatives with zero allocation
+- AD backend: exact derivatives with no per-row allocation
 
 ### Column Naming Convention
 

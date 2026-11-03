@@ -1,13 +1,11 @@
 # Developer Performance Guide
 
-This page summarizes best practices to ensure O(1) allocations in production paths without compromising statistical correctness. It mirrors PERFORMANCE_BEST_PRACTICES.md at the repo root for convenient browsing.
-
-See also: ../../PERFORMANCE_BEST_PRACTICES.md (same content).
+This page summarizes best practices to keep the per-row loops allocation-free, and per-call allocations from growing with n, without compromising statistical correctness.
 
 ## Core Principles
 
 - Preserve statistical validity (delta-method, full Σ) at all times
-- Aim for constant allocations w.r.t. sample size in production code
+- Aim for constant allocations w.r.t. sample size in production code (the per-call Float64 copies of integer columns and of columns a scenario replaces are the accepted O(n) exceptions)
 - Preallocate once; reuse buffers and result tables
 - Avoid dynamic growth in hot paths
 
@@ -21,9 +19,7 @@ See also: ../../PERFORMANCE_BEST_PRACTICES.md (same content).
 
 ## Validation
 
-- Use `validate_allocations.jl`; rely on tags:
-  - [PROD]: production code paths — must be O(1)
-  - [TEST]: diagnostic loops — may allocate by design for isolation
+- The allocation tests are in `test/performance/` (`test_allocation_scaling.jl`, `test_ame_fd_loop_zero_alloc.jl`, `test_population_aap_loop_zero_alloc.jl`).
 
-Expected (validated): `_population_predictions`, `population_margins` (pred/effects) show constant allocations.
+Expected (tested): the row loops allocate 0 bytes; warm `population_margins` calls (predictions and effects) on Float64 data allocate about the same amount at n = 1,000 and 50,000 (well below one 8n-byte column).
 
