@@ -56,6 +56,8 @@ end
     include("regression/test_integer_coded_categorical.jl")
     include("regression/test_profile_measure_quotient_rule.jl")
     include("regression/test_data_prep_memo.jl")
+    include("regression/test_int_column_engine_cache.jl")
+    include("regression/test_hierarchical_partial_typical.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
     include("test_profile_pairwise.jl")
@@ -68,6 +70,8 @@ end
     include("test_categorical_batch_zero_alloc.jl")
     include("test_categorical_kernel_zero_alloc.jl")
     include("test_per_row_allocations.jl")
+    include("performance/test_ame_fd_loop_zero_alloc.jl")
+    include("performance/test_population_aap_loop_zero_alloc.jl")
 end
 
 @testset "Statistical Correctness" begin
@@ -102,5 +106,7 @@ end
     include("validation/test_measure_contexts.jl")
     include("validation/test_elasticity_unit_definitions.jl")
     include("validation/test_engine_cache.jl")
+    include("validation/test_engine_cache_bound.jl")
+    include("validation/test_concurrent_calls.jl")
     include("validation/test_profile_categorical_contrasts.jl")
 end

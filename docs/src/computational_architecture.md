@@ -100,7 +100,7 @@ struct MarginsEngine
 end
 ```
 
-These buffers are **reused across all computations**, eliminating runtime allocations. Because they are mutable and shared by every call that reuses the same cached engine, Margins is **not thread-safe**: concurrent Margins calls in one process can overwrite each other's buffers and return wrong results silently. Run Margins calls serially, or parallelize across processes (see [Caching: Thread Safety Considerations](caching.md#Thread-Safety-Considerations)).
+These buffers are **reused across calls**, eliminating runtime allocations. Because they are mutable, a call takes its engine from the cache for its exclusive use and returns it when it finishes, and every engine evaluates through its own copy of the compiled formula's scratch buffer. Concurrent Margins calls from several tasks or threads are therefore safe: each gets its own engine (see [Caching: Thread Safety](caching.md#Thread-Safety)).
 
 ## Data Type Architecture
 

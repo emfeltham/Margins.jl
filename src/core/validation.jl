@@ -210,7 +210,7 @@ function validate_vcov_parameter(vcov, model)
     vcov_key = hash((vcov, typeof(model), coef(model)))
     
     # Skip expensive validation if we've already validated this combination
-    if vcov_key in Margins.VALIDATED_MODELS_CACHE
+    if _is_validated(vcov_key)
         return nothing
     end
     
@@ -234,7 +234,7 @@ function validate_vcov_parameter(vcov, model)
     end
     
     # Cache successful validation
-    push!(Margins.VALIDATED_MODELS_CACHE, vcov_key)
+    _mark_validated!(vcov_key)
     return nothing
 end
 

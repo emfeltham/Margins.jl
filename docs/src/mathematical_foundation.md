@@ -124,7 +124,7 @@ Elasticities are transformations of marginal effects that follow the same 2×2 f
 
 ### Framework Application
 - **Profile elasticities**: Calculate (∂Y/∂X) × (X/Ŷ) at the representative values of the grid row
-- **Population elasticities**: Average the unit-level (∂Ŷᵢ/∂X) × (Xᵢ/Ŷᵢ) across sample observations (as Stata `margins, eyex()` and R `avg_slopes(slope = "eyex")` do; before v2.2.0 Margins used the ratio of means (X̄/Ȳ) × AME)
+- **Population elasticities**: Average the unit-level (∂Ŷᵢ/∂X) × (Xᵢ/Ŷᵢ) across sample observations (as Stata `margins, eyex()` and R `avg_slopes(slope = "eyex")` do; before v2.3.0 Margins used the ratio of means (X̄/Ȳ) × AME)
 
 In GLMs with non-identity links, profile elasticity ≠ average elasticity, following the same logic as marginal effects.
 

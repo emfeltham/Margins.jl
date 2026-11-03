@@ -248,8 +248,9 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
 
-    # Compile formula with FormulaCompiler (using cache for performance)
-    compiled = get_or_compile_formula(model, data_nt)
+    # Compiled formula with a private scratch buffer (cached ops; see `_private_compiled`),
+    # so engines never share mutable evaluation state
+    compiled = _private_compiled(model, data_nt)
     all_continuous = continuous_variables(compiled, data_nt)
 
     # Filter continuous and categorical vars from requested vars (zero allocation)

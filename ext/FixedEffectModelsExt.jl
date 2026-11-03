@@ -28,7 +28,7 @@ using Margins: _auto_link, validate_model_methods, MarginsError,
                _population_predictions, _build_metadata, _ame_calculate,
                _population_margins_with_contexts, _process_vars_parameter,
                _process_weights_parameter, _convert_numeric_to_float64, _prepare_margins_data,
-               get_or_build_engine, PopulationUsage, ProfileUsage,
+               _checkout_engine, _checkin_engine!, PopulationUsage, ProfileUsage,
                HasDerivatives, NoDerivatives,
                _profile_margins, process_reference_grid,
                _validate_reference_grid_column_type
@@ -144,44 +144,49 @@ function Margins.population_margins(
 
     # Build engine
     deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
-    engine = get_or_build_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
-
-    # Handle scenarios/groups
-    if !isnothing(scenarios) || !isnothing(groups)
-        result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
-        # Add FE offset for predictions with contexts
-        if type === :predictions
-            return _adjust_population_result_with_fe(result, model, data, weights_vec)
+    # Exclusive use of a cached engine for this call (returned in `finally`, so an
+    # error cannot leak it); concurrent calls each get their own engine.
+    (engine, engine_key) = _checkout_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
+    try
+        # Handle scenarios/groups
+        if !isnothing(scenarios) || !isnothing(groups)
+            result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
+            # Add FE offset for predictions with contexts
+            if type === :predictions
+                return _adjust_population_result_with_fe(result, model, data, weights_vec)
+            end
+            return result
         end
-        return result
-    end
 
-    if type === :effects
-        df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)
-        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-        metadata[:alpha] = ci_alpha
-        metadata[:analysis_type] = :population
-        metadata[:weighted] = !isnothing(weights_vec)
+        if type === :effects
+            df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)
+            metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+            metadata[:alpha] = ci_alpha
+            metadata[:analysis_type] = :population
+            metadata[:weighted] = !isnothing(weights_vec)
 
-        estimates = df.estimate
-        standard_errors = df.se
-        variables = df.variable
-        terms = df.contrast
+            estimates = df.estimate
+            standard_errors = df.se
+            variables = df.variable
+            terms = df.contrast
 
-        return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
-    else # :predictions
-        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-        metadata[:alpha] = ci_alpha
-        metadata[:analysis_type] = :population
-        metadata[:weighted] = !isnothing(weights_vec)
+            return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+        else # :predictions
+            df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
+            metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+            metadata[:alpha] = ci_alpha
+            metadata[:analysis_type] = :population
+            metadata[:weighted] = !isnothing(weights_vec)
 
-        # Add FE offset to prediction estimates
-        fe_offset = _compute_population_fe_offset(model, data, weights_vec)
-        estimates = df.estimate .+ fe_offset
-        standard_errors = df.se  # SEs unchanged — FE offset is constant w.r.t. β
+            # Add FE offset to prediction estimates
+            fe_offset = _compute_population_fe_offset(model, data, weights_vec)
+            estimates = df.estimate .+ fe_offset
+            standard_errors = df.se  # SEs unchanged — FE offset is constant w.r.t. β
 
-        return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
+            return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
+        end
+    finally
+        _checkin_engine!(engine_key, engine)
     end
 end
 

@@ -52,8 +52,10 @@ function _convert_numeric_to_float64(data_nt::NamedTuple{names}) where {names}
         col = _narrow_missing_eltype(getproperty(data_nt, name))
         # Convert numeric columns (excluding Bool and CategoricalArray)
         if col isa AbstractVector{<:Real} && !(eltype(col) <: Bool) && !(eltype(col) === Float64)
-            # Need to convert: Int64, Int32, Float32, etc.
-            return Float64.(col)
+            # Need to convert: Int64, Int32, Float32, etc. Memoized per source array (like
+            # the Union{Missing,T} narrowing) so that repeated calls on the same data get the
+            # same Float64 array back and hit the engine cache, which checks column identity.
+            return _memoized_transform(_to_float64_copy, col, _FLOAT64_CONVERSION_TAG)
         else
             # Keep as-is: Float64 (already correct), Bool, CategoricalArray, String, etc.
             return col
@@ -122,6 +124,10 @@ const _NARROWED_COLUMNS_MAX = 64
 
 _memoized_narrowing(col::AbstractVector) = _memoized_transform(_narrow_copy, col, UInt(0))
 
+# Float64 conversion of non-Float64 numeric columns (`_convert_numeric_to_float64`)
+const _FLOAT64_CONVERSION_TAG = UInt(0x466c6f6174363421)  # distinct from the other tags
+_to_float64_copy(col::AbstractVector) = Float64.(col)
+
 _unwrap_value(x) = x isa CategoricalArrays.CategoricalValue ? CategoricalArrays.unwrap(x) : x
 
 # Staleness check behind a function barrier: the memo stores `AbstractVector`, so this must
@@ -147,24 +153,74 @@ end
 
 _purge_dead_memo_entries!() = filter!(kv -> kv.second[1].value !== nothing, _NARROWED_COLUMNS)
 
+# Guards Margins' small process-wide tables — this memo, `VALIDATED_MODELS_CACHE`, and
+# lookups in FormulaCompiler's compiled-formula cache (`_shared_compiled`) — so concurrent
+# Margins calls cannot corrupt them. Held only for lookups and inserts, never while
+# computing. Lock order: `_ENGINE_CACHE_LOCK` may be held when this one is taken, never
+# the reverse.
+const _STATE_LOCK = ReentrantLock()
+
 # Apply `f(col)` once per (source array, `tag`) and reuse the result while the source's
 # contents still equal it (so in-place edits of the source are picked up). Keeps the result's
 # identity stable across calls, which the engine cache's identity check relies on.
+# Thread-safe: the table is touched only under `_STATE_LOCK`; the staleness check and `f`
+# run outside it (a memoized copy is never mutated after it is stored).
 function _memoized_transform(f, col::AbstractVector, tag::UInt)
     ismutable(col) || return f(col)  # no stable identity to key on
     key = hash(tag, UInt(objectid(col)))
-    _purge_dead_memo_entries!()
-    hit = get(_NARROWED_COLUMNS, key, nothing)
+    hit = nothing
+    lock(_STATE_LOCK)
+    try
+        _purge_dead_memo_entries!()
+        hit = get(_NARROWED_COLUMNS, key, nothing)
+    finally
+        unlock(_STATE_LOCK)
+    end
     if !isnothing(hit)
         (wr, out) = hit
         wr.value === col && _same_contents(col, out) && return out
     end
     out = f(col)
-    length(_NARROWED_COLUMNS) >= _NARROWED_COLUMNS_MAX && empty!(_NARROWED_COLUMNS)
-    _NARROWED_COLUMNS[key] = (WeakRef(col), out)
+    lock(_STATE_LOCK)
+    try
+        length(_NARROWED_COLUMNS) >= _NARROWED_COLUMNS_MAX && empty!(_NARROWED_COLUMNS)
+        _NARROWED_COLUMNS[key] = (WeakRef(col), out)
+    finally
+        unlock(_STATE_LOCK)
+    end
     return out
 end
 
+"""
+    _shared_compiled(model, data) -> UnifiedCompiled
+
+FormulaCompiler's process-wide cached compiled formula for `(model, data schema)`, looked
+up under `_STATE_LOCK`. The returned object is SHARED: use it only for read-only
+inspection (its `ops`, `continuous_variables`, `categorical_levels`, `length`). Anything
+that evaluates rows must use `_private_compiled`, because evaluation writes into the
+compiled object's scratch buffer.
+"""
+function _shared_compiled(model, data)
+    lock(_STATE_LOCK)
+    try
+        return get_or_compile_formula(model, data)
+    finally
+        unlock(_STATE_LOCK)
+    end
+end
+
+"""
+    _private_compiled(model, data) -> UnifiedCompiled
+
+A compiled formula for `(model, data schema)` with its own scratch buffer: the cached
+operations (shared; their only mutable state, FormulaCompiler's categorical level cache, is
+published atomically since FC 1.5.0) with a freshly allocated scratch vector, so concurrent
+Margins calls on the same model never write into the same buffer. Costs one small
+allocation (the scratch vector) instead of a recompilation.
+"""
+_private_compiled(model, data) = _with_private_scratch(_shared_compiled(model, data))
+_with_private_scratch(c::FormulaCompiler.UnifiedCompiled{T, Ops, S, O}) where {T, Ops, S, O} =
+    FormulaCompiler.UnifiedCompiled{T, Ops, S, O}(c.ops)
 
 """
     _model_variable_names(model) -> Vector{Symbol}
@@ -243,7 +299,7 @@ function _model_categorical_levels(model, data_nt::NamedTuple)
     # No try/catch: a model Margins accepts always compiles (the engine is built from the
     # same compiled formula), and swallowing an error here would silently disable the
     # model-based classification.
-    return categorical_levels(get_or_compile_formula(model, data_nt))
+    return categorical_levels(_shared_compiled(model, data_nt))
 end
 
 """

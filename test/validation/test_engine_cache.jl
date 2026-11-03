@@ -167,9 +167,11 @@ end
         @test Margins.get_cache_stats().entries <= 2        # effects engine (+ any predictions)
     end
 
-    @testset "Int columns: rebuilt each call, still correct and bounded" begin
-        # _convert_numeric_to_float64 makes a fresh array for non-Float64 numerics, so these
-        # calls always miss revalidation. Results must stay correct and the cache bounded.
+    @testset "Int columns: correct, cached and bounded" begin
+        # _convert_numeric_to_float64 converts non-Float64 numerics to a Float64 copy that is
+        # memoized per source array, so repeated calls reuse one engine (see
+        # test/regression/test_int_column_engine_cache.jl). Results must stay correct and
+        # the cache bounded.
         Margins.clear_engine_cache!()
         Random.seed!(7); n = 200
         di = DataFrame(x=abs.(randn(n)) .+ 1.0, k=rand(1:10, n))

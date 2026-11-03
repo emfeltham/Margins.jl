@@ -31,7 +31,7 @@ _wmean(v, rows, w) = isnothing(w) ? mean(@view v[rows]) :
 Closed-form (estimate, se) for the marginal effect of a continuous `var` over `rows`,
 under `measure` and `scale`. `X` is the design matrix already reflecting any scenario
 override. Measures are (weighted) means of unit-level quantities, as in Stata `margins,
-eyex()/dyex()/eydx()` and R `avg_slopes(slope = ...)` (v2.2.0; earlier versions used a
+eyex()/dyex()/eydx()` and R `avg_slopes(slope = ...)` (v2.3.0; earlier versions used a
 ratio of means — see test/validation/test_elasticity_unit_definitions.jl). Gradients come
 from a central difference in β, so this covers the quotient-rule terms without deriving
 them by hand.

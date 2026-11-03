@@ -29,13 +29,13 @@ The computation of marginal effects involves repeated evaluation of compiled for
 
 ### Cache Structure
 
-The package maintains a global dictionary that maps configuration hashes to pre-compiled engine instances:
+The package keeps a process-wide, bounded pool of pre-built engine instances, keyed by a configuration hash:
 
 ```julia
-const ENGINE_CACHE = Dict{UInt64, MarginsEngine}()
+const ENGINE_CACHE = Dict{UInt64, _EngineSlot}()   # key => idle engines of that configuration
 ```
 
-Each `MarginsEngine` encapsulates a compiled formula evaluator from FormulaCompiler.jl along with pre-allocated buffers necessary for computation. The cache key uniquely identifies the computational context through a hash of relevant parameters.
+Each `MarginsEngine` encapsulates a compiled formula evaluator from FormulaCompiler.jl (with its own scratch buffer) along with pre-allocated buffers necessary for computation. A slot normally holds one engine; it holds more only while several calls on the same configuration run concurrently (see "Thread Safety"). The pool holds at most `Margins.engine_cache_capacity()` engines in total (default 8; see "Memory Management").
 
 ### Configuration Identification
 
@@ -58,26 +58,22 @@ This key identifies the data only by its column *names* — not by which arrays 
 
 ### Retrieval Mechanism
 
-A cache hit is accepted only when the cached engine is bound to the same column objects the caller passed; otherwise the engine is rebuilt and the entry replaced:
+Each call checks an engine out for its exclusive use and returns it when it finishes, in a `finally` block so an error cannot leak it:
 
 ```julia
-function get_or_build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
-    cache_key = hash(...)
-
-    cached = get(ENGINE_CACHE, cache_key, nothing)
-    if !isnothing(cached) && _engine_data_matches(cached, data_nt)
-        return cached
-    end
-
-    engine = build_engine(usage, deriv, model, data_nt, vars, vcov, backend)
-    ENGINE_CACHE[cache_key] = engine
-    return engine
+(engine, key) = _checkout_engine(usage, deriv, model, data_nt, vars, vcov, backend)
+try
+    # ... compute with `engine` ...
+finally
+    _checkin_engine!(key, engine)
 end
 ```
 
+Check-out takes an idle engine of that configuration whose data binding matches the caller's data, or builds a new one (outside the lock, so a slow build does not block other calls). Check-in returns it to the idle pool, drops idle engines of the same configuration bound to *other* data (so processing many same-schema datasets one after another keeps one engine per configuration, not one per dataset), and trims the pool to capacity. The only per-call overhead of the pool is a lock acquire/release at check-out and at check-in.
+
 `_engine_data_matches` compares columns by identity (`===`) rather than by value: the same array object is precisely the condition under which the cached evaluators read the caller's data. Identity comparison is also collision-free, since the cache holds the engine, which holds the arrays.
 
-The tradeoff is deliberate. Alternating between two datasets that share a schema rebuilds the engine on each call — measured at 0.03–0.13 ms, or 1–3% of a single margins call on a 16-parameter logit with interactions at n = 20,000. That is the correct price for never returning results computed on the wrong rows. Note also that `_convert_numeric_to_float64` returns the original array for `Float64`, `Bool` and categorical columns, so ordinary data continues to hit the cache; only `Int` and `Float32` columns are re-converted per call and therefore force a rebuild.
+The tradeoff is deliberate. Alternating between two datasets that share a schema rebuilds the engine on each call — measured at 0.03–0.13 ms, or 1–3% of a single margins call on a 16-parameter logit with interactions at n = 20,000. That is the correct price for never returning results computed on the wrong rows. Data preparation keeps column identity stable for repeated calls on the same data: `Float64`, `Bool` and categorical columns are passed through, and the copies it makes (`Int`/`Float32` → `Float64`, `Union{Missing,T}` columns without missing values narrowed, model-categorical columns converted to `CategoricalArray`) are memoized per source array and reused while the source's contents are unchanged (in-place edits of the source are detected and picked up).
 
 When a configuration is encountered for the first time, the system constructs a new engine instance. Subsequent requests with an identical configuration *and* the same data retrieve the existing instance without recompilation.
 
@@ -171,28 +167,23 @@ The caching system creates distinct entries for configurations that differ in an
 
 ### Memory Management
 
-The memory footprint of cached engines scales with the number of unique configurations encountered during a session. For a model with p predictors, each engine requires approximately O(p²) memory, dominated by the variance-covariance matrix storage.
-
-Typical usage patterns exhibit bounded cache growth:
-
-- Standard analysis sessions: 1-10 unique configurations
-- Complex comparative studies: 10-100 configurations
-- Long-running services: Periodic cache clearing may be warranted
-
-#### Internal Cache Management (Not Exported)
-
-For advanced users and developers, the package provides internal utilities for cache management. These are **not exported** and require qualified access:
+A cached engine keeps the data columns it was built from alive, so the cache is bounded: it holds at most `Margins.engine_cache_capacity()` engines (default 8), evicting idle engines of the least recently used configurations first. Engines in use by running calls are never evicted. Repeated calls on a few models and datasets — the common pattern — stay within the default and always hit the cache; a loop that fits a new model per iteration (bootstrap, simulation, cross-validation) uses a new configuration each time, and the bound keeps memory flat: at most the 8 most recent configurations (and their data) are retained.
 
 ```julia
-# Query cache statistics (internal function)
+# Query cache statistics
 stats = Margins.get_cache_stats()
-# Returns: (entries = n, memory_estimate = bytes, keys = [...])
+# (entries = engines held, keys = configurations, capacity = 8, memory_estimate = bytes)
 
-# Clear cache to reclaim memory (internal function)
+# Change the bound (returns the previous capacity); 0 disables caching
+Margins.set_engine_cache_capacity!(4)
+
+# Release everything now (engines and memoized data conversions)
 Margins.clear_engine_cache!()
 ```
 
-**Note:** These functions are primarily for debugging and development. Most users will never need to call them directly, as Julia's garbage collection handles memory management automatically when MarginsEngine instances are no longer referenced.
+These functions are not exported. Most users never need them: the bound applies automatically. Lowering the capacity is useful when each dataset is very large; `clear_engine_cache!()` releases memory at once.
+
+FormulaCompiler keeps its own cache of compiled formulas (one small entry per model and column-type signature), which `clear_engine_cache!()` does not yet clear.
 
 ### Performance Characteristics
 
@@ -202,47 +193,47 @@ Empirical measurements demonstrate the performance impact of caching for a gener
 |-----------------|--------------|-------------|-------|
 | Population margins | 45 | 3 | 15:1 |
 | Profile margins (10 profiles) | 8 | 0.5 | 16:1 |
-| Bootstrap standard errors (1000 iterations) | 45,000 | 3,000 | 15:1 |
 
 These measurements reflect the elimination of compilation overhead while preserving computational correctness.
 
 ## Implementation Details
 
-### Thread Safety Considerations
+### Thread Safety
 
-Margins.jl is **not thread-safe**. Do not call `population_margins`, `profile_margins` or
-any other Margins function concurrently from several tasks or threads in one Julia process.
+Concurrent Margins calls are safe. `population_margins`, `profile_margins` and the
+functions built on them (second differences, contrasts) may be called from several tasks
+or threads at once, on the same model and data or on different ones, and each returns
+exactly what it returns when called alone.
 
-The problem is not only the cache dictionary. A cached `MarginsEngine` owns mutable scratch
-buffers (gradient accumulators, model-row and Jacobian buffers, counterfactual state in its
-FormulaCompiler evaluators), and every call writes into them. Two concurrent calls that
-resolve to the same engine — the same model with the same data, which is exactly what a
-bootstrap or simulation loop produces — overwrite each other's intermediate results and
-return wrong estimates and standard errors without any error. Pre-populating the cache
-before a `Threads.@threads` loop does **not** help: it makes the calls share one engine,
-which is the unsafe case. (In testing, 64 of 64 concurrent calls on a pre-populated cache
-returned wrong values.)
+This holds because no two running calls share mutable state:
 
-Safe ways to parallelize:
+- A cached `MarginsEngine` owns mutable scratch buffers (gradient accumulators, model-row
+  and Jacobian buffers, counterfactual state in its FormulaCompiler evaluators). A call
+  checks its engine out of the pool for its exclusive use; a concurrent call on the same
+  configuration gets another engine (built on demand, then kept in the pool, within its
+  capacity).
+- FormulaCompiler's cached compiled formula is shared per model and schema and holds a
+  scratch buffer. Margins never evaluates through the shared object: every engine, and
+  every reference-grid evaluation, uses a copy of the compiled operations with its own
+  scratch buffer.
+- Process-wide tables (the engine pool, the memo of converted data columns, the
+  validated-model cache, lookups in FormulaCompiler's compiled-formula cache) are guarded
+  by locks.
 
-1. **Separate processes** (recommended). Each process has its own cache and engines:
+```julia
+results = Vector{Any}(undef, 200)
+Threads.@threads for b in 1:200
+    d = bootstrap_sample(data, b)              # your resampling function
+    m = glm(formula, d, Binomial(), LogitLink())
+    results[b] = DataFrame(population_margins(m, d; vars=[:x]))
+end
+```
 
-   ```julia
-   using Distributed
-   addprocs(4)
-   @everywhere using Margins, GLM, DataFrames
-   results = pmap(1:200) do b
-       d = bootstrap_sample(data, b)          # your resampling function
-       m = glm(formula, d, Binomial(), LogitLink())
-       DataFrame(population_margins(m, d; vars=[:x]))
-   end
-   ```
-
-2. **Serial Margins calls.** Parallelize the expensive work that does not touch Margins
-   (model fitting, data preparation) and run the Margins calls one at a time, e.g. behind a
-   `ReentrantLock`.
-
-Thread-local engines are not currently supported.
+Objects obtained from FormulaCompiler directly (`compile_formula`,
+`derivativeevaluator`, `contrastevaluator`, ...) are *not* thread-safe: they carry their own
+scratch buffers, so create one per task when using them in threaded code. The same holds
+for the internal helper `Margins.get_or_build_engine`, which returns a cached engine
+without holding it.
 
 ### Cache Invalidation
 
@@ -263,20 +254,6 @@ Margins.clear_engine_cache!()
 result2 = population_margins(model, data)
 ```
 
-### Backward Compatibility
-
-The system provides automatic derivative support detection for legacy code:
-
-```julia
-# Explicit specification (recommended)
-get_or_build_engine(PopulationUsage, HasDerivatives, model, data_nt, vars, vcov)
-
-# Automatic detection (backward compatible)
-get_or_build_engine(PopulationUsage, model, data_nt, vars, vcov)
-```
-
-The automatic detection examines the data types to determine whether derivative computation is required.
-
 ## Theoretical Foundation
 
 The caching system exploits the mathematical property that marginal effects computation for a given model configuration involves deterministic transformations of the design matrix and coefficient vector. For a model with linear predictor η = Xβ, the marginal effect computation:
@@ -289,10 +266,8 @@ depends only on the model structure, coefficients, and link function. By caching
 
 Several enhancements to the caching system are under consideration:
 
-1. **Least-recently-used eviction**: Automatic cache size management through LRU policies
-2. **Thread-local engines**: Safe concurrent use from several threads (engines and their buffers are currently shared and not thread-safe)
-3. **Weak references**: Enable garbage collection of unused engines while preserving active ones
-4. **Persistent caching**: Serialization of compiled engines for cross-session reuse
+1. **Clearing FormulaCompiler's compiled-formula cache** from `clear_engine_cache!()`, once FormulaCompiler provides `clear_compiled_cache!()`
+2. **Persistent caching**: Serialization of compiled engines for cross-session reuse
 
 These enhancements would extend the applicability of the caching system to more diverse computational contexts while maintaining the current guarantees of numerical correctness.
 

@@ -20,7 +20,7 @@ This is the cleanest approach to prevent non-model variables from leaking into c
 """
 function _filter_data_to_model_variables(data_nt::NamedTuple, model)
     # Get model variables using FormulaCompiler (using cache for performance)
-    compiled = get_or_compile_formula(model, data_nt)
+    compiled = _shared_compiled(model, data_nt)
 
     # Extract all variables used in model operations
     model_vars = Set{Symbol}()
@@ -1098,12 +1098,16 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
         cols[key] = Any[]
     end
     
+    # Positions filled with a typical value (rather than specified by a combination)
+    typical_mask = Dict{Symbol, BitVector}(key => falses(length(grid_combinations)) for key in all_keys)
+
     # Fill in values - Phase 1.2: Use typical values instead of missing
-    for combo in grid_combinations
+    for (row, combo) in enumerate(grid_combinations)
         for key in all_keys
             if haskey(combo, key)
                 push!(cols[key], combo[key])
             else
+                typical_mask[key][row] = true
                 # For missing keys, fill with typical values from data
                 if !haskey(data_nt, key)
                     error("Variable $key not found in data when computing typical value")
@@ -1164,9 +1168,19 @@ function _build_hierarchical_reference_grid(grid_combinations, data_nt)
     end
     
     df = DataFrame(cols)
-    # Columns no combination specifies hold only typical values
-    typical_only = [k for k in all_keys if !any(combo -> haskey(combo, k), grid_combinations)]
-    return _mark_typical_values!(df, [string(k) for k in typical_only if string(k) in names(df)])
+    # Record which cells hold typical values: columns no combination specifies are marked
+    # whole; columns some combinations specify and others leave to the typical value (e.g.
+    # `:g => [(:k, [1, 3]), (:x, [0, 1])]`) are marked per row.
+    for (k, mask) in typical_mask
+        c = string(k)
+        c in names(df) || continue
+        if all(mask)
+            _mark_typical_values!(df, [c])
+        elseif any(mask)
+            _mark_typical_value_rows!(df, c, mask)
+        end
+    end
+    return df
 end
 
 """
@@ -1351,6 +1365,41 @@ function _mark_typical_values!(df::DataFrame, cols)
 end
 
 _is_typical_value_column(df::DataFrame, col) = colmetadata(df, col, _TYPICAL_VALUE_KEY, false) === true
+
+const _TYPICAL_VALUE_ROWS_KEY = "Margins.typical_value_rows"
+
+"""
+    _mark_typical_value_rows!(df, col, mask) -> df
+
+Record that the cells `mask` (a `BitVector`, one entry per row) of column `col` hold typical
+values computed from the data, while the other cells hold values the user specified. Used
+by `hierarchical_grid` for columns only some combinations specify.
+
+Stored as `:default`-style column metadata, which DataFrames keeps through `copy` and
+`DataFrame(df)` but drops on every operation that can move, add, remove or overwrite rows
+or cells (sorting, subsetting, `vcat`, `push!`, assignment). A grid edited that way is
+therefore treated as fully user-specified (its non-level values are rejected) rather than
+having the wrong cells replaced. The mask's length is checked against the grid as well.
+"""
+function _mark_typical_value_rows!(df::DataFrame, col, mask::AbstractVector{Bool})
+    length(mask) == nrow(df) || throw(ArgumentError("typical-value mask length $(length(mask)) ≠ nrow $(nrow(df))"))
+    colmetadata!(df, col, _TYPICAL_VALUE_ROWS_KEY, BitVector(mask); style=:default)
+    return df
+end
+
+"""
+    _typical_value_rows(df, col) -> Union{BitVector, Nothing}
+
+The rows of `col` that hold typical values: all rows of a column marked whole by
+`_mark_typical_values!`, the recorded rows of a column marked by `_mark_typical_value_rows!`,
+or `nothing` when no cell is marked (every value was specified by the user).
+"""
+function _typical_value_rows(df::DataFrame, col)
+    _is_typical_value_column(df, col) && return trues(nrow(df))
+    mask = colmetadata(df, col, _TYPICAL_VALUE_ROWS_KEY, nothing)
+    (mask isa AbstractVector{Bool} && length(mask) == nrow(df)) || return nothing
+    return BitVector(mask)
+end
 
 function means_grid(data; typical=mean)
     data_nt = _narrow_missing_columns(data isa NamedTuple ? data : Tables.columntable(data))
@@ -1655,22 +1704,29 @@ function complete_reference_grid(reference_grid::DataFrame, model, data; typical
             if dcol isa CategoricalArray && eltype(gcol) <: Real
                 lv = CategoricalArrays.unwrap.(levels(dcol))
                 is_level(v) = any(l -> isequal(l, v) || (l isa Real && l == v), lv)
-                if !all(is_level, gcol)
-                    if _is_typical_value_column(reference_grid, col_name)
-                        # A data-only builder (`means_grid`, `balanced_grid`, ...) filled this
-                        # column with a typical value (e.g. the mean code k = 1.94) without
-                        # knowing the model treats it as categorical. Use the frequency
-                        # mixture over the model's levels, as for any categorical variable.
-                        @debug "Variable $col_sym is categorical in the model; using its frequency mixture instead of the typical value $(unique(gcol))."
-                        gcol = fill(_create_frequency_mixture(dcol), length(gcol))
-                    else
-                        bad = unique(filter(!is_level, gcol))
-                        throw(MarginsError(
-                            "Reference grid values $(bad) for :$col_sym are not levels of " *
-                            "this variable, which the fitted model treats as categorical. " *
-                            "Valid levels: $(lv). (Use a mixture, e.g. mix(...), for a " *
-                            "weighted combination of levels.)"))
-                    end
+                # Cells a data-only builder (`means_grid`, `balanced_grid`,
+                # `hierarchical_grid`, ...) filled with a typical value (e.g. the mean code
+                # k = 1.94) without knowing the model treats the variable as categorical. They
+                # take the frequency mixture over the model's levels, as for any categorical
+                # variable. Every other cell was specified by the user and must be a level.
+                trows = _typical_value_rows(reference_grid, col_name)
+                is_typical(i) = !isnothing(trows) && trows[i]
+                bad = unique([gcol[i] for i in eachindex(gcol) if !is_typical(i) && !is_level(gcol[i])])
+                if !isempty(bad)
+                    throw(MarginsError(
+                        "Reference grid values $(bad) for :$col_sym are not levels of " *
+                        "this variable, which the fitted model treats as categorical. " *
+                        "Valid levels: $(lv). (Use a mixture, e.g. mix(...), for a " *
+                        "weighted combination of levels.)"))
+                end
+                if !isnothing(trows) && any(trows)
+                    mixture = _create_frequency_mixture(dcol)
+                    @debug "Variable $col_sym is categorical in the model; using its frequency mixture instead of the typical value(s) $(unique(gcol[trows]))."
+                    # A column that mixes typical and user-specified cells holds the
+                    # mixture in some rows and levels in others; `profile_margins` evaluates
+                    # such grids in homogeneous row blocks (`_heterogeneous_grid_blocks`).
+                    gcol = all(trows) ? fill(mixture, length(gcol)) :
+                        Any[trows[i] ? mixture : gcol[i] for i in eachindex(gcol)]
                 end
             end
             complete_cols[col_sym] = gcol

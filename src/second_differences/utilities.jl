@@ -120,6 +120,6 @@ function second_differences_table(
     return df
 end
 
-# Continuous effects are labelled "dy/dx" (v2.2.0; the scenarios/groups path used to say
+# Continuous effects are labelled "dy/dx" (v2.3.0; the scenarios/groups path used to say
 # "derivative"). "derivative" is still accepted wherever a contrast label is passed in.
 _contrast_label(c::AbstractString) = c == "derivative" ? "dy/dx" : String(c)

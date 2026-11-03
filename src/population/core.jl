@@ -38,7 +38,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `:semielasticity_eydx` - Semielasticity d(ln y)/dx (percent change in y for unit change in x)
   Each is the (weighted) mean over observations of the unit-level quantity — gᵢxᵢ/ŷᵢ,
   gᵢxᵢ or gᵢ/ŷᵢ with gᵢ = ∂ŷᵢ/∂x — as in Stata `margins, eyex()/dyex()/eydx()` and R
-  `avg_slopes(slope = ...)`. (Before v2.2.0: a ratio of means such as (x̄/ȳ)·AME.)
+  `avg_slopes(slope = ...)`. (Before v2.3.0: a ratio of means such as (x̄/ȳ)·AME.)
   - Measures other than `:effect` apply to continuous variables only: naming a
     discrete variable in `vars` is an error, and auto-detected discrete variables
     are skipped with an informational message
@@ -175,51 +175,56 @@ function population_margins(
     # Build zero-allocation engine with PopulationUsage optimization (including vcov function)
     # Determine derivative support based on type and vars
     deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
-    engine = get_or_build_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
+    # Exclusive use of a cached engine for this call (returned in `finally`, so an
+    # error cannot leak it); concurrent calls each get their own engine.
+    (engine, engine_key) = _checkout_engine(PopulationUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
+    try
+        # Handle scenarios/groups parameters for counterfactual scenarios and grouping
+        if !isnothing(scenarios) || !isnothing(groups)
+            return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
+        end
     
-    # Handle scenarios/groups parameters for counterfactual scenarios and grouping
-    if !isnothing(scenarios) || !isnothing(groups)
-        return _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
-    end
-    
-    if type === :effects
-        df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)  # → AME (both continuous and categorical)
-        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
+        if type === :effects
+            df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)  # → AME (both continuous and categorical)
+            metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
         
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = ci_alpha
+            # Store confidence interval parameters in metadata
+            metadata[:alpha] = ci_alpha
         
-        # Add analysis_type for format auto-detection
-        metadata[:analysis_type] = :population
+            # Add analysis_type for format auto-detection
+            metadata[:analysis_type] = :population
         
-        # Store weights info in metadata
-        metadata[:weighted] = !isnothing(weights_vec)
+            # Store weights info in metadata
+            metadata[:weighted] = !isnothing(weights_vec)
         
-        # Extract raw components from DataFrame
-        estimates = df.estimate
-        standard_errors = df.se
-        variables = df.variable  # The "x" in dy/dx
-        terms = df.contrast
+            # Extract raw components from DataFrame
+            estimates = df.estimate
+            standard_errors = df.se
+            variables = df.variable  # The "x" in dy/dx
+            terms = df.contrast
         
-        return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
-    else # :predictions  
-        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
+            return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
+        else # :predictions  
+            df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
+            metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
         
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = ci_alpha
+            # Store confidence interval parameters in metadata
+            metadata[:alpha] = ci_alpha
         
-        # Add analysis_type for format auto-detection
-        metadata[:analysis_type] = :population
+            # Add analysis_type for format auto-detection
+            metadata[:analysis_type] = :population
         
-        # Store weights info in metadata  
-        metadata[:weighted] = !isnothing(weights_vec)
+            # Store weights info in metadata  
+            metadata[:weighted] = !isnothing(weights_vec)
         
-        # Extract raw components from DataFrame
-        estimates = df.estimate
-        standard_errors = df.se
+            # Extract raw components from DataFrame
+            estimates = df.estimate
+            standard_errors = df.se
         
-        return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
+            return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
+        end
+    finally
+        _checkin_engine!(engine_key, engine)
     end
 end
 
@@ -353,7 +358,7 @@ function _get_continuous_variables(model, data_nt::NamedTuple, weight_col=nothin
     # Use FormulaCompiler's robust implementation instead of manual type checking
     # FormulaCompiler analyzes compiled operations to correctly distinguish
     # continuous vs categorical variables and automatically handles formula filtering
-    compiled = get_or_compile_formula(model, data_nt)
+    compiled = _shared_compiled(model, data_nt)
     continuous_vars = continuous_variables(compiled, data_nt)
 
     # Weight column filtering (defensive check - FormulaCompiler should exclude this automatically
@@ -728,7 +733,9 @@ function _process_weights_parameter(weights, data, data_nt)
     elseif weights isa Symbol
         # Extract weights column from data
         weights_col = getproperty(data_nt, weights)
-        return Float64.(weights_col)  # Convert to Float64
+        # Weights are only read, so a Float64 column (already converted by data
+        # preparation) is used as is rather than copied on every call
+        return weights_col isa Vector{Float64} ? weights_col : Float64.(weights_col)
     elseif weights isa AbstractVector
         return Float64.(weights)  # Convert to Float64
     else

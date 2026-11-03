@@ -145,7 +145,7 @@ end
     @testset "elasticity quotient-rule gradient uses the link scale" begin
         # On the link scale ŷᵢ = ηᵢ, so ∇β ŷᵢ must be Xᵢ, not the mueta-weighted g⁻¹′(ηᵢ)Xᵢ.
         # For y ~ x + z the unit link-scale effect of x is β_x and the elasticity is the
-        # mean of unit elasticities (v2.2.0; Stata eyex / R slope = "eyex"):
+        # mean of unit elasticities (v2.3.0; Stata eyex / R slope = "eyex"):
         #   ε = mean(β_x xᵢ / ηᵢ)  ⇒  ∂ε/∂β = mean((xᵢ/ηᵢ) eₓ - (β_x xᵢ / ηᵢ²) Xᵢ)
         Random.seed!(7)
         n = 400

@@ -252,67 +252,72 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
     # Build zero-allocation engine with ProfileUsage optimization (including vcov function)
     # Determine derivative support based on type and vars
     deriv_support = (type === :effects && !isnothing(vars) && !isempty(vars)) ? HasDerivatives : NoDerivatives
-    engine = get_or_build_engine(ProfileUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
-    
-    if type === :effects
-        # Use the actual working function that already exists from the original utilities.jl
-        # Pass original_grid_vars so we know which variables are scenario-defining
-        df, G, profile_of_row = _mem_continuous_and_categorical(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, vars_explicit)
+    # Exclusive use of a cached engine for this call (returned in `finally`, so an
+    # error cannot leak it); concurrent calls each get their own engine.
+    (engine, engine_key) = _checkout_engine(ProfileUsage, deriv_support, model, data_nt, isnothing(vars) ? Symbol[] : vars, vcov, backend)
+    try
+        if type === :effects
+            # Use the actual working function that already exists from the original utilities.jl
+            # Pass original_grid_vars so we know which variables are scenario-defining
+            df, G, profile_of_row = _mem_by_grid_blocks(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, vars_explicit)
         
-        # Convert symbol terms + profile info to descriptive strings for user display
-        df = _convert_profile_terms_to_strings(df)
+            # Convert symbol terms + profile info to descriptive strings for user display
+            df = _convert_profile_terms_to_strings(df)
         
-        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at_spec)
+            metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), 
+                                      model_type=typeof(model), at_spec=at_spec)
         
-        # Add analysis_type for format auto-detection
-        metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(completed_reference_grid)
+            # Add analysis_type for format auto-detection
+            metadata[:analysis_type] = :profile
+            metadata[:n_profiles] = nrow(completed_reference_grid)
         
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = ci_alpha
+            # Store confidence interval parameters in metadata
+            metadata[:alpha] = ci_alpha
         
-        # Extract raw components from DataFrame  
-        estimates = df.estimate
-        standard_errors = df.se
-        variables = string.(df.variable)  # The "x" in dy/dx
-        terms = string.(df.contrast)  # Convert Symbol to String
+            # Extract raw components from DataFrame  
+            estimates = df.estimate
+            standard_errors = df.se
+            variables = string.(df.variable)  # The "x" in dy/dx
+            terms = string.(df.contrast)  # Convert Symbol to String
         
-        # Extract profile values from reference grid, one entry per result row
-        # Filter to show only original reference grid variables (hide automatic typical values)
-        profile_values = _extract_and_filter_profile_values(completed_reference_grid, profile_of_row, original_grid_vars)
+            # Extract profile values from reference grid, one entry per result row
+            # Filter to show only original reference grid variables (hide automatic typical values)
+            profile_values = _extract_and_filter_profile_values(completed_reference_grid, profile_of_row, original_grid_vars)
         
-        return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
-    else # :predictions  
-        # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
-        df, G = _profile_predictions(engine, completed_reference_grid, scale)  # → APM/APR
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
-                                  model_type=typeof(model), at_spec=at_spec)
+            return EffectsResult(estimates, standard_errors, variables, terms, profile_values, nothing, G, metadata)
+        else # :predictions  
+            # Reference grid can contain CategoricalMixture objects directly - FormulaCompiler handles them
+            df, G = _profile_predictions_by_grid_blocks(engine, completed_reference_grid, scale)  # → APM/APR
+            metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), 
+                                      model_type=typeof(model), at_spec=at_spec)
         
-        # Add analysis_type for format auto-detection
-        metadata[:analysis_type] = :profile
-        metadata[:n_profiles] = nrow(completed_reference_grid)
+            # Add analysis_type for format auto-detection
+            metadata[:analysis_type] = :profile
+            metadata[:n_profiles] = nrow(completed_reference_grid)
 
-        # Store confidence interval parameters in metadata
-        metadata[:alpha] = ci_alpha
+            # Store confidence interval parameters in metadata
+            metadata[:alpha] = ci_alpha
 
-        # Interval kind: :confidence (default) or :prediction. For prediction
-        # intervals, store the residual variance σ̂² that widens the interval
-        # bounds (eligibility to Gaussian/identity is enforced here).
-        metadata[:interval] = interval
-        if interval === :prediction
-            metadata[:resid_var] = _prediction_residual_variance(model)
+            # Interval kind: :confidence (default) or :prediction. For prediction
+            # intervals, store the residual variance σ̂² that widens the interval
+            # bounds (eligibility to Gaussian/identity is enforced here).
+            metadata[:interval] = interval
+            if interval === :prediction
+                metadata[:resid_var] = _prediction_residual_variance(model)
+            end
+
+            # Extract raw components from DataFrame
+            estimates = df.estimate
+            standard_errors = df.se
+
+            # Extract profile values from reference grid - expand to match result length
+            # Filter to show only original reference grid variables (hide automatic typical values)
+            profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
+
+            return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
         end
-
-        # Extract raw components from DataFrame
-        estimates = df.estimate
-        standard_errors = df.se
-
-        # Extract profile values from reference grid - expand to match result length
-        # Filter to show only original reference grid variables (hide automatic typical values)
-        profile_values = _extract_and_filter_profile_values(completed_reference_grid, length(estimates), original_grid_vars)
-
-        return PredictionsResult(estimates, standard_errors, profile_values, nothing, G, metadata)
+    finally
+        _checkin_engine!(engine_key, engine)
     end
 end
 
@@ -445,7 +450,7 @@ function profile_margins(
     data_vars = Set(keys(data_nt))
     # Get model variables by compiling the formula and extracting variable references (using cache)
     try
-        compiled = get_or_compile_formula(model, data_nt)
+        compiled = _shared_compiled(model, data_nt)
         model_vars = Set{Symbol}()
         for op in compiled.ops
             if op isa LoadOp
@@ -480,6 +485,72 @@ function profile_margins(
 end
 
 
+# =============================================================================
+# Reference grids whose categorical columns mix discrete levels and mixtures
+# =============================================================================
+#
+# FormulaCompiler compiles each column either as a discrete categorical or as ONE mixture
+# (`is_mixture_column` requires every cell to hold the same mixture), so a grid column that
+# holds a level in some rows and a mixture in others — e.g. a `hierarchical_grid` column only
+# some combinations specify, whose other cells hold the frequency mixture — cannot be
+# evaluated in one pass. Such grids are evaluated in blocks of rows that are homogeneous in
+# every such column, and the results are reassembled in grid-row order (the order a single
+# pass produces: profile-major).
+
+_is_mixture_cell(v) = v isa CategoricalMixture
+
+# Row blocks (each a sorted Vector{Int}) to evaluate separately, or `nothing` when the grid
+# can be evaluated in one pass.
+function _heterogeneous_grid_blocks(grid::DataFrame)
+    hetero = Symbol[]
+    for c in propertynames(grid)
+        col = grid[!, c]
+        any(_is_mixture_cell, col) || continue
+        first_m = first(col)
+        homogeneous = all(v -> _is_mixture_cell(v) && v.levels == first_m.levels && v.weights == first_m.weights, col)
+        homogeneous || push!(hetero, c)
+    end
+    isempty(hetero) && return nothing
+    signature(i) = Tuple(_is_mixture_cell(grid[i, c]) ? (grid[i, c].levels, grid[i, c].weights) : nothing for c in hetero)
+    blocks = Dict{Any, Vector{Int}}()
+    order = Any[]
+    for i in 1:nrow(grid)
+        sig = signature(i)
+        haskey(blocks, sig) || (blocks[sig] = Int[]; push!(order, sig))
+        push!(blocks[sig], i)
+    end
+    return [blocks[sig] for sig in order]
+end
+
+# The sub-grid of `rows`, with every column narrowed to its cells' common element type
+_grid_block(grid::DataFrame, rows::Vector{Int}) =
+    DataFrame([c => identity.(grid[rows, c]) for c in propertynames(grid)])
+
+function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, scale)
+    blocks = _heterogeneous_grid_blocks(grid)
+    isnothing(blocks) && return _profile_predictions(engine, grid, scale)
+    parts = [_profile_predictions(engine, _grid_block(grid, rows), scale) for rows in blocks]
+    perm = sortperm(reduce(vcat, blocks))  # one result row per grid row
+    df = reduce((a, b) -> vcat(a, b; cols=:union), first.(parts))[perm, :]
+    G = reduce(vcat, last.(parts))[perm, :]
+    # The `at_*` columns hold each block's narrowed cells; restore the grid's own columns
+    for (c, col) in pairs(eachcol(grid))
+        df[!, Symbol("at_$(c)")] = col
+    end
+    return df, G
+end
+
+function _mem_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, args...)
+    blocks = _heterogeneous_grid_blocks(grid)
+    isnothing(blocks) && return _mem_continuous_and_categorical(engine, grid, args...)
+    parts = [_mem_continuous_and_categorical(engine, _grid_block(grid, rows), args...) for rows in blocks]
+    profile_of_row = reduce(vcat, [rows[p[3]] for (rows, p) in zip(blocks, parts)])
+    perm = sortperm(profile_of_row; alg=Base.Sort.DEFAULT_STABLE)  # keeps within-profile order
+    df = reduce(vcat, [p[1] for p in parts])[perm, :]
+    G = reduce(vcat, [p[2] for p in parts])[perm, :]
+    return df, G, profile_of_row[perm]
+end
+
 """
     _profile_predictions(engine, reference_grid, scale) -> (DataFrame, Matrix{Float64})
 
@@ -513,7 +584,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     data_nt = _convert_numeric_to_float64(data_nt_raw)
 
     # Single compilation with complete reference grid (using cache for performance)
-    refgrid_compiled = get_or_compile_formula(engine.model, data_nt)
+    refgrid_compiled = _private_compiled(engine.model, data_nt)
 
     # Single pass over profiles via helper that takes only concrete arguments
     _compute_profile_predictions!(predictions, G, refgrid_compiled, engine, data_nt, scale)
@@ -534,8 +605,10 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale) w
     
     # Create results DataFrame with profile information (no variable/contrast for predictions)
     results = DataFrame()
-    results.estimate = predictions
-    results.se = se_vals
+    # Copies: `predictions`/`se_vals` may be views of the engine's buffers, which the
+    # next call on this engine overwrites
+    results.estimate = collect(predictions)
+    results.se = collect(se_vals)
     results.t_stat = predictions ./ se_vals
     results.p_value = 2 .* ccdf.(Normal(), abs.(predictions ./ se_vals))
     
@@ -716,7 +789,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
 
     # Step 3: Prepare reference grid compilation (extracted from original lines 1297-1303)
     refgrid_data = Tables.columntable(reference_grid)
-    refgrid_compiled = get_or_compile_formula(engine.model, refgrid_data)
+    refgrid_compiled = _private_compiled(engine.model, refgrid_data)
     refgrid_de = _build_refgrid_derivative_evaluator(refgrid_compiled, refgrid_data, continuous_requested, engine, backend)
 
     # Step 3.5: Build the ContrastEvaluators used for categorical contrasts at grid rows.
@@ -748,7 +821,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
         # Recompile against the hybrid schema: replacing a mixture column with a discrete
         # pooled column changes the column's semantic type, so refgrid_compiled (built for
         # the mixture) does not apply.
-        hybrid_compiled = get_or_compile_formula(engine.model, hybrid_data)
+        hybrid_compiled = _private_compiled(engine.model, hybrid_data)
         refgrid_contrasts[var] = contrastevaluator(hybrid_compiled, hybrid_data, [var])
     end
 

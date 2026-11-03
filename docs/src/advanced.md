@@ -49,8 +49,8 @@ Interpretation: "A 1-unit increase in x changes y by about (100×ε)%"
 population_margins(model, data; type=:effects, measure=:semielasticity_eydx)
 ```
 
-!!! note "Changed in v2.2.0"
-    Before v2.2.0 the population measures were computed as a ratio of means — e.g.
+!!! note "Changed in v2.3.0"
+    Before v2.3.0 the population measures were computed as a ratio of means — e.g.
     `(x̄/ȳ) × AME` for `:elasticity` — rather than the mean of the unit-level quantities in
     the table above, which is what this page always documented and what Stata and R
     compute. Earlier versions of this page also swapped the descriptions of `dyex` and

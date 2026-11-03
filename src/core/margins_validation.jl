@@ -4,6 +4,25 @@
 # Cache for validated models to avoid repeated expensive vcov() calls
 const VALIDATED_MODELS_CACHE = Set{UInt64}()
 
+# Thread-safe access (see `_STATE_LOCK`)
+function _is_validated(key::UInt64)
+    lock(_STATE_LOCK)
+    try
+        return key in VALIDATED_MODELS_CACHE
+    finally
+        unlock(_STATE_LOCK)
+    end
+end
+function _mark_validated!(key::UInt64)
+    lock(_STATE_LOCK)
+    try
+        push!(VALIDATED_MODELS_CACHE, key)
+    finally
+        unlock(_STATE_LOCK)
+    end
+    return nothing
+end
+
 """
     validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
 
@@ -41,7 +60,7 @@ function validate_model_methods(model)
     model_key = hash((typeof(model), coef(model)))
     
     # Skip expensive validation if we've already validated this model
-    if model_key in VALIDATED_MODELS_CACHE
+    if _is_validated(model_key)
         return nothing
     end
     
@@ -58,7 +77,7 @@ function validate_model_methods(model)
     end
     
     # Cache successful validation
-    push!(VALIDATED_MODELS_CACHE, model_key)
+    _mark_validated!(model_key)
     return nothing
 end
 

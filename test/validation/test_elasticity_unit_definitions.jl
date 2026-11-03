@@ -7,7 +7,7 @@
 #   :semielasticity_dyex (dyex)  mean_i[ gᵢ xᵢ ]          dy / d(ln x)
 #   :semielasticity_eydx (eydx)  mean_i[ gᵢ / ŷᵢ ]        d(ln y) / dx
 #
-# with gᵢ = ∂ŷᵢ/∂x and ŷᵢ the prediction on `scale`. Before v2.2.0 Margins computed a ratio
+# with gᵢ = ∂ŷᵢ/∂x and ŷᵢ the prediction on `scale`. Before v2.3.0 Margins computed a ratio
 # of means instead ((x̄/ȳ)·AME, x̄·AME, AME/ȳ), which disagrees with its own docs, Stata
 # and R whenever the unit quantities vary.
 #
@@ -117,7 +117,7 @@ end
     end
 
     @testset "ratio of means is NOT what is computed" begin
-        # Regression guard for the pre-2.2.0 definition (x̄/ȳ)·AME
+        # Regression guard for the pre-2.3.0 definition (x̄/ȳ)·AME
         m = models["logit"]
         ame = DataFrame(population_margins(m, d; vars=[:x])).estimate[1]
         el = DataFrame(population_margins(m, d; vars=[:x], measure=:elasticity)).estimate[1]

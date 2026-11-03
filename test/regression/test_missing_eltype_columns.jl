@@ -58,9 +58,9 @@ using Margins
         duf = select(du, Not(:k))
         Margins.clear_engine_cache!()
         population_margins(mf, duf; vars=[:x])
-        e1 = only(values(Margins.ENGINE_CACHE))
+        e1 = only(Margins._cached_engines())
         population_margins(mf, duf; vars=[:x])
-        @test only(values(Margins.ENGINE_CACHE)) === e1
+        @test only(Margins._cached_engines()) === e1
         # ...but an in-place edit of the source column is picked up
         du2 = allowmissing(select(d, Not(:k))); d2 = select(d, Not(:k))
         population_margins(mf, du2; vars=[:x])

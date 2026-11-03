@@ -1,96 +1,62 @@
 # test_population_aap_loop_zero_alloc.jl
-# Verifies zero-allocation hot loop for AAP (predictions) using BenchmarkTools
+#
+# Allocation of the population adjusted-prediction (AAP) path: the per-row prediction loop
+# on an engine's compiled formula is allocation-free, and a warm
+# `population_margins(...; type=:predictions)` call allocates the same amount at n = 1,000 and
+# n = 50,000 (O(1) in rows), unweighted and weighted.
+#
+# (Rewritten in 3.0.0: it used a removed 5-argument `get_or_build_engine` and was not run by
+# runtests.jl.)
 
 using Test
-using BenchmarkTools
-using DataFrames, Tables, CategoricalArrays
+using DataFrames, Tables, CategoricalArrays, Random
 using GLM, StatsModels
 using FormulaCompiler, Margins
 using LinearAlgebra: dot
 
-"""
-Typed hot-loop helpers to force specialization on the compiled evaluator
-"""
-function _aap_loop_typed!(compiled::UnifiedCompiled{T,Ops,S,O},
-                          row_buf::Vector{Float64}, β::Vector{Float64}, link,
-                          data_nt::NamedTuple, n_calls) where {T,Ops,S,O}
-    n_rows = length(first(data_nt))
-    @inbounds for i in 1:n_calls
-        row = ((i - 1) % n_rows) + 1
-        modelrow!(row_buf, compiled, data_nt, row)
-        η = dot(row_buf, β)
-        _ = GLM.linkinv(link, η)
-    end
-    return nothing
-end
-
-function _aap_loop_weighted_typed!(compiled::UnifiedCompiled{T,Ops,S,O},
-                                   row_buf::Vector{Float64}, β::Vector{Float64}, link,
-                                   data_nt::NamedTuple, weights::Vector{Float64}, n_calls) where {T,Ops,S,O}
-    n_rows = length(first(data_nt))
+function _aap_loop!(compiled, row_buf::Vector{Float64}, β::Vector{Float64}, link,
+                    data_nt::NamedTuple, rows)
     acc = 0.0
-    total_w = sum(weights)
-    @inbounds for i in 1:n_calls
-        row = ((i - 1) % n_rows) + 1
-        w = weights[row]
+    @inbounds for row in rows
         modelrow!(row_buf, compiled, data_nt, row)
-        η = dot(row_buf, β)
-        μ = GLM.linkinv(link, η)
-        acc += w * μ
+        acc += GLM.linkinv(link, dot(row_buf, β))
     end
-    return acc / total_w
+    return acc
 end
 
-@testset "AAP Hot Loop Zero Allocation" begin
-    # Small, representative dataset
-    n = 5000
-    df = DataFrame(
-        y = randn(n),
-        x = randn(n),
-        group = categorical(rand(["A", "B", "C"], n))
-    )
-    data_nt = Tables.columntable(df)
-
-    # Fit simple linear model (identity link); predictions path is exercised identically
-    model = lm(@formula(y ~ x + group), df)
-
-    # Build/populate engine (PopulationUsage); no derivatives needed for predictions
-    engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, Symbol[], GLM.vcov)
-
-    # Warm-up calls to compile and stabilize
-    for i in 1:10
-        modelrow!(engine.row_buf, engine.compiled, data_nt, 1)
-    end
-
-    # Benchmark: assert zero allocations after warm-up
-    b = @benchmark _aap_loop_typed!($engine.compiled, $engine.row_buf, $engine.β, $engine.link, $data_nt, 50_000) samples=5 evals=1
-    # Some environments report tiny, constant overhead (e.g., 32 bytes). Accept bounded constant.
-    @test minimum(b.memory) <= 64
-
-    # Weighted variant (exercise weighted branch arithmetics; loop body is identical)
-    weights = rand(n) .+ 0.1  # positive weights
-    b_w = @benchmark _aap_loop_weighted_typed!($engine.compiled, $engine.row_buf, $engine.β, $engine.link, $data_nt, $weights, 50_000) samples=5 evals=1
-    @test minimum(b_w.memory) <= 96
+function _aap_data(n)
+    rng = MersenneTwister(n)
+    df = DataFrame(x = randn(rng, n), k = rand(rng, 1:5, n),
+                   group = categorical(rand(rng, ["A", "B", "C"], n)))
+    df.y = rand(rng, n) .< 1 ./ (1 .+ exp.(-(0.4 .* df.x .+ 0.1 .* df.k)))
+    df.w = rand(rng, n) .+ 0.1
+    return df
 end
 
-# Optional: extended large-n test (run manually with FC_SLOW_TESTS=1)
-if get(ENV, "FC_SLOW_TESTS", "0") == "1"
-    @testset "AAP Hot Loop Zero Allocation (Large-n)" begin
-        n = 200_000
-        df = DataFrame(
-            y = randn(n),
-            x = randn(n),
-            group = categorical(rand(["A", "B", "C"], n))
-        )
-        data_nt = Tables.columntable(df)
-        model = lm(@formula(y ~ x + group), df)
-        engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, Symbol[], GLM.vcov)
+@testset "AAP: allocation independent of rows" begin
+    df = _aap_data(5_000)
+    model = glm(@formula(y ~ x + k + group), df, Binomial(), LogitLink())
+    data_nt = Margins._prepare_margins_data(Tables.columntable(df), model)
+    engine = Margins.build_engine(Margins.PopulationUsage, Margins.NoDerivatives, model, data_nt,
+                                  Symbol[], GLM.vcov, :ad)
+    _aap_loop!(engine.compiled, engine.row_buf, engine.β, engine.link, data_nt, 1:10)
+    @test (@allocated _aap_loop!(engine.compiled, engine.row_buf, engine.β, engine.link, data_nt, 1:5_000)) == 0
 
-        # Warm-up
-        modelrow!(engine.row_buf, engine.compiled, data_nt, 1)
-
-        # Benchmark a sizable loop; assert zero allocations
-        b = @benchmark _aap_loop_typed!($engine.compiled, $engine.row_buf, $engine.β, $engine.link, $data_nt, 100_000) samples=3 evals=1
-        @test minimum(b.memory) <= 64
+    allocs = Dict{Tuple{Int, Bool}, Int}()
+    for n in (1_000, 50_000)
+        d = _aap_data(n)
+        m = glm(@formula(y ~ x + k + group), d, Binomial(), LogitLink())
+        for weighted in (false, true)
+            w = weighted ? :w : nothing
+            population_margins(m, d; type=:predictions, weights=w)
+            population_margins(m, d; type=:predictions, weights=w)
+            allocs[(n, weighted)] = @allocated population_margins(m, d; type=:predictions, weights=w)
+        end
+    end
+    for weighted in (false, true)
+        # The integer column k is converted to Float64 once and memoized, so a warm call does
+        # not copy it: allocation must be far below one column's worth (8 × 50,000 bytes)
+        @test allocs[(50_000, weighted)] < allocs[(1_000, weighted)] + 20_000
+        @test allocs[(50_000, weighted)] < 8 * 50_000 ÷ 4
     end
 end

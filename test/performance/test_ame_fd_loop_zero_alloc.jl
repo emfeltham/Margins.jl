@@ -1,47 +1,43 @@
 # test_ame_fd_loop_zero_alloc.jl
-# Verifies near-zero allocation hot loop for AME (effects) with FD backend
+#
+# Per-row allocation of the population AME hot loop with the finite-difference backend:
+# `_compute_continuous_marginal_effects!` (→ `_compute_me_loop_linear!` /
+# `_compute_me_loop_response!` with an `FDEvaluator`), on the engine's own buffers, for both
+# scales, unweighted and weighted. Allocation must not grow with the number of rows.
+#
+# (Rewritten in 3.0.0: the previous version called a removed
+# `marginal_effects_eta!(g, de, β, row; backend=:fd)` signature and a removed 5-argument
+# `get_or_build_engine`, and was not run by runtests.jl.)
 
 using Test
-using BenchmarkTools
-using DataFrames, Tables, CategoricalArrays
+using DataFrames, Tables, CategoricalArrays, Random
 using GLM, StatsModels
 using FormulaCompiler, Margins
-using Margins: marginal_effects_eta!
 
-function _ame_fd_loop_typed!(de::DerivativeEvaluator,
-                             gview::AbstractVector{Float64}, β::Vector{Float64},
-                             n_calls::Int, n_rows::Int)
-    @inbounds for i in 1:n_calls
-        row = ((i - 1) % n_rows) + 1
-        marginal_effects_eta!(gview, de, β, row; backend=:fd)
-    end
-    return nothing
+function _fd_ame_loop_allocs(engine, vars, rows, scale, weights)
+    total_weight = isnothing(weights) ? Float64(length(rows)) : Float64(sum(weights[rows]))
+    Margins._compute_continuous_marginal_effects!(engine, vars, rows, scale, weights, total_weight)  # warm-up
+    return @allocated Margins._compute_continuous_marginal_effects!(engine, vars, rows, scale, weights, total_weight)
 end
 
-@testset "AME FD Hot Loop Zero Allocation" begin
-    # Small, representative dataset
-    n = 5000
-    df = DataFrame(
-        y = randn(n),
-        x = randn(n),
-        z = abs.(randn(n)) .+ 0.1,
-        group = categorical(rand(["A", "B", "C"], n))
-    )
-    data_nt = Tables.columntable(df)
+@testset "AME FD hot loop: allocation independent of rows" begin
+    Random.seed!(42)
+    n = 20_000
+    df = DataFrame(x = randn(n), z = abs.(randn(n)) .+ 0.1,
+                   group = categorical(rand(["A", "B", "C"], n)))
+    df.y = rand(n) .< 1 ./ (1 .+ exp.(-(0.3 .* df.x .- 0.2 .* df.z .+ 0.1 .* (df.group .== "B"))))
+    model = glm(@formula(y ~ x * group + log(z)), df, Binomial(), LogitLink())
+    data_nt = Margins._prepare_margins_data(Tables.columntable(df), model)
+    vars = [:x, :z]
+    engine = Margins.build_engine(Margins.PopulationUsage, Margins.HasDerivatives, model, data_nt,
+                                  vars, GLM.vcov, :fd)
+    @test engine.de isa FormulaCompiler.FDEvaluator
+    weights = rand(n) .+ 0.1
 
-    # Fit model and build engine with derivatives (PopulationUsage)
-    model = lm(@formula(y ~ x + z + group + x & group), df)
-    engine = Margins.get_or_build_engine(Margins.PopulationUsage, model, data_nt, [:x, :z], GLM.vcov)
-
-    # Warmup: compute FD marginal effects a few times
-    gview = @view engine.g_buf[1:length(engine.de.vars)]
-    for row in 1:10
-        marginal_effects_eta!(gview, engine.de, engine.β, row; backend=:fd)
+    for scale in (:link, :response), w in (nothing, weights)
+        small = _fd_ame_loop_allocs(engine, vars, 1:1_000, scale, w)
+        large = _fd_ame_loop_allocs(engine, vars, 1:n, scale, w)
+        @test large == small            # O(1) in rows
+        @test large <= 64               # and effectively zero
     end
-
-    # Typed loop helper to force specialization on de    
-
-    n_rows = length(first(data_nt))
-    b = @benchmark _ame_fd_loop_typed!($engine.de, $gview, $engine.β, 50_000, $n_rows) samples=5 evals=1
-    @test minimum(b.memory) <= 64
 end

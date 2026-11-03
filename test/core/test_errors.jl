@@ -311,7 +311,7 @@ using LinearAlgebra
 
         @testset "Raw String columns are handled as the model's categorical" begin
             # A raw String column used to be rejected with a "convert it with categorical()"
-            # error. Margins now takes the model's view of every variable (v2.2.0): a column
+            # error. Margins now takes the model's view of every variable (v2.3.0): a column
             # the fitted model treats as categorical is handled as categorical with the
             # model's levels, so a raw String column gives the same contrasts as its
             # CategoricalArray equivalent.

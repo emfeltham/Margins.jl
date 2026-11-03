@@ -401,7 +401,7 @@ All scenarios maintain **publication-grade statistical validity**:
 **Performance Characteristics:**
 - O(1) memory per scenario (reuse buffers)
 - O(n) time per scenario where n = observations
-- Scenarios evaluated sequentially (Margins calls are not thread-safe; see the caching documentation)
+- Scenarios evaluated sequentially within a call (separate Margins calls may run concurrently; see the caching documentation)
 - FD backend: minimal override sets constructed
 - AD backend: exact derivatives with zero allocation
 

@@ -90,9 +90,9 @@ using Margins
         Margins.clear_engine_cache!()
         dk = select(d, :x, :k, :z, :y); dk.x = Float64.(dk.x); dk.z = Float64.(dk.z)
         population_margins(m, dk; vars=[:k])
-        e1 = only(values(Margins.ENGINE_CACHE))
+        e1 = only(Margins._cached_engines())
         population_margins(m, dk; vars=[:k])
-        @test only(values(Margins.ENGINE_CACHE)) === e1
+        @test only(Margins._cached_engines()) === e1
     end
 
     @testset "explicit grid values must be levels; typical values become mixtures" begin
