@@ -8970,146 +8970,146 @@ wts:log/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:
 wts:log/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.3587334480399553,0.331153679039002,Inf
 wts:log/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.7780570711760122,0.25654740328569736,Inf
 wts:log/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",5.005082801168471,0.1266837794105387,Inf
-vcov:identity/HC1/population/effect/ad,population_effects,var=x|contrast=d,0.29204620301742107,0.02756468523833259,391.0
+vcov:identity/HC1/population/effect/ad,population_effects,var=x|contrast=d,0.29204620301742107,0.027564685238332592,391.0
 vcov:identity/HC1/population/effect/ad,population_effects,var=z|contrast=d,0.45053589453450926,0.028006611265019275,391.0
-vcov:identity/HC1/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877077363,0.03522212317903642,391.0
-vcov:identity/HC1/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740696382,0.04360966236653696,391.0
+vcov:identity/HC1/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877077363,0.0352221231790364,391.0
+vcov:identity/HC1/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740696382,0.04360966236653699,391.0
 vcov:identity/HC1/population/effect/ad,population_effects,var=b|contrast=true - false,0.2961011613548417,0.03271119737431776,391.0
-vcov:identity/HC1/population/predictions,population_predictions,all,5.619570819349344,0.015771887750027545,391.0
+vcov:identity/HC1/population/predictions,population_predictions,all,5.619570819349344,0.015771887750027528,391.0
 vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.29082971227748433,0.0275489933453296,391.0
 vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,0.45665729397167765,0.028114606851939797,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.2544065649634092,0.03520119251357886,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257194954,0.0438497027183719,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.2544065649634092,0.03520119251357884,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257194954,0.04384970271837193,391.0
 vcov:identity/HC1/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.2961011613548435,0.03271119737431776,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.2976649149179914,0.02765021741164645,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.44779836153972924,0.027987004536691926,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201616,0.03526918068637371,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472296,0.04354919710242292,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.2976649149179914,0.027650217411646447,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.44779836153972924,0.02798700453669192,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201616,0.03526918068637369,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472296,0.04354919710242296,391.0
 vcov:identity/HC1/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.2961011613548435,0.03271119737431776,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.2876017359026477,0.02756414876745285,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.4471726110469678,0.027985021293192257,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.2542682686971869,0.03528319721256644,391.0
-vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.20948040666062676,0.043539468622464744,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.2876017359026477,0.027564148767452848,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.4471726110469678,0.02798502129319225,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.2542682686971869,0.03528319721256642,391.0
+vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.20948040666062676,0.04353946862246477,391.0
 vcov:identity/HC1/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.2961011613548435,0.03271119737431776,391.0
-vcov:identity/HC1/groups=h/predictions,population_predictions,h=r,5.623957458952541,0.015826532615311403,391.0
-vcov:identity/HC1/groups=h/predictions,population_predictions,h=q,5.6318285093129825,0.015963192109727162,391.0
-vcov:identity/HC1/groups=h/predictions,population_predictions,h=p,5.60283432670008,0.015856130522657108,391.0
+vcov:identity/HC1/groups=h/predictions,population_predictions,h=r,5.623957458952541,0.01582653261531139,391.0
+vcov:identity/HC1/groups=h/predictions,population_predictions,h=q,5.6318285093129825,0.01596319210972716,391.0
+vcov:identity/HC1/groups=h/predictions,population_predictions,h=p,5.60283432670008,0.015856130522657087,391.0
 vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.38357863537657455,0.036707691007576274,391.0
-vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,0.25431730877077363,0.03522212317903642,391.0
-vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.21186726740696382,0.04360966236653696,391.0
+vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,0.25431730877077363,0.0352221231790364,391.0
+vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.21186726740696382,0.04360966236653699,391.0
 vcov:identity/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.2961011613548417,0.03271119737431776,391.0
-vcov:identity/HC1/scenarios z=0.5/predictions,population_predictions,z=0.5,5.842037322419653,0.021392250107031864,391.0
+vcov:identity/HC1/scenarios z=0.5/predictions,population_predictions,z=0.5,5.842037322419653,0.021392250107031854,391.0
 vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.29204620301742096,0.027564685238332862,391.0
-vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.4505358945345089,0.02800661126501953,391.0
-vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.25431730877077374,0.03522212317903641,391.0
-vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740696393,0.04360966236653696,391.0
+vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.4505358945345089,0.028006611265019528,391.0
+vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.25431730877077374,0.0352221231790364,391.0
+vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740696393,0.04360966236653699,391.0
 vcov:identity/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.29610116135484343,0.03271119737431776,391.0
-vcov:identity/HC1/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",5.618604029001584,0.015794834354080526,391.0
-vcov:identity/CR1(h)/population/effect/ad,population_effects,var=x|contrast=d,0.29204620301742107,0.04111648704711176,391.0
-vcov:identity/CR1(h)/population/effect/ad,population_effects,var=z|contrast=d,0.45053589453450926,0.05035629217276915,391.0
-vcov:identity/CR1(h)/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877077363,0.020736296268596792,391.0
-vcov:identity/CR1(h)/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740696382,0.028438534931947416,391.0
-vcov:identity/CR1(h)/population/effect/ad,population_effects,var=b|contrast=true - false,0.2961011613548417,0.038181931950979665,391.0
-vcov:identity/CR1(h)/population/predictions,population_predictions,all,5.619570819349344,0.02069057212444643,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.29082971227748433,0.040810510572521455,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,0.45665729397167765,0.05115455957800186,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.2544065649634092,0.019184283347295147,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257194954,0.026855759950832614,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.2961011613548435,0.038181931950979665,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.2976649149179914,0.04169388745919442,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.44779836153972924,0.050008743075494265,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201616,0.02144914258118957,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472296,0.029293607921303953,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.2961011613548435,0.038181931950979665,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.2876017359026477,0.04087486994080874,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.4471726110469678,0.04993013892942951,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.2542682686971869,0.021613531010636865,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.20948040666062676,0.02950062551406208,391.0
-vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.2961011613548435,0.038181931950979665,391.0
-vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=r,5.623957458952541,0.021006179071931218,391.0
-vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=q,5.6318285093129825,0.01978278850394655,391.0
-vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=p,5.60283432670008,0.021615647001610103,391.0
-vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.38357863537657455,0.05124693389801657,391.0
-vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,0.25431730877077363,0.020736296268596792,391.0
-vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.21186726740696382,0.028438534931947416,391.0
-vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.2961011613548417,0.038181931950979665,391.0
-vcov:identity/CR1(h)/scenarios z=0.5/predictions,population_predictions,z=0.5,5.842037322419653,0.029515901307945284,391.0
-vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.29204620301742096,0.041116487047111884,391.0
-vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.4505358945345089,0.050356292172769254,391.0
-vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.25431730877077374,0.020736296268596785,391.0
-vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740696393,0.028438534931947416,391.0
-vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.29610116135484343,0.038181931950979665,391.0
-vcov:identity/CR1(h)/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",5.618604029001584,0.021412309610128095,391.0
+vcov:identity/HC1/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",5.618604029001584,0.015794834354080505,391.0
+vcov:identity/CR1(h)/population/effect/ad,population_effects,var=x|contrast=d,0.29204620301742107,0.03357147109372603,391.0
+vcov:identity/CR1(h)/population/effect/ad,population_effects,var=z|contrast=d,0.45053589453450926,0.041115740387263594,391.0
+vcov:identity/CR1(h)/population/effect/ad,population_effects,var=g|contrast=b - a,0.25431730877077363,0.016931115004413758,391.0
+vcov:identity/CR1(h)/population/effect/ad,population_effects,var=g|contrast=c - a,-0.21186726740696382,0.023219966538528584,391.0
+vcov:identity/CR1(h)/population/effect/ad,population_effects,var=b|contrast=true - false,0.2961011613548417,0.03117541689119002,391.0
+vcov:identity/CR1(h)/population/predictions,population_predictions,all,5.619570819349344,0.016893781397049116,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.29082971227748433,0.033321642348378734,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,0.45665729397167765,0.04176752299430214,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,0.2544065649634092,0.01566390176061532,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.21621151257194954,0.021927636178070364,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.2961011613548435,0.03117541689119002,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.2976649149179914,0.03404291655601778,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,0.44779836153972924,0.040831967737634145,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,0.25427739277201616,0.01751315158137269,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.20992449033472296,0.023918130710781846,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.2961011613548435,0.03117541689119002,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.2876017359026477,0.033374191552535966,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,0.4471726110469678,0.04076778772112552,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,0.2542682686971869,0.017647374171960495,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.20948040666062676,0.02408715986746076,391.0
+vcov:identity/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.2961011613548435,0.03117541689119002,391.0
+vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=r,5.623957458952541,0.017151473390587466,391.0
+vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=q,5.6318285093129825,0.016152579174688726,391.0
+vcov:identity/CR1(h)/groups=h/predictions,population_predictions,h=p,5.60283432670008,0.017649101871355415,391.0
+vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.38357863537657455,0.04184294631075982,391.0
+vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,0.25431730877077363,0.016931115004413758,391.0
+vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.21186726740696382,0.023219966538528584,391.0
+vcov:identity/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.2961011613548417,0.03117541689119002,391.0
+vcov:identity/CR1(h)/scenarios z=0.5/predictions,population_predictions,z=0.5,5.842037322419653,0.02409963250093753,391.0
+vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.29204620301742096,0.033571471093726137,391.0
+vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",0.4505358945345089,0.04111574038726368,391.0
+vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",0.25431730877077374,0.01693111500441377,391.0
+vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.21186726740696393,0.023219966538528584,391.0
+vcov:identity/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.29610116135484343,0.03117541689119002,391.0
+vcov:identity/CR1(h)/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",5.618604029001584,0.017483077586435573,391.0
 vcov:logit/HC1/population/effect/ad,population_effects,var=x|contrast=d,0.04471011657648599,0.02608741004819616,Inf
 vcov:logit/HC1/population/effect/ad,population_effects,var=z|contrast=d,-0.0069617591669865215,0.02595004403056225,Inf
-vcov:logit/HC1/population/effect/ad,population_effects,var=g|contrast=b - a,-0.01750976687241101,0.0317990976456398,Inf
-vcov:logit/HC1/population/effect/ad,population_effects,var=g|contrast=c - a,-0.047382733830165655,0.043079599650596066,Inf
-vcov:logit/HC1/population/effect/ad,population_effects,var=b|contrast=true - false,0.01607031122065413,0.029616439787670947,Inf
-vcov:logit/HC1/population/predictions,population_predictions,all,0.9049999999614138,0.014695159378167292,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.04344644522107068,0.025671814742650647,Inf
+vcov:logit/HC1/population/effect/ad,population_effects,var=g|contrast=b - a,-0.01750976687241101,0.031799097645639825,Inf
+vcov:logit/HC1/population/effect/ad,population_effects,var=g|contrast=c - a,-0.047382733830165655,0.04307959965059604,Inf
+vcov:logit/HC1/population/effect/ad,population_effects,var=b|contrast=true - false,0.01607031122065413,0.02961643978767095,Inf
+vcov:logit/HC1/population/predictions,population_predictions,all,0.9049999999614138,0.014695159378167271,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.04344644522107068,0.02567181474265065,Inf
 vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,-0.005125058303672937,0.02577766374951539,Inf
 vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,-0.01600322434396342,0.03088790515547777,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.04977906285563437,0.04323355506024942,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.015910200748654495,0.029410717336689932,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.0451755977700698,0.02628977532860987,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.04977906285563437,0.04323355506024939,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.015910200748654495,0.029410717336689936,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.0451755977700698,0.026289775328609866,Inf
 vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,-0.007668728959937339,0.02597982111587095,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.01842665112724898,0.032412883340068324,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.04606783923076503,0.04318121376974483,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.01842665112724898,0.032412883340068345,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.04606783923076503,0.043181213769744806,Inf
 vcov:logit/HC1/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.016038358440077054,0.029520071956308413,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.04550480687971928,0.02650429867698976,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,-0.008086174674996269,0.02630746486980107,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.01809253127944287,0.032187245985598606,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.04631118582965677,0.04298791970908159,Inf
-vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.01626261471970133,0.02992247600456762,Inf
-vcov:logit/HC1/groups=h/predictions,population_predictions,h=r,0.9059339963632769,0.014750673821968126,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.04550480687971928,0.02650429867698975,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,-0.008086174674996269,0.026307464869801046,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.01809253127944287,0.03218724598559862,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.04631118582965677,0.042987919709081564,Inf
+vcov:logit/HC1/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.01626261471970133,0.029922476004567617,Inf
+vcov:logit/HC1/groups=h/predictions,population_predictions,h=r,0.9059339963632769,0.014750673821968121,Inf
 vcov:logit/HC1/groups=h/predictions,population_predictions,h=q,0.9051401494662622,0.014720778214294005,Inf
-vcov:logit/HC1/groups=h/predictions,population_predictions,h=p,0.9039248002990269,0.01499792393525035,Inf
-vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.06266154523317388,0.03796579850869454,Inf
-vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,-0.019487951134719718,0.03354678292965057,Inf
-vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.044072034748703796,0.046127858509388844,Inf
+vcov:logit/HC1/groups=h/predictions,population_predictions,h=p,0.9039248002990269,0.014997923935250347,Inf
+vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.06266154523317388,0.037965798508694526,Inf
+vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,-0.019487951134719718,0.03354678292965059,Inf
+vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.044072034748703796,0.04612785850938879,Inf
 vcov:logit/HC1/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.01651002765762809,0.030164814390942176,Inf
-vcov:logit/HC1/scenarios z=0.5/predictions,population_predictions,z=0.5,0.9015368251416922,0.019539282137050487,Inf
-vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.04622234480077352,0.02332213833996348,Inf
-vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",-0.002211736037660832,0.02547174834587343,Inf
-vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.03118288141155492,Inf
-vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113601,0.04289038316284761,Inf
+vcov:logit/HC1/scenarios z=0.5/predictions,population_predictions,z=0.5,0.9015368251416922,0.01953928213705047,Inf
+vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.04622234480077352,0.02332213833996347,Inf
+vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",-0.002211736037660832,0.025471748345873426,Inf
+vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.031182881411554928,Inf
+vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113601,0.0428903831628476,Inf
 vcov:logit/HC1/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.01529824137652136,0.028112739612546612,Inf
-vcov:logit/HC1/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",0.9119916822692093,0.014830788684101565,Inf
-vcov:logit/CR1(h)/population/effect/ad,population_effects,var=x|contrast=d,0.04471011657648599,0.04338488630390357,Inf
-vcov:logit/CR1(h)/population/effect/ad,population_effects,var=z|contrast=d,-0.0069617591669865215,0.028702108400569498,Inf
-vcov:logit/CR1(h)/population/effect/ad,population_effects,var=g|contrast=b - a,-0.01750976687241101,0.004148712777087147,Inf
-vcov:logit/CR1(h)/population/effect/ad,population_effects,var=g|contrast=c - a,-0.047382733830165655,0.03150537150323106,Inf
-vcov:logit/CR1(h)/population/effect/ad,population_effects,var=b|contrast=true - false,0.01607031122065413,0.03244525183597221,Inf
-vcov:logit/CR1(h)/population/predictions,population_predictions,all,0.9049999999614138,0.07592518956279337,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.04344644522107068,0.041372747816585086,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,-0.005125058303672937,0.027558850158370295,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,-0.01600322434396342,0.002877658733830747,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.04977906285563437,0.030975889778351206,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.015910200748654495,0.03201378165005931,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.0451755977700698,0.04462660709656249,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,-0.007668728959937339,0.02932474419124292,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.01842665112724898,0.005340296626869317,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.04606783923076503,0.032091171823043343,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.016038358440077054,0.03242207018578299,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.04550480687971928,0.04415024463838235,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,-0.008086174674996269,0.029592130674043756,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.01809253127944287,0.0046670745801767576,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.04631118582965677,0.03146456765140457,Inf
-vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.01626261471970133,0.03290079976264306,Inf
-vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=r,0.9059339963632769,0.07395143798800781,Inf
-vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=q,0.9051401494662622,0.07647770696639172,Inf
-vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=p,0.9039248002990269,0.07735058169153482,Inf
-vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.06266154523317388,0.07983659834955806,Inf
-vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,-0.019487951134719718,0.009006689048314122,Inf
-vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.044072034748703796,0.03761939496072823,Inf
-vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.01651002765762809,0.032331036444914245,Inf
-vcov:logit/CR1(h)/scenarios z=0.5/predictions,population_predictions,z=0.5,0.9015368251416922,0.08038084685524116,Inf
-vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.04622234480077352,0.04137724018135229,Inf
-vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",-0.002211736037660832,0.027746244585284064,Inf
-vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.007144032522952345,Inf
-vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113601,0.029654211504906783,Inf
-vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.01529824137652136,0.03128041935844046,Inf
-vcov:logit/CR1(h)/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",0.9119916822692093,0.07060214647249902,Inf
+vcov:logit/HC1/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",0.9119916822692093,0.014830788684101561,Inf
+vcov:logit/CR1(h)/population/effect/ad,population_effects,var=x|contrast=d,0.04471011657648599,0.035423611331075,Inf
+vcov:logit/CR1(h)/population/effect/ad,population_effects,var=z|contrast=d,-0.0069617591669865215,0.02343517337448193,Inf
+vcov:logit/CR1(h)/population/effect/ad,population_effects,var=g|contrast=b - a,-0.01750976687241101,0.0033874097977404254,Inf
+vcov:logit/CR1(h)/population/effect/ad,population_effects,var=g|contrast=c - a,-0.047382733830165655,0.025724028113245905,Inf
+vcov:logit/CR1(h)/population/effect/ad,population_effects,var=b|contrast=true - false,0.01607031122065413,0.02649143719141016,Inf
+vcov:logit/CR1(h)/population/predictions,population_predictions,all,0.9049999999614138,0.06199265768431013,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=x|contrast=d,0.04344644522107068,0.033780707135826364,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=z|contrast=d,-0.005125058303672937,0.022501706928608815,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=b - a,-0.01600322434396342,0.0023495985172476597,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=g|contrast=c - a,-0.04977906285563437,0.025291708095217996,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=r|var=b|contrast=true - false,0.015910200748654495,0.026139143259840025,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=x|contrast=d,0.0451755977700698,0.03643747211274778,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=z|contrast=d,-0.007668728959937339,0.023943553368730015,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=b - a,-0.01842665112724898,0.004360333936976168,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=g|contrast=c - a,-0.04606783923076503,0.026202332071478793,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=q|var=b|contrast=true - false,0.016038358440077054,0.026472509453290397,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=x|contrast=d,0.04550480687971928,0.03604852379436156,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=z|contrast=d,-0.008086174674996269,0.024161873517723167,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=b - a,-0.01809253127944287,0.00381065043764645,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=g|contrast=c - a,-0.04631118582965677,0.025690711907740745,Inf
+vcov:logit/CR1(h)/groups=h/effect/ad,population_effects,h=p|var=b|contrast=true - false,0.01626261471970133,0.026863390515985634,Inf
+vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=r,0.9059339963632769,0.060381096271896945,Inf
+vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=q,0.9051401494662622,0.06244378625525123,Inf
+vcov:logit/CR1(h)/groups=h/predictions,population_predictions,h=p,0.9039248002990269,0.06315648548390886,Inf
+vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=x|contrast=d,0.06266154523317388,0.06518630958531402,Inf
+vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=b - a,-0.019487951134719718,0.0073539308134255715,Inf
+vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=g|contrast=c - a,-0.044072034748703796,0.030716107362003836,Inf
+vcov:logit/CR1(h)/scenarios z=0.5/effect/ad,population_effects,z=0.5|var=b|contrast=true - false,0.01651002765762809,0.026398180715122017,Inf
+vcov:logit/CR1(h)/scenarios z=0.5/predictions,population_predictions,z=0.5,0.9015368251416922,0.06563068662937949,Inf
+vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=x|contrast=d",0.04622234480077352,0.03378437513629896,Inf
+vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=z|contrast=d",-0.002211736037660832,0.0226547138374688,Inf
+vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=b - a",-0.010994471107450443,0.005833078129026429,Inf
+vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=g|contrast=c - a",-0.04974270404113601,0.024212562303864794,Inf
+vcov:logit/CR1(h)/profile:means_grid/effect/ad,profile_effects,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924|var=b|contrast=true - false",0.01529824137652136,0.025540355456151947,Inf
+vcov:logit/CR1(h)/profile:means_grid/predictions,profile_predictions,"b=0.4|g=mix(a:0.4,b:0.4,c:0.2)|x=1.501629489|z=0.005944164924",0.9119916822692093,0.057646411200953825,Inf
 ctx:logit/none/groups=h+scenarios z=0.5/effect/ad,population_effects,h=r|z=0.5|var=x|contrast=d,0.06187126683596357,0.036300962370684677,Inf
 ctx:logit/none/groups=h+scenarios z=0.5/effect/ad,population_effects,h=r|z=0.5|var=g|contrast=b - a,-0.018032192154944435,0.03227364451219027,Inf
 ctx:logit/none/groups=h+scenarios z=0.5/effect/ad,population_effects,h=r|z=0.5|var=g|contrast=c - a,-0.046454621360501956,0.04395859269782778,Inf

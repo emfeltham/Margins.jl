@@ -6,9 +6,12 @@
 #   lm, HC0–HC3     V = (X'X)⁻¹ X' Ω X (X'X)⁻¹, Ω = diag(ωᵢ eᵢ²) with ω = 1, n/(n−k),
 #                   1/(1−hᵢ), 1/(1−hᵢ)²
 #   lm, CR0         V = (X'X)⁻¹ (Σ_g s_g s_g') (X'X)⁻¹,   s_g = Σ_{i∈g} xᵢ eᵢ
+#   CR1             V_CR0 · G/(G−1) · (n−1)/(n−k), as Stata, fixest and sandwich::vcovCL(type =
+#                   "HC1"); two-way: V_a + V_b − V_ab, each term with its own G (CovarianceMatrices
+#                   before 0.32.2 applied G/(G−1) twice)
 #   logit, HC0/HC1  V = B (Σ uᵢuᵢ') B · {1, n/(n−k)},      B = (X'WX)⁻¹, W = diag(μᵢ(1−μᵢ)),
 #                   uᵢ = xᵢ (yᵢ − μᵢ)
-#   logit, CR0      V = B (Σ_g u_g u_g') B,                u_g = Σ_{i∈g} uᵢ
+#   logit, CR0/CR1  V = B (Σ_g u_g u_g') B,                u_g = Σ_{i∈g} uᵢ (CR1 scaled as above)
 #
 # and every Margins SE in the 2×2 framework is √(g'Vg) with the gradient g written out from
 # X, β and the link derivative (μ' = μ(1−μ), μ'' = μ(1−μ)(1−2μ) for the logit).
@@ -27,17 +30,24 @@ using LinearAlgebra
 
 _rse_delta(g, V) = sqrt(g' * V * g)
 
+# CR1's finite-sample factor for one clustering: G/(G−1) · (n−1)/(n−k)
+_rse_cr1_factor(cluster, n, k) = (G = length(unique(cluster)); G / (G - 1) * (n - 1) / (n - k))
+
+# CovarianceMatrices < 0.32.2 (what Julia 1.10/1.11 resolve) applies G/(G−1) twice in CR1; Margins
+# corrects it (`_evaluate_vcov`), so only upstream's own CR1 matrix depends on the version
+const _RSE_CM_CR1_FIXED = pkgversion(CovarianceMatrices) >= v"0.32.2"
+
 # lm sandwich by hand: HC0–HC3 (Ω diagonal) or CR0 (cluster sums of scores)
 function _rse_lm_sandwich(model, est; cluster = nothing)
     X = modelmatrix(model); e = GLM.residuals(model); n, k = size(X)
     B = inv(X' * X)
-    if est === :CR0
+    if est in (:CR0, :CR1)
         S = zeros(k, k)
         for c in unique(cluster)
             s = vec(sum(X[cluster .== c, :] .* e[cluster .== c]; dims = 1))
             S .+= s * s'
         end
-        return B * S * B
+        return B * S * B .* (est === :CR1 ? _rse_cr1_factor(cluster, n, k) : 1.0)
     end
     h = [dot(X[i, :], B * X[i, :]) for i in 1:n]
     ω = est === :HC0 ? ones(n) : est === :HC1 ? fill(n / (n - k), n) :
@@ -51,13 +61,13 @@ function _rse_logit_sandwich(model, y, est; cluster = nothing)
     μ = 1 ./ (1 .+ exp.(-(X * b)))
     B = inv(X' * ((μ .* (1 .- μ)) .* X))
     U = X .* (y .- μ)
-    if est === :CR0
+    if est in (:CR0, :CR1)
         S = zeros(k, k)
         for c in unique(cluster)
             u = vec(sum(U[cluster .== c, :]; dims = 1))
             S .+= u * u'
         end
-        return B * S * B
+        return B * S * B .* (est === :CR1 ? _rse_cr1_factor(cluster, n, k) : 1.0)
     end
     return B * (U' * U) * B .* (est === :HC1 ? n / (n - k) : 1.0)
 end
@@ -92,7 +102,7 @@ end
         end
     end
 
-    @testset "lm: CR0 clustered SEs by hand" begin
+    @testset "lm: CR0 and CR1 clustered SEs by hand" begin
         rng = MersenneTwister(06515)
         n = 240
         region = repeat(1:6, inner = n ÷ 6)       # 6 regions × 40
@@ -109,7 +119,21 @@ end
                 @test CovarianceMatrices.vcov(CR0(data[!, cl]), model) ≈ V rtol = 1e-10
                 _rse_check_lm_quadrants(model, data, CR0(data[!, cl]), V)
                 push!(ses, only(DataFrame(population_margins(model, data; vars = [:x], vcov = CR0(data[!, cl]))).se))
+                V1 = _rse_lm_sandwich(model, :CR1; cluster = data[!, cl])
+                G = length(unique(data[!, cl]))
+                @test CovarianceMatrices.vcov(CR1(data[!, cl]), model) ≈ (_RSE_CM_CR1_FIXED ? V1 : V1 .* (G / (G - 1))) rtol = 1e-10
+                _rse_check_lm_quadrants(model, data, CR1(data[!, cl]), V1)
             end
+        end
+        @testset "two-way CR1 (region × year)" begin
+            # Cameron–Gelbach–Miller: V_region + V_year − V_region∩year, each one-way CR1 term with
+            # its own number of clusters (6, 8 and 48 here), as sandwich::vcovCL does
+            inter = string.(data.region, "_", data.year)
+            V = sum(sgn .* _rse_lm_sandwich(model, :CR1; cluster = c)
+                    for (sgn, c) in ((1, data.region), (1, data.year), (-1, inter)))
+            vc = CR1((data.region, data.year))
+            _RSE_CM_CR1_FIXED && @test CovarianceMatrices.vcov(vc, model) ≈ V rtol = 1e-10
+            _rse_check_lm_quadrants(model, data, vc, V)
         end
         model_se = only(DataFrame(population_margins(model, data; vars = [:x])).se)
         @test all(s -> !isapprox(s, model_se; rtol = 1e-2), ses)    # each clustering is used
@@ -118,7 +142,7 @@ end
         @test_throws Exception population_margins(model, data; vars = [:x], vcov = CR0(:nonexistent_var))
     end
 
-    @testset "logit: HC0, HC1 and CR0 by hand, all four quadrants" begin
+    @testset "logit: HC0, HC1, CR0 and CR1 by hand, all four quadrants" begin
         rng = MersenneTwister(20261102)
         n = 500
         data = DataFrame(x = randn(rng, n), z = randn(rng, n), cl = rand(rng, 1:15, n))
@@ -141,10 +165,15 @@ end
         g_mem = μb1 .* ex .+ b[jx] * μb2 .* xbar                         # at the mean row
         g_apm = μb1 .* xbar
         @test only(DataFrame(population_margins(model, data; vars = [:x])).estimate) ≈ b[jx] * mean(μ1) rtol = 1e-12
-        for (name, vc) in ((:HC0, HC0()), (:HC1, HC1()), (:CR0, CR0(data.cl)))
+        for (name, vc) in ((:HC0, HC0()), (:HC1, HC1()), (:CR0, CR0(data.cl)), (:CR1, CR1(data.cl)))
             @testset "$name" begin
                 V = _rse_logit_sandwich(model, data.y, name; cluster = data.cl)
                 Vcm = CovarianceMatrices.vcov(vc, model)
+                if name === :CR1 && !_RSE_CM_CR1_FIXED
+                    G = length(unique(data.cl))
+                    @test Vcm ≈ V .* (G / (G - 1)) rtol = 1e-10     # the upstream bug Margins corrects
+                    Vcm = V
+                end
                 @test Vcm ≈ V rtol = 1e-10
                 se(r) = only(DataFrame(r).se)
                 for (r, g) in ((population_margins(model, data; vars = [:x], vcov = vc), g_ame),

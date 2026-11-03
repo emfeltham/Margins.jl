@@ -243,7 +243,7 @@ CovarianceMatrices estimator, or any value in a matrix passed as `vcov=`). The z
 
 Any other non-finite entry of Σ is an `ArgumentError` (a broken matrix or estimator is not
 silently zeroed), and so is a Σ of the wrong size. CovarianceMatrices estimators on a
-rank-deficient GLM.jl fit (CovarianceMatrices 0.30):
+rank-deficient GLM.jl fit (CovarianceMatrices 0.30 to 0.33):
 - `HC0` gives NaN rows for the dropped coefficients and the refit's values elsewhere;
 - `HC1`/`HR1` and HAC scale by n/(n − p) with p counting the dropped coefficients; Σ is rescaled
   to n/(n − rank), the value of the refit without the redundant terms (and of R's `sandwich`);
@@ -329,7 +329,7 @@ end
 
 # CovarianceMatrices' leverage-based estimators (HC2-HC5) on a rank-deficient GLM.jl fit: its
 # leverage for a pivoted Cholesky takes the first `rank` columns of X instead of the kept (pivoted)
-# ones (CovarianceMatrices 0.30, GLMExt `_leverage`), so the result is silently wrong (5x on a test
+# ones (CovarianceMatrices 0.30 to 0.33, GLMExt `_leverage`), so the result is silently wrong (5x on a test
 # logit). Refused rather than passed on.
 _check_rank_deficient_estimator(vcov, model, dropped) = nothing
 function _check_rank_deficient_estimator(
@@ -345,7 +345,7 @@ function _check_rank_deficient_estimator(
 end
 
 # CovarianceMatrices' HC1/HR1 and HAC degrees-of-freedom factor n/(n − p) counts every coefficient,
-# dropped ones included (CovarianceMatrices 0.30); on a rank-deficient GLM.jl fit, rescale it to
+# dropped ones included (CovarianceMatrices 0.30 to 0.33); on a rank-deficient GLM.jl fit, rescale it to
 # n/(n − rank), as for the refit without the dropped terms and in R's `sandwich`.
 _rank_dof_rescale!(Σ, vcov, model, rank::Int) = Σ
 function _rank_dof_rescale!(Σ, vcov::Union{CovarianceMatrices.HR1, CovarianceMatrices.HAC},
@@ -362,6 +362,40 @@ end
 _evaluate_vcov(vcov::Function, model) = vcov(model)
 _evaluate_vcov(::typeof(GLM.vcov), model) = _default_vcov(model)   # the model class's own
 _evaluate_vcov(vcov, model) = CovarianceMatrices.vcov(vcov, model)
+
+# CovarianceMatrices before 0.32.2 applied CR1's cluster factor G/(G−1) twice on a fitted model:
+# it scales the residuals by √((N−1)/(N−K))·G/(G−1), and the meat squares them, so every CR1
+# variance was G/(G−1) too large (SE √(G/(G−1))). The fixed releases need Julia 1.12, so Julia
+# 1.10/1.11 still resolve 0.30. There Margins rebuilds CR1 from one-way CR0 matrices, each scaled
+# by G_c/(G_c−1)·(N−1)/(N−K): for multiway clustering V_a + V_b − V_ab (Cameron–Gelbach–Miller),
+# each term with its own number of clusters, as CovarianceMatrices ≥ 0.32.2 and R's
+# sandwich::vcovCL(type = "HC1") compute it. Remove with the 0.30 compat bound.
+const _CM_CR1_DOUBLE_FACTOR = pkgversion(CovarianceMatrices) < v"0.32.2"
+
+function _evaluate_vcov(vcov::CovarianceMatrices.CR1, model)
+    _CM_CR1_DOUBLE_FACTOR || return CovarianceMatrices.vcov(vcov, model)
+    terms = getfield(vcov, :g)
+    # The column-name form (`CR1(:id)`) is not supported on a fitted model by these versions;
+    # leave its error to CovarianceMatrices
+    terms isa Tuple{Vararg{Symbol}} && return CovarianceMatrices.vcov(vcov, model)
+    # Each clustering's integer codes: a `GroupedArray` (0.30.3–0.30.4) or a `Clustering` (0.30.5),
+    # both with a `groups` field
+    codes = map(t -> getfield(t, :groups), terms)
+    N = CovarianceMatrices.numobs(model)
+    K = length(_coef(model))
+    V = nothing
+    for c in _nonempty_subsets(length(terms))
+        ids = [Tuple(codes[j][i] for j in c) for i in 1:N]   # intersection of the clusterings in c
+        G = length(unique(ids))
+        Vc = CovarianceMatrices.vcov(CovarianceMatrices.CR0(ids), model) .*
+             ((-1)^(length(c) - 1) * G / (G - 1) * (N - 1) / (N - K))
+        V = V === nothing ? Vc : V .+ Vc
+    end
+    return V
+end
+
+# The nonempty subsets of 1:m, as index vectors (m = number of clustering dimensions)
+_nonempty_subsets(m) = (findall(d -> isodd(s >> (d - 1)), 1:m) for s in 1:(2^m - 1))
 
 """
     _covariance_matrix(model, vcov) -> Matrix{Float64}

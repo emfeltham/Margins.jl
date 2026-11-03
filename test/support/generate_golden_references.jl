@@ -43,7 +43,10 @@ Margins.clear_engine_cache!()
 golden = MarginsGolden.run_all()
 elapsed = time() - t0
 
-@assert all(isfinite, golden.estimate) && all(isfinite, golden.se)
+# A NaN SE is expected only for a quantity that is not identified on a rank-deficient fit
+# (it loads only on a dropped coefficient; R reports NA)
+@assert all(isfinite, golden.estimate)
+@assert all(r -> isfinite(r.se) || (isnan(r.se) && startswith(r.case_id, "rank-deficient:")), eachrow(golden))
 CSV.write(joinpath(GOLDEN_DIR, "margins_golden.csv"), golden)
 
 open(joinpath(GOLDEN_DIR, "margins_golden_versions.txt"), "w") do io

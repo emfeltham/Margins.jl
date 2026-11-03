@@ -33,7 +33,7 @@ MixedModelsExt = "MixedModels"
 
 [compat]
 CategoricalArrays = "1.0.1"
-CovarianceMatrices = "0.30.3"
+CovarianceMatrices = "0.30.3, 0.32.2, 0.33"
 DataFrames = "1.7"
 Dates = "1"
 Distributions = "0.25"

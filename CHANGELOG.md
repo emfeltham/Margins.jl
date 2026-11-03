@@ -20,9 +20,29 @@ Every lower bound in `[compat]` is now one the full test suite passes at: Julia 
 |---|---|---|---|
 | CategoricalArrays | `"0.10, 1"` | `"1.0.1"` | Under 0.10, `groups = :g` with a categorical `g` failed with `MethodError: levelcode(::String)` (`unique` returns plain values there). Under 1.0.0, MixedModels fits with a categorical grouping factor fail upstream. |
 | StatsModels | `"0.7"` | `"0.7.9"` | Below 0.7.5, no model with a CategoricalArrays 1.x column can be fitted (`ContrastsMatrix` `MethodError`, upstream); MixedModels grouping needs 0.7.9. |
-| CovarianceMatrices | `"0.30"` | `"0.30.3"` | Clustered `CR1` fails upstream below 0.30.3 (`ArgumentError: tuple must be non-empty`). |
+| CovarianceMatrices | `"0.30"` | `"0.30.3, 0.32.2, 0.33"` | Clustered `CR1` fails upstream below 0.30.3 (`ArgumentError: tuple must be non-empty`). 0.31–0.32.1 are excluded (they have the CR1 bug below and none of the fixes); 0.32.2+ fix it but need Julia 1.12, so Julia 1.10/1.11 resolve 0.30, where Margins corrects CR1 itself. |
 | FixedEffectModels | `"1.11"` | `"1.13.2, 2"` | FixedEffectModels' residual df changed between versions: 1.11–1.12 count one fewer absorbed degree of freedom than 1.13.2–2.1, and 1.13.0–1.13.1 give clustered fits G − 2. Margins takes the t df from the model, so its intervals follow the installed version; the tests pin 1.13.2+. 2.x is supported (2.0.0 and 2.2.0 tested): 2.0's shorter coefficient vector for `fe(g)*x` does not affect Margins, and 2.2 no longer counts fixed-effect levels that are redundant or nested in the cluster, so its df and SEs equal fixest's (Margins' SEs match fixest to 1e-6 in the oracle test, where 1.13 differs by sqrt(275/274)). |
 | StatsBase | `"0.33, 0.34"` | `"0.34"` | 0.33 cannot be installed together with MixedModels 4.35 or FixedEffectModels 1.13. |
+
+### Clustered CR1 standard errors match Stata, fixest and sandwich (numbers change)
+
+CovarianceMatrices before 0.32.2 applied CR1's cluster correction G/(G−1) twice on a fitted model.
+It scales each residual by √((N−1)/(N−K))·G/(G−1) and the meat squares the residuals, so every
+CR1 variance was G/(G−1) too large: SEs were √(G/(G−1)) too large, 5% with 10 clusters and 22%
+with 3. Margins passes `vcov = CR1(...)` through, so its CR1 SEs had the same error, including the
+`vcov = CR1(data.c), df = G - 1` form documented as matching Stata's `vce(cluster c)`.
+- With CovarianceMatrices 0.32.2 or later (Julia 1.12+), the upstream result is correct and is used
+  as is.
+- With 0.30 (Julia 1.10/1.11), Margins rebuilds CR1 from one-way CR0 matrices, each scaled by
+  G_c/(G_c−1)·(N−1)/(N−K); multiway clustering sums them with signs (V_a + V_b − V_ab), each term
+  with its own number of clusters, as 0.32.2+ and R's `sandwich::vcovCL(type = "HC1")` compute it.
+- On both versions, CR1 SEs for `lm` (three one-way clusterings and region × year) and logit are
+  checked against a hand-built sandwich at 1e-10 in `statistical_validation/robust_se_validation.jl`.
+  Before this there was no CR1 test.
+- The golden snapshot is regenerated with CovarianceMatrices 0.33.1. Only its 70 CR1 rows change,
+  each SE by exactly √((G−1)/G) (G = 3). 50 HC1 rows move in the last digit, and nothing else
+  changes. On 0.30.5 the corrected CR1 matches the new snapshot to 2e-12. The snapshot generator
+  now accepts the one NaN SE that is expected (an effect not identified on a rank-deficient fit).
 
 ### Breaking: output schema
 

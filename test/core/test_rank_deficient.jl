@@ -177,7 +177,7 @@ end
         @test_throws ArgumentError population_margins(r_lm, d; vcov = m -> fill(NaN, 7, 7))
         @test_throws r"3×3 matrix but the model has 7" population_margins(r_lm, d; vcov = m -> zeros(3, 3))
         # HC0: NaN rows for the dropped coefficient, the rest as for the refit. HC1 scales by
-        # n/(n − p) with p counting the dropped coefficient (CovarianceMatrices 0.30); Margins
+        # n/(n − p) with p counting the dropped coefficient (CovarianceMatrices 0.30 to 0.33); Margins
         # rescales it to n/(n − rank), the refit's (and R sandwich's) value
         for est in (HC0(), HC1())
             for (m, r) in ((m_lm, r_lm), (m_lg, r_lg))
