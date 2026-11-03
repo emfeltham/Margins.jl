@@ -6,7 +6,7 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 
 ## Unreleased
 
-## v3.0.0 — YYYY-MM-DD
+## v3.0.0 — 2026-11-03
 
 Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It contains everything below.
 
