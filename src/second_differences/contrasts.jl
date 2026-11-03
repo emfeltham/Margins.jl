@@ -8,7 +8,7 @@ using LinearAlgebra: dot
 
 """
     second_differences(result, variables, modifier[, vcov]; contrast="dy/dx", modifier_type=:auto,
-                       all_contrasts=true, alpha=nothing, p_adjust=:none, include_gradients=false)
+                       alpha=nothing, p_adjust=:none, include_gradients=false)
 
 Second differences (interaction effects) from an `EffectsResult` you already hold, from
 `population_margins(...; scenarios=(modifier=levels,), type=:effects)` or
@@ -33,10 +33,11 @@ levels in scenario order. A continuous modifier gives slopes (the difference per
   different estimator; the t/z choice (`df` column) then follows that matrix.
 
 # Keyword Arguments
-- `contrast::String="dy/dx"`: the focal contrast when `all_contrasts=false` (`"derivative"` is an alias
-  of `"dy/dx"`); for a variable with a single contrast it is detected automatically
-- `all_contrasts::Bool=true`: use every contrast of each focal variable (categorical variables have
-  several); `false` restricts to `contrast`
+- `contrast=nothing`: `nothing` uses every contrast of each focal variable (a categorical variable has
+  several, a continuous one has `"dy/dx"`). A label such as `"college - hs"` (or `"dy/dx"`; `"derivative"`
+  is an alias) restricts the result to that contrast, and is an error for a variable that has no such
+  contrast. Not to be confused with `contrasts=` of the model-level form, which chooses how the
+  contrasts are built (`:baseline` or `:pairwise`); a result already holds its contrasts
 - `modifier_type::Symbol=:auto`: `:binary`, `:categorical`, `:continuous` or `:auto`. Under `:auto`, two
   levels are `:binary` (with a warning when they are numeric and not 0/1, because the result is then the
   raw difference rather than a slope), three or more numeric levels are `:continuous`, anything else is
@@ -73,7 +74,7 @@ second_differences(ames, [:age, :education], :treated)         # several focal v
 ames = population_margins(model, data; vars=[:education], contrasts=:pairwise,
                           scenarios=(region=[:north, :south, :west],), type=:effects)
 second_differences(ames, :education, :region)                  # 3 contrasts × 3 region pairs = 9 rows
-second_differences(ames, :education, :region; contrast="college - hs", all_contrasts=false)
+second_differences(ames, :education, :region; contrast="college - hs")
 ```
 """
 function second_differences(
@@ -81,14 +82,16 @@ function second_differences(
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
     vcov::AbstractMatrix{<:Real};
-    contrast::String="dy/dx",
+    contrast::Union{Nothing,AbstractString}=nothing,
     modifier_type::Symbol=:auto,
-    all_contrasts::Bool=true,
+    all_contrasts=nothing,
     alpha=nothing,
     p_adjust::Symbol=:none,
     include_gradients::Bool=false,
     warn::Bool=true
 )
+    isnothing(all_contrasts) || error("`all_contrasts` was removed: leave `contrast` unset for every " *
+        "contrast (the default), or pass `contrast=\"label\"` for one.")
     _check_p_adjust(p_adjust)
     alpha = _resolve_alpha(alpha, ame_result)
 
@@ -103,21 +106,20 @@ function second_differences(
         # Get information about the variable's contrasts
         variable_contrasts = _variable_contrasts(idx, variable)
 
-        has_multiple_contrasts = length(variable_contrasts) > 1
-
-        # Determine if user wants all contrasts or just one
-        if has_multiple_contrasts && all_contrasts
+        # Every contrast (the default) or the one asked for
+        if isnothing(contrast) && length(variable_contrasts) > 1
             # Use _second_differences_all_contrasts for comprehensive results
             df = _second_differences_all_contrasts(
                 ame_result, variable, modifier, vcov;
                 modifier_type=modifier_type, alpha=alpha, include_gradients=true, warn=warn
             )
         else
-            # Use _second_differences_pairwise for single contrast
-            # Auto-detect the contrast if it is the default "dy/dx" (or its alias "derivative") and there is only one contrast
-            contrast_to_use = contrast
-            if _contrast_label(contrast) == "dy/dx" && length(variable_contrasts) == 1
-                contrast_to_use = variable_contrasts[1]
+            # One contrast: the one asked for, or the variable's only one
+            if isnothing(contrast)
+                _require_variable(idx, variable)
+                contrast_to_use = only(variable_contrasts)
+            else
+                contrast_to_use = String(contrast)
             end
 
             df = _second_differences_pairwise(

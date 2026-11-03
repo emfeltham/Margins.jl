@@ -66,6 +66,8 @@ end
     include("test_second_differences_api.jl")
     include("test_second_differences_structural.jl")
     include("test_second_differences_review.jl")
+    include("test_vcov_matrix.jl")
+    include("test_result_metadata_contract.jl")
     include("test_profile_pairwise.jl")
 end
 
@@ -112,6 +114,7 @@ end
     include("validation/test_link_scale.jl")
     include("validation/test_measure_contexts.jl")
     include("validation/test_elasticity_unit_definitions.jl")
+    include("validation/test_second_differences_r_oracle.jl")
     include("validation/test_engine_cache.jl")
     include("validation/test_engine_cache_bound.jl")
     include("validation/test_concurrent_calls.jl")

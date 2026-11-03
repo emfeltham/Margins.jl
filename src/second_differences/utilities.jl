@@ -66,6 +66,26 @@ function _expand_profile_to_cartesian(profile::NamedTuple)
     return result
 end
 
+# ---- observation weights --------------------------------------------------------------------
+
+# `weights` as `population_margins` takes it (nothing, a column name, or a vector), as a Float64 vector.
+function _weights_vector(weights, data)
+    isnothing(weights) && return nothing
+    _validate_weights_parameter(weights, data)
+    return weights isa Symbol ? Float64.(data[!, weights]) : Float64.(weights)
+end
+
+_weighted_mean(x, w) = sum(w .* x) / sum(w)
+
+# Smallest x whose cumulative weight reaches half the total (the midpoint of two x when it lands exactly on half).
+function _weighted_median(x, w)
+    p = sortperm(x)
+    xs, cw = x[p], cumsum(w[p])
+    half = cw[end] / 2
+    i = findfirst(c -> c >= half, cw)
+    return (cw[i] == half && i < length(xs)) ? (xs[i] + xs[i + 1]) / 2 : float(xs[i])
+end
+
 # Continuous effects are labelled "dy/dx" (v2.3.0; the scenarios/groups path used to say
 # "derivative"). "derivative" is still accepted wherever a contrast label is passed in.
 _contrast_label(c::AbstractString) = c == "derivative" ? "dy/dx" : String(c)
@@ -170,7 +190,7 @@ const P_ADJUST_METHODS = (:none, :bonferroni, :holm, :bh)
 # Significance level / confidence level: an explicit `alpha`, else the one the result was
 # computed with (population_margins `ci_alpha`), else 0.05.
 function _resolve_alpha(alpha, ame_result)::Float64
-    a = isnothing(alpha) ? Float64(get(ame_result.metadata, :alpha, 0.05)) : Float64(alpha)
+    a = isnothing(alpha) ? _result_alpha(ame_result) : Float64(alpha)
     0 < a < 1 || error("alpha must be in (0, 1), got $a")
     return a
 end
@@ -325,7 +345,7 @@ function _effect_index(r::EffectsResult)
     sources = Dict{Symbol,String}()
     # population_margins stores group columns in `profile_values`, and records which columns are
     # groups and which are scenario variables in the metadata
-    group_vars = Set(Symbol.(get(r.metadata, :groups_vars, Symbol[])))
+    group_vars = Set(_result_groups_vars(r))
     for (source, nt) in (("scenario", r.profile_values), ("group", r.group_values))
         isnothing(nt) && continue
         for k in keys(nt)

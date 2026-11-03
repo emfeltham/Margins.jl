@@ -54,6 +54,12 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
+  (a function of the model, a CovarianceMatrices estimator, or a covariance matrix; a matrix must be square,
+  finite, symmetric and match the coefficients). The covariance is computed once per cached engine. A
+  matrix is cached by its contents, so changing it between calls is always picked up; a *function* is
+  cached by identity, so one that builds a new array each call from state you modify later (a copy of a
+  captured matrix, say) keeps returning the old one: pass the matrix itself, a new function, or call
+  `clear_engine_cache!()`.
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator (e.g. `HC1()`) for robust/clustered
     standard errors (inference is then z-based; see *Inference* below)
@@ -198,7 +204,9 @@ function population_margins(
     try
         # Handle scenarios/groups parameters for counterfactual scenarios and grouping
         if !isnothing(scenarios) || !isnothing(groups)
-            return _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov, engine.Σ)
+            res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov, engine.Σ)
+            res.metadata[:weighted] = !isnothing(weights_vec)
+            return res
         end
     
         if type === :effects

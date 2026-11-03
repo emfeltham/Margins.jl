@@ -278,9 +278,13 @@ function _build_metadata(;
         :backend => backend,
         :measure => measure,
         :n_obs => n_obs,
-        :model_type => isnothing(model_type) ? "unknown" : string(typeof(model_type)),
+        :model_type => isnothing(model_type) ? "unknown" : string(model_type isa Type ? model_type : typeof(model_type)),
         :timestamp => ts,
         :at_spec => at_spec,
-        :has_contexts => has_contexts
+        :has_contexts => has_contexts,
+        # Always present (see result_metadata_keys): empty/false unless the call set them
+        :groups_vars => Symbol[],
+        :scenarios_vars => Symbol[],
+        :weighted => false
     )
 end

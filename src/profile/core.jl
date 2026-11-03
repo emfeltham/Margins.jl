@@ -47,7 +47,8 @@ or adjusted predictions at specific profiles (APM/APR).
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
-  - Custom function for robust/clustered standard errors
+  - Custom function or CovarianceMatrices estimator for robust/clustered standard errors, or a covariance
+    matrix itself (see `population_margins`)
 
 # Returns
 `EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients,

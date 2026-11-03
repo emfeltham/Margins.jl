@@ -352,11 +352,11 @@ end
         @test sd_wrapper.second_diff == sd_direct.second_diff
     end
 
-    @testset "Wrapper with all_contrasts=false" begin
+    @testset "Wrapper with a single contrast" begin
         ames = population_margins(model, df; scenarios=(education=["hs", "college", "grad"],), type=:effects)
 
         # Single contrast only
-        sd_single = second_differences(ames, :x, :education, Σ; all_contrasts=false)
+        sd_single = second_differences(ames, :x, :education, Σ; contrast="dy/dx")
 
         # Should return 3 rows (pairwise education levels for single contrast)
         @test nrow(sd_single) == 3

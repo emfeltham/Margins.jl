@@ -70,7 +70,7 @@ Fields:
 - `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile effects MEM/MER) or the `scenarios=` and `groups=` variables (population effects); `nothing` for a plain AME. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
 - `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
-- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
+- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, the covariance behind the standard errors, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
 
 # Examples
 ```julia
@@ -104,7 +104,7 @@ Fields:
 - `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile predictions APM/APR) or the `scenarios=` and `groups=` variables (population predictions); `nothing` for a plain AAP. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
 - `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
-- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
+- `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, the covariance behind the standard errors, …). The keys every result carries, with their types, are listed by `Margins.result_metadata_keys()`
 
 # Examples
 ```julia
@@ -188,7 +188,7 @@ import DataFrames: DataFrame # explicit import to extend method
 function DataFrame(mr::EffectsResult; format::Symbol=:auto, include_gradients::Bool=false)
     # Auto-detect natural format based on analysis type
     if format == :auto
-        analysis_type = get(mr.metadata, :analysis_type, :unknown)
+        analysis_type = _result_analysis_type(mr, :unknown)
         # For effects, use profile format for profile analysis, standard otherwise
         format = analysis_type == :profile ? :profile : :standard
     end
@@ -240,7 +240,7 @@ Base.convert(::Type{DataFrame}, mr::MarginsResult) = DataFrame(mr)
 # Stata-style display methods for effects
 function Base.show(io::IO, mr::EffectsResult)
     n_results = length(mr.estimates)
-    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    analysis_type = _result_analysis_type(mr, :unknown)
     
     # Header
     n_obs = get(mr.metadata, :n_obs, missing)
@@ -263,7 +263,7 @@ end
 # Stata-style display methods for predictions
 function Base.show(io::IO, mr::PredictionsResult)
     n_results = length(mr.estimates)
-    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    analysis_type = _result_analysis_type(mr, :unknown)
     
     # Header
     n_obs = get(mr.metadata, :n_obs, missing)
@@ -301,7 +301,7 @@ function Base.show(io::IO, cr::ContrastResult)
     println(io, "ContrastResult:")
 
     # Get alpha from metadata if available
-    alpha = get(cr.metadata, :alpha, 0.05)
+    alpha = _result_alpha(cr)
     ci_pct = _format_level_pct(alpha)
 
     # Display width for alignment
@@ -372,8 +372,8 @@ Only shows when:
 Kept behind a guard to avoid noisy output for simple cases.
 """
 function _show_context_header(io::IO, mr::MarginsResult)
-    has_contexts = get(mr.metadata, :has_contexts, false)
-    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    has_contexts = _result_has_contexts(mr)
+    analysis_type = _result_analysis_type(mr, :unknown)
     
     # Only show for population-with-contexts
     if !(has_contexts && analysis_type == :population)
@@ -432,8 +432,8 @@ groups, scenarios = context_columns(result)
 """
 function context_columns(mr::MarginsResult)
     # Get metadata variables
-    groups_vars = get(mr.metadata, :groups_vars, Symbol[])
-    scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
+    groups_vars = _result_groups_vars(mr)
+    scenarios_vars = _result_scenarios_vars(mr)
     
     # Only include variables that are actually present in profile_values
     if isnothing(mr.profile_values)
@@ -490,11 +490,11 @@ _scenario_column_name(var) = Symbol("at_", var)
 
 # Display name of a `profile_values` key: prefixed for population contexts, bare otherwise
 function _context_display_name(mr::MarginsResult, name::Symbol)
-    has_contexts = get(mr.metadata, :has_contexts, false) &&
-                   get(mr.metadata, :analysis_type, :unknown) == :population
+    has_contexts = _result_has_contexts(mr) &&
+                   _result_analysis_type(mr, :unknown) == :population
     has_contexts || return string(name)
-    name in get(mr.metadata, :groups_vars, Symbol[]) && return string(_group_column_name(name))
-    name in get(mr.metadata, :scenarios_vars, Symbol[]) && return string(_scenario_column_name(name))
+    name in _result_groups_vars(mr) && return string(_group_column_name(name))
+    name in _result_scenarios_vars(mr) && return string(_scenario_column_name(name))
     return string(name)
 end
 
@@ -502,8 +502,8 @@ end
 # (over_) first, then scenarios (at_); otherwise the stored order
 function _display_profile_pairs(mr::MarginsResult)
     pv = mr.profile_values
-    has_contexts = get(mr.metadata, :has_contexts, false) &&
-                   get(mr.metadata, :analysis_type, :unknown) == :population
+    has_contexts = _result_has_contexts(mr) &&
+                   _result_analysis_type(mr, :unknown) == :population
     has_contexts || return collect(pairs(pv))
     groups, scenarios = context_columns(mr)
     ordered = Symbol[groups; scenarios]
@@ -516,8 +516,8 @@ function append_context_columns!(df::DataFrame, mr::MarginsResult; order::Symbol
         return df  # No context columns to add
     end
     
-    has_contexts = get(mr.metadata, :has_contexts, false)
-    analysis_type = get(mr.metadata, :analysis_type, :unknown)
+    has_contexts = _result_has_contexts(mr)
+    analysis_type = _result_analysis_type(mr, :unknown)
     
     if has_contexts && analysis_type == :population
         # Population contexts: distinguish groups from scenarios
@@ -579,7 +579,7 @@ end
 
 function _show_stata_table(io::IO, mr::EffectsResult)
     # Calculate confidence intervals
-    alpha = get(mr.metadata, :alpha, 0.05)
+    alpha = _result_alpha(mr)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
     
     # Check if this is profile margins (has profile_values)
@@ -601,15 +601,15 @@ function _show_stata_table(io::IO, mr::EffectsResult)
     end
     
     # Context information is already conveyed by at_* column headers, so no separate Context column needed
-    has_contexts = get(mr.metadata, :has_contexts, false) && get(mr.metadata, :analysis_type, :unknown) == :population
+    has_contexts = _result_has_contexts(mr) && _result_analysis_type(mr, :unknown) == :population
     
     # Profile columns (for profile margins or population margins with contexts)
     profile_widths = Int[]  # Specify Int type to avoid sum() type issues
     profile_names = String[]  # Display names
     profile_raw_names = Symbol[]  # Raw names for data access
     if has_profile
-        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
-        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+        scenarios_vars = _result_scenarios_vars(mr)
+        groups_vars = _result_groups_vars(mr)
         
         for (name, values) in _display_profile_pairs(mr)
             # Store raw name for data access
@@ -721,7 +721,7 @@ end
 
 function _show_stata_table(io::IO, mr::PredictionsResult)
     # Calculate confidence (or prediction) intervals
-    alpha = get(mr.metadata, :alpha, 0.05)
+    alpha = _result_alpha(mr)
     is_prediction_interval = get(mr.metadata, :interval, :confidence) === :prediction
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; var_inflation=_interval_var_inflation(mr), df=_result_df(mr))
     
@@ -733,8 +733,8 @@ function _show_stata_table(io::IO, mr::PredictionsResult)
     profile_names = String[]
     profile_raw_names = Symbol[]
     if has_profile
-        scenarios_vars = get(mr.metadata, :scenarios_vars, Symbol[])
-        groups_vars = get(mr.metadata, :groups_vars, Symbol[])
+        scenarios_vars = _result_scenarios_vars(mr)
+        groups_vars = _result_groups_vars(mr)
         
         for (name, values) in _display_profile_pairs(mr)
             push!(profile_raw_names, name)
@@ -1000,7 +1000,7 @@ function _standard_table(mr::EffectsResult; include_gradients::Bool=false)
     statistics, dfs, p_values = _inference_columns(mr)
 
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
 
@@ -1050,7 +1050,7 @@ end
 
 function _compact_table(mr::EffectsResult; include_gradients::Bool=false)
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
 
@@ -1076,11 +1076,11 @@ function _compact_table(mr::EffectsResult; include_gradients::Bool=false)
 end
 
 function _confidence_table(mr::EffectsResult; include_gradients::Bool=false)
-    alpha = get(mr.metadata, :alpha, 0.05)
+    alpha = _result_alpha(mr)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
 
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
 
@@ -1108,11 +1108,11 @@ end
 
 function _profile_table(mr::EffectsResult; include_gradients::Bool=false)
     # Profile-first organization: reference grid with results attached
-    alpha = get(mr.metadata, :alpha, 0.05)
+    alpha = _result_alpha(mr)
     lower, upper = _calculate_confidence_intervals(mr.estimates, mr.standard_errors, alpha; df=_result_df(mr))
 
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
 
@@ -1152,7 +1152,7 @@ function _predictions_table(mr::PredictionsResult; include_gradients::Bool=false
     statistics, dfs, p_values = _inference_columns(mr)
 
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     type_description = _create_type_description(analysis_type, :prediction, :predictions)
 
     # Build DataFrame with new column order: context columns first (using consistent helper)
@@ -1203,7 +1203,7 @@ function _stata_table(mr::EffectsResult; include_gradients::Bool=false)
     t_based = isfinite(_result_df(mr))
 
     # Create self-describing type column
-    analysis_type = get(mr.metadata, :analysis_type, :population)
+    analysis_type = _result_analysis_type(mr, :population)
     measure = get(mr.metadata, :measure, :effect)
     type_description = _create_type_description(analysis_type, measure, :effects)
 

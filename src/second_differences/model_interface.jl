@@ -52,8 +52,8 @@ end
 """
     second_differences(model, data, variables, modifier;
                        levels=nothing, at=nothing, modifier_type=:auto, profile=NamedTuple(),
-                       delta=:auto, scale=:response, contrasts=:baseline, vcov=GLM.vcov,
-                       alpha=0.05, p_adjust=:none, include_gradients=false, warn=true)
+                       delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing, vcov=GLM.vcov,
+                       weights=nothing, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true)
 
 How does the marginal effect of `variables` change with `modifier`? Computes the second
 difference (interaction effect on the response scale) with delta-method standard errors
@@ -89,11 +89,22 @@ What is computed depends on the modifier:
   counterfactuals (everyone's value is set), not subgroups; for subgroups use `groups=` on
   `population_margins` and the result-level form. Must not contain the modifier.
 - `delta`: finite-difference step for a local derivative (`:auto` = 1% of the modifier's SD).
-- `scale`: `:response` (default) or `:link`. `contrasts`: `:baseline` or `:pairwise` for
-  categorical focal variables.
+- `measure`: `:effect` (default), `:elasticity`, `:semielasticity_dyex` or `:semielasticity_eydx`, as in
+  `population_margins`: the second difference is then the change in that measure across the modifier.
+  The measures are defined for continuous focal variables only, so request categorical ones separately.
+- `scale`: `:response` (default) or `:link`. `contrasts`: how contrasts of a categorical focal variable
+  are built, `:baseline` (K−1) or `:pairwise` (K(K−1)/2), as in `population_margins`.
+- `contrast`: restrict the result to one contrast label, such as `"college - hs"` (or `"dy/dx"` for a
+  continuous variable). `nothing` (default) keeps every contrast. It applies to every focal variable, so
+  each must have it, and it must exist under the chosen `contrasts`. Same keyword as the result-level
+  form; `contrasts` (plural) builds the contrasts, `contrast` selects one.
 - `vcov`: covariance estimator, as in `population_margins` (default `GLM.vcov`; a function, a
   matrix, or a CovarianceMatrices estimator). The t/z choice follows the same rule as the rest of
   the package: t with the residual df for a linear model's own covariance, z otherwise.
+- `weights`: observation weights, as in `population_margins` (a column name or a vector). Every average
+  marginal effect is then weighted, and the default evaluation point `at=:mean` / `:median` of a continuous
+  modifier is the weighted mean / median. Without it the numbers are unweighted, even if you computed
+  weighted effects elsewhere.
 - `alpha`: significance level; `significant` is `p_value < alpha` and `ci_lower`/`ci_upper` give the
   (1 − `alpha`) interval (default 0.05, a 95% interval).
 - `p_adjust`: multiple-testing adjustment over **all rows returned** (every variable, contrast, level
@@ -140,8 +151,8 @@ does the same comparison on its rows (see its docstring).
 function second_differences(
     model::RegressionModel, data, variables::Union{Symbol,Vector{Symbol}}, modifier::Symbol;
     levels=nothing, at=nothing, modifier_type::Symbol=:auto, profile::NamedTuple=NamedTuple(),
-    delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, contrasts::Symbol=:baseline,
-    vcov=GLM.vcov, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
+    delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
+    contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=nothing, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
     warn::Bool=true,
 )
     _check_p_adjust(p_adjust)
@@ -186,7 +197,7 @@ function second_differences(
         # Local derivative at `at` (default: the mean)
         out = _second_differences_local(
             model, data, variables, modifier, vcov;
-            at = isnothing(at) ? :mean : at, profile, delta, scale, contrasts, alpha, p_adjust, include_gradients,
+            at = isnothing(at) ? :mean : at, profile, delta, scale, measure, contrasts, alpha, p_adjust, include_gradients, weights, contrast,
         )
         warn && _warn_structural_zeros(out, modifier_in_model)
         return out
@@ -211,20 +222,17 @@ function second_differences(
     mtype === :continuous && !all(x -> x isa Number && !(x isa Bool), lv) &&
         error("A continuous modifier needs numeric `levels`, got $(eltype(lv)).")
 
-    # population_margins takes a function or estimator; wrap a matrix
-    vcov_arg = vcov isa AbstractMatrix ? (_model -> Matrix{Float64}(vcov)) : vcov
-
     Σ = _covariance_matrix(model, vcov)   # computed here, not read back from the cached engine
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)
         scenarios = merge(NamedTuple{(modifier,)}((lv,)), profile_point)
         ames = population_margins(
-            model, data; scenarios, vars=vars_vec, type=:effects, scale, vcov=vcov_arg, contrasts,
+            model, data; scenarios, vars=vars_vec, type=:effects, scale, measure, vcov, contrasts, weights,
             ci_alpha=Float64(alpha),
         )
         _align_second_difference_df!(ames, model, vcov)
         sd = second_differences(
-            ames, vars_vec, modifier, Σ; modifier_type=result_type, alpha, include_gradients=true, warn=false,
+            ames, vars_vec, modifier, Σ; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
         )
         for (k, v) in pairs(profile_point)
             sd[!, k] = fill(v, nrow(sd))

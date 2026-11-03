@@ -151,7 +151,7 @@ second_differences(
     levels = nothing, at = nothing, modifier_type::Symbol = :auto,
     profile::NamedTuple = NamedTuple(), delta = :auto,
     scale::Symbol = :response, contrasts::Symbol = :baseline, vcov = GLM.vcov,
-    alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
+    weights = nothing, alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
 )
 ```
 
@@ -174,9 +174,18 @@ second_differences(
   `modifier_type=:categorical` for an integer-coded categorical modifier
 - `profile`: other variables to hold fixed, e.g. `(age=40, region="north")`; vector values give one
   profile point each (Cartesian product, counterfactual rather than subgroup) and appear as extra columns
+- `weights`: observation weights as in `population_margins` (a column name or a vector). All average
+  marginal effects are weighted, and `at=:mean`/`:median` use the weighted mean/median of the modifier.
+  Without it the result is unweighted even if you computed weighted effects elsewhere. For a result you
+  already hold, pass the weighted `EffectsResult` to the result-level form: its gradients carry the weights
 - `delta`: finite-difference step for a local derivative (`:auto` = 1% of the modifier's SD, raised
   where needed to keep `at ± δ` distinct in floating point); ignored with `levels`
+- `measure`: `:effect` (default), `:elasticity`, `:semielasticity_dyex` or `:semielasticity_eydx`, as in
+  `population_margins`; the second difference is then the change in that measure across the modifier (the
+  `ame_at_level1/2` columns hold the measure). These are defined for continuous focal variables only, so
+  request categorical variables in a separate call
 - `scale`: `:response` or `:link`
+- `contrast`: restrict the result to one contrast label, e.g. `"college - hs"` or `"dy/dx"`; default `nothing` keeps every contrast. Applies to every focal variable and must exist under the chosen `contrasts`
 - `contrasts`: `:baseline` (K−1 contrasts per categorical focal variable) or `:pairwise` (K(K−1)/2)
 - `vcov`: covariance estimator, as in `population_margins`: a function of the model (`GLM.vcov`, the
   default), a matrix (any `AbstractMatrix`, e.g. `Symmetric`), or a CovarianceMatrices estimator (`HC1()`)
@@ -214,9 +223,8 @@ second_differences(
     variables::Union{Symbol, Vector{Symbol}},
     modifier::Symbol,
     vcov::AbstractMatrix{<:Real} = <the result's own covariance>;
-    contrast::String = "dy/dx",
+    contrast = nothing,
     modifier_type::Symbol = :auto,
-    all_contrasts::Bool = true,
     alpha = nothing,
     p_adjust::Symbol = :none,
     include_gradients::Bool = false,
@@ -232,7 +240,7 @@ second_differences(
 - `modifier_type`: `:auto` classifies two levels as `:binary` (with a warning if they are numeric and not
   0/1, because the result is then the raw AME difference rather than a slope), three or more numeric
   levels as `:continuous`, otherwise `:categorical`.
-- `contrast` / `all_contrasts`: choose one focal contrast instead of all of them.
+- `contrast`: `nothing` (default) uses every contrast of each focal variable; a label such as `"college - hs"` or `"dy/dx"` restricts the result to that contrast. (Plural `contrasts=` in the model-level form chooses how contrasts are *built*, `:baseline` or `:pairwise`; a result already holds its contrasts.)
 - `alpha` defaults to the `ci_alpha` the result was computed with; `p_adjust` and `include_gradients` are as above.
 - Numeric (and Bool) modifier levels are always compared in ascending order, so
   `modifier_level1 < modifier_level2` whatever the scenario order; categorical levels keep scenario order.
@@ -245,7 +253,7 @@ removed (calling one raises an `UndefVarError` that names its replacement):
 | Removed (2.x) | Use instead |
 |:--|:--|
 | `second_differences_at(model, data, vars, mod, vcov; at=…, …)` | `second_differences(model, data, vars, mod; at=…, vcov=vcov, …)` |
-| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; all_contrasts=false, contrast=…)` |
+| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; contrast=…)` |
 | `second_differences_all_contrasts(result, var, mod, vcov)` | `second_differences(result, var, mod)` |
 | `second_differences_table(result, vars, mod, vcov)` | `second_differences(result, vars, mod)` |
 | `second_difference(result, var, mod, vcov)` (a `NamedTuple`) | `second_differences(result, var, mod; include_gradients=true)` (one `DataFrame` row) |
@@ -373,7 +381,7 @@ sd = second_differences(model, data, :education, :region; contrasts=:pairwise)
 
 With three education levels and three regions, `contrasts=:baseline` (the default) returns 2 × 3 = 6
 rows and `contrasts=:pairwise` returns 3 × 3 = 9 rows. To look at one contrast, filter the result:
-`sd[sd.contrast .== "college - hs", :]`.
+`contrast="college - hs"` (or filter the result, `sd[sd.contrast .== "college - hs", :]`).
 
 ### Local Derivatives at Profiles
 

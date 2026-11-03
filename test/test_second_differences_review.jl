@@ -96,4 +96,59 @@ using Random
         @test a.se == b.se
         @test a.se[1] ≈ 2 * second_differences(ames, :x, :z).se[1]
     end
+
+    @testset "weights" begin
+        w = 1.0 .+ 2.0 .* (df.x .> 0)          # weight 3 for x > 0, else 1
+        dup = vcat(df, df[df.x .> 0, :], df[df.x .> 0, :])  # same weighting as 2 extra copies
+        un = second_differences(lg, df, :x, :z)
+        wt = second_differences(lg, df, :x, :z; weights = w)
+        @test !isapprox(wt.second_diff[1], un.second_diff[1]; rtol = 1e-6)
+        # equals the unweighted calculation on the expanded data, and a weights column works too
+        ex = second_differences(lg, dup, :x, :z)
+        @test wt.second_diff ≈ ex.second_diff && wt.se ≈ ex.se
+        dw = copy(df); dw.sw = w
+        @test second_differences(lg, dw, :x, :z; weights = :sw).second_diff ≈ wt.second_diff
+        @test second_differences(lg, df, :x, :z; weights = ones(n)).second_diff ≈ un.second_diff
+        # same as the result-level form on a weighted result
+        ames = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects, weights = w)
+        @test second_differences(ames, :x, :z).second_diff ≈ wt.second_diff
+        # local derivative: weighted mean as the default point, weighted effects
+        lw = second_differences(lg, df, :x, :w; weights = w, delta = 0.01)
+        @test lw.eval_point[1] ≈ sum(w .* df.w) / sum(w)
+        lex = second_differences(lg, dup, :x, :w; at = lw.eval_point[1], delta = 0.01)
+        @test lw.second_diff ≈ lex.second_diff
+        lmed = second_differences(lg, df, :x, :w; weights = ones(n), at = :median, delta = 0.01)
+        @test lmed.eval_point[1] ≈ sort(df.w)[n ÷ 2] / 2 + sort(df.w)[n ÷ 2 + 1] / 2
+        # invalid weights are rejected
+        @test_throws ArgumentError second_differences(lg, df, :x, :z; weights = ones(n - 1))
+        @test_throws ArgumentError second_differences(lg, df, :x, :z; weights = :nope)
+    end
+
+    @testset "contrast= selects one contrast (both forms); all_contrasts is gone" begin
+        d = copy(df); d.cg = categorical(d.g)
+        m = lm(@formula(y ~ x * z + cg * z + w), d)
+        all_rows = second_differences(m, d, :cg, :z; warn = false)
+        @test sort(unique(all_rows.contrast)) == ["b - a", "c - a"]
+        one = second_differences(m, d, :cg, :z; contrast = "b - a", warn = false)
+        @test one.contrast == ["b - a"]
+        @test one.second_diff == all_rows[all_rows.contrast .== "b - a", :].second_diff
+        # p_adjust family is the selected rows only
+        adj = second_differences(m, d, :cg, :z; contrast = "b - a", p_adjust = :bonferroni, warn = false)
+        @test adj.p_adjusted == adj.p_value
+        # a continuous focal variable: "dy/dx" and its alias
+        @test second_differences(m, d, :x, :z; contrast = "dy/dx").contrast == ["dy/dx"]
+        @test second_differences(m, d, :x, :z; contrast = "derivative").contrast == ["dy/dx"]
+        @test second_differences(m, d, :x, :w; contrast = "dy/dx", at = 0.0).contrast == ["dy/dx"]
+        @test_throws ErrorException second_differences(m, d, :cg, :z; contrast = "c - b", warn = false)  # not built under :baseline
+        @test_throws ErrorException second_differences(m, d, :x, :w; contrast = "b - a")
+        @test second_differences(m, d, :cg, :z; contrast = "c - b", contrasts = :pairwise, warn = false).contrast == ["c - b"]
+        # result-level form
+        ames = population_margins(m, d; vars = :cg, scenarios = (z = [false, true],), type = :effects)
+        r = second_differences(ames, :cg, :z; warn = false)
+        @test nrow(r) == 2
+        @test second_differences(ames, :cg, :z; contrast = "c - a", warn = false).contrast == ["c - a"]
+        @test_throws ErrorException second_differences(ames, :cg, :z; contrast = "dy/dx", warn = false)
+        err = try second_differences(ames, :cg, :z; all_contrasts = false) catch e; sprint(showerror, e) end
+        @test occursin("all_contrasts", err) && occursin("contrast=", err)
+    end
 end

@@ -193,7 +193,8 @@ end
     validate_vcov_parameter(vcov, model)
 
 Validate the `vcov` parameter for margins functions.
-Must be a function that takes a model and returns a covariance matrix.
+A function of the model returning a covariance matrix, a CovarianceMatrices estimator, or a
+covariance matrix itself (square, finite, symmetric, one row per coefficient).
 
 # Arguments
 - `vcov`: Function that computes covariance matrix from model
@@ -211,6 +212,17 @@ function validate_vcov_parameter(vcov, model)
     
     # Skip expensive validation if we've already validated this combination
     if _is_validated(vcov_key)
+        return nothing
+    end
+
+    # A covariance matrix given directly: check its shape, not the model
+    if vcov isa AbstractMatrix
+        k = length(coef(model))
+        size(vcov) == (k, k) ||
+            throw(ArgumentError("vcov matrix is $(size(vcov, 1))×$(size(vcov, 2)) but the model has $k coefficients"))
+        all(isfinite, vcov) || throw(ArgumentError("vcov matrix contains non-finite values"))
+        isapprox(vcov, vcov'; rtol=1e-8, atol=1e-12) || throw(ArgumentError("vcov matrix is not symmetric"))
+        _mark_validated!(vcov_key)
         return nothing
     end
     

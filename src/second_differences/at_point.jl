@@ -161,7 +161,8 @@ function _process_variable_contrasts(
     eval_pt::Real,
     δ::Float64,
     profile_point::NamedTuple,
-    alpha::Real=0.05
+    alpha::Real=0.05,
+    contrast::Union{Nothing,AbstractString}=nothing
 )::Vector{NamedTuple}
     results = NamedTuple[]
     idx = _effect_index(ames)
@@ -172,6 +173,12 @@ function _process_variable_contrasts(
         # Categorical variables have multiple contrasts (e.g., "level2 - level1")
         _require_variable(idx, var)
         unique_contrasts = _variable_contrasts(idx, var)
+        if !isnothing(contrast)
+            label = _contrast_label(contrast)
+            label in unique_contrasts || error("Variable :$var has no contrast '$contrast'. " *
+                "Contrasts available: $(join(unique_contrasts, ", "))")
+            unique_contrasts = [label]
+        end
 
         # For each contrast, compute second difference (interaction effect)
         # This measures how the focal variable's effect changes with the modifier
@@ -230,13 +237,17 @@ function _second_differences_local(
     profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto,
     scale::Symbol=:response,
+    measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05,
     p_adjust::Symbol=:none,
-    include_gradients::Bool=false
+    include_gradients::Bool=false,
+    weights=nothing,
+    contrast::Union{Nothing,AbstractString}=nothing
 )
     _check_p_adjust(p_adjust)
     0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
+    wvec = _weights_vector(weights, data)
 
     # 1. Validate inputs
     if !hasproperty(data, modifier)
@@ -289,6 +300,9 @@ function _second_differences_local(
 
     # 3. Extract modifier values from data
     modifier_vals_clean = collect(skipmissing(modifier_vals))
+    # `:mean` / `:median` use the weights too, so the point matches the weighted population
+    keep = [!ismissing(v) for v in modifier_vals]
+    wclean = isnothing(wvec) ? nothing : wvec[keep]
 
     # 4. Parse `at` parameter to determine evaluation points and complete profile specification
     # The `at` parameter supports multiple formats for flexibility:
@@ -321,10 +335,10 @@ function _second_differences_local(
         (modifier_val isa AbstractVector ? Float64.(modifier_val) : [Float64(modifier_val)], merged_profile)
     elseif at === :mean
         # Evaluate derivative at mean(modifier), convenient default
-        ([mean(modifier_vals_clean)], profile)
+        ([isnothing(wclean) ? mean(modifier_vals_clean) : _weighted_mean(modifier_vals_clean, wclean)], profile)
     elseif at === :median
         # Evaluate derivative at median(modifier), robust to outliers
-        ([median(modifier_vals_clean)], profile)
+        ([isnothing(wclean) ? median(modifier_vals_clean) : _weighted_median(modifier_vals_clean, wclean)], profile)
     elseif at isa Real
         # Evaluate at specific modifier value
         ([Float64(at)], profile)
@@ -367,7 +381,6 @@ function _second_differences_local(
     profile_combinations = _expand_profile_to_cartesian(full_profile)
 
     # 7. Prepare vcov function and matrix once (avoid repeated wrapping in loops)
-    vcov_func = vcov isa AbstractMatrix ? (_model -> Matrix{Float64}(vcov)) : vcov
     vcov_matrix = _covariance_matrix(model, vcov)
 
     # 8. Main computation loop: iterate over all profile combinations and evaluation points
@@ -398,9 +411,11 @@ function _second_differences_local(
                 vars=vars_vec,
                 type=:effects,
                 scale=scale,
-                vcov=vcov_func,
+                measure=measure,
+                vcov=vcov,
                 contrasts=contrasts,
-                ci_alpha=Float64(alpha)
+                ci_alpha=Float64(alpha),
+                weights=weights
             )
 
             # t vs z from the model and the vcov as given (same rule as `_inference_df`);
@@ -410,7 +425,7 @@ function _second_differences_local(
             # Extract derivatives for all variables and contrasts using symmetric FD formula
             # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)
             point_results = _process_variable_contrasts(
-                ames, vars_vec, modifier, vcov_matrix, eval_pt, δ, profile_point, alpha
+                ames, vars_vec, modifier, vcov_matrix, eval_pt, δ, profile_point, alpha, contrast
             )
 
             # Accumulate results from this (profile_point, eval_point) combination

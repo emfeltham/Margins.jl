@@ -22,7 +22,7 @@ using Margins
 end
 
 @testset "second differences: removed functions explain themselves" begin
-    for (f, mention) in ((:second_differences_at, "at="), (:second_differences_pairwise, "all_contrasts=false"),
+    for (f, mention) in ((:second_differences_at, "at="), (:second_differences_pairwise, "contrast="),
                          (:second_differences_all_contrasts, "second_differences(result"),
                          (:second_differences_table, "second_differences(result"),
                          (:second_difference, "include_gradients=true"))

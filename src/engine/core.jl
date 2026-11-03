@@ -176,7 +176,7 @@ Construct zero-allocation margins engine with usage-specific optimization and de
 - `model`: Fitted statistical model (GLM.jl, MLJ.jl, etc.)
 - `data_nt::NamedTuple`: Data in columntable format from Tables.jl
 - `vars::Vector{Symbol}`: Variables to analyze for marginal effects
-- `vcov`: Covariance estimator (function or CovarianceMatrices estimator)
+- `vcov`: Covariance estimator (function, CovarianceMatrices estimator, or a covariance matrix)
 
 # Returns
 - `MarginsEngine{L, U, D}`: Pre-compiled engine with usage and derivative support optimization
@@ -356,7 +356,11 @@ function build_engine(usage::Type{U}, deriv::Type{D}, model, data_nt::NamedTuple
     actual_vcov = vcov
     
     # Handle both functions (GLM.vcov) and CovarianceMatrices estimators (HC1())
-    if isa(actual_vcov, Function)
+    if isa(actual_vcov, AbstractMatrix)
+        # A matrix given directly. Copy it: the cache key is a hash of its contents, so the engine
+        # must not alias an array the caller may modify later.
+        covariance_matrix = Float64.(actual_vcov)
+    elseif isa(actual_vcov, Function)
         covariance_matrix = actual_vcov(model)
     else
         # Handle CovarianceMatrices estimators as optional dependency

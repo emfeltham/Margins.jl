@@ -90,6 +90,7 @@ export means_grid, balanced_grid, cartesian_grid, quantile_grid, hierarchical_gr
 
 # Include all submodules in dependency order
 include("types.jl")
+include("metadata.jl")   # the documented contract of `result.metadata` and its accessors
 
 # Statistical inference modules
 include("inference/derivative_utilities.jl")             # _matrix_multiply_eta!, continuous_variables
@@ -136,7 +137,7 @@ export second_differences
 const REMOVED_SECOND_DIFFERENCE_FUNCTIONS = Dict(
     :second_differences_at => "second_differences(model, data, variables, modifier; at=…) " *
         "(the vcov argument is now the keyword `vcov=`)",
-    :second_differences_pairwise => "second_differences(result, variables, modifier; all_contrasts=false, contrast=…)",
+    :second_differences_pairwise => "second_differences(result, variables, modifier; contrast=…)",
     :second_differences_all_contrasts => "second_differences(result, variables, modifier)",
     :second_differences_table => "second_differences(result, variables, modifier)",
     :second_difference => "second_differences(result, variables, modifier; include_gradients=true) " *

@@ -95,12 +95,12 @@ between `levels`. Keywords: `levels`, `at`, `modifier_type`, `profile` (strata),
 **`second_differences(result, variables, modifier[, vcov]; …)`** does the same on an `EffectsResult` you
 already hold, from `population_margins` or `profile_margins`. `vcov` is optional: results record the
 covariance they were computed with (`metadata[:vcov]`), so the standard errors agree with those of the
-effects. Keywords: `contrast`, `all_contrasts`, `modifier_type`, `alpha`, `p_adjust`, `include_gradients`.
+effects. Keywords: `contrast`, `modifier_type`, `alpha`, `p_adjust`, `include_gradients`.
 
 | Removed (2.x) | Use instead |
 |:--|:--|
 | `second_differences_at(model, data, vars, mod, vcov; at=…, …)` | `second_differences(model, data, vars, mod; at=…, vcov=vcov, …)` |
-| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; all_contrasts=false, contrast=…)` |
+| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; contrast=…)` |
 | `second_differences_all_contrasts(result, var, mod, vcov)` | `second_differences(result, var, mod)` |
 | `second_differences_table(result, vars, mod, vcov)` | `second_differences(result, vars, mod)` |
 | `second_difference(result, var, mod, vcov)` (NamedTuple) | `second_differences(result, var, mod; include_gradients=true)` (one DataFrame row) |
@@ -161,6 +161,11 @@ every `profile` variable adds a column.
   raise specific errors. Integer-valued float codes (1.0/2.0/3.0) trigger the integer-code warning, and
   `warn=false` silences every warning. The result-level form also accepts `vcov=` as a keyword.
 - `profile` values are counterfactuals (everyone's value is set), not subgroups; use `groups=` for subgroups.
+- **`contrast=` selects one contrast in both forms; `all_contrasts` is removed.** The result-level form had `contrast::String="dy/dx"` plus `all_contrasts::Bool`, and the model-level form had `contrasts::Symbol`, which read as the same thing. Now `contrast=nothing` (default) keeps every contrast and `contrast="label"` keeps one (`"derivative"` is an alias of `"dy/dx"`), in the result-level and the model-level form alike. Plural `contrasts=` (model-level, as in `population_margins`) still chooses how contrasts are built, `:baseline` or `:pairwise`. Migration: `all_contrasts=false, contrast="x"` → `contrast="x"`; `all_contrasts=true` → omit. Passing `all_contrasts` raises an error saying so.
+- **`measure=`** in the model-level `second_differences` (`:effect`, `:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx`): the change in an elasticity or semielasticity across the modifier. Result-level calls already worked on such results.
+- **Validated against R `marginaleffects` 1.0.0** (`test/validation/test_second_differences_r_oracle.jl`, reference values from `test/r_compare_marginaleffects/second_differences/`): 72 cases (logit and Poisson; response and link scale; with and without weights; binary, categorical and continuous modifiers; all four measures) agree to 3e-6 in the estimate and 5e-4 in the SE (R's numerical Jacobian limits the SE comparison; where the answer is exact, Margins matches it to rounding, and a closed-form oracle checks the local derivative of an elasticity). Rows that are zero by construction have no SE in R and a zero with NaN inference here.
+- **`weights=`** in the model-level `second_differences` (a column name or a vector, as in `population_margins`). Every AME is weighted and `at=:mean`/`:median` use the weighted mean/median. Before, there was no way to pass weights to the model-level form, so it silently returned unweighted results.
+- **`vcov` may be a covariance matrix** in `population_margins` and `profile_margins` (square, finite, symmetric, one row per coefficient; copied at engine build). The engine cache keys it by its contents, so a matrix changed in place between calls is picked up. A function `vcov` is still cached by identity, so one that builds a new array from state modified later keeps returning the old covariance (pass the matrix, or `clear_engine_cache!()`).
 
 ### Breaking / behaviour change
 
