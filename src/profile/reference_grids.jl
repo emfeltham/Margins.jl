@@ -1839,6 +1839,10 @@ grid = DataFrame(education = ["High School", "College"])
 processed_grid = process_reference_grid(data, grid)
 ```
 """
+# Any other Tables.jl source (a NamedTuple of columns, ...): the same, on its columns
+process_reference_grid(data, grid::DataFrame) =
+    process_reference_grid(DataFrame(Tables.columntable(data); copycols=false), grid)
+
 function process_reference_grid(data::DataFrame, grid::DataFrame)
     processed_grid = copy(grid)
     

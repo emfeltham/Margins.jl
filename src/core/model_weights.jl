@@ -51,6 +51,9 @@ entry per row of `data`), where they came from (`:model`, `:user` or `:none`, re
 `weights = nothing` means `:none` (the 2.x default, so code that passed it explicitly keeps its
 unweighted result). `:model` and `:none` are reserved: a data column with one of these names is
 passed as a vector (`weights = data.model`).
+
+This is the one weights helper: `_normalize_request` calls it for every entry point,
+including the model-level `second_differences`.
 """
 function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data))
     (isnothing(weights) || weights === :none) && return (nothing, :none, nothing)
@@ -66,8 +69,13 @@ function _resolve_weights(weights, model, data, data_nt=Tables.columntable(data)
         return (w, :model, nothing)
     end
     _validate_weights_parameter(weights, data)
-    return (_process_weights_parameter(weights, data, data_nt), :user,
-            weights isa Symbol ? weights : nothing)
+    if weights isa Symbol
+        # Weights are only read, so a Float64 column (already converted by data preparation)
+        # is used as is rather than copied on every call
+        col = getproperty(data_nt, weights)
+        return (col isa Vector{Float64} ? col : Float64.(col), :user, weights)
+    end
+    return (Float64.(weights), :user, nothing)
 end
 
 _n_rows(data) = Tables.rowaccess(data) && !Tables.columnaccess(data) ? length(Tables.rows(data)) :

@@ -204,9 +204,10 @@ gives for `model`. `vcov` is a function of the model returning a covariance matr
 CovarianceMatrices estimator, or a covariance matrix itself (square, finite, symmetric, one
 row per coefficient).
 
-This is the one place an entry point evaluates `vcov`: the returned Σ (a fresh copy, never
-aliasing the caller's matrix) is passed on to `build_engine`, so a robust or clustered
-estimator is computed once per call.
+This is the one place `vcov` is evaluated: `_normalize_request` calls it once per call and
+keeps the returned Σ (a fresh copy, never aliasing the caller's matrix) in the request, so a
+robust or clustered estimator is computed once per call, also for the model-level
+`second_differences`, which runs several computations from one request.
 
 # Arguments
 - `vcov`: Function that computes covariance matrix from model
@@ -219,9 +220,6 @@ estimator is computed once per call.
 ```
 """
 function validate_vcov_parameter(vcov, model)::Matrix{Float64}
-    # Already evaluated (and validated) by an enclosing entry point
-    vcov isa _PrecomputedVcov && return vcov.Σ
-
     # A covariance matrix given directly: check its shape, not the model
     if vcov isa AbstractMatrix
         k = length(coef(model))
@@ -247,20 +245,6 @@ function validate_vcov_parameter(vcov, model)::Matrix{Float64}
     return Matrix{Float64}(vcov_result)
 end
 
-"""
-    _PrecomputedVcov(Σ, source)
-
-A covariance matrix Σ already computed from the user's `vcov` (`source`), for entry points
-that call other entry points (the model-level `second_differences` calls
-`population_margins` once per profile point or shift). Passed as `vcov`, it is not
-evaluated again, and the t/z df rule (`_inference_df`) still sees the original `source`.
-Internal.
-"""
-struct _PrecomputedVcov
-    Σ::Matrix{Float64}
-    source::Any
-end
-
 # `vcov` applied to the model: a function of the model (`GLM.vcov`, `m -> ...`) or a
 # CovarianceMatrices estimator (`HC1()`, `CR1(cl)`, ...). CovarianceMatrices is a hard
 # dependency, so it is called directly.
@@ -276,7 +260,6 @@ checks of `validate_vcov_parameter`. Used by `build_engine`, which entry points 
 the matrix they already computed.
 """
 _covariance_matrix(model, vcov::AbstractMatrix)::Matrix{Float64} = Matrix{Float64}(vcov)
-_covariance_matrix(model, vcov::_PrecomputedVcov)::Matrix{Float64} = copy(vcov.Σ)
 _covariance_matrix(model, vcov)::Matrix{Float64} = Matrix{Float64}(_evaluate_vcov(vcov, model))
 
 """

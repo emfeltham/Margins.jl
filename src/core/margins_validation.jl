@@ -1,26 +1,10 @@
-# Shared validation utilities for margins computation
-# Contains only genuinely common validation logic between population_margins() and profile_margins()
-
-"""
-    validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov) -> Matrix{Float64}
-
-Shared input validation for both population_margins and profile_margins.
-Only validates the truly common requirements - each function handles its specific validation separately.
-Validation runs on every call (nothing is cached), and returns the covariance matrix Σ that
-`vcov` gives for `model` (`validate_vcov_parameter`), which the caller passes to `build_engine`.
-"""
-function validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
-    validate_required_args(model, data)
-    validate_model_methods(model)
-    validate_population_parameters(type, scale, backend, measure, vars)
-    return validate_vcov_parameter(vcov, model)
-end
+# Shared validation utilities for margins computation, called by `_normalize_request`
+# (core/request.jl), which runs every validator once per call
 
 """
     validate_required_args(model, data)
 
 Check that required arguments are not nothing.
-Eliminates duplicated null checks between both margin functions.
 """
 function validate_required_args(model, data)
     isnothing(model) && throw(ArgumentError("model cannot be nothing"))
@@ -32,7 +16,6 @@ end
 
 Validate that model supports required methods for margins computation. Its covariance is
 checked where it is evaluated, once per call (`validate_vcov_parameter`).
-Eliminates the duplicated try/catch blocks between both margin functions.
 """
 function validate_model_methods(model)
     try

@@ -48,7 +48,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels  
-- `alpha::Float64=0.05`: significance level α: confidence intervals have level 1-α (the same keyword as `contrast` and `second_differences`; it was `ci_alpha` before 3.0)
+- `alpha::Real=0.05`: significance level α, in (0, 1): confidence intervals have level 1-α (the same keyword as `contrast` and `second_differences`; it was `ci_alpha` before 3.0)
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   (a function of the model, a CovarianceMatrices estimator, or a covariance matrix; a matrix must be square,
@@ -150,72 +150,50 @@ function population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
+    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
-    # Shared input validation for common parameters. Returns Σ: `vcov` is evaluated once,
-    # here, and the matrix is passed to the engine; `vcov` itself is kept for the df rule.
-    Σ = validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
-    
-    # Population-specific validation
-    if !isnothing(scenarios)
-        _validate_scenarios_specific(scenarios, vars, type)
-        _validate_scenarios_are_predictors(model, scenarios)
-    end
-    if !isnothing(groups)
-        _validate_groups_parameter(groups)
-        # Teaching validation: check for vars/groups overlap (mirrors the scenarios check
-        # in _validate_scenarios_specific). Only fires for explicit vars; auto-detected
-        # vars are still skipped silently, and the empty-result guard in
-        # _population_margins_with_contexts catches the case where nothing survives.
-        if !isnothing(vars) && type === :effects
-            _validate_vars_groups_overlap(vars, groups)
-        end
-        # A variable cannot be binned by groups and overridden by scenarios at once: the
-        # bins come from its observed values, the override then discards them.
-        if !isnothing(scenarios)
-            _validate_scenarios_groups_conflict(scenarios, groups)
-        end
-    end
-    # Single data conversion (consistent format throughout)
-    data_nt_raw = Tables.columntable(data)
+    # Every option is validated, and `vcov` evaluated, once, here
+    req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
+                             measure, contrasts, alpha, vcov, weights)
+    return _run(req)
+end
 
-    # Convert all numeric columns to Float64 for type stability
-    # This prevents heterogeneous NamedTuple types (e.g., Int64, Float64, etc.)
-    # that cause type instability and allocations in downstream code
-    data_nt = _prepare_margins_data(data_nt_raw, model)
+"""
+    _run(req::MarginsRequest{:population}) -> Union{EffectsResult, PredictionsResult}
 
-    # Averaging weights (:model default), where they came from, and the weight column (if a name)
-    # to exclude from auto-detected variables
-    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt)
-    
-    # Handle vars parameter with improved validation
-    if type === :effects
-        vars_explicit = !isnothing(vars)
-        vars = _process_vars_parameter(model, vars, data_nt, weight_col)
-        # Elasticity measures are only defined for continuous variables; filter or error
-        # BEFORE the engine is built so the discrete variables never reach computation
-        vars = _filter_vars_for_measure(vars, data_nt, measure, vars_explicit)
-    else # type === :predictions
-        vars = nothing  # Not needed for predictions
-    end
-    
-    if !isnothing(groups)
-        _validate_group_columns_complete(groups, data_nt)
-    end
+Compute a population request and attach its inference (`metadata[:df]`, `metadata[:vcov]`).
+"""
+function _run(req::MarginsRequest{:population})
+    (res, Σ) = _population_result(req)
+    return _attach_inference_df!(res, req.model, req.df, Σ)
+end
+
+"""
+    _population_result(req::MarginsRequest{:population}) -> (result, Σ)
+
+The AME/AAP of a population request, without the inference df (the FixedEffectModels
+extension adds its fixed-effect offsets to this), and the engine's covariance matrix.
+"""
+function _population_result(req::MarginsRequest{:population})
+    (; model, data_nt, type, vars, scale, backend, measure, contrasts, alpha) = req
+    weights_vec = req.weights
 
     # Build zero-allocation engine with PopulationUsage optimization.
     # Each call builds its own engine (nothing is cached across calls), so concurrent calls
     # never share mutable buffers and every call sees the current model, data and Σ.
     # The scenarios/groups path builds its own evaluators per context, so its engine gets none.
-    has_contexts = !isnothing(scenarios) || !isnothing(groups)
-    engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, Σ, backend;
+    has_contexts = _has_contexts(req)
+    engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend;
                           evaluators = !has_contexts)
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if has_contexts
-        res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts), model, vcov, engine.Σ)
-        _set_weights_metadata!(res.metadata, weights_vec, weights_source)
-        return res
+        # Whether a request has contexts is a run-time value (it is a type in the keyword
+        # call), so the contexts path is called without inference (`invokelatest`): it is
+        # then not compiled into every plain AME/AAP call (first-call latency), only on first use.
+        res = Base.invokelatest(_population_margins_with_contexts, engine, req)
+        _set_weights_metadata!(res.metadata, weights_vec, req.weights_source)
+        return (res, engine.Σ)
     end
 
     if type === :effects
@@ -229,7 +207,7 @@ function population_margins(
         metadata[:analysis_type] = :population
     
         # Store weights info in metadata
-        _set_weights_metadata!(metadata, weights_vec, weights_source)
+        _set_weights_metadata!(metadata, weights_vec, req.weights_source)
     
         # Extract raw components from DataFrame
         estimates = df.estimate
@@ -237,7 +215,7 @@ function population_margins(
         variables = df.variable  # The "x" in dy/dx
         terms = df.contrast
     
-        return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov, engine.Σ)
+        return (EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), engine.Σ)
     else # :predictions  
         df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
         metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
@@ -249,16 +227,15 @@ function population_margins(
         metadata[:analysis_type] = :population
     
         # Store weights info in metadata
-        _set_weights_metadata!(metadata, weights_vec, weights_source)
+        _set_weights_metadata!(metadata, weights_vec, req.weights_source)
     
         # Extract raw components from DataFrame
         estimates = df.estimate
         standard_errors = df.se
     
-        return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov, engine.Σ)
+        return (PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), engine.Σ)
     end
 end
-
 
 """
     _get_model_formula_variables(model) -> Set{Symbol}
@@ -408,13 +385,15 @@ end
     Teaching validation that provides helpful error messages when users 
 incorrectly specify the same variable in both vars and scenarios parameters.
 """
-function _validate_vars_scenarios_overlap(vars, scenarios::NamedTuple)
+_validate_vars_scenarios_overlap(vars, scenarios::NamedTuple) =
+    _validate_vars_scenarios_overlap(vars, collect(Symbol, keys(scenarios)))
+
+function _validate_vars_scenarios_overlap(vars, scenario_vars::AbstractVector{Symbol})
     # Convert vars to vector for consistent handling
     vars_vec = vars isa Symbol ? [vars] : (vars === :all_continuous ? Symbol[] : vars)
     
     # Find overlapping variables
-    scenario_vars = Set(keys(scenarios))
-    overlapping_vars = intersect(Set(vars_vec), scenario_vars)
+    overlapping_vars = intersect(Set(vars_vec), Set(scenario_vars))
     
     if !isempty(overlapping_vars)
         overlapping_list = join(overlapping_vars, ", ")
@@ -510,9 +489,10 @@ function _validate_vars_groups_overlap(vars, groups)
 end
 
 """
-    _validate_scenarios_groups_conflict(scenarios, groups)
+    _validate_scenarios_groups_conflict(scenario_vars, groups)
 
-Reject a variable that is simultaneously overridden by `scenarios` and used by `groups`.
+Reject a variable that is simultaneously overridden by `scenarios` (whose variables are
+`scenario_vars`) and used by `groups`.
 
 Such a request is silently misleading: `_create_context_data_with_weights` selects each
 group's rows using the variable's REAL values, then the scenario override replaces those
@@ -521,10 +501,9 @@ is defined by data that no longer exists in the context it labels. For a categor
 the scenario and group values also share one `at_<var>` column, so the scenario label is
 overwritten and the scenarios cannot be told apart.
 """
-function _validate_scenarios_groups_conflict(scenarios, groups)
-    scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
+function _validate_scenarios_groups_conflict(scenario_vars, groups)
     (pinned_vars, binned_vars) = _classify_group_variables(groups)
-    conflicting = intersect(Set(keys(scenarios_nt)), Set(vcat(pinned_vars, binned_vars)))
+    conflicting = intersect(Set{Symbol}(scenario_vars), Set(vcat(pinned_vars, binned_vars)))
 
     if !isempty(conflicting)
         conflicting_list = join(sort!(collect(conflicting)), ", ")
@@ -543,16 +522,17 @@ function _validate_scenarios_groups_conflict(scenarios, groups)
 end
 
 """
-    _validate_scenarios_are_predictors(model, scenarios)
+    _validate_scenarios_are_predictors(model, scenario_vars)
 
-Reject a scenario variable that is not a predictor in the model's formula.
+Reject a scenario variable (an entry of `scenario_vars`, the keys of `scenarios`) that is not
+a predictor in the model's formula.
 
 Overriding such a column (a typo, the response, the weights column, or any unused column)
 changes nothing, so every scenario would silently report the baseline estimate under an
 `at_<var>` label that looks like a "no effect" result.
 """
-function _validate_scenarios_are_predictors(model, scenarios)
-    bad = _nonpredictor_vars(model, keys(_normalize_scenarios_to_namedtuple(scenarios)))
+function _validate_scenarios_are_predictors(model, scenario_vars)
+    bad = _nonpredictor_vars(model, scenario_vars)
     if !isempty(bad)
         throw(ArgumentError(
             "Scenario variable(s) $(join(bad, ", ")) are not predictors in the model, so " *
@@ -565,9 +545,13 @@ end
 """
     _predictor_names(model) -> Vector{Symbol}
 
-Sorted names of the model's predictors: formula variables other than the response.
+Sorted names of the model's predictors: formula variables other than the response. A
+model class whose formula omits some predictors adds a method (FixedEffectModels adds its
+absorbed fixed effects, which a reference grid may set).
 """
-function _predictor_names(model)
+_predictor_names(model) = _formula_predictor_names(model)
+
+function _formula_predictor_names(model)
     predictors = _get_model_formula_variables(model)
     response = try
         Set{Symbol}(StatsModels.termvars(StatsModels.formula(model).lhs))
@@ -832,48 +816,6 @@ function _check_weight_values(w, label)
         throw(ArgumentError("at least some weights must be positive ($label is all zero)"))
     end
     return nothing
-end
-
-"""
-    _process_weights_parameter(weights, data, data_nt) -> Vector{Float64} or nothing
-
-Process the weights parameter into a standardized Float64 vector.
-
-# Arguments
-- `weights`: The weights specification (Symbol, Vector, or nothing)
-- `data`: Original data (unused but kept for API consistency)
-- `data_nt`: Data in NamedTuple format
-
-# Returns
-- `Vector{Float64}`: Processed weights vector
-- `nothing`: If no weights specified
-
-# Examples
-```julia
-# No weights
-weights_vec = _process_weights_parameter(nothing, data, data_nt)  # -> nothing
-
-# Column name
-weights_vec = _process_weights_parameter(:sampling_weight, data, data_nt)  # -> Float64 vector
-
-# Direct vector
-weights_vec = _process_weights_parameter([1.0, 2.0, 1.5], data, data_nt)  # -> Float64 vector
-```
-"""
-function _process_weights_parameter(weights, data, data_nt)
-    if isnothing(weights)
-        return nothing
-    elseif weights isa Symbol
-        # Extract weights column from data
-        weights_col = getproperty(data_nt, weights)
-        # Weights are only read, so a Float64 column (already converted by data
-        # preparation) is used as is rather than copied on every call
-        return weights_col isa Vector{Float64} ? weights_col : Float64.(weights_col)
-    elseif weights isa AbstractVector
-        return Float64.(weights)  # Convert to Float64
-    else
-        throw(ArgumentError("Unexpected weights type: $(typeof(weights))"))  # Should not reach here due to validation
-    end
 end
 
 # Note: _convert_numeric_to_float64() is defined in core/data_conversion.jl

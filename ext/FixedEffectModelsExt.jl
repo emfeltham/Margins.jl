@@ -22,16 +22,8 @@ module FixedEffectModelsExt
 
 using Margins
 using Margins: _auto_link, validate_model_methods, MarginsError,
-               validate_margins_common_inputs, _validate_scenarios_specific,
-               _validate_groups_parameter, _validate_weights_parameter,
-               PredictionsResult, EffectsResult,
-               _population_predictions, _build_metadata, _ame_calculate,
-               _population_margins_with_contexts, _process_vars_parameter,
-               _process_weights_parameter, _convert_numeric_to_float64, _prepare_margins_data,
-               _resolve_weights, _set_weights_metadata!,
-               build_engine, PopulationUsage, ProfileUsage, _measure_type,
-               _profile_margins, process_reference_grid,
-               _validate_reference_grid_column_type
+               PredictionsResult, EffectsResult, MarginsRequest,
+               _normalize_request, _population_result, _profile_result, _formula_predictor_names
 using FixedEffectModels: FixedEffectModel
 using GLM
 using GLM: IdentityLink
@@ -76,120 +68,72 @@ function Margins.validate_model_methods(model::FixedEffectModel)
 end
 
 # ---------------------------------------------------------------------------
-# validate_margins_common_inputs: validate FE-specific constraints
+# _predictor_names: the absorbed fixed effects are predictors too. They are not in the
+# formula Margins evaluates (fe() terms are stripped), but a reference grid may set them for
+# prediction (the FE estimate of that level is looked up), and a scenario on one is rejected
+# below for predictions rather than as "not a predictor".
 # ---------------------------------------------------------------------------
-function Margins.validate_margins_common_inputs(model::FixedEffectModel, data, type, vars, scale, backend, measure, vcov)
-    _warn_if_iv(model)
+Margins._predictor_names(model::FixedEffectModel) =
+    sort!(unique!(vcat(_formula_predictor_names(model), _get_fe_variables(model))))
 
+# ---------------------------------------------------------------------------
+# _validate_focal_vars / _validate_request: the FE-specific constraints, in the shared validation of
+# Margins._normalize_request (so a FixedEffectModel also gets the measure filter, the
+# vars/groups and scenarios/groups checks and the Σ handling of every other model)
+# ---------------------------------------------------------------------------
+function Margins._validate_request(model::FixedEffectModel, req::MarginsRequest)
     # For predictions: require save=:fe
-    if type === :predictions
+    if req.type === :predictions
         _validate_fe_available(model)
     end
 
-    # Block FE variables in vars (for effects)
-    if !isnothing(vars)
-        fe_vars = _get_fe_variables(model)
-        vars_vec = vars isa Symbol ? [vars] : vars
-        for v in vars_vec
-            if v in fe_vars
-                throw(MarginsError(
-                    "Variable :$v is an absorbed fixed effect in this model.\n" *
-                    "Marginal effects for absorbed FE variables are not meaningful — " *
-                    "their coefficients are not estimated in coef().\n" *
-                    "Remove :$v from vars, or use a model without fe($v)."
-                ))
-            end
+    # Block scenarios on FE variables for predictions
+    if req.type === :predictions
+        _validate_no_fe_scenarios(model, req.scenarios)
+    end
+    return nothing
+end
+
+# Block FE variables in vars (for effects), before the data checks on those columns
+function Margins._validate_focal_vars(model::FixedEffectModel, vars)
+    fe_vars = _get_fe_variables(model)
+    for v in (vars isa Symbol ? [vars] : vars)
+        if v in fe_vars
+            throw(MarginsError(
+                "Variable :$v is an absorbed fixed effect in this model.\n" *
+                "Marginal effects for absorbed FE variables are not meaningful — " *
+                "their coefficients are not estimated in coef().\n" *
+                "Remove :$v from vars, or use a model without fe($v)."
+            ))
         end
     end
-
-    # Delegate to the default validation path (call individual validators); returns Σ
-    Margins.validate_required_args(model, data)
-    Margins.validate_population_parameters(type, scale, backend, measure, vars)
-    return Margins.validate_vcov_parameter(vcov, model)
+    return nothing
 end
 
 # ---------------------------------------------------------------------------
-# population_margins: override for FixedEffectModel to add FE offsets
+# population_margins: override for FixedEffectModel to add FE offsets. The request is
+# normalized as for every model; only the offsets are FE-specific. (Step 5 of the 3.0 plan
+# replaces these overrides with a per-row offset hook.)
 # ---------------------------------------------------------------------------
 function Margins.population_margins(
     model::FixedEffectModel, data;
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
+    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
     Margins._reject_ci_alpha(ci_alpha)
-    # Shared input validation; returns Σ, the one evaluation of `vcov` for this call
-    Σ = validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
+    # Shared validation, data preparation, weights (`:model` resolves to none here: see
+    # _model_weights above) and the one evaluation of `vcov` for this call
+    req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
+                             measure, contrasts, alpha, vcov, weights)
+    (result, _) = _population_result(req)
 
-    # Population-specific validation
-    if !isnothing(scenarios)
-        _validate_scenarios_specific(scenarios, vars, type)
-        # Block scenarios on FE variables for predictions
-        if type === :predictions
-            _validate_no_fe_scenarios(model, scenarios)
-        end
+    # Add FE offset to prediction estimates (SEs unchanged — FE offset is constant w.r.t. β)
+    if type === :predictions
+        return _adjust_population_result_with_fe(result, model, data, req.weights)
     end
-    if !isnothing(groups)
-        _validate_groups_parameter(groups)
-    end
-    # Data conversion
-    data_nt_raw = Tables.columntable(data)
-    data_nt = _prepare_margins_data(data_nt_raw, model)
-
-    # Process weights (`:model` resolves to none here: see _model_weights above)
-    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt)
-
-    # Handle vars
-    if type === :effects
-        vars = _process_vars_parameter(model, vars, data_nt, weight_col)
-    else
-        vars = nothing
-    end
-
-    # Build engine. Each call builds its own engine (nothing is cached across calls); the
-    # scenarios/groups path builds its own evaluators per context, so its engine gets none.
-    has_contexts = !isnothing(scenarios) || !isnothing(groups)
-    engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, Σ, backend;
-                          evaluators = !has_contexts)
-    # Handle scenarios/groups
-    if has_contexts
-        result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts)
-        _set_weights_metadata!(result.metadata, weights_vec, weights_source)
-        # Add FE offset for predictions with contexts
-        if type === :predictions
-            return _adjust_population_result_with_fe(result, model, data, weights_vec)
-        end
-        return result
-    end
-
-    if type === :effects
-        df, G = _ame_calculate(engine, data_nt, scale, backend, _measure_type(measure), contrasts, weights_vec)
-        metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-        metadata[:alpha] = alpha
-        metadata[:analysis_type] = :population
-        _set_weights_metadata!(metadata, weights_vec, weights_source)
-
-        estimates = df.estimate
-        standard_errors = df.se
-        variables = df.variable
-        terms = df.contrast
-
-        return EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata)
-    else # :predictions
-        df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
-        metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-        metadata[:alpha] = alpha
-        metadata[:analysis_type] = :population
-        _set_weights_metadata!(metadata, weights_vec, weights_source)
-
-        # Add FE offset to prediction estimates
-        fe_offset = _compute_population_fe_offset(model, data, weights_vec)
-        estimates = df.estimate .+ fe_offset
-        standard_errors = df.se  # SEs unchanged — FE offset is constant w.r.t. β
-
-        return PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata)
-    end
+    return result
 end
 
 # ---------------------------------------------------------------------------
@@ -200,44 +144,17 @@ function Margins.profile_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Float64=0.05, vcov=GLM.vcov, ci_alpha=nothing,
+    alpha::Real=0.05, vcov=GLM.vcov, interval::Symbol=:confidence, ci_alpha=nothing,
 )
     Margins._reject_ci_alpha(ci_alpha)
-    # Convert data
-    data_nt_raw = Tables.columntable(data)
-    data_nt = _prepare_margins_data(data_nt_raw, model)
-
-    # Process reference grid
-    processed_reference_grid = process_reference_grid(data, reference_grid)
-
-    # Validation; returns Σ, the one evaluation of `vcov` for this call
-    Σ = validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
-
-    if isnothing(reference_grid)
-        throw(ArgumentError("reference_grid cannot be nothing"))
-    end
-    if nrow(processed_reference_grid) == 0
-        throw(ArgumentError("reference_grid cannot be empty"))
-    end
-    for col_name in names(processed_reference_grid)
-        col = processed_reference_grid[!, col_name]
-        _validate_reference_grid_column_type(col, col_name)
-    end
-    if ncol(processed_reference_grid) == 0
-        throw(ArgumentError("reference_grid must have at least one column"))
-    end
-
-    # Block counterfactuals on FE variables for predictions
-    if type === :predictions
-        _validate_no_fe_in_grid(model, processed_reference_grid)
-    end
-
-    # Delegate to internal implementation
-    result = _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, Σ, processed_reference_grid, alpha, contrasts)
+    # Shared validation of the options and the reference grid; one evaluation of `vcov`
+    req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
+                             contrasts, alpha, vcov, weights=:none, interval)
+    result = _profile_result(req)
 
     # Add FE offset for predictions
     if type === :predictions
-        return _adjust_profile_result_with_fe(result, model, data, processed_reference_grid)
+        return _adjust_profile_result_with_fe(result, model, data, req.reference_grid)
     end
 
     return result
@@ -432,17 +349,6 @@ function _validate_no_fe_scenarios(model::FixedEffectModel, scenarios)
             ))
         end
     end
-end
-
-"""
-    _validate_no_fe_in_grid(model, reference_grid)
-
-Warn but allow FE variables in profile prediction grids — they're used for FE lookup.
-Block if save=:fe wasn't used (already checked elsewhere).
-"""
-function _validate_no_fe_in_grid(model::FixedEffectModel, reference_grid::DataFrame)
-    # FE variables in grid are fine — they specify which FE level to use for prediction
-    # No validation needed beyond _validate_fe_available (already called)
 end
 
 """

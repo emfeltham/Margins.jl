@@ -82,7 +82,6 @@ end
 # Is `vcov` the model's own (classical) covariance estimator?
 _is_model_based_vcov(model, vcov::Function) = vcov === GLM.vcov
 _is_model_based_vcov(model, vcov::AbstractMatrix) = vcov == GLM.vcov(model)
-_is_model_based_vcov(model, vcov::_PrecomputedVcov) = _is_model_based_vcov(model, vcov.source)
 _is_model_based_vcov(model, vcov) = false  # CovarianceMatrices estimators and anything else
 
 """
@@ -96,9 +95,10 @@ _inference_dist(df::Real) = isfinite(df) ? TDist(df) : Normal()
 # Degrees of freedom stored on a result (`Inf` for results built without one).
 _result_df(mr)::Float64 = Float64(get(mr.metadata, :df, Inf))
 
-# Store the inference df on a result's metadata (called once by the public entry points).
-function _attach_inference_df!(result, model, vcov, Σ=nothing)
-    result.metadata[:df] = _inference_df(model, vcov)
+# Store the inference df on a result's metadata (called once per result, by `_run`, with the
+# request's `df = _inference_df(model, vcov)`).
+function _attach_inference_df!(result, model, df::Float64, Σ=nothing)
+    result.metadata[:df] = df
     # The covariance matrix behind this result's standard errors, so that second differences
     # can default to it (`_stored_vcov`).
     isnothing(Σ) || (result.metadata[:vcov] = Matrix{Float64}(Σ))
@@ -132,10 +132,11 @@ function _second_difference_dof(ame_result, Σ::AbstractMatrix)::Float64
     (isfinite(d) && V !== nothing && size(V) == size(Σ) && Σ == V) ? Float64(d) : Inf
 end
 
-# Make the second-difference df rule agree with `_inference_df(model, vcov)` for the covariance the
-# user gave: drop the recorded linear-model information when that rule says z (e.g. `vcov = m -> vcov(m)`).
-function _align_second_difference_df!(ame_result, model, vcov)
-    isfinite(_inference_df(model, vcov)) && return ame_result
+# Make the second-difference df rule agree with `_inference_df(model, vcov)` (`df`, the request's) for
+# the covariance the user gave: drop the recorded linear-model information when that rule says z
+# (e.g. `vcov = m -> vcov(m)`).
+function _align_second_difference_df!(ame_result, df::Float64)
+    isfinite(df) && return ame_result
     delete!(ame_result.metadata, :model_df)
     delete!(ame_result.metadata, :model_vcov)
     return ame_result
@@ -267,7 +268,7 @@ function _prediction_residual_variance(model)::Float64
 end
 
 """
-    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
+    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
 
 Compute contrast between two result rows with delta-method inference.
 
@@ -278,7 +279,7 @@ computing the difference between estimates at two rows with proper standard erro
 - `result`: EffectsResult or PredictionsResult object
 - `row1`, `row2`: Row numbers to contrast
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level (default 0.05)
+- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
 
 # Returns
 `ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
@@ -311,7 +312,8 @@ df = DataFrame(cr)
 ```
 """
 function contrast(result::MarginsResult, row1::Int, row2::Int,
-                 Σ::Matrix{Float64}; alpha::Float64=0.05)
+                 Σ::Matrix{Float64}; alpha::Real=0.05)
+    alpha = _validate_alpha(alpha)
     n = length(result.estimates)
     (row1 < 1 || row1 > n) && throw(ArgumentError("row1 = $row1 out of bounds (1:$n)"))
     (row2 < 1 || row2 > n) && throw(ArgumentError("row2 = $row2 out of bounds (1:$n)"))
@@ -342,7 +344,7 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
 end
 
 """
-    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
+    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
 
 Compute contrast between two rows in a margins DataFrame using row indices.
 
@@ -353,7 +355,7 @@ produced by `DataFrame(profile_margins(...))` or `DataFrame(population_margins(.
 - `df`: DataFrame from `DataFrame(result; include_gradients=true)`
 - `row1`, `row2`: Row numbers to contrast
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level (default 0.05)
+- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
 
 # Returns
 `ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
@@ -395,9 +397,10 @@ function contrast(
     row1::Int,
     row2::Int,
     Σ::Matrix{Float64};
-    alpha::Float64=0.05,
+    alpha::Real=0.05,
     estimatename = :estimate
 )
+    alpha = _validate_alpha(alpha)
     # Validate gradient column exists
     if !hasproperty(df, :gradient)
         error("DataFrame must include gradient column. Use: DataFrame(result; include_gradients=true)")
@@ -442,7 +445,7 @@ function contrast(
 end
 
 """
-    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
+    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; alpha=0.05) -> ContrastResult
 
 Compute contrast between two rows identified by column values in a margins DataFrame.
 
@@ -455,7 +458,7 @@ row selection, similar to DataFrame filtering. Works with DataFrames produced by
 - `row1_spec`: NamedTuple specifying column values for first row (e.g., `(x=1, treatment=0)`)
 - `row2_spec`: NamedTuple specifying column values for second row (e.g., `(x=1, treatment=1)`)
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `alpha`: Significance level (default 0.05)
+- `alpha`: Significance level, a real number in (0, 1) (default 0.05)
 
 # Column Specifications
 The NamedTuple keys must match column names in the DataFrame:
@@ -512,9 +515,10 @@ function contrast(
     row1_spec::NamedTuple,
     row2_spec::NamedTuple,
     Σ::Matrix{Float64};
-    alpha::Float64=0.05,
+    alpha::Real=0.05,
     estimatename = :estimate
 )
+    alpha = _validate_alpha(alpha)
     # Validate gradient column exists
     if !hasproperty(df, :gradient)
         error("DataFrame must include gradient column. Use: DataFrame(result; include_gradients=true)")

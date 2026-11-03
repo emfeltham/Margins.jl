@@ -43,7 +43,7 @@ or adjusted predictions at specific profiles (APM/APR).
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels
-- `alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+- `alpha::Real=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α), in (0, 1)
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
@@ -220,53 +220,33 @@ function _extract_and_filter_profile_values(reference_grid, result_length::Int, 
 end
 
 """
-    _profile_margins(model, data_nt, reference_grid, type, vars, scale, backend, measure, Σ, at_spec) -> Union{EffectsResult, PredictionsResult}
+    _run(req::MarginsRequest{:profile}) -> Union{EffectsResult, PredictionsResult}
 
-Internal implementation for both profile_margins methods.
-This eliminates code duplication between the convenience method and DataFrame method.
+Compute a profile request and attach its inference df (`metadata[:df]`).
 """
-function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, Σ::AbstractMatrix, at_spec, alpha::Float64, contrasts::Symbol; interval::Symbol=:confidence)
-    # Handle vars parameter with improved validation - use same helper as population_margins
-    if type === :effects
-        vars_explicit = !isnothing(vars)
-        vars = _process_vars_parameter(model, vars, data_nt)
-        # Same measure/variable-type rule as population_margins (see _filter_vars_for_measure)
-        vars = _filter_vars_for_measure(vars, data_nt, measure, vars_explicit)
-    else # type === :predictions
-        vars = nothing  # Not needed for predictions
-    end
-    
-    # Store original reference grid variable names for output filtering
-    original_grid_vars = Set(Symbol.(names(reference_grid)))
+_run(req::MarginsRequest{:profile}) = _attach_inference_df!(_profile_result(req), req.model, req.df)
 
-    # Attempt to remove response variable from display if it appears in the provided grid.
-    # Be defensive: formulas with transformed responses (e.g., log(y)) may not expose `.sym`.
-    try
-        response_var = Symbol(model.mf.f.lhs.sym)
-        delete!(original_grid_vars, response_var)
-    catch
-        # If we cannot determine a simple response symbol, do nothing.
-        # Reference grids almost never include the response variable anyway.
-    end
+"""
+    _profile_result(req::MarginsRequest{:profile}) -> Union{EffectsResult, PredictionsResult}
 
-    # Complete reference grid with typical values for missing model variables
-    # Note: complete_reference_grid now filters to model variables internally
-    completed_reference_grid = complete_reference_grid(reference_grid, model, data_nt)
+The MEM/APM of a profile request on its completed reference grid, without the inference df
+(the FixedEffectModels extension adds its fixed-effect offsets to this).
+"""
+function _profile_result(req::MarginsRequest{:profile})
+    (; model, data_nt, type, vars, scale, backend, measure, contrasts, alpha, interval) = req
+    completed_reference_grid = req.completed_grid
+    original_grid_vars = req.grid_vars
+    at_spec = req.reference_grid
 
-    # Filter original_grid_vars to only model variables for proper output display
-    # Get model variables from the completed grid to know what was actually kept
-    model_vars_in_grid = Set(Symbol.(names(completed_reference_grid)))
-    original_grid_vars = intersect(original_grid_vars, model_vars_in_grid)
-    
     # Build zero-allocation engine with ProfileUsage optimization. It carries no evaluators:
     # effects are evaluated on the reference grid, with evaluators built over the grid.
     # Each call builds its own engine (nothing is cached across calls); Σ is the matrix the
-    # entry point computed from `vcov`, once per call.
-    engine = build_engine(ProfileUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, Σ, backend)
+    # request computed from `vcov`, once per call.
+    engine = build_engine(ProfileUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend)
     if type === :effects
         # Use the actual working function that already exists from the original utilities.jl
         # Pass original_grid_vars so we know which variables are scenario-defining
-        df, G, profile_of_row = _mem_by_grid_blocks(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, vars_explicit)
+        df, G, profile_of_row = _mem_by_grid_blocks(engine, completed_reference_grid, original_grid_vars, scale, backend, measure, contrasts, req.vars_explicit)
     
         # Convert symbol terms + profile info to descriptive strings for user display
         df = _convert_profile_terms_to_strings(df)
@@ -359,7 +339,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
     discrete variable in `vars` is an error, and auto-detected discrete variables
     are skipped with an informational message
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables (:baseline or :pairwise)
-- `alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+- `alpha::Real=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α), in (0, 1)
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
 - `interval::Symbol=:confidence`: Interval kind for `type=:predictions`
   - `:confidence` - interval for the mean prediction (default): `ŷ ± z·√(SE²)`
@@ -410,98 +390,15 @@ function profile_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Float64=0.05, vcov=GLM.vcov,
+    alpha::Real=0.05, vcov=GLM.vcov,
     interval::Symbol=:confidence, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
-    # Validate interval kind. Prediction intervals add observation-level residual
-    # variance and are only meaningful for predictions (a derivative of a mean has
-    # no "new observation" analogue), so they are rejected for type=:effects.
-    if !(interval in (:confidence, :prediction))
-        throw(ArgumentError("interval must be :confidence or :prediction, got $(repr(interval))"))
-    end
-    if interval === :prediction && type === :effects
-        throw(ArgumentError("interval=:prediction is only valid with type=:predictions; " *
-                            "marginal effects do not have prediction intervals."))
-    end
-
-    # Convert data to NamedTuple for consistency
-    data_nt_raw = Tables.columntable(data)
-
-    # Convert all numeric columns to Float64 for type stability
-    # This prevents heterogeneous NamedTuple types that cause allocations
-    data_nt = _prepare_margins_data(data_nt_raw, model)
-
-    # Process reference grid to convert string categorical specifications to proper categorical values
-    # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
-    processed_reference_grid = process_reference_grid(data, reference_grid)
-    
-    # Shared input validation for common parameters. Returns Σ, the one evaluation of `vcov`
-    # for this call (`vcov` itself is kept for the df rule).
-    Σ = validate_margins_common_inputs(model, data_nt, type, vars, scale, backend, measure, vcov)
-    
-    # Profile-specific validation for reference grid
-    if isnothing(reference_grid)
-        throw(ArgumentError("reference_grid cannot be nothing"))
-    end
-    
-    # Reference grid specific validation (use processed grid for actual validation)
-    if nrow(processed_reference_grid) == 0
-        throw(ArgumentError("reference_grid cannot be empty"))
-    end
-    
-    # Validate data types in reference grid - explicit error policy (use processed grid)
-    for col_name in names(processed_reference_grid)
-        col = processed_reference_grid[!, col_name]
-        _validate_reference_grid_column_type(col, col_name)
-    end
-    
-    if ncol(processed_reference_grid) == 0
-        throw(ArgumentError("reference_grid must have at least one column"))
-    end
-    
-    # Validate that reference grid variables exist in the data or model
-    data_vars = Set(keys(data_nt))
-    # Get model variables by compiling the formula and extracting variable references (using cache)
-    try
-        compiled = _shared_compiled(model, data_nt)
-        model_vars = extract_variable_names(compiled)   # every data column the formula reads
-        
-        # Check reference grid variables against both data and model variables
-        for col_name in names(processed_reference_grid)
-            col_symbol = Symbol(col_name)
-            if !(col_symbol in data_vars) && !(col_symbol in model_vars)
-                throw(ArgumentError("Reference grid variable '$col_name' not found in model data. Available variables: $(sort(collect(data_vars)))"))
-            end
-        end
-    catch e
-        # If we can't compile the formula (which might happen if the reference grid is invalid),
-        # just check against data variables for basic validation
-        for col_name in names(processed_reference_grid)
-            col_symbol = Symbol(col_name)
-            if !(col_symbol in data_vars)
-                throw(ArgumentError("Reference grid variable '$col_name' not found in data. Available variables: $(sort(collect(data_vars)))"))
-            end
-        end
-    end
-    
-    # A grid column that is not a model predictor and VARIES across the grid (a typo that
-    # happens to match a data column, the response, an unused column) changes nothing, so
-    # every profile would silently report the same value. Constant extra columns are
-    # harmless and common: means_grid(data) carries every data column.
-    varying = [Symbol(c) for c in names(processed_reference_grid)
-               if length(unique(processed_reference_grid[!, c])) > 1]
-    bad_cols = _nonpredictor_vars(model, varying)
-    if !isempty(bad_cols)
-        throw(ArgumentError(
-            "Reference grid variable(s) $(join(bad_cols, ", ")) vary across the grid but are " *
-            "not predictors in the model, so they would not change any estimate. Check for " *
-            "typos; model predictors are: $(join(_predictor_names(model), ", "))."
-        ))
-    end
-
-    # Route to single implementation with processed reference grid
-    return _attach_inference_df!(_profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, Σ, processed_reference_grid, alpha, contrasts; interval=interval), model, vcov)
+    # Every option and the reference grid are validated, and `vcov` evaluated, once, here.
+    # `profile_margins` takes no weights (see "Weights" above).
+    req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
+                             contrasts, alpha, vcov, weights=:none, interval)
+    return _run(req)
 end
 
 

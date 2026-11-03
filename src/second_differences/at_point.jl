@@ -213,13 +213,14 @@ end
 # at = :observed: the average derivative over the observed modifier values
 # ============================================================================
 
-# The modifier column shifted by `shift` for every row (each row keeps its own other values), as a
-# shallow copy of `data` that shares every other column.
-function _shifted_modifier_data(data, modifier::Symbol, shift::Real)
-    d = DataFrame(data; copycols=false)
-    col = d[!, modifier]
-    d[!, modifier] = [ismissing(v) ? missing : Float64(v) + shift for v in col]
-    return d
+# The request with the modifier column shifted by `shift` for every row (each row keeps its own
+# other values); every other column of the prepared data is shared.
+function _shifted_modifier_request(req::MarginsRequest, modifier::Symbol, shift::Real)
+    col = _column(req.data_nt, modifier)
+    col isa CategoricalArray && throw(ArgumentError("Modifier :$modifier is categorical in the fitted " *
+        "model, so a local derivative is not defined. Pass modifier_type=:categorical to compare its levels."))
+    shifted = _narrow_missing_eltype([ismissing(v) ? missing : Float64(v) + shift for v in col])
+    return _with_data(req, merge(req.data_nt, NamedTuple{(modifier,)}((shifted,))))
 end
 
 # AME at modifier + δ and modifier − δ with the shift applied to every row, which is the average over
@@ -227,15 +228,11 @@ end
 # stacked into one EffectsResult with a synthetic scenario column for the modifier (the shifts −δ and
 # +δ) so the pairing, scaling by 2δ, delta method, df and structural-zero logic are the ones used for
 # every other derivative; eval_point and the levels are NaN (no single evaluation point).
-function _observed_derivative_rows(model, data, vars_vec, modifier, modifier_vals, vcov, vcov_matrix,
-                                   profile_point, δ_raw; scale, measure, contrasts, alpha, weights, contrast)
+function _observed_derivative_rows(req::MarginsRequest, vars_vec, modifier, modifier_vals,
+                                   profile_point, δ_raw; alpha, contrast)
     δ = _adjust_delta_for_eval_point(maximum(abs, modifier_vals), δ_raw)
-    scenarios = isempty(profile_point) ? nothing : profile_point
-    fit(shift) = population_margins(
-        model, _shifted_modifier_data(data, modifier, shift);
-        scenarios, vars=vars_vec, type=:effects, scale, measure, vcov, contrasts,
-        alpha=Float64(alpha), weights,
-    )
+    point_req = _with_scenarios(req, isempty(profile_point) ? nothing : profile_point)
+    fit(shift) = _run(_shifted_modifier_request(point_req, modifier, shift))
     lo, hi = fit(-δ), fit(δ)
     n_lo, n_hi = length(lo.estimates), length(hi.estimates)
     n_lo == n_hi && lo.variables == hi.variables && lo.terms == hi.terms ||
@@ -251,14 +248,58 @@ function _observed_derivative_rows(model, data, vars_vec, modifier, modifier_val
         vcat(lo.variables, hi.variables), vcat(lo.terms, hi.terms), cells, nothing,
         vcat(lo.gradients, hi.gradients), md,
     )
-    _align_second_difference_df!(stacked, model, vcov)
-    rows = _process_variable_contrasts(stacked, vars_vec, modifier, vcov_matrix, NaN, δ, profile_point, alpha, contrast)
+    _align_second_difference_df!(stacked, req.df)
+    rows = _process_variable_contrasts(stacked, vars_vec, modifier, req.Σ, NaN, δ, profile_point, alpha, contrast)
     return [merge(r, (modifier_level1 = NaN, modifier_level2 = NaN)) for r in rows]
 end
 
 # ============================================================================
 # Main Function
 # ============================================================================
+
+# The variables a local derivative holds fixed: `profile`, plus the other variables of an `at`
+# NamedTuple (values given in `at` take precedence if conflict)
+function _local_profile(at, profile::NamedTuple, modifier::Symbol)
+    at isa NamedTuple || return profile
+    other_vars = NamedTuple{Tuple(k for k in keys(at) if k != modifier)}(
+        Tuple(at[k] for k in keys(at) if k != modifier)
+    )
+    return merge(profile, other_vars)
+end
+
+# Checks specific to a local derivative: a numeric modifier, and an `at` this function can read
+function _check_local_derivative_inputs(cols::NamedTuple, modifier::Symbol, at)
+    modifier_vals = _column(cols, modifier)
+    if !all(x -> x isa Number || ismissing(x), modifier_vals)
+        modifier_type = typeof(first(skipmissing(modifier_vals)))
+        error("Modifier :$modifier must be numeric for a local derivative (`at`). " *
+              "Found type: $modifier_type. " *
+              "Continuous modifiers require numeric values (Int, Float64, etc.).")
+    end
+    if at isa NamedTuple
+        if !haskey(at, modifier)
+            provided_keys = join(string.(keys(at)), ", ")
+            error("When `at` is a NamedTuple, it must include the modifier :$modifier. " *
+                  "Provided keys: ($provided_keys). " *
+                  "Example: at=($modifier=50, other_var=100)")
+        end
+    elseif !(at in (:mean, :median, :observed) || at isa Real || at isa AbstractVector)
+        error("Invalid `at` parameter: must be :mean, :median, :observed, a Real, a Vector, or a NamedTuple")
+    end
+    return nothing
+end
+
+# The one request of a local derivative. The scenario variables (validated here, once) are the modifier,
+# set to eval_point ± δ, and the profile variables; `at=:observed` shifts the modifier column instead, so
+# it is not a scenario variable there.
+function _local_derivative_request(model, cols::NamedTuple, vars_vec::Vector{Symbol}, modifier::Symbol, at,
+                                   profile::NamedTuple; scale, backend, measure, contrasts, vcov, weights, alpha)
+    held = collect(Symbol, keys(_local_profile(at, profile, modifier)))
+    scenario_vars = at === :observed ? held : Symbol[modifier; held]
+    return _normalize_request(model, cols; type=:effects, vars=vars_vec, scale, backend, measure,
+                              contrasts, alpha, vcov, weights, scenario_vars,
+                              changed_vars=Symbol[modifier; held])
+end
 
 # Engine for a local derivative ∂AME/∂modifier (symmetric finite difference of the AME at
 # `at ± δ`, with the `profile` variables held fixed). Public entry point:
@@ -270,7 +311,7 @@ function _second_differences_local(
     data,
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
-    vcov; # An AbstractMatrix, a Function returning one, an estimator, or a _PrecomputedVcov
+    vcov; # An AbstractMatrix, a Function returning one, or an estimator
     at::Union{Symbol,Real,AbstractVector,NamedTuple}=:observed,
     profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto,
@@ -281,64 +322,50 @@ function _second_differences_local(
     p_adjust::Symbol=:none,
     include_gradients::Bool=false,
     weights=:model,
-    contrast::Union{Nothing,AbstractString}=nothing
+    contrast::Union{Nothing,AbstractString}=nothing,
+    backend::Symbol=:ad,
 )
     _check_p_adjust(p_adjust)
     0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
-    (wvec, weights_source) = _weights_vector(weights, model, data)
+    cols = Tables.columntable(data)
 
     # 1. Validate inputs
-    if !hasproperty(data, modifier)
-        available_cols = join(string.(names(data)), ", ")
+    if !hasproperty(cols, modifier)
         error("Modifier variable :$modifier not found in data. " *
-              "Available columns: $available_cols")
-    end
-
-    # Validate contrasts parameter
-    if !(contrasts in (:baseline, :pairwise))
-        error("Invalid contrasts parameter: $contrasts. " *
-              "Must be :baseline or :pairwise.")
+              "Available columns: $(_column_list(cols))")
     end
 
     modifier in keys(profile) && error("`profile` contains the modifier :$modifier; the modifier is " *
         "varied by the calculation (use `at` to choose where). Remove it from `profile`.")
 
-    modifier_vals = data[!, modifier]
-    if any(x -> x isa Bool, skipmissing(modifier_vals))
+    if any(x -> x isa Bool, skipmissing(_column(cols, modifier)))
         error("Modifier :$modifier is Bool, so a local derivative is not defined. Use `levels` or " *
               "leave modifier_type=:auto to compare false and true.")
     end
-    if !all(x -> x isa Number || ismissing(x), modifier_vals)
-        modifier_type = typeof(first(skipmissing(modifier_vals)))
-        error("Modifier :$modifier must be numeric for a local derivative (`at`). " *
-              "Found type: $modifier_type. " *
-              "Continuous modifiers require numeric values (Int, Float64, etc.).")
-    end
+    _check_local_derivative_inputs(cols, modifier, at)
 
-    # Validate profile variables exist
-    for var in keys(profile)
-        if !hasproperty(data, var)
-            available_cols = join(string.(names(data)), ", ")
-            error("Profile variable :$var not found in data. " *
-                  "Available columns: $available_cols")
-        end
-    end
-
-    # 2. Normalize variables to Vector{Symbol}
+    # 2. Normalize variables to Vector{Symbol}; profile and focal variables must exist in data
     vars_vec = variables isa Symbol ? [variables] : variables
+    _check_focal_and_profile_vars(cols, vars_vec, keys(profile))
 
-    # Validate all variables exist in data
-    for var in vars_vec
-        if !hasproperty(data, var)
-            available_cols = join(string.(names(data)), ", ")
-            error("Focal variable :$var not found in data. " *
-                  "Available columns: $available_cols")
-        end
-    end
+    # 3. One request: the shared validators (`contrasts`, `weights`, ...) and Σ
+    req = _local_derivative_request(model, cols, vars_vec, modifier, at, profile;
+                                    scale, backend, measure, contrasts, vcov, weights, alpha)
+    return _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, alpha, p_adjust,
+                              include_gradients, contrast)
+end
 
+# The local derivatives of a validated request (`_local_derivative_request`): one AME computation per
+# (profile point, evaluation point ± δ) from the request, with no keyword parsing or validation in
+# between. `cols` is the data as given (the evaluation points and δ come from its modifier column).
+function _local_derivatives(req::MarginsRequest, cols::NamedTuple, vars_vec::Vector{Symbol}, modifier::Symbol;
+                            at, profile::NamedTuple, delta, alpha::Real, p_adjust::Symbol,
+                            include_gradients::Bool, contrast)
     # 3. Extract modifier values from data
+    modifier_vals = _column(cols, modifier)
     modifier_vals_clean = collect(skipmissing(modifier_vals))
     # `:mean` / `:median` use the weights too, so the point matches the weighted population
+    wvec = req.weights
     keep = [!ismissing(v) for v in modifier_vals]
     wclean = isnothing(wvec) ? nothing : wvec[keep]
 
@@ -348,46 +375,29 @@ function _second_differences_local(
     # - Real value - single specific evaluation point
     # - Vector - multiple evaluation points
     # - NamedTuple - complete profile specification (modifier + other variables)
-    eval_points, full_profile = if at isa NamedTuple
+    full_profile = _local_profile(at, profile, modifier)
+    eval_points = if at isa NamedTuple
         # NamedTuple case: user provided complete profile including modifier value
         # Example: at=(age=40, income=50000, region="north")
-        # Split into modifier value (for evaluation) and profile variables (held fixed)
-        if !haskey(at, modifier)
-            provided_keys = join(string.(keys(at)), ", ")
-            error("When `at` is a NamedTuple, it must include the modifier :$modifier. " *
-                  "Provided keys: ($provided_keys). " *
-                  "Example: at=($modifier=50, other_var=100)")
-        end
-
-        # Extract modifier value to determine where to evaluate derivative
+        # The modifier value says where to evaluate the derivative; the other variables are
+        # held fixed (merged into `full_profile` by _local_profile)
         modifier_val = at[modifier]
-
-        # Extract other variables (everything except modifier) as profile constraints
-        other_vars = NamedTuple{Tuple(k for k in keys(at) if k != modifier)}(
-            Tuple(at[k] for k in keys(at) if k != modifier)
-        )
-
-        # Merge with profile parameter (values given in `at` take precedence if conflict)
-        merged_profile = merge(profile, other_vars)
-
-        (modifier_val isa AbstractVector ? Float64.(modifier_val) : [Float64(modifier_val)], merged_profile)
+        modifier_val isa AbstractVector ? Float64.(modifier_val) : [Float64(modifier_val)]
     elseif at === :mean
         # Evaluate derivative at mean(modifier), convenient default
-        ([isnothing(wclean) ? mean(modifier_vals_clean) : _weighted_mean(modifier_vals_clean, wclean)], profile)
+        [isnothing(wclean) ? mean(modifier_vals_clean) : _weighted_mean(modifier_vals_clean, wclean)]
     elseif at === :observed
         # Average derivative over the observed values: the modifier column is shifted, not set (see below)
-        ([NaN], profile)
+        [NaN]
     elseif at === :median
         # Evaluate derivative at median(modifier), robust to outliers
-        ([isnothing(wclean) ? median(modifier_vals_clean) : _weighted_median(modifier_vals_clean, wclean)], profile)
+        [isnothing(wclean) ? median(modifier_vals_clean) : _weighted_median(modifier_vals_clean, wclean)]
     elseif at isa Real
         # Evaluate at specific modifier value
-        ([Float64(at)], profile)
-    elseif at isa AbstractVector
+        [Float64(at)]
+    else # AbstractVector (checked by _check_local_derivative_inputs)
         # Evaluate at multiple modifier values (creates one result row per value)
-        (Float64.(at), profile)
-    else
-        error("Invalid `at` parameter: must be :mean, :median, :observed, a Real, a Vector, or a NamedTuple")
+        Float64.(at)
     end
 
     # 5. Compute delta (step size for finite difference)
@@ -421,8 +431,8 @@ function _second_differences_local(
     # This enables stratified analysis: "does the interaction vary across subgroups?"
     profile_combinations = _expand_profile_to_cartesian(full_profile)
 
-    # 7. Covariance matrix (already computed when `vcov` is a `_PrecomputedVcov`)
-    vcov_matrix = _covariance_matrix(model, vcov)
+    # 7. Covariance matrix: the request's, the one evaluation of `vcov` for the call
+    vcov_matrix = req.Σ
 
     # 8. Main computation loop: iterate over all profile combinations and evaluation points
     # Overall algorithm:
@@ -437,8 +447,7 @@ function _second_differences_local(
         for eval_pt in eval_points
             if at === :observed
                 append!(results, _observed_derivative_rows(
-                    model, data, vars_vec, modifier, modifier_vals_clean, vcov, vcov_matrix, profile_point, δ_raw;
-                    scale, measure, contrasts, alpha, weights, contrast,
+                    req, vars_vec, modifier, modifier_vals_clean, profile_point, δ_raw; alpha, contrast,
                 ))
                 continue
             end
@@ -452,23 +461,11 @@ function _second_differences_local(
 
             # Compute population average marginal effects at both perturbed modifier values
             # This is the computationally expensive step: evaluates AME across entire dataset
-            # Pass contrasts parameter for categorical variables
-            ames = population_margins(
-                model, data;
-                scenarios=full_scenarios,
-                vars=vars_vec,
-                type=:effects,
-                scale=scale,
-                measure=measure,
-                vcov=vcov,
-                contrasts=contrasts,
-                alpha=Float64(alpha),
-                weights=weights
-            )
+            # (one computation from the request, with the scenarios set to this point)
+            ames = _run(_with_scenarios(req, full_scenarios))
 
-            # t vs z from the model and the vcov as given (same rule as `_inference_df`);
-            # population_margins only saw the wrapped function
-            _align_second_difference_df!(ames, model, vcov)
+            # t vs z from the model and the vcov as given (same rule as `_inference_df`)
+            _align_second_difference_df!(ames, req.df)
 
             # Extract derivatives for all variables and contrasts using symmetric FD formula
             # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)
@@ -481,5 +478,5 @@ function _second_differences_local(
         end
     end
 
-    return _finalize_frame!(DataFrame(results), p_adjust, alpha, include_gradients; weights_source)
+    return _finalize_frame!(DataFrame(results), p_adjust, alpha, include_gradients; weights_source=req.weights_source)
 end

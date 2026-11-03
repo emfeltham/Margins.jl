@@ -103,6 +103,7 @@ include("core/data_conversion.jl")  # Data type conversion utilities
 include("core/validation.jl")
 include("core/model_weights.jl")  # weights=:model default: _model_weights, _resolve_weights
 include("core/margins_validation.jl")
+include("core/request.jl")  # MarginsRequest, _normalize_request: every entry point's options, validated once
 include("core/typical_values.jl")
 include("computation/scenarios.jl")  # ContrastPair and scenario utilities
 include("computation/predictions.jl")

@@ -228,7 +228,9 @@ using CategoricalArrays
     end
 
     @testset "Error Handling - Invalid Contrasts" begin
-        @test_throws ErrorException Margins._second_differences_local(
+        # An ArgumentError from the request layer, as in every other entry point (3.0; was a
+        # bare ErrorException here and silently accepted on the discrete path)
+        @test_throws ArgumentError Margins._second_differences_local(
             model, df, :x1, :age, Σ;
             contrasts=:invalid
         )

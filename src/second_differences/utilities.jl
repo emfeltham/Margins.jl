@@ -67,10 +67,7 @@ function _expand_profile_to_cartesian(profile::NamedTuple)
 end
 
 # ---- observation weights --------------------------------------------------------------------
-
-# `weights` as `population_margins` takes it (:model, :none/nothing, a column name or a vector):
-# the averaging weights as a Float64 vector (or `nothing`) and their source (:model, :user, :none).
-_weights_vector(weights, model, data) = _resolve_weights(weights, model, data)[1:2]
+# (`weights` is resolved once per call by the request, `_resolve_weights`; these helpers use it)
 
 # The table-level metadata key under which a second-differences frame records `weights_source`
 const _SD_WEIGHTS_SOURCE_KEY = "weights_source"
@@ -283,11 +280,11 @@ function _warn_structural_zeros(df::DataFrame, modifier_in_model::Union{Nothing,
     return nothing
 end
 
-# Warn when numeric modifier or profile values lie outside the range seen in the data: the
-# counterfactual there extrapolates the fitted model.
-function _warn_extrapolation(data, name::Symbol, values)
-    hasproperty(data, name) || return nothing
-    col = collect(skipmissing(data[!, name]))
+# Warn when numeric modifier or profile values lie outside the range seen in the data (a column
+# table): the counterfactual there extrapolates the fitted model.
+function _warn_extrapolation(cols::NamedTuple, name::Symbol, values)
+    hasproperty(cols, name) || return nothing
+    col = collect(skipmissing(_column(cols, name)))
     isempty(col) && return nothing
     all(x -> x isa Real, col) || return nothing
     vals = [v for v in values if v isa Real]

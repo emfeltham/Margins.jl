@@ -77,6 +77,7 @@ src/
 │   ├── variable_detection.jl          # Variable type detection
 │   ├── validation.jl                  # Input validation
 │   ├── margins_validation.jl          # Margins-specific validation
+│   ├── request.jl                     # MarginsRequest, _normalize_request: every entry point's options, validated once
 │   ├── engine_validation.jl           # Engine validation
 │   ├── data_conversion.jl            # Data type conversions
 │   └── typical_values.jl             # Representative value computation
@@ -169,7 +170,9 @@ All implement the Tables.jl interface for `DataFrame` conversion. Effects suppor
 ```
 population_margins(model, data; type=:effects, scenarios=..., groups=...)
     ↓
-Tables.columntable(data)                    # Single conversion
+_normalize_request(model, data; ...)        # Every validator once; data prepared (any Tables source);
+    ↓                                       # Σ = vcov evaluated once; weights; parsed scenarios/groups
+_run(req::MarginsRequest{:population})
     ↓
 build_engine(PopulationUsage, ..., Σ)       # Per call; compiled formula cached by FC
     ↓
@@ -191,7 +194,9 @@ EffectsResult or PredictionsResult          # Type-safe result
 ```
 profile_margins(model, data, reference_grid; type=:effects)
     ↓
-Tables.columntable(reference_grid)           # Convert grid
+_normalize_request(model, data; reference_grid, ...)  # Validation, Σ, grid resolved and completed
+    ↓
+_run(req::MarginsRequest{:profile})
     ↓
 build_engine(ProfileUsage, ..., Σ)           # Per call; compiled formula cached by FC
     ↓
@@ -210,16 +215,18 @@ Profile margins are **O(1) with respect to dataset size** — they evaluate only
 
 ```
 second_differences(model, data, :x, :z; levels=, at=, profile=, vcov=)     # model_interface.jl
-    │  modifier type from the data (discrete vs continuous)
+    │  modifier type from the data (discrete vs continuous); ONE request for the call
+    │  (_normalize_request with scenario_vars = modifier ∪ profile: validated once, Σ once)
     ├─ discrete modifier, or continuous with `levels`:
-    │    population_margins(model, data; scenarios=(z=levels,), type=:effects)   # per profile stratum
+    │    _run(_with_scenarios(req, (z=levels, profile_point...)))   # per profile stratum
     │        → EffectsResult (AMEs + gradients + metadata[:vcov])
     │            → _effect_index (the one place string labels are read) → _modifier_rows
     │              (select rows; reject other varying scenario/group columns;
     │              order numeric levels) → pairwise differences, delta-method SE from gradient
     │              differences: sqrt((g₂-g₁)' Σ (g₂-g₁)); df from the Σ used (_second_difference_dof)
     └─ continuous modifier (default):
-         _second_differences_local(...)  → AMEs at at±δ → (AME₊ - AME₋)/2δ via the pairwise engine
+         _local_derivatives(req, ...)  → AMEs at at±δ (_with_scenarios; at=:observed shifts the
+         modifier column, _with_data) → (AME₊ - AME₋)/2δ via the pairwise engine
 ```
 
 The result-based method (`second_differences(result, …)`) exposes the middle step for users who already hold an `EffectsResult`.

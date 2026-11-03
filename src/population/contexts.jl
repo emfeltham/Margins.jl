@@ -13,34 +13,21 @@ import GLM
 const _MAX_CONTEXT_COMBINATIONS = 250
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, alpha, measure)
+    _population_margins_with_contexts(engine, req::MarginsRequest)
 
 Handle population margins with scenarios/groups contexts - clean FormulaCompiler implementation.
+The request carries the parsed scenarios and groups (`req.scenario_specs`, `req.group_specs`),
+already checked against the combination limit.
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, alpha, measure, contrasts=:baseline)
+function _population_margins_with_contexts(engine, req::MarginsRequest)
+    (; data_nt, vars, scenarios, groups, type, scale, backend, alpha, measure, contrasts) = req
+    weights = req.weights
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     # Variables dropped by the skip rule below, for the empty-result diagnostic
     skipped_vars = Set{Symbol}()
 
-    # Parse specifications
-    scenario_specs = isnothing(scenarios) ? [Dict()] : _parse_at_specification(scenarios)
-    group_specs = isnothing(groups) ? [Dict()] : _parse_groups_specification(groups, data_nt; weights)
-
-    # Create all combinations of contexts
-    total_combinations = length(scenario_specs) * length(group_specs)
-
-    # Enforce the hard limit (error-first policy): every combination is a full pass over the data
-    if total_combinations > _MAX_CONTEXT_COMBINATIONS
-        throw(MarginsError(
-            "Too many scenario/group combinations: $(length(scenario_specs)) scenarios × " *
-            "$(length(group_specs)) groups = $(total_combinations), above the limit of " *
-            "$(_MAX_CONTEXT_COMBINATIONS). Use fewer scenario values or coarser groups, or " *
-            "split the request into several calls."
-        ))
-    end
-
-    for scenario_spec in scenario_specs, group_spec in group_specs
+    for scenario_spec in req.scenario_specs, group_spec in req.group_specs
         # NOTE: the third return value (weights subset) is deliberately discarded. Every
         # context compute function below takes the FULL weights vector and indexes it by
         # absolute row index, matching `context_indices`.
@@ -160,13 +147,8 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
     metadata[:alpha] = alpha
 
     # Store scenarios and groups variable information for Context column
-    # Use _normalize_scenarios_to_namedtuple to handle both NamedTuple and Pair syntax
-    scenarios_vars = if isnothing(scenarios)
-        Symbol[]
-    else
-        scenarios_nt = _normalize_scenarios_to_namedtuple(scenarios)
-        collect(keys(scenarios_nt))
-    end
+    # (`req.scenarios` is already a NamedTuple, also for the Pair syntax)
+    scenarios_vars = isnothing(scenarios) ? Symbol[] : collect(Symbol, keys(scenarios))
     groups_vars = isnothing(groups) ? Symbol[] : _extract_group_variables(groups)
     metadata[:scenarios_vars] = scenarios_vars
     metadata[:groups_vars] = groups_vars

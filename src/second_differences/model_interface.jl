@@ -53,7 +53,7 @@ end
     second_differences(model, data, variables, modifier;
                        levels=nothing, at=nothing, modifier_type=:auto, profile=NamedTuple(),
                        delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing, vcov=GLM.vcov,
-                       weights=:model, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true)
+                       weights=:model, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true, backend=:ad)
 
 How does the marginal effect of `variables` change with `modifier`? Computes the second
 difference (interaction effect on the response scale) with delta-method standard errors
@@ -68,7 +68,7 @@ What is computed depends on the modifier:
   values (`at=:observed`, the default) or taken at the points `at` gives; or, with `levels=[…]`, the slope between those modifier values.
 
 # Arguments
-- `model`, `data`: fitted model and the data frame it was fit to.
+- `model`, `data`: fitted model and the data it was fit to (a `DataFrame` or any Tables.jl table).
 - `variables::Union{Symbol,Vector{Symbol}}`: focal variable(s); each continuous variable gives
   one row, each categorical variable one row per contrast (see `contrasts`).
 - `modifier::Symbol`: the moderating variable (must not also be in `variables`).
@@ -98,7 +98,8 @@ What is computed depends on the modifier:
 - `measure`: `:effect` (default), `:elasticity`, `:semielasticity_dyex` or `:semielasticity_eydx`, as in
   `population_margins`: the second difference is then the change in that measure across the modifier.
   The measures are defined for continuous focal variables only, so request categorical ones separately.
-- `scale`: `:response` (default) or `:link`. `contrasts`: how contrasts of a categorical focal variable
+- `scale`: `:response` (default) or `:link`. `backend`: `:ad` (default) or `:fd`, as in
+  `population_margins`. `contrasts`: how contrasts of a categorical focal variable
   are built, `:baseline` (K−1) or `:pairwise` (K(K−1)/2), as in `population_margins`.
 - `contrast`: restrict the result to one contrast label, such as `"college - hs"` (or `"dy/dx"` for a
   continuous variable). `nothing` (default) keeps every contrast. It applies to every focal variable, so
@@ -161,18 +162,20 @@ function second_differences(
     levels=nothing, at=nothing, modifier_type::Symbol=:auto, profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
     contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=:model, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
-    warn::Bool=true,
+    warn::Bool=true, backend::Symbol=:ad,
 )
     _check_p_adjust(p_adjust)
     0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
-    hasproperty(data, modifier) || error("Modifier variable :$modifier not found in data. " *
-        "Available columns: $(join(string.(names(data)), ", "))")
+    # Any Tables.jl source: the checks below read the columns as given
+    cols = Tables.columntable(data)
+    hasproperty(cols, modifier) || error("Modifier variable :$modifier not found in data. " *
+        "Available columns: $(_column_list(cols))")
     modifier_type ∈ (:auto, :categorical, :continuous) ||
         error("modifier_type must be :auto, :categorical or :continuous, got :$modifier_type")
     !isnothing(levels) && !isnothing(at) &&
         error("Give either `levels` (compare these modifier values) or `at` (local derivative), not both.")
 
-    col = data[!, modifier]
+    col = _column(cols, modifier)
     modifier_in_model = _modifier_in_model(model, modifier)
     mtype = modifier_type === :auto ? _detect_modifier_type(col) : modifier_type
     if warn && modifier_type === :auto && mtype === :continuous && isnothing(at) && isnothing(levels)
@@ -188,29 +191,29 @@ function second_differences(
     if warn
         # modifier / profile values the data does not cover
         if !isnothing(levels)
-            _warn_extrapolation(data, modifier, levels)
+            _warn_extrapolation(cols, modifier, levels)
         elseif at isa Real || at isa AbstractVector
-            _warn_extrapolation(data, modifier, at isa Real ? [at] : at)
+            _warn_extrapolation(cols, modifier, at isa Real ? [at] : at)
         elseif at isa NamedTuple
             for (k, v) in pairs(at)
-                _warn_extrapolation(data, k, v isa AbstractVector ? v : [v])
+                _warn_extrapolation(cols, k, v isa AbstractVector ? v : [v])
             end
         end
         for (k, v) in pairs(profile)
-            _warn_extrapolation(data, k, v isa AbstractVector ? v : [v])
+            _warn_extrapolation(cols, k, v isa AbstractVector ? v : [v])
         end
     end
 
-    # Evaluate `vcov` once for the whole call: every population_margins call below gets the
-    # matrix together with its source (which the t/z df rule keys on), not the estimator
-    vcov = _PrecomputedVcov(validate_vcov_parameter(vcov, model), vcov)
-
     if mtype === :continuous && isnothing(levels)
         # Derivative of the AME with respect to the modifier (default `at=:observed`)
-        out = _second_differences_local(
-            model, data, variables, modifier, vcov;
-            at = isnothing(at) ? :observed : at, profile, delta, scale, measure, contrasts, alpha, p_adjust, include_gradients, weights, contrast,
-        )
+        at = isnothing(at) ? :observed : at
+        _check_local_derivative_inputs(cols, modifier, at)
+        _check_focal_and_profile_vars(cols, vars_vec, keys(_local_profile(at, profile, modifier)))
+        # One request for the whole call: every validator and the one evaluation of `vcov`
+        req = _local_derivative_request(model, cols, vars_vec, modifier, at, profile;
+                                        scale, backend, measure, contrasts, vcov, weights, alpha)
+        out = _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, alpha, p_adjust,
+                                 include_gradients, contrast)
         warn && _warn_structural_zeros(out, modifier_in_model)
         return out
     end
@@ -219,14 +222,7 @@ function second_differences(
         "treated as $mtype. Use `levels` to compare specific values, or modifier_type=:continuous.")
     warn && !(isnothing(delta) || delta === :auto) && @warn "`delta` is ignored when comparing modifier levels"
 
-    for v in vars_vec
-        hasproperty(data, v) || error("Focal variable :$v not found in data. " *
-            "Available columns: $(join(string.(names(data)), ", "))")
-    end
-    for k in keys(profile)
-        hasproperty(data, k) || error("Profile variable :$k not found in data. " *
-            "Available columns: $(join(string.(names(data)), ", "))")
-    end
+    _check_focal_and_profile_vars(cols, vars_vec, keys(profile))
 
     lv = isnothing(levels) ? _discrete_levels(col) : collect(levels)
     length(lv) >= 2 || error("Need at least 2 modifier levels to compare, got $(length(lv)).")
@@ -234,20 +230,19 @@ function second_differences(
     mtype === :continuous && !all(x -> x isa Number && !(x isa Bool), lv) &&
         error("A continuous modifier needs numeric `levels`, got $(eltype(lv)).")
 
-    Σ = _covariance_matrix(model, vcov)   # the matrix computed above
-    # Resolved once to validate and to record the source; each population_margins call below
-    # resolves the same keyword against the same rows
-    (_, weights_source) = _weights_vector(weights, model, data)
+    # One request for the whole call: every validator (the scenario variables, the modifier and the
+    # `profile` variables, included) and the one evaluation of `vcov` and of the weights. Each profile
+    # point is then one AME computation from it, with the scenarios set to that point.
+    req = _normalize_request(model, cols; type=:effects, vars=vars_vec, scale, backend, measure,
+                             contrasts, alpha, vcov, weights,
+                             scenario_vars=Symbol[modifier, keys(profile)...])
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)
         scenarios = merge(NamedTuple{(modifier,)}((lv,)), profile_point)
-        ames = population_margins(
-            model, data; scenarios, vars=vars_vec, type=:effects, scale, measure, vcov, contrasts, weights,
-            alpha=Float64(alpha),
-        )
-        _align_second_difference_df!(ames, model, vcov)
+        ames = _run(_with_scenarios(req, scenarios))
+        _align_second_difference_df!(ames, req.df)
         sd = second_differences(
-            ames, vars_vec, modifier, Σ; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
+            ames, vars_vec, modifier, req.Σ; modifier_type=result_type, contrast, alpha, include_gradients=true, warn=false,
         )
         for (k, v) in pairs(profile_point)
             sd[!, k] = fill(v, nrow(sd))
@@ -255,5 +250,27 @@ function second_differences(
         push!(pieces, sd)
     end
     out = length(pieces) == 1 ? only(pieces) : vcat(pieces...; cols=:union)
-    return _finalize_frame!(out, p_adjust, alpha, include_gradients; warn, modifier_in_model, weights_source)
+    return _finalize_frame!(out, p_adjust, alpha, include_gradients; warn, modifier_in_model,
+                            weights_source=req.weights_source)
+end
+
+# A column of a column table, by a name known only at run time. The barrier hides the column's
+# type from inference, so the code reading it is compiled for the column it gets, not for every
+# column type of the table (first-call latency).
+_column(cols::NamedTuple, name::Symbol)::AbstractVector = Base.inferencebarrier(getproperty(cols, name))
+
+# Column names for messages, as `names(df)` lists them
+_column_list(cols::NamedTuple) = join(string.(keys(cols)), ", ")
+
+# The focal and profile variables must be columns of the data
+function _check_focal_and_profile_vars(cols::NamedTuple, vars_vec, profile_vars)
+    for v in vars_vec
+        hasproperty(cols, v) || error("Focal variable :$v not found in data. " *
+            "Available columns: $(_column_list(cols))")
+    end
+    for k in profile_vars
+        hasproperty(cols, k) || error("Profile variable :$k not found in data. " *
+            "Available columns: $(_column_list(cols))")
+    end
+    return nothing
 end

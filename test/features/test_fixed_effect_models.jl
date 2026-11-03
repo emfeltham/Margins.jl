@@ -4,6 +4,7 @@ using FixedEffectModels
 using DataFrames
 using GLM
 using Statistics
+using CategoricalArrays
 
 @testset "FixedEffectModels Extension" begin
     # Set up common test data with known state effects
@@ -253,5 +254,41 @@ using Statistics
         result = population_margins(m_fe, df; type=:effects, vars=[:x1])
         df_r = DataFrame(result)
         @test abs(df_r.estimate[1] - 2.0) < 0.15
+    end
+
+    @testset "Shared validation of the request layer (B7)" begin
+        df_c = copy(df)
+        df_c.c = categorical(ifelse.(df_c.x3 .> 0, "hi", "lo"))
+        df_c.y .+= 0.3 .* (df_c.c .== "hi")
+        mc = reg(df_c, @formula(y ~ x1 + x2 + c + fe(state)))
+        # measure filter: a categorical's contrasts get no "elasticity" rows
+        r = @test_logs (:info, r"Skipping measure=:elasticity") match_mode=:any population_margins(mc, df_c; measure=:elasticity)
+        @test Set(DataFrame(r).variable) == Set(["x1", "x2"])
+        @test_throws ArgumentError population_margins(mc, df_c; vars=[:c], measure=:elasticity)
+        # vars/groups overlap and scenarios/groups conflict, as for GLM
+        @test_throws ArgumentError population_margins(mc, df_c; vars=[:c], groups=:c)
+        @test_throws ArgumentError population_margins(mc, df_c; vars=[:x1], scenarios=(x2=[0.0],), groups=(:x2, 2))
+        # a scenario variable must be a predictor; the absorbed fixed effects count as predictors
+        @test_throws ArgumentError population_margins(mc, df_c; vars=[:x1], scenarios=(y=[0.0],))
+        @test_throws Margins.MarginsError population_margins(m_fe, df; type=:predictions, scenarios=(state=["CA"],))
+        # alpha and contrasts checked
+        @test_throws ArgumentError population_margins(m, df; vars=[:x1], alpha=1.5)
+        @test_throws ArgumentError profile_margins(m, df, DataFrame(x1=[0.0]); vars=[:x2], alpha=0.0)
+        @test_throws ArgumentError population_margins(m, df; vars=[:x1], contrasts=:foo)
+        @test population_margins(m, df; vars=[:x1], alpha=1//10).metadata[:alpha] == 0.1
+        # a varying grid column that is not a predictor (FE columns are)
+        @test_throws ArgumentError profile_margins(m_fe, df, DataFrame(x1=[0.0, 0.0], y=[0.0, 1.0]); type=:predictions)
+        # an absorbed FE named in vars gets the FE message, also for a String column
+        msg = try population_margins(m, df; vars=[:state]); "" catch e; sprint(showerror, e) end
+        @test occursin("absorbed fixed effect", msg)
+    end
+
+    @testset "profile_margins interval keyword" begin
+        grid = DataFrame(x1=[0.0, 1.0], x2=[0.0, 0.0], x3=[0.0, 0.0])
+        a = profile_margins(m_fe, df, grid; type=:predictions)
+        b = profile_margins(m_fe, df, grid; type=:predictions, interval=:confidence)
+        @test DataFrame(a) == DataFrame(b)
+        @test_throws ArgumentError profile_margins(m_fe, df, grid; type=:predictions, interval=:prediction)
+        @test_throws ArgumentError profile_margins(m_fe, df, grid; type=:effects, interval=:prediction)
     end
 end

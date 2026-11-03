@@ -31,6 +31,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_mixedmodels.jl")
     include("core/test_weights.jl")
     include("core/test_model_weights.jl")
+    include("core/test_request_layer.jl")
     include("statistical_validation/robust_se_validation.jl")
 end
 
