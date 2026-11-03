@@ -39,8 +39,11 @@ end
     data_nt = Margins._prepare_margins_data(Tables.columntable(df), model)
     engine = Margins.build_engine(Margins.PopulationUsage, Margins.NoDerivatives, model, data_nt,
                                   Symbol[], GLM.vcov, :ad)
+    # (measured inside a function: on Julia 1.10, @allocated at testset scope counts boxing)
+    alloc_loop(e, d, rows) = @allocated _aap_loop!(e.compiled, e.row_buf, e.β, e.link, d, rows)
     _aap_loop!(engine.compiled, engine.row_buf, engine.β, engine.link, data_nt, 1:10)
-    @test (@allocated _aap_loop!(engine.compiled, engine.row_buf, engine.β, engine.link, data_nt, 1:5_000)) == 0
+    alloc_loop(engine, data_nt, 1:10)
+    @test alloc_loop(engine, data_nt, 1:5_000) == 0
 
     allocs = Dict{Tuple{Int, Bool}, Int}()
     for n in (1_000, 50_000)

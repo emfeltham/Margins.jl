@@ -62,16 +62,16 @@ The `EffectsResult` type encapsulates computed marginal effects along with assoc
 - `standard_errors::Vector{Float64}` - Delta-method standard errors
 - `variables::Vector{String}` - The "x" in dy/dx (which variable each row represents)
 - `terms::Vector{String}` - Contrast descriptions (e.g., "dy/dx", "treated - control")
-- `profile_values::Union{Nothing, NamedTuple}` - Reference grid values (for profile effects MEM/MER; `nothing` for population effects AME)
-- `group_values::Union{Nothing, NamedTuple}` - Grouping variable values (when using `groups` parameter; `nothing` otherwise)
+- `profile_values::Union{Nothing, NamedTuple}` - Per-row values of the context columns: the reference-grid variables for `profile_margins()` (MEM/MER), and the `scenarios=` and `groups=` variables for `population_margins()`. `nothing` for a plain population result (AME). `metadata[:groups_vars]` and `metadata[:scenarios_vars]` record which of these columns are groups and which are scenarios (`Margins.context_columns(result)` returns them)
+- `group_values::Union{Nothing, NamedTuple}` - Reserved; currently always `nothing`. Group columns from the `groups` parameter are stored in `profile_values`
 - `gradients::Matrix{Float64}` - Parameter gradients (G matrix) for delta-method computation
 - `metadata::Dict{Symbol, Any}` - Analysis metadata (model info, options used, sample size, etc.)
 
 **Key Features:**
 - Multiple DataFrame formats: `:standard`, `:compact`, `:confidence`, `:profile`, `:stata`
 - Auto-detects appropriate format based on analysis type
-- `profile_values` populated only for `profile_margins()` (MEM/MER)
-- `group_values` populated only when using `groups` parameter
+- `profile_values` holds the reference grid (`profile_margins()`) or the scenario and group columns (`population_margins()` with `scenarios=` or `groups=`); `nothing` for a plain population result
+- Group columns are in `profile_values` (not `group_values`); `metadata[:groups_vars]` identifies them
 
 ### `PredictionsResult`
 
@@ -82,8 +82,8 @@ The `PredictionsResult` type focuses specifically on predicted values without va
 **Fields:**
 - `estimates::Vector{Float64}` - Point estimates (predicted values)
 - `standard_errors::Vector{Float64}` - Delta-method standard errors
-- `profile_values::Union{Nothing, NamedTuple}` - Reference grid values (for profile predictions APM/APR; `nothing` for population predictions AAP)
-- `group_values::Union{Nothing, NamedTuple}` - Grouping variable values (when using `groups` parameter; `nothing` otherwise)
+- `profile_values::Union{Nothing, NamedTuple}` - Per-row values of the context columns: the reference-grid variables for `profile_margins()` (APM/APR), and the `scenarios=` and `groups=` variables for `population_margins()`. `nothing` for a plain population result (AAP); `metadata[:groups_vars]` and `metadata[:scenarios_vars]` say which columns are groups and which are scenarios
+- `group_values::Union{Nothing, NamedTuple}` - Reserved; currently always `nothing`. Group columns from the `groups` parameter are stored in `profile_values`
 - `gradients::Matrix{Float64}` - Parameter gradients (G matrix) for delta-method computation
 - `metadata::Dict{Symbol, Any}` - Analysis metadata (model info, options used, sample size, etc.)
 
@@ -91,8 +91,8 @@ The `PredictionsResult` type focuses specifically on predicted values without va
 - Omits variable/contrast fields (not applicable to predictions - predictions don't have "x" or "dy/dx" concepts)
 - Single optimized DataFrame format for predictions display
 - Clean tabular output focused on prediction values and statistics
-- `profile_values` populated only for `profile_margins()` (APM/APR)
-- `group_values` populated only when using `groups` parameter
+- `profile_values` holds the reference grid (`profile_margins()`) or the scenario and group columns (`population_margins()` with `scenarios=` or `groups=`); `nothing` for a plain population result
+- Group columns are in `profile_values` (not `group_values`); `metadata[:groups_vars]` identifies them
 
 **Data Integration Framework:**
 ```julia
@@ -104,17 +104,19 @@ predictions_result = population_margins(model, data; type=:predictions)  # Retur
 effects_result.estimates          # Vector{Float64} of marginal effects
 effects_result.standard_errors    # Vector{Float64} of standard errors
 effects_result.variables          # Vector{String} of variable names
-effects_result.profile_values     # Nothing (for population) or NamedTuple (for profile)
-effects_result.group_values       # Nothing (no groups) or NamedTuple (with groups)
+effects_result.profile_values     # Nothing (plain population result) or NamedTuple (profile, scenarios or groups)
+effects_result.group_values       # Reserved; always Nothing (group columns are in profile_values)
 effects_result.metadata           # Dict{Symbol, Any} with analysis info
 
 # Profile margins have profile_values populated
 profile_result = profile_margins(model, data, means_grid(data); type=:effects)
 profile_result.profile_values     # NamedTuple(x1=[...], x2=[...], ...)
 
-# Grouped analysis has group_values populated
+# Grouped analysis keeps its group columns in profile_values; metadata says which are groups
 grouped_result = population_margins(model, data; type=:effects, groups=:region)
-grouped_result.group_values       # NamedTuple(region=["North", "South", ...])
+grouped_result.profile_values     # NamedTuple(region=["North", "South", ...])
+grouped_result.metadata[:groups_vars]       # [:region]
+Margins.context_columns(grouped_result)     # ([:region], Symbol[]): (groups, scenarios)
 
 # Type-specific DataFrame conversion
 effects_df = DataFrame(effects_result)  # Includes variable/contrast columns
@@ -172,27 +174,42 @@ Margins.jl provides comprehensive support for computing second differences—int
 
 ### Quick Start
 
-```julia
-# Step 1: Compute AMEs across modifier levels
-ames = population_margins(model, data;
-                         scenarios=(treated=[0, 1],),
-                         type=:effects)
+One function covers every case. Give it the fitted model, the data, the focal variable(s) and the
+moderator:
 
-# Step 2: Calculate second differences
-sd = second_differences(ames, :age, :treated, vcov(model))
-DataFrame(sd)
+```julia
+second_differences(model, data, :age, :treated)             # discrete modifier: treated vs not
+second_differences(model, data, [:age, :income], :treated)  # several focal variables
+second_differences(model, data, :age, :income)              # continuous modifier: ∂AME/∂income at mean(income)
+second_differences(model, data, :age, :income; at=[20_000, 50_000])      # at chosen values
+second_differences(model, data, :age, :income; levels=[20_000, 50_000])  # slope between two values
+second_differences(model, data, :age, :treated; profile=(female=[0, 1],)) # separately by female
+second_differences(model, data, :age, :treated; vcov=HC1())              # robust covariance
+```
+
+The modifier type is detected from the data (Bool, 0/1, two-valued, string or categorical →
+discrete; numeric with more than two distinct values → continuous); use
+`modifier_type=:categorical` for an integer-coded categorical modifier. Scenarios, AMEs and
+delta-method standard errors are handled internally. `vcov` takes the same forms as in
+`population_margins` and defaults to `GLM.vcov`.
+
+If you already hold an `EffectsResult` from `population_margins(...; scenarios=..., type=:effects)`,
+the same comparison is available on its rows, with `vcov` defaulting to the covariance the result
+was computed with:
+
+```julia
+ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effects)
+sd = second_differences(ames, :age, :treated)
 ```
 
 ### Available Functions
 
-**Discrete Contrast Approach** (Population-based):
-- **`second_differences()`**: Unified interface (recommended) - handles binary, categorical, and continuous moderators
-- **`second_difference()`**: Binary moderators only (backward compatibility)
-- **`second_differences_pairwise()`**: All pairwise modifier comparisons
-- **`second_differences_all_contrasts()`**: All focal contrasts × all modifier pairs
+- **`second_differences(model, data, variables, modifier; …)`**: the entry point described above.
+- **`second_differences(result, variables, modifier[, vcov])`**: the same on a precomputed result.
 
-**Local Derivative Approach** (Profile-based):
-- **`second_differences_at()`**: Compute ∂AME/∂modifier at specific evaluation points via finite differences
+That is the whole API: the 2.x functions `second_differences_at`, `second_differences_pairwise`,
+`second_differences_all_contrasts`, `second_differences_table` and `second_difference` were removed in 3.0;
+see [Migrating from Margins 2.x](second_differences.md#Migrating-from-Margins-2.x).
 
 For comprehensive coverage including methodological foundation, usage patterns, and interpretation guidance, see [Second Differences](second_differences.md).
 

@@ -32,7 +32,7 @@ using Random
         ames = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
 
         # Test with original function (backward compatibility)
-        sd_orig = second_difference(ames, :x, :treated, Σ)
+        sd_orig = Margins._second_difference(ames, :x, :treated, Σ)
         @test sd_orig.variable == :x
         @test sd_orig.modifier == :treated
         @test sd_orig.modifier_level1 == 0
@@ -44,7 +44,7 @@ using Random
         @test 0 <= sd_orig.p_value <= 1
 
         # Test with new pairwise function
-        sd_df = second_differences_pairwise(ames, :x, :treated, Σ)
+        sd_df = Margins._second_differences_pairwise(ames, :x, :treated, Σ)
         @test nrow(sd_df) == 1  # Binary has only one pairwise contrast
         @test sd_df.variable[1] == :x
         @test sd_df.modifier[1] == :treated
@@ -63,7 +63,7 @@ using Random
         ames = population_margins(model, df; scenarios=(education=["hs", "college", "grad"],), type=:effects)
 
         # Use pairwise function
-        sd_df = second_differences_pairwise(ames, :x, :education, Σ)
+        sd_df = Margins._second_differences_pairwise(ames, :x, :education, Σ)
 
         # Should have 3 pairwise contrasts: (3 choose 2) = 3
         @test nrow(sd_df) == 3
@@ -76,9 +76,12 @@ using Random
         # All should have valid statistics
         @test all(isfinite.(sd_df.second_diff))
         @test all(sd_df.se .>= 0)  # Can be zero if no interaction with modifier
-        @test all(isfinite.(sd_df.statistic))
-        @test all(0 .<= sd_df.p_value .<= 1)
-        @test all(in.(sd_df.significant, Ref([true, false])))
+        # `education` is not in the model, so each difference is zero by construction: zero estimate and
+        # SE, and NaN inference (there is nothing to test)
+        @test all(abs.(sd_df.second_diff) .< 1e-12) && all(sd_df.se .< 1e-12)
+        @test all(isnan, sd_df.statistic) && all(isnan, sd_df.p_value)
+        @test all(isnan, sd_df.ci_lower) && all(isnan, sd_df.ci_upper)
+        @test all(sd_df.significant .== false)
     end
 
     @testset "Continuous Modifier (numeric levels)" begin
@@ -87,7 +90,7 @@ using Random
         ames = population_margins(model, df; scenarios=(age=ages,), type=:effects)
 
         # Use pairwise function with continuous modifier
-        sd_df = second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
+        sd_df = Margins._second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
 
         # Should have 3 pairwise contrasts: (3 choose 2) = 3
         @test nrow(sd_df) == 3
@@ -111,17 +114,17 @@ using Random
     @testset "Auto-detection of modifier type" begin
         # Binary should auto-detect as :binary
         ames_binary = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
-        sd_auto = second_differences_pairwise(ames_binary, :x, :treated, Σ; modifier_type=:auto)
+        sd_auto = Margins._second_differences_pairwise(ames_binary, :x, :treated, Σ; modifier_type=:auto)
         @test sd_auto.modifier_type[1] == :binary
 
         # Categorical should auto-detect as :categorical
         ames_cat = population_margins(model, df; scenarios=(education=["hs", "college", "grad"],), type=:effects)
-        sd_auto = second_differences_pairwise(ames_cat, :x, :education, Σ; modifier_type=:auto)
+        sd_auto = Margins._second_differences_pairwise(ames_cat, :x, :education, Σ; modifier_type=:auto)
         @test sd_auto.modifier_type[1] == :categorical
 
         # Numeric should auto-detect as :continuous
         ames_cont = population_margins(model, df; scenarios=(age=[30, 45, 60],), type=:effects)
-        sd_auto = second_differences_pairwise(ames_cont, :x, :age, Σ; modifier_type=:auto)
+        sd_auto = Margins._second_differences_pairwise(ames_cont, :x, :age, Σ; modifier_type=:auto)
         @test sd_auto.modifier_type[1] == :continuous
     end
 end
@@ -142,18 +145,18 @@ end
     @testset "Error: insufficient modifier levels" begin
         # Only one level - should error
         ames_one = population_margins(model, df; scenarios=(group=[1],), type=:effects)
-        @test_throws ErrorException second_differences_pairwise(ames_one, :x, :group, Σ)
+        @test_throws ErrorException Margins._second_differences_pairwise(ames_one, :x, :group, Σ)
     end
 
     @testset "Error: missing modifier in profile_values" begin
         ames = population_margins(model, df; type=:effects)
-        @test_throws ErrorException second_differences_pairwise(ames, :x, :nonexistent, Σ)
+        @test_throws ErrorException Margins._second_differences_pairwise(ames, :x, :nonexistent, Σ)
     end
 
     @testset "Error: dimension mismatch" begin
         ames = population_margins(model, df; scenarios=(group=[1, 2],), type=:effects)
         Σ_wrong = vcov(model)[1:2, 1:2]  # Wrong dimensions
-        @test_throws ErrorException second_differences_pairwise(ames, :x, :group, Σ_wrong)
+        @test_throws ErrorException Margins._second_differences_pairwise(ames, :x, :group, Σ_wrong)
     end
 end
 
@@ -179,7 +182,7 @@ end
 
     @testset "Second difference should detect interaction" begin
         ames = population_margins(model, df; scenarios=(m_binary=[0, 1],), type=:effects)
-        sd = second_differences_pairwise(ames, :x, :m_binary, Σ)
+        sd = Margins._second_differences_pairwise(ames, :x, :m_binary, Σ)
 
         # The second difference should be non-zero and statistically significant
         @test nrow(sd) == 1
@@ -211,7 +214,7 @@ end
     @testset "Slope scaling is correct" begin
         ages = [25.0, 35.0, 55.0]
         ames = population_margins(model, df; scenarios=(age=ages,), type=:effects)
-        sd = second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
+        sd = Margins._second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
 
         # Check each pairwise slope
         for row in eachrow(sd)
@@ -230,10 +233,10 @@ end
         ames = population_margins(model, df; scenarios=(age=ages,), type=:effects)
 
         # Get slope
-        sd_cont = second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
+        sd_cont = Margins._second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:continuous)
 
         # Also compute as categorical (no scaling)
-        sd_cat = second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:categorical)
+        sd_cat = Margins._second_differences_pairwise(ames, :x, :age, Σ; modifier_type=:categorical)
 
         # SE relationship: SE_slope = SE_diff / |age_diff|
         age_diff = 20.0
@@ -269,7 +272,7 @@ end
         ames = population_margins(model, df; scenarios=(region=["north", "south", "west"],), type=:effects)
 
         # Should return 3 pairwise region comparisons (south-north, west-north, west-south)
-        sd = second_differences_all_contrasts(ames, :x, :region, Σ)
+        sd = Margins._second_differences_all_contrasts(ames, :x, :region, Σ)
 
         @test nrow(sd) == 3  # 3 pairwise region comparisons
         @test sd.modifier_type[1] == :categorical
@@ -296,7 +299,7 @@ end
         ames2 = population_margins(model2, df2; scenarios=(region=["north", "south", "west"],), type=:effects)
 
         # Should return 3 pairwise region comparisons for the treated effect
-        sd2 = second_differences_all_contrasts(ames2, :treated, :region, Σ2)
+        sd2 = Margins._second_differences_all_contrasts(ames2, :treated, :region, Σ2)
 
         @test nrow(sd2) == 3  # 3 pairwise region comparisons
         @test all(isfinite.(sd2.second_diff))
@@ -326,7 +329,7 @@ end
         sd_wrapper = second_differences(ames, :x, :treated, Σ)
 
         # Using direct function
-        sd_direct = second_differences_pairwise(ames, :x, :treated, Σ)
+        sd_direct = Margins._second_differences_pairwise(ames, :x, :treated, Σ)
 
         # Should produce same results
         @test sd_wrapper.second_diff == sd_direct.second_diff
@@ -341,7 +344,7 @@ end
         sd_wrapper = second_differences(ames, :x, :education, Σ)
 
         # Using direct function
-        sd_direct = second_differences_pairwise(ames, :x, :education, Σ)
+        sd_direct = Margins._second_differences_pairwise(ames, :x, :education, Σ)
 
         # Should produce same results (3 pairwise contrasts)
         @test nrow(sd_wrapper) == 3
@@ -429,11 +432,11 @@ end
             @test all(sd.modifier_type .== :continuous)
         end
 
-        @testset "second_differences_table with Multiple Variables" begin
+        @testset "second_differences with Multiple Variables (table form)" begin
             ames = population_margins(model, df; scenarios=(treated=[0, 1],), type=:effects)
 
             # Test table wrapper
-            sd = second_differences_table(ames, [:x1, :x2, :x3], :treated, Σ)
+            sd = second_differences(ames, [:x1, :x2, :x3], :treated, Σ)
             @test nrow(sd) == 3
             @test hasproperty(sd, :significant)
             @test all(sd.significant .== (sd.p_value .< 0.05))

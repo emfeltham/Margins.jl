@@ -48,13 +48,14 @@ using CategoricalArrays
         @test contrasts[1] != "dy/dx"  # Should be "true - false" or similar
 
         # This should now work with the fix (auto-detects the contrast)
-        sd = second_differences(ames, :treated_cat, :region, Σ; all_contrasts=true)
+        sd = second_differences(ames, :treated_cat, :region, Σ; all_contrasts=true, warn=false)
 
         # Should have 3 pairwise region comparisons
         @test nrow(sd) == 3
         @test all(isfinite.(sd.second_diff))
         @test all(sd.se .>= 0)
-        @test all(0 .<= sd.p_value .<= 1)
+        # region is not in the model, so these are structural zeros (NaN inference); otherwise p is in [0, 1]
+        @test all(isnan.(sd.p_value) .| (0 .<= sd.p_value .<= 1))
 
         println("✓ Boolean variable auto-detection works!")
         println("  Found contrast: ", contrasts[1])

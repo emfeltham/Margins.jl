@@ -198,7 +198,7 @@ function population_margins(
     try
         # Handle scenarios/groups parameters for counterfactual scenarios and grouping
         if !isnothing(scenarios) || !isnothing(groups)
-            return _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov)
+            return _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov, engine.Σ)
         end
     
         if type === :effects
@@ -220,7 +220,7 @@ function population_margins(
             variables = df.variable  # The "x" in dy/dx
             terms = df.contrast
         
-            return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov)
+            return _attach_inference_df!(EffectsResult(estimates, standard_errors, variables, terms, nothing, nothing, G, metadata), model, vcov, engine.Σ)
         else # :predictions  
             df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)  # → AAP
             metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
@@ -238,7 +238,7 @@ function population_margins(
             estimates = df.estimate
             standard_errors = df.se
         
-            return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov)
+            return _attach_inference_df!(PredictionsResult(estimates, standard_errors, nothing, nothing, G, metadata), model, vcov, engine.Σ)
         end
     finally
         _checkin_engine!(engine_key, engine)

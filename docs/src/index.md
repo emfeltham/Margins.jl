@@ -145,22 +145,15 @@ population_margins(
 ### Second Differences (Interaction Effects)
 
 ```julia
-# Compute AMEs across modifier levels
-ames = population_margins(
-  model, data; scenarios = (treated = [0,1],), type = :effects
-)
+# Does the effect of age depend on treatment?
+sd = second_differences(model, data, :age, :treated)
 
-# Calculate second differences (does X's effect depend on treatment?)
-sd = second_differences(ames, :age, :treated, vcov(model))
-DataFrame(sd)
+# Categorical moderators with multiple levels: all pairwise comparisons
+sd = second_differences(model, data, :income, :education)
 
-# Categorical moderators with multiple levels
-ames = population_margins(
-  model, data;
-  scenarios = (education = ["hs","college","grad"],),
-  type = :effects
-)
-sd = second_differences(ames, :income, :education, vcov(model))
+# Continuous moderator: ∂AME/∂income at the mean, or at chosen values
+sd = second_differences(model, data, :age, :income)
+sd = second_differences(model, data, :age, :income; at = [20_000, 50_000])
 ```
 
 ## Integration with JuliaStats

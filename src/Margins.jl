@@ -127,9 +127,31 @@ include("profile/reference_grids.jl")
 include("second_differences/contrasts.jl")
 include("second_differences/at_point.jl")
 include("second_differences/utilities.jl")
+include("second_differences/model_interface.jl")
 
-export second_differences, second_difference, second_differences_all_contrasts,
-       second_differences_table, second_differences_pairwise,
-       second_differences_at
+export second_differences
+
+# Second-difference functions of Margins 2.x that were removed in 3.0, with their replacements.
+# Calling one gives an UndefVarError; this hint says what to use instead.
+const REMOVED_SECOND_DIFFERENCE_FUNCTIONS = Dict(
+    :second_differences_at => "second_differences(model, data, variables, modifier; at=…) " *
+        "(the vcov argument is now the keyword `vcov=`)",
+    :second_differences_pairwise => "second_differences(result, variables, modifier; all_contrasts=false, contrast=…)",
+    :second_differences_all_contrasts => "second_differences(result, variables, modifier)",
+    :second_differences_table => "second_differences(result, variables, modifier)",
+    :second_difference => "second_differences(result, variables, modifier; include_gradients=true) " *
+        "(it returns a DataFrame row, not a NamedTuple)",
+)
+
+function __init__()
+    if isdefined(Base, :Experimental) && isdefined(Base.Experimental, :register_error_hint)
+        Base.Experimental.register_error_hint(UndefVarError) do io, exc
+            replacement = get(REMOVED_SECOND_DIFFERENCE_FUNCTIONS, exc.var, nothing)
+            isnothing(replacement) && return
+            print(io, "\n`", exc.var, "` was removed in Margins 3.0. Use ", replacement,
+                  ". See the CHANGELOG and the Second Differences documentation for the migration.")
+        end
+    end
+end
 
 end # module

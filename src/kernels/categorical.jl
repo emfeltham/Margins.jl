@@ -6,24 +6,8 @@
 # `PredScale` (link: Δη = (X₁ − X₀)'β; response: g⁻¹(η₁) − g⁻¹(η₀)), with its delta-method
 # gradient and standard error.
 
-using FormulaCompiler: contrast_modelrow!, reset_all_counterfactuals!, update_counterfactual_for_var!
+using FormulaCompiler: contrast_modelrow!, level_modelrow!
 using LinearAlgebra: dot
-
-"""
-    _level_modelrow!(buf, evaluator::ContrastEvaluator, row, var, level) -> buf
-
-The model row at `row` with `var` set to `level`, evaluated exactly as
-`contrast_modelrow!` evaluates each endpoint of a contrast (all counterfactuals reset
-before and after), so the batched kernel below reproduces its rows bitwise.
-"""
-@inline function _level_modelrow!(buf::Vector{Float64}, evaluator::ContrastEvaluator,
-                                  row::Int, var::Symbol, level)
-    reset_all_counterfactuals!(evaluator.counterfactuals)
-    update_counterfactual_for_var!(evaluator, var, row, level)
-    evaluator.compiled(buf, evaluator.data_counterfactual, row)
-    reset_all_counterfactuals!(evaluator.counterfactuals)
-    return buf
-end
 
 # ŷ(X₀) and dŷ/dη at X₀, which every contrast from the same level shares within a row
 # (the link scale needs neither: its contrast is linear in X₁ − X₀)
@@ -151,10 +135,10 @@ function categorical_contrast_ame_batch!(
         for k in 1:n_pairs
             pair = contrast_pairs[k]
             if k == 1 || pair.level1 != contrast_pairs[k - 1].level1
-                _level_modelrow!(x₀, evaluator, row, var, pair.level1)
+                level_modelrow!(x₀, evaluator, row, var, pair.level1)
                 base = _contrast_base(s, x₀, β)
             end
-            _level_modelrow!(x₁, evaluator, row, var, pair.level2)
+            level_modelrow!(x₁, evaluator, row, var, pair.level2)
             contrast_buf .= x₁ .- x₀
             results_ame[k] += w * _contrast_row!(view(gradient_matrix, k, :), w, contrast_buf,
                                                  x₀, x₁, base, β, s)

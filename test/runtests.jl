@@ -61,6 +61,11 @@ end
     include("regression/test_hierarchical_partial_typical.jl")
     include("test_second_differences.jl")
     include("test_second_differences_at.jl")
+    include("test_second_differences_regressions.jl")
+    include("test_second_differences_model_interface.jl")
+    include("test_second_differences_api.jl")
+    include("test_second_differences_structural.jl")
+    include("test_second_differences_review.jl")
     include("test_profile_pairwise.jl")
 end
 

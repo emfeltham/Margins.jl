@@ -84,9 +84,10 @@ src/
 │   ├── data_conversion.jl            # Data type conversions
 │   └── typical_values.jl             # Representative value computation
 ├── second_differences/               # Second differences (interaction effects)
-│   ├── contrasts.jl                  # second_differences(), pairwise, all_contrasts
-│   ├── at_point.jl                   # second_differences_at() (profile-based local derivatives)
-│   └── utilities.jl                  # Shared utilities for second differences
+│   ├── model_interface.jl            # second_differences(model, data, vars, modifier; ...) entry point
+│   ├── contrasts.jl                  # second_differences(result, ...) and its engines (_pairwise, _all_contrasts, _second_difference)
+│   ├── at_point.jl                   # _second_differences_local() (local derivative engine, finite differences)
+│   └── utilities.jl                  # Output schema, EffectIndex / _modifier_rows (row selection), vcov defaults
 └── features/                          # Advanced features
     └── averaging.jl                   # Profile averaging with delta-method SEs
 ```
@@ -215,17 +216,20 @@ Profile margins are **O(1) with respect to dataset size** — they evaluate only
 ### Second Differences Flow
 
 ```
-# Discrete approach (population-based):
-population_margins(model, data; scenarios=(z=[0,1],), type=:effects)
-    → EffectsResult with AMEs at each modifier level
-        → second_differences(ames, :x, :z, vcov(model))
-            → Delta-method SE from gradient differences
-
-# Local derivative approach (profile-based):
-second_differences_at(model, data, :x, :z, vcov(model); at=40)
-    → Finite difference: AME(z=40+δ) - AME(z=40-δ) / 2δ
-    → Delta-method SE from gradient information
+second_differences(model, data, :x, :z; levels=, at=, profile=, vcov=)     # model_interface.jl
+    │  modifier type from the data (discrete vs continuous)
+    ├─ discrete modifier, or continuous with `levels`:
+    │    population_margins(model, data; scenarios=(z=levels,), type=:effects)   # per profile stratum
+    │        → EffectsResult (AMEs + gradients + metadata[:vcov])
+    │            → _effect_index (the one place string labels are read) → _modifier_rows
+    │              (select rows; reject other varying scenario/group columns;
+    │              order numeric levels) → pairwise differences, delta-method SE from gradient
+    │              differences: sqrt((g₂-g₁)' Σ (g₂-g₁)); df from the Σ used (_second_difference_dof)
+    └─ continuous modifier (default):
+         _second_differences_local(...)  → AMEs at at±δ → (AME₊ - AME₋)/2δ via the pairwise engine
 ```
+
+The result-based method (`second_differences(result, …)`) exposes the middle step for users who already hold an `EffectsResult`.
 
 ## Backend Selection
 

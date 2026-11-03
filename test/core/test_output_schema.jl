@@ -160,10 +160,10 @@ using Margins
         ame_3 = population_margins(m, d; vars=[:x], scenarios=(z=[-1.0, 0.0, 1.0],))
         sd_cont = second_differences(ame_3, :x, :z, vcov(m))                # continuous
         sd_cat = second_differences(ame_3, :x, :z, vcov(m); modifier_type=:categorical)
-        sd_pw = second_differences_pairwise(ame_bin, :x, :t, vcov(m))      # binary via pairwise
-        sd_all = second_differences_all_contrasts(ame_bin, :g, :t, vcov(m))
-        sd_at = second_differences_at(m, d, :x, :z, vcov(m))
-        sd_at_f = second_differences_at(m, d, :x, :z, GLM.vcov)
+        sd_pw = Margins._second_differences_pairwise(ame_bin, :x, :t, vcov(m))      # binary via pairwise
+        sd_all = Margins._second_differences_all_contrasts(ame_bin, :g, :t, vcov(m))
+        sd_at = Margins._second_differences_local(m, d, :x, :z, vcov(m))
+        sd_at_f = Margins._second_differences_local(m, d, :x, :z, GLM.vcov)
 
         for sd in (sd_bin, sd_cont, sd_cat, sd_pw, sd_all)
             @test propertynames(sd) == cols
@@ -190,8 +190,8 @@ using Margins
         @test sd_at.modifier_level2[1] - sd_at.modifier_level1[1] ≈ 2 * sd_at.delta_used[1]
 
         # single-row API
-        row = second_difference(ame_bin, :x, :t, vcov(m))
-        @test keys(row) == Tuple(cols)
+        row = Margins._second_difference(ame_bin, :x, :t, vcov(m))
+        @test keys(row) == (Tuple(cols)..., :gradient)   # the single-row API keeps the gradient
         @test row.modifier_type == :binary && row.df == dfr
 
         # logit: z

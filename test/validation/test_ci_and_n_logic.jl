@@ -43,16 +43,16 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         res = population_margins(m, df; type=:effects, vars=[:x], ci_alpha=0.10)  # 90% CI
         df_result = DataFrame(res; format=:confidence)
         
-        @test :lower in propertynames(df_result)  # confidence table uses :lower/:upper
-        @test :upper in propertynames(df_result)
-        @test :ci_lower ∉ propertynames(df_result)  # not :ci_lower/:ci_upper
-        @test :ci_upper ∉ propertynames(df_result)
+        @test :ci_lower in propertynames(df_result)  # same names as every other table (3.0)
+        @test :ci_upper in propertynames(df_result)
+        @test :lower ∉ propertynames(df_result)
+        @test :upper ∉ propertynames(df_result)
         
         # Should use 90% CI (t(dof_residual) quantile for an lm)
         # Note: confidence format doesn't include :se column, so we need to get it from standard format
         df_std = DataFrame(res; format=:standard)
         expected_half_width = quantile(TDist(dof_residual(m)), 0.95) .* df_std.se
-        actual_half_width = (df_result.upper .- df_result.lower) ./ 2
+        actual_half_width = (df_result.ci_upper .- df_result.ci_lower) ./ 2
         @test all(abs.(actual_half_width .- expected_half_width) .< 1e-3)
     end
     
@@ -154,10 +154,10 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         
         # Profile format should have CI columns
         df_profile = DataFrame(res; format=:profile)
-        @test :lower in propertynames(df_profile)
-        @test :upper in propertynames(df_profile)
-        @test all(df_profile.lower .< df_profile.estimate)
-        @test all(df_profile.estimate .< df_profile.upper)
+        @test :ci_lower in propertynames(df_profile)
+        @test :ci_upper in propertynames(df_profile)
+        @test all(df_profile.ci_lower .< df_profile.estimate)
+        @test all(df_profile.estimate .< df_profile.ci_upper)
     end
     
     @testset "CI Calculation Function Correctness" begin

@@ -82,14 +82,16 @@ using Margins: PredScale, LinkScale, ResponseScale, predscale, yhat, yhat2,
             @test ŷk ≈ ŷ[rows] rtol = 1e-13
             @test G ≈ dŷ[rows] .* X[rows, :] rtol = 1e-13
 
-            # zero allocation
-            average_prediction!(g, x, compiled, data, β, s, 1:n, weights, tw)
-            @test (@allocated average_prediction!(g, x, compiled, data, β, s, 1:n, weights, tw)) == 0
-            @test (@allocated average_prediction!(g, x, compiled, data, β, s, 1:n, nothing, Float64(n))) == 0
-            predict_row!(x, compiled, data, β, s, 3)
-            @test (@allocated predict_row!(x, compiled, data, β, s, 3)) == 0
-            predict_rows!(ŷk, G, x, compiled, data, β, s, rows)
-            @test (@allocated predict_rows!(ŷk, G, x, compiled, data, β, s, rows)) == 0
+            # zero allocation (measured inside functions: on Julia 1.10, @allocated at testset
+            # scope can count the boxing of the returned value)
+            alloc_avg(w, tw) = @allocated average_prediction!(g, x, compiled, data, β, s, 1:n, w, tw)
+            alloc_row(r) = @allocated predict_row!(x, compiled, data, β, s, r)
+            alloc_rows(rs) = @allocated predict_rows!(ŷk, G, x, compiled, data, β, s, rs)
+            alloc_avg(weights, tw); alloc_avg(nothing, Float64(n)); alloc_row(3); alloc_rows(rows)
+            @test alloc_avg(weights, tw) == 0
+            @test alloc_avg(nothing, Float64(n)) == 0
+            @test alloc_row(3) == 0
+            @test alloc_rows(rows) == 0
         end
     end
 end

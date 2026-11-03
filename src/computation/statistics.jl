@@ -96,9 +96,48 @@ _inference_dist(df::Real) = isfinite(df) ? TDist(df) : Normal()
 _result_df(mr)::Float64 = Float64(get(mr.metadata, :df, Inf))
 
 # Store the inference df on a result's metadata (called once by the public entry points).
-function _attach_inference_df!(result, model, vcov)
+function _attach_inference_df!(result, model, vcov, Σ=nothing)
     result.metadata[:df] = _inference_df(model, vcov)
+    # The covariance matrix behind this result's standard errors, so that second differences
+    # can default to it (`_stored_vcov`).
+    isnothing(Σ) || (result.metadata[:vcov] = Matrix{Float64}(Σ))
+    # For a linear regression also keep the model-based covariance and residual df, so that
+    # second differences can decide t vs z from the covariance matrix they are *given*
+    # (see `_second_difference_dof`), not from the one this result was computed with.
+    if _is_linear_regression(model)
+        d = Float64(GLM.dof_residual(model))
+        if isfinite(d) && d > 0
+            result.metadata[:model_df] = d
+            result.metadata[:model_vcov] = Matrix{Float64}(GLM.vcov(model))
+        end
+    end
     return result
+end
+
+# The covariance matrix a result was computed with (second-difference functions default to it).
+function _stored_vcov(ame_result)::Matrix{Float64}
+    V = get(ame_result.metadata, :vcov, nothing)
+    isnothing(V) && error("This result does not record the covariance matrix it was computed " *
+                          "with; pass `vcov` explicitly.")
+    return V
+end
+
+# Inference df for a second difference computed with covariance `Σ`: t with the residual df
+# when `Σ` is the linear model's own covariance, z (`Inf`) for any other matrix or when the
+# result carries no linear-model information (same rule as `_inference_df`).
+function _second_difference_dof(ame_result, Σ::AbstractMatrix)::Float64
+    d = get(ame_result.metadata, :model_df, Inf)
+    V = get(ame_result.metadata, :model_vcov, nothing)
+    (isfinite(d) && V !== nothing && size(V) == size(Σ) && Σ == V) ? Float64(d) : Inf
+end
+
+# Make the second-difference df rule agree with `_inference_df(model, vcov)` for the covariance the
+# user gave: drop the recorded linear-model information when that rule says z (e.g. `vcov = m -> vcov(m)`).
+function _align_second_difference_df!(ame_result, model, vcov)
+    isfinite(_inference_df(model, vcov)) && return ame_result
+    delete!(ame_result.metadata, :model_df)
+    delete!(ame_result.metadata, :model_vcov)
+    return ame_result
 end
 
 """

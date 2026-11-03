@@ -13,11 +13,6 @@ using Statistics: mean, median, std
 # - Larger values increase approximation bias from non-linearity
 const DEFAULT_DELTA_FACTOR = 0.01
 
-# Minimum absolute delta to prevent catastrophic cancellation
-# When δ is too small, (f(x+δ) - f(x-δ)) loses significant digits to floating-point error
-# 1e-10 is well above machine epsilon (≈2e-16) while still allowing fine-grained derivatives
-const MIN_ABSOLUTE_DELTA = 1e-10
-
 # Relative delta factor for large evaluation points (|eval_pt| > 1)
 # Ensures δ ≥ |eval_pt| × 1e-8 to maintain numerical distinctness of (eval_pt ± δ)
 # Stays well above machine epsilon while scaling proportionally with magnitude
@@ -25,12 +20,21 @@ const RELATIVE_DELTA_FACTOR = 1e-8
 
 # Minimum delta for small evaluation points (|eval_pt| ≤ 1)
 # Prevents δ → 0 when eval_pt ≈ 0, which would cause division issues in slope calculation
-# Slightly larger than MIN_ABSOLUTE_DELTA to ensure robustness near zero
+# Points are checked for distinctness with `pt_minus < pt_plus`, not `≈`
 const SMALL_VALUE_MIN_DELTA = 1e-9
 
 # ============================================================================
-# Helper Functions for second_differences_at
+# Helper Functions for _second_differences_local
 # ============================================================================
+
+# Covariance matrix for `vcov` given as a matrix, a function of the model (e.g. `GLM.vcov`) or a
+# CovarianceMatrices estimator (`HC1()`, …), the same forms `population_margins` accepts.
+function _covariance_matrix(model, vcov)::Matrix{Float64}
+    vcov isa AbstractMatrix && return Matrix{Float64}(vcov)
+    vcov isa Function && return Matrix{Float64}(vcov(model))
+    cm = Base.require(Main, :CovarianceMatrices)
+    return Matrix{Float64}(Base.invokelatest(cm.vcov, vcov, model))
+end
 
 """
     _adjust_delta_for_eval_point(eval_pt::Real, δ_raw::Float64)::Float64
@@ -103,7 +107,7 @@ function _build_finite_diff_scenarios(
 
     # Validate that perturbations produced numerically distinct points
     # If this fails, floating-point precision is insufficient for the requested δ
-    if pt_minus ≈ pt_plus
+    if !(pt_minus < pt_plus)
         error("Cannot compute finite difference at eval_point=$eval_pt with δ=$δ. " *
               "Points ($pt_minus, $pt_plus) are numerically identical. " *
               "Solutions: (1) Specify a larger delta (try delta=1e-6 or larger), " *
@@ -125,10 +129,11 @@ end
         ames::EffectsResult,
         vars_vec::Vector{Symbol},
         modifier::Symbol,
-        vcov_matrix::Matrix{Float64},
+        vcov_matrix::AbstractMatrix{<:Real},
         eval_pt::Real,
         δ::Float64,
-        profile_point::NamedTuple
+        profile_point::NamedTuple,
+        alpha::Real
     )::Vector{NamedTuple}
 
 Process all variables and their contrasts to extract second difference results.
@@ -152,44 +157,38 @@ function _process_variable_contrasts(
     ames::EffectsResult,
     vars_vec::Vector{Symbol},
     modifier::Symbol,
-    vcov_matrix::Matrix{Float64},
+    vcov_matrix::AbstractMatrix{<:Real},
     eval_pt::Real,
     δ::Float64,
-    profile_point::NamedTuple
+    profile_point::NamedTuple,
+    alpha::Real=0.05
 )::Vector{NamedTuple}
     results = NamedTuple[]
+    idx = _effect_index(ames)
 
     for var in vars_vec
         # Identify all contrasts for this variable
         # Continuous variables have single "dy/dx" contrast
         # Categorical variables have multiple contrasts (e.g., "level2 - level1")
-        var_str = string(var)
-        var_indices = findall(i -> ames.variables[i] == var_str, 1:length(ames.estimates))
-
-        if isempty(var_indices)
-            available_vars = unique(ames.variables)
-            error("Variable :$var not found in AME results. " *
-                  "This may indicate the variable was not included in the model or scenarios. " *
-                  "Variables found in AME results: $(join(available_vars, ", "))")
-        end
-
-        # Get unique contrasts for this variable
-        unique_contrasts = unique(ames.terms[var_indices])
+        _require_variable(idx, var)
+        unique_contrasts = _variable_contrasts(idx, var)
 
         # For each contrast, compute second difference (interaction effect)
         # This measures how the focal variable's effect changes with the modifier
         for contrast in unique_contrasts
-            # Use second_differences_pairwise to compute slope from the two AME points
+            # Use _second_differences_pairwise to compute slope from the two AME points
             # modifier_type=:continuous ensures proper scaling by modifier distance
-            second_diff_result = second_differences_pairwise(
+            second_diff_result = _second_differences_pairwise(
                 ames, var, modifier, vcov_matrix;
                 contrast = contrast,
-                modifier_type = :continuous
+                modifier_type = :continuous,
+                alpha = alpha,
+                include_gradients = true
             )
 
             if nrow(second_diff_result) == 0
                 # This should never happen with valid inputs - indicates a bug or data corruption
-                error("second_differences_pairwise() returned empty result for variable :$var " *
+                error("_second_differences_pairwise() returned empty result for variable :$var " *
                       "(contrast: '$contrast') at modifier :$modifier = $eval_pt. " *
                       "This indicates an internal error. Please report this issue with a reproducible example.")
             end
@@ -216,188 +215,29 @@ end
 # Main Function
 # ============================================================================
 
-"""
-    second_differences_at(
-        model, data, variables, modifier, vcov;
-        at=:mean, profile=NamedTuple(), delta=:auto, scale=:response, contrasts=:baseline
-    )
-
-Compute local derivative of marginal effects with respect to a continuous modifier
-at a specified profile (holding other variables fixed).
-
-Uses finite differences around a specified point to estimate ∂AME/∂modifier at that point.
-Supports:
-- **Multiple focal variables**: Compute derivatives for several effects simultaneously
-- **Profile specification**: Hold other variables constant while varying only the modifier
-- **Flexible contrasts**: Choose baseline or pairwise contrasts for categorical variables
-
-# Arguments
-- `model::RegressionModel`: Fitted model
-- `data`: Data frame used to fit the model
-- `variables::Union{Symbol,Vector{Symbol}}`: Focal variable(s) to compute derivatives for
-  - Single Symbol: One focal variable
-  - Vector of Symbols: Multiple focal variables (all get same modifier)
-- `modifier::Symbol`: Continuous modifier variable (the variable to differentiate with respect to)
-- `vcov`: Parameter covariance matrix or function
-  - `Matrix{Float64}`: Pre-computed covariance matrix
-  - `Function`: Covariance function (e.g., `GLM.vcov`) - recommended for mixed models
-
-# Keyword Arguments
-- `at::Union{Symbol,Real,Vector,NamedTuple}`: Where to evaluate the derivative for the modifier
-  - `:mean`: At mean(modifier) [default]
-  - `:median`: At median(modifier)
-  - Numeric value: At specified modifier value
-  - Vector of values: Multiple evaluation points for modifier
-  - NamedTuple: Explicit profile including modifier value (e.g., `(income=50000, age=40, region="north")`)
-- `profile::NamedTuple`: Additional variables to hold fixed (NOT varied in finite difference)
-  - Default: `NamedTuple()` (no additional variables fixed)
-  - **Scalar values**: `(age=40, region="north")` - holds age and region constant while varying modifier
-  - **Vector values**: `(socio4=[false, true])` - stratified estimation at each level (Cartesian product)
-  - Combined with `at` to create full evaluation profile
-- `delta::Union{Symbol,Real}`: Step size for finite difference on the modifier
-  - `:auto`: 0.01 * sd(modifier) [default], automatically adjusted if too small
-  - Numeric value: Explicit step size (recommended for inverse/transformed variables)
-  - **Note**: For inverse or transformed modifiers with low variance, specify explicit delta
-- `scale::Symbol`: Scale for predictions (:link or :response)
-- `contrasts::Symbol`: Contrast coding for categorical focal variables
-  - `:baseline`: Each level minus baseline (default) - produces K-1 contrasts for K levels
-  - `:pairwise`: All pairwise comparisons - produces K(K-1)/2 contrasts for K levels
-  - Only affects categorical variables; continuous variables unaffected
-
-# Returns
-DataFrame with the unified second-difference columns (`Margins.SECOND_DIFFERENCE_COLUMNS`,
-the same as `second_differences`), followed by the evaluation columns:
-- `variable`: Focal variable name
-- `contrast`: Contrast description (for categorical variables, e.g., "Protestant - Catholic"; "dy/dx" for continuous)
-- `modifier`: Modifier variable name
-- `modifier_type`: Always `:continuous`
-- `modifier_level1`, `modifier_level2`: `eval_point - delta_used` and `eval_point + delta_used`
-- `ame_at_level1`, `ame_at_level2`: focal effect at those two modifier values
-- `second_diff`: ∂AME/∂modifier at `eval_point` (per unit change in modifier; was `derivative` before 3.0)
-- `se`: Standard error of `second_diff`
-- `statistic`, `df`: `second_diff / se` and its degrees of freedom (t when finite, z when `Inf`;
-  `dof_residual(model)` for a linear model whose `vcov` is `GLM.vcov` or equal to `vcov(model)`)
-- `p_value`: P-value for H₀: second_diff = 0
-- `significant`: `p_value < 0.05`
-- `gradient`: Gradient vector (∂second_diff/∂β) for custom variance calculations
-- `eval_point`: Point where the derivative is evaluated (for modifier)
-- `delta_used`: Actual delta used for FD
-- Additional columns for each variable in `profile` (if specified)
-
-**Note**: For categorical focal variables, one row is returned per contrast × eval_point × profile combination
-
-# Examples
-```julia
-using Margins, GLM, DataFrames
-
-# Local derivative at mean (simple case)
-sd = second_differences_at(model, df, :education, :income, vcov(model))
-# → Derivative of education effect w.r.t. income, evaluated at mean(income)
-
-# At median with custom step size
-sd = second_differences_at(
-    model, df, :education, :income, vcov(model);
-    at=:median, delta=1000
-)
-
-# At specific modifier value with other variables held constant
-sd = second_differences_at(
-    model, df, :education, :income, vcov(model);
-    at=50000, # Evaluate at income=\$50k
-    profile = (
-        age=40, # Hold age=40 fixed
-        region="north" # Hold region="north" fixed
-    ) 
-) 
-# → "At income=\$50k (with age=40, region=north), how does education effect change per \$1k?"
-
-# Multiple profiles: vary modifier, hold others constant
-sd = second_differences_at(
-    model, df, :education, :distance, vcov(model);
-    at=[0.1, 0.5, 0.9],    # Evaluate at 3 distance values
-    profile = (
-        age=45, # Hold age constant
-        income=60000 # Hold income constant
-    )
-)
-# → 3 rows, one per distance evaluation point
-
-# Full explicit profile (NamedTuple for `at`)
-sd = second_differences_at(model, df, :education, :income, vcov(model);
-                          at=(income=50000, age=40, region="north"))
-# → Equivalent to: at=50000, profile=(age=40, region="north")
-
-# Multiple focal variables (NEW: compare how different effects vary with modifier)
-sd = second_differences_at(model, df, [:education, :experience, :gender], :age, vcov(model);
-                          at=:mean)
-# → 3 rows: derivatives of education, experience, and gender effects w.r.t. age
-# → Compare which effects vary most with age
-
-# Multiple variables with profile
-sd = second_differences_at(model, df, [:x1, :x2, :x3], :income, vcov(model);
-                          at=50000,
-                          profile=(age=40, region="north"))
-# → How do x1, x2, x3 effects vary with income at this specific profile?
-
-# Multiple variables × multiple evaluation points
-sd = second_differences_at(model, df, [:education, :experience], :age, vcov(model);
-                          at=[30, 45, 60])
-# → 6 rows: (education, experience) × (age=30, 45, 60)
-# → Compare education vs experience effect variation across age ranges
-
-# Vector-valued profile (stratified estimation)
-sd = second_differences_at(model, df, :education, :income, vcov(model);
-                          at=50000,
-                          profile=(socio4=[false, true],       # Separate estimation for each socio4 level
-                                  region="north"))
-# → 2 rows: one for socio4=false, one for socio4=true
-# → "At income=\$50k (region=north), how does education effect vary with socio4?"
-
-# Multiple profile vectors (Cartesian product)
-sd = second_differences_at(model, df, :education, :income, vcov(model);
-                          at=[40000, 60000],
-                          profile=(socio4=[false, true],
-                                  gender=["male", "female"]))
-# → 8 rows: 2 income levels × 2 socio4 levels × 2 gender levels
-# → Stratified analysis across all combinations
-
-# Pairwise contrasts for categorical variable (3 levels)
-sd = second_differences_at(model, df, :religion, :age, vcov(model);
-                          contrasts=:pairwise)
-# → 3 rows with baseline contrasts=:baseline (default): Protestant - Catholic, None - Catholic
-# → 3 rows with contrasts=:pairwise: Protestant - Catholic, None - Catholic, None - Protestant
-# → Pairwise provides all K(K-1)/2 comparisons instead of just K-1 baseline comparisons
-
-# Compare baseline vs pairwise contrasts
-sd_baseline = second_differences_at(model, df, :religion, :age, vcov(model); contrasts=:baseline)
-sd_pairwise = second_differences_at(model, df, :religion, :age, vcov(model); contrasts=:pairwise)
-# → baseline: 2 rows (K-1 contrasts for K=3 levels)
-# → pairwise: 3 rows (K(K-1)/2 = 3 contrasts for K=3 levels)
-```
-
-# Statistical Notes
-- Uses two-point finite difference: (AME(at + δ) - AME(at - δ)) / (2δ)
-- Delta method SE: SE(slope) = SE(AME₊ - AME₋) / (2δ)
-- Symmetric FD provides better approximation than one-sided
-- Choice of δ trades off bias vs variance
-- Profile variables are held **constant** - only modifier is varied by ± δ
-
-# See Also
-- `second_differences()`: For discrete contrasts between pre-computed AME values
-- `second_differences_pairwise()`: All pairwise modifier comparisons
-"""
-function second_differences_at(
+# Engine for a local derivative ∂AME/∂modifier (symmetric finite difference of the AME at
+# `at ± δ`, with the `profile` variables held fixed). Public entry point:
+# `second_differences(model, data, variables, modifier; at=…)`, whose docstring describes the
+# keywords (`at`, `profile`, `delta`, `scale`, `contrasts`, `alpha`, `p_adjust`, `include_gradients`).
+# Here `vcov` is required and may be a matrix, a function of the model, or a CovarianceMatrices estimator.
+function _second_differences_local(
     model::RegressionModel,
     data,
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
-    vcov; # This can be Matrix{Float64} or Function
-    at::Union{Symbol,Real,Vector,NamedTuple}=:mean,
+    vcov; # An AbstractMatrix or a Function returning one
+    at::Union{Symbol,Real,AbstractVector,NamedTuple}=:mean,
     profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto,
     scale::Symbol=:response,
-    contrasts::Symbol=:baseline
+    contrasts::Symbol=:baseline,
+    alpha::Real=0.05,
+    p_adjust::Symbol=:none,
+    include_gradients::Bool=false
 )
+    _check_p_adjust(p_adjust)
+    0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
+
     # 1. Validate inputs
     if !hasproperty(data, modifier)
         available_cols = join(string.(names(data)), ", ")
@@ -411,10 +251,17 @@ function second_differences_at(
               "Must be :baseline or :pairwise.")
     end
 
+    modifier in keys(profile) && error("`profile` contains the modifier :$modifier; the modifier is " *
+        "varied by the calculation (use `at` to choose where). Remove it from `profile`.")
+
     modifier_vals = data[!, modifier]
+    if any(x -> x isa Bool, skipmissing(modifier_vals))
+        error("Modifier :$modifier is Bool, so a local derivative is not defined. Use `levels` or " *
+              "leave modifier_type=:auto to compare false and true.")
+    end
     if !all(x -> x isa Number || ismissing(x), modifier_vals)
         modifier_type = typeof(first(skipmissing(modifier_vals)))
-        error("Modifier :$modifier must be numeric for second_differences_at(). " *
+        error("Modifier :$modifier must be numeric for a local derivative (`at`). " *
               "Found type: $modifier_type. " *
               "Continuous modifiers require numeric values (Int, Float64, etc.).")
     end
@@ -468,10 +315,10 @@ function second_differences_at(
             Tuple(at[k] for k in keys(at) if k != modifier)
         )
 
-        # Merge with profile parameter (profile parameter takes precedence if conflict)
+        # Merge with profile parameter (values given in `at` take precedence if conflict)
         merged_profile = merge(profile, other_vars)
 
-        ([Float64(modifier_val)], merged_profile)
+        (modifier_val isa AbstractVector ? Float64.(modifier_val) : [Float64(modifier_val)], merged_profile)
     elseif at === :mean
         # Evaluate derivative at mean(modifier), convenient default
         ([mean(modifier_vals_clean)], profile)
@@ -481,7 +328,7 @@ function second_differences_at(
     elseif at isa Real
         # Evaluate at specific modifier value
         ([Float64(at)], profile)
-    elseif at isa Vector
+    elseif at isa AbstractVector
         # Evaluate at multiple modifier values (creates one result row per value)
         (Float64.(at), profile)
     else
@@ -510,10 +357,8 @@ function second_differences_at(
               "For variables with small variance, try delta=1e-6 to delta=0.1 range.")
     end
 
-    # Enforce minimum delta to prevent catastrophic cancellation in floating-point arithmetic
-    # When δ is too small, (f(x+δ) - f(x-δ)) suffers from subtractive cancellation
-    # losing significant digits even though both function evaluations are accurate
-    δ_raw = max(δ_raw, MIN_ABSOLUTE_DELTA)
+    # The minimum step (absolute near zero, relative for large |eval_pt|) is enforced per
+    # evaluation point in _adjust_delta_for_eval_point
 
     # 6. Expand profile to Cartesian product if it contains vectors
     # Rationale: When profile=(age=[30,60], region=["north","south"]), we need to compute
@@ -522,20 +367,8 @@ function second_differences_at(
     profile_combinations = _expand_profile_to_cartesian(full_profile)
 
     # 7. Prepare vcov function and matrix once (avoid repeated wrapping in loops)
-    vcov_func = if vcov isa Function
-        vcov  # Already a function
-    else
-        # Wrap the matrix in a function for population_margins
-        _model -> vcov
-    end
-
-    vcov_matrix = if vcov isa Function
-        vcov(model)
-    else
-        vcov  # Already a matrix
-    end
-
-    inference_df = _inference_df(model, vcov)
+    vcov_func = vcov isa AbstractMatrix ? (_model -> Matrix{Float64}(vcov)) : vcov
+    vcov_matrix = _covariance_matrix(model, vcov)
 
     # 8. Main computation loop: iterate over all profile combinations and evaluation points
     # Overall algorithm:
@@ -566,17 +399,18 @@ function second_differences_at(
                 type=:effects,
                 scale=scale,
                 vcov=vcov_func,
-                contrasts=contrasts
+                contrasts=contrasts,
+                ci_alpha=Float64(alpha)
             )
 
-            # Inference df from the model and the vcov as given (a matrix equal to vcov(model)
-            # counts as model-based); population_margins only saw the wrapped function
-            ames.metadata[:df] = inference_df
+            # t vs z from the model and the vcov as given (same rule as `_inference_df`);
+            # population_margins only saw the wrapped function
+            _align_second_difference_df!(ames, model, vcov)
 
             # Extract derivatives for all variables and contrasts using symmetric FD formula
             # slope = (AME[modifier + δ] - AME[modifier - δ]) / (2δ)
             point_results = _process_variable_contrasts(
-                ames, vars_vec, modifier, vcov_matrix, eval_pt, δ, profile_point
+                ames, vars_vec, modifier, vcov_matrix, eval_pt, δ, profile_point, alpha
             )
 
             # Accumulate results from this (profile_point, eval_point) combination
@@ -584,5 +418,5 @@ function second_differences_at(
         end
     end
 
-    return DataFrame(results)
+    return _finalize_frame!(DataFrame(results), p_adjust, alpha, include_gradients)
 end

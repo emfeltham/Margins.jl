@@ -10,6 +10,8 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 
 Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It contains everything below.
 
+Highlights: a new output schema (`statistic` + `df` with t inference for linear models, `over_` group columns, one second-difference schema); population elasticities now match Stata and R; a single model-level `second_differences`; concurrent calls are safe and the engine cache is bounded; numerous correctness fixes. FormulaCompiler ≥ 1.5 is required.
+
 ### Breaking: output schema
 
 Four changes to the columns of `DataFrame(result)` and of the second-difference tables. Estimates
@@ -24,7 +26,7 @@ and standard errors are unchanged; p-values and confidence intervals change for 
    `vcov(model)`), which does not carry the df Stata would use. `p_value`, `ci_lower`/`ci_upper`
    and the printed intervals use t(`df`). The rule is defined once
    (`Margins._inference_df(model, vcov)`), stored in `result.metadata[:df]`, and
-   inherited by `contrast(...)` and all second-difference functions. `ContrastResult`'s
+   inherited by `contrast(...)`; second differences apply the same rule to the covariance matrix they use. `ContrastResult`'s
    `t_stat` field is now `statistic` plus `df`, and its `show` prints `t (df = …)` or `z`.
    Profile effects (`format=:profile`, the default for `profile_margins` effects) now also include
    `statistic`, `df` and `p_value`. `format=:stata` labels the statistic `t`/`P_t` for t inference
@@ -35,16 +37,7 @@ and standard errors are unchanged; p-values and confidence intervals change for 
    and nested groups, to the printed table, and to `contrast(df, (over_g = …,), …)` row lookups.
    Profile (reference-grid) columns keep their bare names; `context_columns(result)` still returns
    raw variable names.
-3. **One `second_differences` schema.** `second_differences`, `second_differences_pairwise`,
-   `second_differences_all_contrasts`, `second_differences_table` and `second_difference` (one
-   row, as a `NamedTuple`) return the same columns, in this order, for binary, categorical and
-   continuous modifiers (`Margins.SECOND_DIFFERENCE_COLUMNS`): `variable, contrast, modifier,
-   modifier_type, modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff, se,
-   statistic, df, p_value, significant, gradient`. The binary path used to omit `modifier_type`
-   (now `:binary`) and filled `contrast` after the fact. `second_differences_at` returns the same
-   columns (`modifier_type = :continuous`, `modifier_level1/2 = eval_point ∓ delta_used`, and the
-   local derivative in `second_diff`), followed by `eval_point`, `delta_used` and the `profile`
-   columns.
+3. **Second differences have one entry point and one schema.** See "Second differences" below.
 4. **Profile-effects intervals are `ci_lower`/`ci_upper`** (were `lower`/`upper`), the same names
    as every other table, in both the default profile table and `format=:confidence`.
 
@@ -83,9 +76,91 @@ critical value is 2.086 instead of 1.960, about 6% wider; at n − p = 1000 the 
 0.1%). This matches `GLM.coeftable`, Stata's `margins` after `regress` and R's `emmeans`.
 Results for GLMs with non-identity links, mixed models and robust/clustered `vcov` are unchanged.
 
-### Dependencies
-- Requires FormulaCompiler ≥ 1.5 (compat `"1.5"`). FormulaCompiler 1.5 resolves categorical codes through the fitted model's own levels (a `LevelIndex` on `ContrastOp`), so data pools that are reordered, rebuilt or smaller than the fitting data's evaluate correctly, and missing or unknown categorical values throw instead of silently mapping to the reference level. It also adds `categorical_levels` and the public mixture validators used here.
-- MixedModels.jl is now a weak dependency (compat `"4.35"`), loaded through the new `MixedModelsExt` extension. FormulaCompiler already depends on it, so nothing extra is installed.
+### Second differences: one entry point, one schema (breaking)
+
+Second differences are redesigned around one function. The old entry points are **removed**, not
+deprecated; 3.0 is a breaking release and each has a direct replacement (table below). Calling a removed
+name raises an `UndefVarError` with a hint naming its replacement.
+
+**New: `second_differences(model, data, variables, modifier; …)`.** It builds the scenarios, computes the
+effects and applies the delta method itself, instead of the user assembling
+`population_margins(...; scenarios=...)`, passing the result and Σ to one of five functions, or calling
+`second_differences_at` for the continuous case. The modifier type is detected from the data: a discrete
+modifier (Bool, 0/1, two-valued, string, categorical) compares effects at its levels (`levels=` selects
+them); a continuous modifier gives the local derivative ∂AME/∂modifier at `at` (default the mean), or slopes
+between `levels`. Keywords: `levels`, `at`, `modifier_type`, `profile` (strata), `delta`, `scale`,
+`contrasts`, `vcov` (a function, a matrix or a CovarianceMatrices estimator such as `HC1()`), `alpha`,
+`p_adjust`, `include_gradients`.
+
+**`second_differences(result, variables, modifier[, vcov]; …)`** does the same on an `EffectsResult` you
+already hold, from `population_margins` or `profile_margins`. `vcov` is optional: results record the
+covariance they were computed with (`metadata[:vcov]`), so the standard errors agree with those of the
+effects. Keywords: `contrast`, `all_contrasts`, `modifier_type`, `alpha`, `p_adjust`, `include_gradients`.
+
+| Removed (2.x) | Use instead |
+|:--|:--|
+| `second_differences_at(model, data, vars, mod, vcov; at=…, …)` | `second_differences(model, data, vars, mod; at=…, vcov=vcov, …)` |
+| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; all_contrasts=false, contrast=…)` |
+| `second_differences_all_contrasts(result, var, mod, vcov)` | `second_differences(result, var, mod)` |
+| `second_differences_table(result, vars, mod, vcov)` | `second_differences(result, vars, mod)` |
+| `second_difference(result, var, mod, vcov)` (NamedTuple) | `second_differences(result, var, mod; include_gradients=true)` (one DataFrame row) |
+
+**Output schema.** Every call returns the same columns, in this order, whatever the modifier type
+(`Margins.SECOND_DIFFERENCE_COLUMNS`): `variable, contrast, modifier, modifier_type, modifier_level1,
+modifier_level2, ame_at_level1, ame_at_level2, second_diff, se, statistic, df, p_value, ci_lower, ci_upper,
+significant`. The binary path used to omit `modifier_type` (now `:binary`) and filled `contrast` after the
+fact. A local derivative adds `eval_point` and `delta_used` (`modifier_type = :continuous`,
+`modifier_level1/2 = eval_point ∓ delta_used`, `second_diff` the derivative, called `derivative` in 2.x), and
+every `profile` variable adds a column.
+- `ci_lower`/`ci_upper` are the (1 − `alpha`) interval, t or z by the same rule as the test; `significant` is
+  `p_value < alpha`. `alpha` defaults to 0.05 (to the `ci_alpha` of a precomputed result).
+- `p_adjust=:bonferroni|:holm|:bh` adjusts over all returned rows and adds `p_adjusted` after `p_value`;
+  `significant` then uses it.
+- **`gradient` is no longer in the output by default**, matching `DataFrame(result)`: it was a vector per
+  row, which broke CSV export and printing. `include_gradients=true` adds it after the schema columns.
+
+**Behaviour changes and fixes.**
+- **Mixed rows are rejected.** A result that varies over another scenario variable or a `groups=` variable
+  as well as the modifier raises an error (naming the variable as a scenario or group variable). Before,
+  rows from different cells were paired (e.g. `m: 0 vs 0`) and meaningless differences returned.
+- **Level order.** Numeric (and Bool) modifier levels are sorted ascending, so `modifier_level1 <
+  modifier_level2` and the sign of `second_diff` no longer depend on scenario order or on which function was
+  called. Categorical levels keep scenario order.
+- **Inference df follows the covariance you pass**, by the package-wide rule (`_inference_df`): the residual df
+  only for the default `vcov` or a matrix equal to a linear model's own covariance; z for any other matrix, any
+  function (even one returning `vcov(model)`), robust estimators and other models. Before, the discrete functions took `df` from the effects result and ignored
+  `vcov` (a robust Σ with a default-`lm` result still used t). Results record `metadata[:model_vcov]` and
+  `metadata[:model_df]` for this.
+- **Second differences the model cannot support are flagged.** When the gradient of the difference is
+  identically zero (no interaction in an identity-link model, or the modifier is not in the model) the
+  second difference is zero by construction. Such rows report `second_diff = 0`, `se = 0`,
+  `significant = false` and `NaN` `statistic`, `p_value`, `ci_lower`, `ci_upper` (they used to report
+  `p = 1` and an interval `[0, 0]`), are left out of the `p_adjust` family, and one warning per call lists
+  them. A nonlinear model without an interaction term is *not* flagged: the effect still varies with the
+  modifier through the link. `second_differences(model, data, …)` also warns when numeric `levels`, `at` or
+  `profile` values lie outside the observed range of the variable. `warn=false` silences both.
+- `vcov` arguments accept any `AbstractMatrix{<:Real}` (e.g. `Symmetric`) or a function returning one.
+- Two-level numeric modifiers typed `:binary` by `:auto` warn when the levels are not 0/1 (the result is the
+  raw difference, not a slope); a numeric modifier with at most 5 distinct integer values (probably category
+  codes) is treated as continuous with a warning naming `modifier_type=:categorical`.
+- A small explicit `delta` near `|at| ≈ 0.1–1` no longer raises "numerically identical" (the distinctness
+  check is `pt_minus < pt_plus`); the unused `MIN_ABSOLUTE_DELTA` was removed.
+- `profile_margins` effects results work with `second_differences(result, …)` (the difference of marginal
+  effects at the profile) and record their covariance. A `PredictionsResult` is rejected with a message to
+  recompute with `type=:effects` instead of a `MethodError`.
+- Errors are specific: a variable missing from the result lists the variables it has; a contrast that matches
+  no rows lists the contrasts available; real errors are no longer reported as "No valid contrasts".
+- Internally a result's string labels are read in one place (a typed `EffectIndex` built once per call).
+  Contrast labels are canonicalized on the result's side too, so a result spelling a continuous contrast
+  `"derivative"` is matched by `"dy/dx"`, and a result whose label vectors and gradient rows disagree in
+  length raises `Malformed EffectsResult`.
+
+- The model-level form reads the covariance from the `vcov` argument on every call, so a matrix modified in
+  place between calls is respected. `at` accepts any vector (e.g. a range) and a NamedTuple whose modifier
+  entry is a vector; `profile` containing the modifier, and a Bool modifier forced to `modifier_type=:continuous`,
+  raise specific errors. Integer-valued float codes (1.0/2.0/3.0) trigger the integer-code warning, and
+  `warn=false` silences every warning. The result-level form also accepts `vcov=` as a keyword.
+- `profile` values are counterfactuals (everyone's value is set), not subgroups; use `groups=` for subgroups.
 
 ### Breaking / behaviour change
 
@@ -93,8 +168,31 @@ Results for GLMs with non-identity links, mixed models and robust/clustered `vco
 - **Population elasticities are now means of unit-level elasticities (matching the docs, Stata and R).** `population_margins(...; measure=:elasticity | :semielasticity_dyex | :semielasticity_eydx)` used to compute a *ratio of means*: `(x̄/ȳ)·AME`, `x̄·AME` and `AME/ȳ`, with x̄ and ȳ the (weighted) sample means and a quotient-rule correction `−(ε/ȳ)·∂ȳ/∂β` for the SE (`apply_measure_transformations` and `_gradient_of_mean_response` in `src/population/continuous_effects.jl`). Margins' own documentation (`docs/src/advanced.md`, `docs/src/mathematical_foundation.md`), Stata's `margins, eyex()/dyex()/eydx()` and R's `marginaleffects::avg_slopes(slope = "eyex"|"dyex"|"eydx")` all define the population measure as the *mean of the unit-level quantity*, with gᵢ = ∂ŷᵢ/∂x and ŷᵢ the prediction on the requested `scale`: eyex = mean(gᵢxᵢ/ŷᵢ), dyex = mean(gᵢxᵢ), eydx = mean(gᵢ/ŷᵢ) — weighted means under `weights`, taken over each context's rows under `groups`/`scenarios`. The two agree only when the unit quantities are constant (e.g. eyex and eydx for a log-link model, or dyex with a constant gᵢ). Margins now computes the unit-level definition. The delta-method gradient is the mean of the per-row gradients, e.g. ∇β(gᵢxᵢ/ŷᵢ) = (xᵢ/ŷᵢ)∇βgᵢ − (gᵢxᵢ/ŷᵢ²)∇βŷᵢ with ∇βŷᵢ = g⁻¹′(ηᵢ)Xᵢ (response scale) or Xᵢ (link scale), accumulated in a dedicated row loop (`_accumulate_continuous_measures!`) shared by the plain and the `scenarios`/`groups` paths, on both backends; `measure=:effect` does not go through it, so plain AMEs are computed exactly as before. A row with ŷᵢ = 0 makes eyex/eydx undefined: R silently returns `Inf`/`NaN` for that unit and propagates it into the average; Margins raises a `MarginsError` naming the row. Profile margins (`profile_margins`) are unchanged: at a single grid row the mean of ratios is the ratio, and they already used x and ŷ at the grid row.
   - Worked example (logit `yb ~ x * z + g`, n = 300, the deterministic dataset of `test/validation/test_elasticity_unit_definitions.jl`, response scale, estimate ± SE):
 
+    | measure | ≤ 2.2 (ratio of means) | 3.0.0 | R marginaleffects 1.0.0 |
+    |---|---|---|---|
+    | `:elasticity` (eyex) | 1.092346 ± 0.104633 | 1.399523 ± 0.192544 | 1.399523 ± 0.192626 |
+    | `:semielasticity_dyex` | 0.495197 ± 0.041409 | 0.527332 ± 0.045356 | 0.527332 ± 0.045367 |
+    | `:semielasticity_eydx` | 0.622449 ± 0.059623 | 0.953084 ± 0.140625 | 0.953084 ± 0.140680 |
+
+    (R SEs use a numerical Jacobian; Margins' SEs match a central-difference-in-β oracle to 1e-4.) For a Poisson/log model the eyex and eydx values are identical before and after, as they must be (gᵢ/ŷᵢ = β_x), while dyex changes (2.062070 → 2.225984, R 2.225984).
+  - **Documentation label swap fixed.** `docs/src/advanced.md` described `:semielasticity_dyex` with the formula and interpretation of eydx (`(∂Y/∂X)×(1/Y)`, "% change in Y per unit change in X") and vice versa, as did the docstring of `_process_continuous_variables!` and `docs/src/mathematical_foundation.md` ("Semi-elasticity (X)/(Y)"); `docs/src/examples.md` used `:semielasticity_dyex` for a "% change in wages per unit change" example. The *computations* always matched the names (dyex = dy/d(ln x) = g·x, eydx = d(ln y)/dx = g/y, as in Stata); the docs now say so, with a Stata/R correspondence table.
+  - Tests: `test/validation/test_elasticity_unit_definitions.jl` checks all three measures × {logit, Poisson, lm} × {response, link} × {unweighted, weighted} × {whole sample, `groups`} × {`:ad`, `:fd`} against a closed-form oracle (gᵢ from central differences of `linkinv.(X(x±h)β)`, SEs from central differences in β) and against 120 R marginaleffects 1.0.0 `avg_slopes()` values (`test/r_compare_marginaleffects/elasticity/`). Existing tests that encoded the ratio-of-means definition were updated to the unit-level one: the oracle in `test/validation/test_measure_contexts.jl` (`_measure_oracle`) and the link-scale gradient check in `test/validation/test_link_scale.jl` ("elasticity quotient-rule gradient uses the link scale").
+  - This supersedes the ratio-of-means normalisation that v2.2.0 introduced for `scenarios`/`groups`.
+
+### Features
+
+- **One entry point for second differences**, `second_differences(model, data, variables, modifier; …)`, plus a result-level form: see "Second differences: one entry point, one schema".
+- **Concurrent Margins calls are safe.** `population_margins`, `profile_margins` and everything built on them may be called from several tasks or threads at once (e.g. a `Threads.@threads` bootstrap), on the same model and data or on different ones; each result equals the serial one exactly. Previously concurrent calls shared one cached engine and FormulaCompiler's cached compiled formula, whose scratch buffers they overwrote: 64 of 64 concurrent `population_margins` calls on one model returned wrong estimates. Now `ENGINE_CACHE` (`src/engine/caching.jl`) is a pool: each call checks an engine out for its exclusive use (`_checkout_engine`) and returns it in a `finally` block (`_checkin_engine!`), building another engine when all of a configuration's engines are busy (not keyed by `threadid()`, since tasks migrate between threads). Every engine and every reference-grid evaluation uses a private copy of the compiled formula's scratch buffer (`_private_compiled`, `src/core/data_conversion.jl`; the shared cached object is used only for read-only inspection, `_shared_compiled`), and the process-wide tables (engine pool, converted-column memo, validated-model cache, lookups in FormulaCompiler's compiled-formula cache) are guarded by locks. Single-threaded behaviour is unchanged: repeated calls reuse one engine, and the only added per-call cost is a lock acquire/release at check-out and check-in. Entry points converted: `population_margins` and `profile_margins` (`src/population/core.jl`, `src/profile/core.jl`) and the FixedEffectModels extension. FormulaCompiler evaluators used directly (`compile_formula`, `derivativeevaluator`, ...) remain per-task, as does the internal `Margins.get_or_build_engine`, which returns an engine without holding it. Tests: `test/validation/test_concurrent_calls.jl` (runs `concurrent_calls_checks.jl` in a `-t 4` subprocess when the suite is single-threaded: 132 `Threads.@spawn` and 132 `Threads.@threads` calls mixing AME (AD/FD, both scales), AAP, groups, scenarios, elasticities, MEM/APM, means and hierarchical grids, plus 128 calls on eight same-schema datasets and a run at capacity 2; every result compared with `isequal` to its serial counterpart). The reproducer `r5_threads.jl` now reports 0 / 64 wrong.
+- **The engine cache is bounded.** It kept every engine — and through it every dataset — for the session (a 40-replicate bootstrap at n = 50,000 retained ~320 MB). It now holds at most `Margins.engine_cache_capacity()` engines (default 8), evicting idle engines of the least recently used configurations first; engines in use are never evicted. The same 40-replicate bootstrap (with an extra Int column) now retains 8 engines (~100 MB; ~200 MB at capacity 16). A configuration keeps engines for its most recent data only, so a loop over same-schema datasets holds one engine, not one per dataset. `Margins.set_engine_cache_capacity!(n)` (new, not exported) changes the bound and returns the previous value; `n = 0` disables caching. `get_cache_stats()` now reports `entries` (engines held), `keys`, `capacity` and `memory_estimate`. `clear_engine_cache!()` also empties the converted-column memo; clearing FormulaCompiler's compiled-formula cache is left as a marked TODO until FormulaCompiler provides `clear_compiled_cache!()`. Tests: `test/validation/test_engine_cache_bound.jl` (bound, LRU order, same-key replacement, a bootstrap loop releasing its datasets to the GC, capacity 0, warm-call allocation, failed-build and check-in bookkeeping, clearing while an engine is in use).
+
+### Dependencies
+
+- Requires FormulaCompiler ≥ 1.5 (compat `"1.5"`). FormulaCompiler 1.5 resolves categorical codes through the fitted model's own levels (a `LevelIndex` on `ContrastOp`), so data pools that are reordered, rebuilt or smaller than the fitting data's evaluate correctly, and missing or unknown categorical values throw instead of silently mapping to the reference level. It also adds `categorical_levels` and the public mixture validators used here.
+- MixedModels.jl is now a weak dependency (compat `"4.35"`), loaded through the new `MixedModelsExt` extension. FormulaCompiler already depends on it, so nothing extra is installed.
+
 ### Performance
 
+Internal changes with identical estimates and standard errors (verified on the six benchmark operations — APM, MEM, AAP, AME (all), AME (one variable), AME (scenario) — at n = 5,000 and 50,000):
 - **Profile engines no longer convert the whole dataset to dual numbers.** `build_engine` (`src/engine/core.jl`) binds a profile engine's derivative evaluator to a 1-row slice of the data. Profile margins build their own evaluator over the reference grid and only check that `engine.de` exists, but the AD backend converted every continuous column over all n rows to `Dual`s (~1 GB at n = 500,000).
 - **Context evaluators differentiate only the requested variables.** Under `scenarios`/`groups`, `_population_margins_with_contexts` (`src/population/contexts.jl`) built the derivative evaluator over every continuous model variable, widening the dual numbers and converting each such column for every context; it now builds it for the requested continuous variables only, as `build_engine` does, and only when there are continuous variables to compute.
 - **Fused AD response-scale AME loop.** A specialised `_compute_me_loop_response!(…, de::ADEvaluator, …)` with a `_fused_me_rows!` function barrier (`src/population/continuous_effects.jl`) accumulates ∂AME/∂β as Σwᵢ[g′(ηᵢ)Jᵢ + g″(ηᵢ)(Jᵢ′β)xᵢ] column-wise, instead of materialising the per-row n_params × n_vars matrix Gβ and making strided writes into `batch_gradients`.
@@ -115,6 +213,11 @@ Results for GLMs with non-identity links, mixed models and robust/clustered `vco
 - **Profile elasticity SEs dropped the quotient-rule term when the scale factor was exactly 1.** In `_process_profile_continuous_variable!` (`src/profile/core.jl`) the correction −(ε/ŷ)·∂ŷ/∂β for `:elasticity` and `:semielasticity_eydx` was applied only inside `if transform_factor != 1.0`, so at a grid point with x == ŷ (eyex) or ŷ == 1 (eydx) the estimate was right but the SE omitted that term. The scaling and the correction are now always applied. Profile measures that divide by ŷ also raise the same `MarginsError` as the population path when ŷ is exactly 0 at a grid row, instead of returning `Inf`/`NaN`. Profile measures are the unit definitions at the grid row (eyex = g·x/ŷ, dyex = g·x, eydx = g/ŷ), consistent with the population change above. Tests: `test/regression/test_profile_measure_quotient_rule.jl`.
 - **Converted-column memo: allocation and clearing.** The memo that keeps converted data columns stable across calls (`_NARROWED_COLUMNS`, `src/core/data_conversion.jl`) checked a hit for staleness on abstractly typed values, allocating O(n) per call (28.8 MB per warm call at n = 200,000 with a `Union{Missing,Float64}` column and Int/String model categoricals, vs 0.007 MB for plain `CategoricalArray` data). The check now runs behind a function barrier (`_same_contents`), and such a warm call allocates about 0.01 MB. Dead entries (source column garbage-collected) are purged on every lookup, and `clear_engine_cache!()` now empties the memo too. Tests: `test/regression/test_data_prep_memo.jl`.
 - **`Margins.VERSION` was stale** (`v"2.0.0"` while Project.toml said 2.2.0). It is now `pkgversion(@__MODULE__)`, read from Project.toml.
+- **Continuous `Int`/`Float32` columns missed the engine cache.** `_convert_numeric_to_float64` (`src/core/data_conversion.jl`) built a new `Float64` copy of each such column on every call, and the cache revalidates engines by column identity, so every call rebuilt the engine and copied the column (O(n) allocation per warm call). The copy is now memoized per source array through the existing `_memoized_transform` (weakly keyed, revalidated against the source's contents, bounded at 64 entries, emptied by `clear_engine_cache!()`), so repeated calls reuse one engine and stay O(1) in allocation while in-place edits of the source are still picked up. Values that do not round-trip through `Float64` (|k| > 2⁵³) always fail the exact staleness check and are re-converted. Tests: `test/regression/test_int_column_engine_cache.jl`; `test/validation/test_engine_cache.jl` now expects the cache hit.
+- **`hierarchical_grid` columns only some combinations specify.** In `:g => [(:k, [1, 3]), (:z, :mean)]` the `k` column holds user values in some rows and the typical value (the mean code) in others. Such columns were not marked as typical, so for a variable the model treats as categorical (an integer fitted with `DummyCoding`) the typical value raised "not levels of this variable" instead of becoming the frequency mixture. Typical cells are now recorded per row (`_mark_typical_value_rows!`, `:default`-style column metadata, which DataFrames keeps through `copy` but drops on any edit that moves or overwrites rows, so an edited grid is validated as user-specified rather than having the wrong cells replaced); `complete_reference_grid` replaces only typical cells with the mixture and validates every user-specified cell, reporting only the offending specified values. A typical cell is replaced even when the mean code happens to equal a level (balanced codes 1/2/3 give mean 2.0, which is not a request for level 2) — this also changes `means_grid` in that case.
+- **Reference grids whose categorical columns mix levels and mixtures could not be evaluated.** FormulaCompiler compiles a column either as discrete or as a single mixture, so such a grid failed with "Categorical mixture objects should not reach a standard ContrastOp" — for hierarchical grids this also affected `CategoricalArray` columns (`:g => [:h, (:x, [0, 1])]`). `profile_margins` now evaluates these grids in blocks of rows homogeneous in each such column and reassembles the results in grid-row order (`_heterogeneous_grid_blocks`, `src/profile/core.jl`); other grids take the unchanged single-pass path. Tests: `test/regression/test_hierarchical_partial_typical.jl` (integer-coded and `CategoricalArray` columns, predictions and effects against design-row oracles with analytic delta-method SEs; validation of specified cells; sorted grids; balanced codes).
+- **Profile predictions copy out of the engine's buffers.** `_profile_predictions` could store views of the engine's `η_buf`/`g_buf` in the result, which a later call on the same engine overwrites; it now copies them.
+- **Weighted population calls no longer copy the weight column.** `_process_weights_parameter` copied a `Float64` weight column on every call (O(n)); it is only read, so it is now used as is.
 
 ### Removed
 
@@ -125,29 +228,14 @@ Results for GLMs with non-identity links, mixed models and robust/clustered `vco
 
 - **Thread safety.** `docs/src/caching.md` recommended pre-populating the engine cache before parallel computation, and `docs/src/computational_architecture.md` said buffer reuse "maintain[s] thread safety". Neither is true: a cached `MarginsEngine` (and its FormulaCompiler evaluators) owns mutable scratch buffers that every call writes, so concurrent calls on a shared engine overwrite each other — pre-populating the cache makes them share one engine, the unsafe case (64 of 64 concurrent calls returned wrong values in testing). The docs now state that Margins calls must not run concurrently in one process, and recommend separate processes (`Distributed.pmap`) or serial Margins calls. `docs/src/population_scenarios.md` no longer claims scenarios are "evaluated in parallel when possible" (they are evaluated sequentially).
 - Elasticity documentation rewritten for the unit-level definition, with the dyex/eydx label swap fixed (see "Breaking / behaviour change").
+- `docs/src/caching.md`: the pool, check-out/check-in, the bound and `set_engine_cache_capacity!`, the new thread-safety guarantee (replacing "Margins is not thread-safe" and its process-only parallelism advice), the memoized data conversions; removed the "bootstrap 1000 iterations" row and the stale `get_or_build_engine` backward-compatibility section. `docs/src/computational_architecture.md` and `docs/src/population_scenarios.md`: thread-safety notes updated.
+- `docs/src/second_differences.md` rewritten around the model-level `second_differences(model, data, …)`; `api.md`, `index.md`, `advanced.md`, `mathematical_foundation.md` and `ARCHITECTURE.md` updated.
 
-The population-elasticity definition above supersedes the ratio-of-means normalisation that v2.2.0 introduced for `scenarios`/`groups`.
+### Tests
 
-### Concurrency, caching and grids (follow-ups)
-
-#### Features
-- **Concurrent Margins calls are safe.** `population_margins`, `profile_margins` and everything built on them may be called from several tasks or threads at once (e.g. a `Threads.@threads` bootstrap), on the same model and data or on different ones; each result equals the serial one exactly. Previously concurrent calls shared one cached engine and FormulaCompiler's cached compiled formula, whose scratch buffers they overwrote: 64 of 64 concurrent `population_margins` calls on one model returned wrong estimates. Now `ENGINE_CACHE` (`src/engine/caching.jl`) is a pool: each call checks an engine out for its exclusive use (`_checkout_engine`) and returns it in a `finally` block (`_checkin_engine!`), building another engine when all of a configuration's engines are busy (not keyed by `threadid()`, since tasks migrate between threads). Every engine and every reference-grid evaluation uses a private copy of the compiled formula's scratch buffer (`_private_compiled`, `src/core/data_conversion.jl`; the shared cached object is used only for read-only inspection, `_shared_compiled`), and the process-wide tables (engine pool, converted-column memo, validated-model cache, lookups in FormulaCompiler's compiled-formula cache) are guarded by locks. Single-threaded behaviour is unchanged: repeated calls reuse one engine, and the only added per-call cost is a lock acquire/release at check-out and check-in. Entry points converted: `population_margins` and `profile_margins` (`src/population/core.jl`, `src/profile/core.jl`) and the FixedEffectModels extension. FormulaCompiler evaluators used directly (`compile_formula`, `derivativeevaluator`, ...) remain per-task, as does the internal `Margins.get_or_build_engine`, which returns an engine without holding it. Tests: `test/validation/test_concurrent_calls.jl` (runs `concurrent_calls_checks.jl` in a `-t 4` subprocess when the suite is single-threaded: 132 `Threads.@spawn` and 132 `Threads.@threads` calls mixing AME (AD/FD, both scales), AAP, groups, scenarios, elasticities, MEM/APM, means and hierarchical grids, plus 128 calls on eight same-schema datasets and a run at capacity 2; every result compared with `isequal` to its serial counterpart). The reproducer `r5_threads.jl` now reports 0 / 64 wrong.
-- **The engine cache is bounded.** It kept every engine — and through it every dataset — for the session (a 40-replicate bootstrap at n = 50,000 retained ~320 MB). It now holds at most `Margins.engine_cache_capacity()` engines (default 8), evicting idle engines of the least recently used configurations first; engines in use are never evicted. The same 40-replicate bootstrap (with an extra Int column) now retains 8 engines (~100 MB; ~200 MB at capacity 16). A configuration keeps engines for its most recent data only, so a loop over same-schema datasets holds one engine, not one per dataset. `Margins.set_engine_cache_capacity!(n)` (new, not exported) changes the bound and returns the previous value; `n = 0` disables caching. `get_cache_stats()` now reports `entries` (engines held), `keys`, `capacity` and `memory_estimate`. `clear_engine_cache!()` also empties the converted-column memo; clearing FormulaCompiler's compiled-formula cache is left as a marked TODO until FormulaCompiler provides `clear_compiled_cache!()`. Tests: `test/validation/test_engine_cache_bound.jl` (bound, LRU order, same-key replacement, a bootstrap loop releasing its datasets to the GC, capacity 0, warm-call allocation, failed-build and check-in bookkeeping, clearing while an engine is in use).
-
-#### Bug Fixes
-- **Continuous `Int`/`Float32` columns missed the engine cache.** `_convert_numeric_to_float64` (`src/core/data_conversion.jl`) built a new `Float64` copy of each such column on every call, and the cache revalidates engines by column identity, so every call rebuilt the engine and copied the column (O(n) allocation per warm call). The copy is now memoized per source array through the existing `_memoized_transform` (weakly keyed, revalidated against the source's contents, bounded at 64 entries, emptied by `clear_engine_cache!()`), so repeated calls reuse one engine and stay O(1) in allocation while in-place edits of the source are still picked up. Values that do not round-trip through `Float64` (|k| > 2⁵³) always fail the exact staleness check and are re-converted. Tests: `test/regression/test_int_column_engine_cache.jl`; `test/validation/test_engine_cache.jl` now expects the cache hit.
-- **`hierarchical_grid` columns only some combinations specify.** In `:g => [(:k, [1, 3]), (:z, :mean)]` the `k` column holds user values in some rows and the typical value (the mean code) in others. Such columns were not marked as typical, so for a variable the model treats as categorical (an integer fitted with `DummyCoding`) the typical value raised "not levels of this variable" instead of becoming the frequency mixture. Typical cells are now recorded per row (`_mark_typical_value_rows!`, `:default`-style column metadata, which DataFrames keeps through `copy` but drops on any edit that moves or overwrites rows, so an edited grid is validated as user-specified rather than having the wrong cells replaced); `complete_reference_grid` replaces only typical cells with the mixture and validates every user-specified cell, reporting only the offending specified values. A typical cell is replaced even when the mean code happens to equal a level (balanced codes 1/2/3 give mean 2.0, which is not a request for level 2) — this also changes `means_grid` in that case.
-- **Reference grids whose categorical columns mix levels and mixtures could not be evaluated.** FormulaCompiler compiles a column either as discrete or as a single mixture, so such a grid failed with "Categorical mixture objects should not reach a standard ContrastOp" — for hierarchical grids this also affected `CategoricalArray` columns (`:g => [:h, (:x, [0, 1])]`). `profile_margins` now evaluates these grids in blocks of rows homogeneous in each such column and reassembles the results in grid-row order (`_heterogeneous_grid_blocks`, `src/profile/core.jl`); other grids take the unchanged single-pass path. Tests: `test/regression/test_hierarchical_partial_typical.jl` (integer-coded and `CategoricalArray` columns, predictions and effects against design-row oracles with analytic delta-method SEs; validation of specified cells; sorted grids; balanced codes).
-- **Profile predictions copy out of the engine's buffers.** `_profile_predictions` could store views of the engine's `η_buf`/`g_buf` in the result, which a later call on the same engine overwrites; it now copies them.
-- **Weighted population calls no longer copy the weight column.** `_process_weights_parameter` copied a `Float64` weight column on every call (O(n)); it is only read, so it is now used as is.
-
-#### Tests
 - `test/performance/test_ame_fd_loop_zero_alloc.jl` called a removed `marginal_effects_eta!(…; backend=:fd)` signature and a removed 5-argument `get_or_build_engine`, and was not run. Rewritten to test the current FD AME loop (`_compute_continuous_marginal_effects!` → `_compute_me_loop_linear!`/`_compute_me_loop_response!` with an `FDEvaluator`): allocation identical at 1,000 and 20,000 rows and ≤ 64 bytes, both scales, weighted and unweighted. It is not redundant: the other FD allocation tests cover one row of `marginal_effects_eta!/mu!` or the full `population_margins` call, not the accumulation loop.
 - `test/performance/test_population_aap_loop_zero_alloc.jl` used the same removed `get_or_build_engine` signature and was not run. Rewritten: the per-row prediction loop is allocation-free, and warm `population_margins(...; type=:predictions)` calls are O(1) in rows (n = 1,000 vs 50,000), unweighted and weighted. It was the only allocation test of the predictions path.
 - Both are now in `test/runtests.jl`. `test/performance/benchmark_blas_opt.jl` is a manual benchmark script using only the public API and is left as is.
-
-#### Documentation
-- `docs/src/caching.md`: the pool, check-out/check-in, the bound and `set_engine_cache_capacity!`, the new thread-safety guarantee (replacing "Margins is not thread-safe" and its process-only parallelism advice), the memoized data conversions; removed the "bootstrap 1000 iterations" row and the stale `get_or_build_engine` backward-compatibility section. `docs/src/computational_architecture.md` and `docs/src/population_scenarios.md`: thread-safety notes updated.
 
 ### Internal (R6/R7 refactor)
 
@@ -161,6 +249,7 @@ No user-visible change; estimates and SEs agree with the pre-refactor golden sna
 - **Profile continuous effects use the accumulator.** At each grid row, `_process_profile_continuous_variables!` computes all requested continuous variables in one call (`rows = p:p`, weight 1), instead of re-evaluating every continuous variable's Jacobian once per requested variable; the reference-grid derivative evaluator differentiates only the requested variables (the Jacobian entries are unchanged). The profile measures now share the population code, quotient-rule term and zero-ŷ guard included. `apply_measure_transformation` and `src/engine/measures.jl` are deleted.
 - **Primitives and dead buffers.** The row-level `marginal_effects_eta!`/`marginal_effects_mu!` (not exported) are kept as internal test oracles; their unused 3-D tensor batch forms, the allocating 4-argument FD `marginal_effects_eta!(g, de, β, row)` and a self-recursive generic `marginal_effects_eta!` wrapper are deleted. The never-used `EffectsBuffers` (`src/population/effects_buffers.jl`) and the engine's `effects_buffers` field are deleted, with four unreferenced `test/support/` scripts that tested removed buffers (one called a nonexistent `population_margins_raw!`). The engine-buffer descriptions in the docs are updated.
 - `test/performance/test_ame_fd_loop_zero_alloc.jl` now drives `_compute_continuous_effects!` for `:effect` and `:elasticity`; per call it allocates a constant 96 bytes for `:effect` (one dynamic dispatch on the engine's abstractly typed derivative evaluator; previously ≤ 64), independent of the number of rows; the bound is ≤ 128 bytes.
+- **Categorical kernel uses FormulaCompiler's public API.** `categorical_contrast_ame_batch!` evaluates each contrast endpoint with FormulaCompiler 1.5's exported `level_modelrow!` instead of its unexported counterfactual helpers (results bitwise unchanged).
 
 ## v2.2.0 — 2026-10
 

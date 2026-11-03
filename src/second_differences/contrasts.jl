@@ -1,143 +1,129 @@
 # contrasts.jl
-# Second differences: discrete contrasts between pre-computed AME values
-#
-# This module contains functions for computing second differences (interaction effects)
-# from pre-computed AME results. For local derivatives at specific points, see at_point.jl
+# Second differences from a precomputed EffectsResult: the public `second_differences(result, ...)`
+# and the internal engines behind it (_second_difference, _second_differences_pairwise,
+# _second_differences_all_contrasts). The local-derivative engine is in at_point.jl and the
+# model-level entry point in model_interface.jl.
 
 using LinearAlgebra: dot
 
 """
-    second_differences(ame_result, variables, modifier::Symbol, vcov::Matrix{Float64}; kwargs...)
+    second_differences(result, variables, modifier[, vcov]; contrast="dy/dx", modifier_type=:auto,
+                       all_contrasts=true, alpha=nothing, p_adjust=:none, include_gradients=false)
 
-Unified interface for computing second differences (interaction effects) across all modifier types.
+Second differences (interaction effects) from an `EffectsResult` you already hold, from
+`population_margins(...; scenarios=(modifier=levels,), type=:effects)` or
+`profile_margins(model, data, cartesian_grid(modifier=levels); type=:effects)`. To go straight from a
+fitted model use `second_differences(model, data, variables, modifier; …)`, which builds the scenarios
+for you.
 
-This is the recommended function that automatically handles:
-- Binary modifiers (2 levels)
-- Categorical modifiers (>2 levels) with all pairwise contrasts
-- Continuous modifiers with slope scaling
-- Multiple focal variables (compute derivatives for several effects simultaneously)
-- Multiple focal variable contrasts (for categorical variables)
-
-Automatically routes to the appropriate specialized function based on:
-1. Number of focal variables (single vs multiple)
-2. Number of modifier levels (2 vs >2)
-3. Number of focal variable contrasts (1 vs multiple)
-4. Specified modifier type (auto-detected by default)
+For every focal variable and contrast it compares the effect at every pair of modifier levels:
+`second_diff = effect(level2) − effect(level1)`, with delta-method standard errors that use the
+covariance between the two effects. Numeric (and Bool) levels are compared in ascending order; other
+levels in scenario order. A continuous modifier gives slopes (the difference per unit of the modifier).
 
 # Arguments
-- `ame_result::EffectsResult`: Result from population_margins with scenarios over the modifier
-- `variables::Union{Symbol,Vector{Symbol}}`: The focal variable(s) to calculate second differences for
-  - Single Symbol: One focal variable
-  - Vector of Symbols: Multiple focal variables (all analyzed with same modifier)
-- `modifier::Symbol`: The moderating variable
-- `vcov::Matrix{Float64}`: Parameter covariance matrix from the model
+- `result::EffectsResult`: effects computed over the modifier. It must vary over the modifier only: if
+  another scenario variable or a `groups=` variable also varies across its rows, an error is raised
+  instead of pairing rows from different cells. A `PredictionsResult` is rejected.
+- `variables::Union{Symbol,Vector{Symbol}}`: focal variable(s)
+- `modifier::Symbol`: the moderating variable
+- `vcov::AbstractMatrix{<:Real}`: parameter covariance matrix. Optional: `population_margins` and
+  `profile_margins` results record the covariance they were computed with (`metadata[:vcov]`), which
+  is the default, so the standard errors agree with those of the effects. Pass a matrix to use a
+  different estimator; the t/z choice (`df` column) then follows that matrix.
 
 # Keyword Arguments
-- `contrast::String="dy/dx"`: Focal variable contrast to analyze (for categorical variables; "derivative" is accepted as an alias of "dy/dx")
-- `modifier_type::Symbol=:auto`: Modifier type (:auto, :binary, :categorical, :continuous)
-- `all_contrasts::Bool=true`: Compute for all focal variable contrasts (if applicable)
+- `contrast::String="dy/dx"`: the focal contrast when `all_contrasts=false` (`"derivative"` is an alias
+  of `"dy/dx"`); for a variable with a single contrast it is detected automatically
+- `all_contrasts::Bool=true`: use every contrast of each focal variable (categorical variables have
+  several); `false` restricts to `contrast`
+- `modifier_type::Symbol=:auto`: `:binary`, `:categorical`, `:continuous` or `:auto`. Under `:auto`, two
+  levels are `:binary` (with a warning when they are numeric and not 0/1, because the result is then the
+  raw difference rather than a slope), three or more numeric levels are `:continuous`, anything else is
+  `:categorical`
+- `alpha=nothing`: significance level for `significant` and the (1 − alpha) intervals; defaults to the
+  `ci_alpha` the result was computed with (0.05 unless changed)
+- `p_adjust::Symbol=:none`: multiple-testing adjustment over all rows returned: `:bonferroni`, `:holm`
+  or `:bh` (Benjamini–Hochberg). Adds a `p_adjusted` column and bases `significant` on it
+- `include_gradients::Bool=false`: add a `gradient` column (∂`second_diff`/∂β per row), as
+  `DataFrame(result; include_gradients=true)` does
+- `warn::Bool=true`: warn (once per call) about second differences that are zero by construction
+
+# Structurally zero rows
+When the model cannot make the effect depend on the modifier (no interaction term in an identity-link
+model, or the modifier is not in the model), the gradient of the difference is zero and the second
+difference is zero by construction, not estimated. Such rows report `second_diff = 0`, `se = 0`,
+`significant = false` and `NaN` for `statistic`, `p_value`, `ci_lower` and `ci_upper`; they are left out
+of the `p_adjust` family, and one warning per call lists them. In a nonlinear model (e.g. logit) the
+effect can vary with the modifier through the link without an interaction term, so such a row is not a
+structural zero on the response scale and is reported normally (with `scale=:link` it is flagged).
 
 # Returns
-- DataFrame with all applicable second differences (one row per variable × contrast × modifier
-  pair). The columns are the same for every modifier type (see `Margins.SECOND_DIFFERENCE_COLUMNS`):
-  `variable, contrast, modifier, modifier_type, modifier_level1, modifier_level2, ame_at_level1,
-  ame_at_level2, second_diff, se, statistic, df, p_value, significant, gradient`.
-
-# Inference
-`statistic = second_diff / se`, referred to t(`df`) with `df` inherited from `ame_result`
-(`dof_residual(model)` for a linear model with the model-based covariance, `Inf` = z otherwise).
+A `DataFrame` with one row per focal variable × contrast × modifier pair and the columns listed under
+"Output Schema" in the second-differences documentation: `variable, contrast, modifier, modifier_type,
+modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff, se, statistic, df,
+p_value, ci_lower, ci_upper, significant`.
 
 # Examples
 ```julia
-using Margins, GLM, DataFrames
-
-# Single variable, binary modifier → single contrast
 ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
-sd = second_differences(ames, :age, :treated, vcov(model))
-# → DataFrame with 1 row
+second_differences(ames, :age, :treated)                       # binary modifier, 1 row
+second_differences(ames, [:age, :education], :treated)         # several focal variables
 
-# Multiple variables, binary modifier → compare effects
-ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
-sd = second_differences(ames, [:age, :education, :experience], :treated, vcov(model))
-# → DataFrame with 3 rows (one per variable)
-# → Compare which effects vary most with treatment
-
-# Single variable, categorical modifier → all pairwise
-ames = population_margins(model, data; scenarios=(education=[:hs, :college, :grad],), type=:effects)
-sd = second_differences(ames, :income, :education, vcov(model))
-# → DataFrame with 3 rows (college-hs, grad-hs, grad-college)
-
-# Multiple variables, categorical modifier → full comparison
-ames = population_margins(model, data; scenarios=(region=[:north, :south, :west],), type=:effects)
-sd = second_differences(ames, [:x1, :x2, :x3], :region, vcov(model))
-# → DataFrame with 9 rows (3 variables × 3 region pairs)
-
-# Multiple variables, continuous modifier → slopes
-ames = population_margins(model, data; scenarios=(age=[30, 45, 60],), type=:effects)
-sd = second_differences(ames, [:education_yrs, :experience], :age, vcov(model); modifier_type=:continuous)
-# → DataFrame with 6 rows (2 variables × 3 age pairs)
-
-# Categorical variable, categorical modifier → full matrix
-ames = population_margins(model, data; scenarios=(region=[:north, :south, :west],),
-                         type=:effects, vars=[:education], contrasts=:pairwise)
-sd = second_differences(ames, :education, :region, vcov(model))
-# → DataFrame with 9 rows (3 education contrasts × 3 region pairs)
-
-# Single contrast only (disable all_contrasts)
-sd = second_differences(ames, :education, :region, vcov(model);
-                       contrast="college - hs", all_contrasts=false)
-# → DataFrame with 3 rows (just college-hs contrast across region pairs)
+ames = population_margins(model, data; vars=[:education], contrasts=:pairwise,
+                          scenarios=(region=[:north, :south, :west],), type=:effects)
+second_differences(ames, :education, :region)                  # 3 contrasts × 3 region pairs = 9 rows
+second_differences(ames, :education, :region; contrast="college - hs", all_contrasts=false)
 ```
-
-# See Also
-- `second_difference()`: Original function for binary modifiers only (backward compatibility)
-- `second_differences_pairwise()`: All pairwise modifier comparisons for single contrast
-- `second_differences_all_contrasts()`: All contrasts × all modifier pairs
 """
 function second_differences(
     ame_result::EffectsResult,
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
-    vcov::Matrix{Float64};
+    vcov::AbstractMatrix{<:Real};
     contrast::String="dy/dx",
     modifier_type::Symbol=:auto,
-    all_contrasts::Bool=true
+    all_contrasts::Bool=true,
+    alpha=nothing,
+    p_adjust::Symbol=:none,
+    include_gradients::Bool=false,
+    warn::Bool=true
 )
+    _check_p_adjust(p_adjust)
+    alpha = _resolve_alpha(alpha, ame_result)
+
     # Normalize variables to Vector{Symbol}
     vars_vec = variables isa Symbol ? [variables] : variables
 
     # Compute second differences for each variable
+    idx = _effect_index(ame_result)
     results = DataFrame[]
 
     for variable in vars_vec
         # Get information about the variable's contrasts
-        var_str = string(variable)
-        variable_contrasts = unique([
-            ame_result.terms[i] for i in 1:length(ame_result.estimates)
-            if ame_result.variables[i] == var_str
-        ])
+        variable_contrasts = _variable_contrasts(idx, variable)
 
         has_multiple_contrasts = length(variable_contrasts) > 1
 
         # Determine if user wants all contrasts or just one
         if has_multiple_contrasts && all_contrasts
-            # Use second_differences_all_contrasts for comprehensive results
-            df = second_differences_all_contrasts(
+            # Use _second_differences_all_contrasts for comprehensive results
+            df = _second_differences_all_contrasts(
                 ame_result, variable, modifier, vcov;
-                modifier_type=modifier_type
+                modifier_type=modifier_type, alpha=alpha, include_gradients=true, warn=warn
             )
         else
-            # Use second_differences_pairwise for single contrast
+            # Use _second_differences_pairwise for single contrast
             # Auto-detect the contrast if it is the default "dy/dx" (or its alias "derivative") and there is only one contrast
             contrast_to_use = contrast
             if _contrast_label(contrast) == "dy/dx" && length(variable_contrasts) == 1
                 contrast_to_use = variable_contrasts[1]
             end
 
-            df = second_differences_pairwise(
+            df = _second_differences_pairwise(
                 ame_result, variable, modifier, vcov;
                 contrast=contrast_to_use,
-                modifier_type=modifier_type
+                modifier_type=modifier_type, alpha=alpha, include_gradients=true, warn=warn
             )
         end
 
@@ -145,46 +131,26 @@ function second_differences(
     end
 
     # Combine all results
-    return vcat(results..., cols=:union)
+    return _finalize_frame!(vcat(results..., cols=:union), p_adjust, alpha, include_gradients; warn)
 end
 
-"""
-    second_difference(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="dy/dx")
+# Two numeric levels other than 0/1 are auto-typed :binary, i.e. a raw difference of AMEs, not a slope.
+function _warn_numeric_binary(modifier::Symbol, levels)
+    all(x -> x isa Number && !(x isa Bool), levels) && !all(x -> x == 0 || x == 1, levels) || return nothing
+    @warn "Modifier :$modifier has two numeric levels ($(levels[1]), $(levels[2])) " *
+          "and is treated as :binary, so second_diff is the raw difference in AMEs. " *
+          "Pass modifier_type=:continuous for the slope per unit of :$modifier."
+    return nothing
+end
 
-Calculate the second difference (interaction effect) of a variable's AME across a modifier
-using proper delta-method standard errors with gradient information.
-
-This measures whether the effect of `variable` differs across levels of the `modifier`,
-i.e., the interaction ∂²P / (∂variable ∂modifier).
-
-# Arguments
-- `ame_result`: Result from population_margins with scenarios over the modifier
-- `variable`: The focal variable to calculate second difference for
-- `modifier`: The moderating variable. Must have exactly 2 levels in profile_values.
-- `vcov`: Parameter covariance matrix from the model (e.g., GLM.vcov(model))
-- `contrast`: The contrast type to filter on (default "dy/dx" for continuous vars; "derivative" is accepted as an alias)
-
-# Returns
-A NamedTuple holding one row of the unified second-difference schema
-(`Margins.SECOND_DIFFERENCE_COLUMNS`): `variable, contrast, modifier, modifier_type (= :binary),
-modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff (= AME_level2 -
-AME_level1), se, statistic, df, p_value, significant, gradient`. Levels are sorted, so
-`modifier_level1 < modifier_level2`. `df` is inherited from `ame_result` (t when finite, z when `Inf`).
-
-# Example
-For socio4 as modifier (measuring accuracy/discrimination):
-- Positive: Variable increases accuracy (improves sensitivity more than FPR)
-- Negative: Variable decreases accuracy (increases FPR more than sensitivity)
-- Zero: Variable doesn't affect discrimination ability
-"""
-function second_difference(
-    ame_result::EffectsResult, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64};
-    contrast="dy/dx"
+# Engine: exactly two modifier levels for one variable and contrast. Returns one row of the unified
+# schema as a NamedTuple, gradient included. `second_differences` is the public entry point.
+function _second_difference(
+    ame_result::EffectsResult, variable::Symbol, modifier::Symbol, vcov::AbstractMatrix{<:Real};
+    contrast="dy/dx", alpha=nothing
 )
-    # Check that modifier exists in profile_values
-    if isnothing(ame_result.profile_values) || !haskey(ame_result.profile_values, modifier)
-        error("AME result does not have modifier $modifier in profile_values")
-    end
+    idx = _effect_index(ame_result)
+    _require_modifier(idx, modifier)
 
     # Validate dimensions: vcov must match gradient dimensions
     n_params_vcov = size(vcov, 1)
@@ -198,26 +164,15 @@ function second_difference(
         error("vcov must be square matrix, got size $(size(vcov))")
     end
 
-    # Find indices for this variable and contrast at each modifier level
-    var_str = string(variable)
-    indices = Int[]
-    modifier_levels = []
-
-    for i in 1:length(ame_result.estimates)
-        if ame_result.variables[i] == var_str && ame_result.terms[i] == _contrast_label(contrast)
-            push!(indices, i)
-            push!(modifier_levels, ame_result.profile_values[modifier][i])
-        end
-    end
+    # Rows for this variable and contrast, one per modifier level, in canonical order
+    indices, modifier_levels = _modifier_rows(idx, variable, modifier, contrast)
 
     if length(indices) != 2
         error("Expected 2 rows (one for each $modifier level), got $(length(indices))")
     end
 
-    # Sort by modifier level for consistency
-    perm = sortperm(modifier_levels)
-    idx1, idx2 = indices[perm[1]], indices[perm[2]]
-    level1, level2 = modifier_levels[perm[1]], modifier_levels[perm[2]]
+    idx1, idx2 = indices
+    level1, level2 = modifier_levels
 
     # Get estimates
     est_level1 = ame_result.estimates[idx1]
@@ -239,211 +194,90 @@ function second_difference(
     return _second_difference_row(;
         variable, contrast = contrast, modifier, modifier_type = :binary,
         level1, level2, est1 = est_level1, est2 = est_level2,
-        second_diff, se = se_diff, gradient = g_diff, dof = _result_df(ame_result),
+        second_diff, se = se_diff, gradient = g_diff, dof = _second_difference_dof(ame_result, vcov),
+        alpha = _resolve_alpha(alpha, ame_result), structural_zero = _is_structural_zero(g_diff, g1, g2),
     )
 end
 
-"""
-    second_differences_all_contrasts(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; modifier_type=:auto)
-
-Calculate second differences for all contrasts of a variable across all modifier levels.
-
-This is the comprehensive function that handles:
-- **Categorical focal variable**: Iterates over all variable contrasts
-- **Binary modifier** (2 levels): Uses `second_difference()` for each contrast
-- **Categorical/Continuous modifier** (>2 levels): Uses `second_differences_pairwise()` for each contrast
-
-For continuous variables with only the "dy/dx" contrast, returns results for all modifier pairs.
-For categorical variables, returns results for all contrasts × all modifier pairs.
-
-# Arguments
-- `ame_result`: Result from population_margins with scenarios over the modifier
-- `variable`: The variable to calculate second differences for
-- `modifier`: The moderating variable
-- `vcov`: Parameter covariance matrix from the model
-- `modifier_type`: Modifier type (:auto, :binary, :categorical, :continuous)
-
-# Returns
-DataFrame with one row per (contrast × modifier pair), with the unified second-difference
-columns (`Margins.SECOND_DIFFERENCE_COLUMNS`, identical for every modifier type).
-
-# Examples
-```julia
-# Continuous focal variable, binary modifier - returns 1 row
-ames = population_margins(model, data; scenarios=(treated=[0,1],), type=:effects)
-sd = second_differences_all_contrasts(ames, :age, :treated, vcov)
-
-# Categorical focal variable, binary modifier - returns rows per contrast
-ames = population_margins(model, data; scenarios=(treated=[0,1],),
-                         type=:effects, vars=[:education], contrasts=:pairwise)
-sd = second_differences_all_contrasts(ames, :education, :treated, vcov)
-# Returns: college-hs, grad-hs, grad-college (each compared across treated=0 vs 1)
-
-# Categorical focal variable, categorical modifier (>2 levels) - full matrix
-ames = population_margins(model, data; scenarios=(region=[:north, :south, :west],),
-                         type=:effects, vars=[:education], contrasts=:pairwise)
-sd = second_differences_all_contrasts(ames, :education, :region, vcov)
-# Returns: (college-hs, grad-hs, grad-college) × (south-north, west-north, west-south)
-#          = 9 rows total (3 contrasts × 3 modifier pairs)
-```
-"""
-function second_differences_all_contrasts(
+# Engine: all focal contrasts of one variable × all modifier pairs. A binary modifier goes through
+# `_second_difference` per contrast, anything else through `_second_differences_pairwise`.
+# Contrasts with fewer than two modifier levels are skipped with a warning. Public entry point:
+# `second_differences`.
+function _second_differences_all_contrasts(
     ame_result::EffectsResult, variable::Symbol, modifier::Symbol,
-    vcov::Matrix{Float64};
-    modifier_type::Symbol=:auto
+    vcov::AbstractMatrix{<:Real};
+    modifier_type::Symbol=:auto,
+    alpha=nothing,
+    p_adjust::Symbol=:none,
+    include_gradients::Bool=false,
+    warn::Bool=true
 )
-    # Get all unique contrasts for this variable
-    var_str = string(variable)
-    contrasts = unique(
-        [
-            ame_result.terms[i] for i in 1:length(ame_result.estimates)
-            if ame_result.variables[i] == var_str
-        ]
-    )
+    _check_p_adjust(p_adjust)
+    alpha = _resolve_alpha(alpha, ame_result)
 
-    # Check number of modifier levels to decide which approach
-    modifier_levels = unique([
-        ame_result.profile_values[modifier][i]
-        for i in 1:length(ame_result.estimates)
-        if ame_result.variables[i] == var_str
-    ])
-    n_modifier_levels = length(modifier_levels)
+    idx = _effect_index(ame_result)
+    contrasts = _variable_contrasts(idx, variable)
 
-    # For binary modifier (2 levels), use original approach with second_difference()
+    # Number of modifier levels (from the first contrast) decides which approach to use
+    n_modifier_levels = isempty(contrasts) ? 0 :
+        length(_modifier_rows(idx, variable, modifier, first(contrasts))[1])
+
+    # Contrasts without usable rows are skipped with a warning
+    skipped = [
+        c for c in contrasts
+        if length(_modifier_rows(idx, variable, modifier, c)[1]) < 2
+    ]
+    if warn && !isempty(skipped)
+        @warn "Skipped $(length(skipped)) contrast(s) for variable $variable with too few modifier levels: $(join(skipped, ", "))"
+    end
+    kept = [c for c in contrasts if c ∉ skipped]
+    isempty(kept) && error("No valid contrasts found for variable $variable with modifier $modifier")
+
     if n_modifier_levels == 2 && modifier_type ∈ (:auto, :binary)
-        results = NamedTuple[]
-        skipped_contrasts = String[]
-
-        for contrast in contrasts
-            try
-                result = second_difference(
-                    ame_result, variable, modifier, vcov; contrast = contrast
-                )
-                push!(results, result)
-            catch e
-                if occursin("Expected 2 rows", string(e))
-                    push!(skipped_contrasts, contrast)
-                else
-                    rethrow(e)
-                end
+        # Binary modifier: one comparison per contrast
+        rows = NamedTuple[]
+        warn && modifier_type === :auto && _warn_numeric_binary(modifier, _modifier_rows(idx, variable, modifier, first(kept))[2])
+        for contrast in kept
+            if length(_modifier_rows(idx, variable, modifier, contrast)[1]) == 2
+                push!(rows, _second_difference(ame_result, variable, modifier, vcov; contrast, alpha))
+            elseif warn
+                @warn "Skipped contrast '$contrast' for variable $variable: not exactly 2 modifier levels"
             end
         end
-
-        if !isempty(skipped_contrasts)
-            @warn "Skipped $(length(skipped_contrasts)) contrast(s) for variable $variable: $(join(skipped_contrasts, ", "))"
-        end
-
-        if isempty(results)
-            error("No valid contrasts found for variable $variable with modifier $modifier")
-        end
-
-        return _second_difference_frame(results)
+        isempty(rows) && error("No valid contrasts found for variable $variable with modifier $modifier")
+        return _finalize_frame!(_second_difference_frame(rows), p_adjust, alpha, include_gradients)
     else
-        # For >2 modifier levels, use second_differences_pairwise() for each contrast
-        all_results = DataFrame[]
-
-        for contrast in contrasts
-            try
-                df_contrast = second_differences_pairwise(
-                    ame_result, variable, modifier, vcov;
-                    contrast = contrast,
-                    modifier_type = modifier_type
-                )
-                push!(all_results, df_contrast)
-            catch e
-                if occursin("Need at least 2 modifier levels", string(e))
-                    @warn "Skipping contrast '$contrast' for variable $variable: insufficient modifier levels"
-                else
-                    rethrow(e)
-                end
-            end
-        end
-
-        if isempty(all_results)
-            error("No valid contrasts found for variable $variable with modifier $modifier")
-        end
-
-        # Combine all contrast results
-        df = vcat(all_results..., cols=:union)
-
-        return df
+        # >2 modifier levels (or explicit categorical/continuous): all pairs per contrast
+        frames = [
+            _second_differences_pairwise(
+                ame_result, variable, modifier, vcov; contrast, modifier_type, alpha, include_gradients=true, warn
+            ) for contrast in kept
+        ]
+        return _finalize_frame!(vcat(frames..., cols=:union), p_adjust, alpha, include_gradients)
     end
 end
 
-"""
-    second_differences_pairwise(ame_result, variable::Symbol, modifier::Symbol, vcov::Matrix{Float64}; contrast="dy/dx", modifier_type=:auto)
-
-Calculate second differences (interaction effects) for all pairwise combinations of modifier levels.
-
-Handles binary, categorical (>2 levels), and continuous modifiers. For categorical modifiers with K levels,
-computes all K(K-1)/2 pairwise contrasts. For continuous modifiers, scales differences by modifier distance.
-
-# Arguments
-- `ame_result::EffectsResult`: Result from population_margins with scenarios over the modifier
-- `variable::Symbol`: The focal variable to calculate second differences for
-- `modifier::Symbol`: The moderating variable
-- `vcov::Matrix{Float64}`: Parameter covariance matrix from the model
-- `contrast::String`: The contrast type to filter on (default "dy/dx" for continuous vars; "derivative" is accepted as an alias)
-- `modifier_type::Symbol`: Modifier type (:binary, :categorical, :continuous, :auto for auto-detection)
-
-# Returns
-DataFrame with one row per pairwise contrast and the unified second-difference columns
-(`Margins.SECOND_DIFFERENCE_COLUMNS`), the same for every modifier type:
-- `variable`, `contrast`, `modifier`: focal variable, its contrast, the modifier
-- `modifier_type`: detected or specified type (`:binary`, `:categorical`, `:continuous`)
-- `modifier_level1`, `modifier_level2`: modifier levels compared
-- `ame_at_level1`, `ame_at_level2`: focal effect at each level
-- `second_diff`: second difference (binary/categorical) or slope (continuous)
-- `se`: standard error via delta method
-- `statistic`, `df`: `second_diff / se` and its degrees of freedom (t when finite, z when `Inf`;
-  inherited from `ame_result`)
-- `p_value`: p-value for H₀: second difference = 0
-- `significant`: `p_value < 0.05`
-- `gradient`: gradient vector (∂second_diff/∂β) for custom variance calculations
-
-# Modifier Types
-- **Binary** (2 levels): Single contrast
-- **Categorical** (>2 levels): All pairwise comparisons (K choose 2)
-- **Continuous**: Pairwise slopes scaled by modifier difference: (AME₂ - AME₁)/(m₂ - m₁)
-
-# Examples
-```julia
-using Margins, GLM, DataFrames
-
-# Binary modifier (2 levels) - single contrast
-ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effects)
-sd = second_differences_pairwise(ames, :age, :treated, vcov(model))
-# Returns 1 row
-
-# Categorical modifier (3 levels) - all pairwise
-ames = population_margins(model, data; scenarios=(education=[:hs, :college, :grad],), type=:effects)
-sd = second_differences_pairwise(ames, :income, :education, vcov(model))
-# Returns 3 rows: college-hs, grad-hs, grad-college
-
-# Continuous modifier - slopes per unit change
-ames = population_margins(model, data; scenarios=(age=[30, 40, 50],), type=:effects)
-sd = second_differences_pairwise(ames, :education, :age, vcov(model); modifier_type=:continuous)
-# Returns 3 rows with slopes: (AME₄₀-AME₃₀)/10, (AME₅₀-AME₃₀)/20, (AME₅₀-AME₄₀)/10
-```
-
-# Statistical Notes
-- Uses proper delta method: SE = sqrt((g₂-g₁)' Σ (g₂-g₁)) for categorical
-- For continuous modifiers: SE(slope) = SE(AME₂-AME₁) / |m₂-m₁|
-- All pairwise comparisons are independent tests (no multiple testing correction applied)
-- For categorical modifiers with many levels, consider Bonferroni or other adjustments
-"""
-function second_differences_pairwise(
+# Engine: all pairs of modifier levels for one variable and contrast. Rows are selected by
+# `_modifier_rows` (numeric levels ascending; error if other scenario/group columns vary), the
+# difference of the two effects has variance (g₂−g₁)'Σ(g₂−g₁), and a continuous modifier divides
+# estimate, SE and gradient by the modifier distance. Public entry point: `second_differences`.
+function _second_differences_pairwise(
     ame_result::EffectsResult,
     variable::Symbol,
     modifier::Symbol,
-    vcov::Matrix{Float64};
+    vcov::AbstractMatrix{<:Real};
     contrast::String="dy/dx",
-    modifier_type::Symbol=:auto
+    modifier_type::Symbol=:auto,
+    alpha=nothing,
+    p_adjust::Symbol=:none,
+    include_gradients::Bool=false,
+    warn::Bool=true
 )
-    # Check that modifier exists in profile_values
-    if isnothing(ame_result.profile_values) || !haskey(ame_result.profile_values, modifier)
-        error("AME result does not have modifier $modifier in profile_values")
-    end
+    _check_p_adjust(p_adjust)
+    alpha = _resolve_alpha(alpha, ame_result)
+
+    idx = _effect_index(ame_result)
+    _require_modifier(idx, modifier)
 
     # Validate dimensions
     n_params_vcov = size(vcov, 1)
@@ -455,36 +289,30 @@ function second_differences_pairwise(
         error("vcov must be square matrix, got size $(size(vcov))")
     end
 
-    # Find indices for this variable and contrast at each modifier level
-    var_str = string(variable)
-    indices = Int[]
-    modifier_levels = []
+    # Rows for this variable and contrast, one per modifier level, in canonical order
+    # (numeric levels ascending, others in scenario order), so level1 < level2 for numeric modifiers
+    indices, modifier_levels = _modifier_rows(idx, variable, modifier, contrast)
 
-    for i in 1:length(ame_result.estimates)
-        if ame_result.variables[i] == var_str && ame_result.terms[i] == _contrast_label(contrast)
-            push!(indices, i)
-            push!(modifier_levels, ame_result.profile_values[modifier][i])
-        end
+    if isempty(indices)
+        _require_variable(idx, variable)
+        error("No rows for variable :$variable with contrast '$contrast'. Contrasts available: " *
+              join(_variable_contrasts(idx, variable), ", "))
     end
-
     if length(indices) < 2
         error("Need at least 2 modifier levels, found $(length(indices)) for variable $variable with contrast $contrast")
     end
 
     # Auto-detect modifier type if requested
-    unique_levels = unique(modifier_levels)
-    n_levels = length(unique_levels)
+    n_levels = length(modifier_levels)
 
     if modifier_type == :auto
         if n_levels == 2
             modifier_type = :binary
+            warn && _warn_numeric_binary(modifier, modifier_levels)
+        elseif all(x -> x isa Number, modifier_levels)
+            modifier_type = :continuous
         else
-            # Check if values are numeric and could be continuous
-            if all(x -> x isa Number, unique_levels)
-                modifier_type = :continuous
-            else
-                modifier_type = :categorical
-            end
+            modifier_type = :categorical
         end
     end
 
@@ -501,12 +329,6 @@ function second_differences_pairwise(
     for (i, j) in level_pairs
         idx1, idx2 = indices[i], indices[j]
         level1, level2 = modifier_levels[i], modifier_levels[j]
-
-        # Ensure consistent ordering (level1 < level2)
-        if modifier_type == :continuous && level2 < level1
-            idx1, idx2 = idx2, idx1
-            level1, level2 = level2, level1
-        end
 
         # Get estimates
         est_level1 = ame_result.estimates[idx1]
@@ -548,7 +370,8 @@ function second_differences_pairwise(
         push!(results, _second_difference_row(;
             variable, contrast, modifier, modifier_type,
             level1, level2, est1 = est_level1, est2 = est_level2,
-            second_diff, se = se_diff, gradient = g_diff_scaled, dof = _result_df(ame_result),
+            second_diff, se = se_diff, gradient = g_diff_scaled, dof = _second_difference_dof(ame_result, vcov),
+            alpha, structural_zero = _is_structural_zero(g_diff, g1, g2),
         ))
     end
 
@@ -556,5 +379,5 @@ function second_differences_pairwise(
         error("No valid pairwise contrasts computed for variable $variable with modifier $modifier")
     end
 
-    return _second_difference_frame(results)
+    return _finalize_frame!(_second_difference_frame(results), p_adjust, alpha, include_gradients)
 end

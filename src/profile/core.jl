@@ -275,6 +275,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
         
             # Store confidence interval parameters in metadata
             metadata[:alpha] = ci_alpha
+            metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
         
             # Extract raw components from DataFrame  
             estimates = df.estimate
@@ -299,6 +300,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
 
             # Store confidence interval parameters in metadata
             metadata[:alpha] = ci_alpha
+            metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
 
             # Interval kind: :confidence (default) or :prediction. For prediction
             # intervals, store the residual variance σ̂² that widens the interval

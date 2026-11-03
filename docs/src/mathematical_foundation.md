@@ -137,7 +137,7 @@ Every estimate θ̂ (a marginal effect, an adjusted prediction, a contrast or a 
 - **Linear models** (`lm`, or a Gaussian `glm` with identity link) **with the model-based covariance**: θ̂ = c′β̂ for a fixed vector c, so under the classical linear-model assumptions θ̂/SE(θ̂) has an exact t distribution with the residual degrees of freedom n − p. Margins uses `df = dof_residual(model)`, as Stata's `margins` does after `regress` and as `GLM.coeftable` does for `lm`. With an identity link the link and response scales coincide.
 - **All other cases** — non-identity links, mixed models, FixedEffectModels, and robust, clustered or custom covariance estimators — use z (`df = Inf`): the delta-method standard errors (or the sandwich covariance) are justified asymptotically.
 
-Contrasts and second differences are linear combinations of the same estimates and use the same `df` as the result they are computed from. The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
+Contrasts are linear combinations of the same estimates and use the same `df` as the result they are computed from; second differences use the same rule applied to the covariance matrix they are computed with (t for a linear model's own covariance, z otherwise). The exact rule, including robust and clustered covariance estimators, is listed in [Output Columns and Inference](api.md#Output-Columns-and-Inference).
 
 ## Implementation in Margins.jl
 

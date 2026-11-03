@@ -2,6 +2,36 @@
 
 *Quantifying how marginal effects vary across moderator levels*
 
+## Quick Start
+
+One function covers every case. Give it the fitted model, the data, the focal variable(s) and the
+moderator:
+
+```julia
+second_differences(model, data, :age, :treated)             # discrete modifier: treated vs not
+second_differences(model, data, [:age, :income], :treated)  # several focal variables
+second_differences(model, data, :age, :income)              # continuous modifier: ∂AME/∂income at mean(income)
+second_differences(model, data, :age, :income; at=[20_000, 50_000])      # at chosen values
+second_differences(model, data, :age, :income; levels=[20_000, 50_000])  # slope between two values
+second_differences(model, data, :age, :treated; profile=(female=[0, 1],)) # with everyone's female set to 0, then 1
+second_differences(model, data, :age, :treated; vcov=HC1())              # robust covariance
+```
+
+The modifier type is detected from the data (Bool, 0/1, two-valued, string or categorical →
+discrete; numeric with more than two distinct values → continuous); use
+`modifier_type=:categorical` for an integer-coded categorical modifier. Scenarios, AMEs and
+delta-method standard errors are handled internally. `vcov` takes the same forms as in
+`population_margins` and defaults to `GLM.vcov`.
+
+If you already hold an `EffectsResult` from `population_margins(...; scenarios=..., type=:effects)`,
+the same comparison is available on its rows, with `vcov` defaulting to the covariance the result
+was computed with:
+
+```julia
+ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effects)
+sd = second_differences(ames, :age, :treated)
+```
+
 ## Conceptual Foundation
 
 ### What Are Second Differences?
@@ -36,49 +66,53 @@ Second differences answer: **"Does the answer to question 1 change depending on 
 
 ## Computational Framework
 
-### Two Approaches to Second Differences
+### Two Ways to Compare, One Function
 
-Margins.jl implements second differences through two complementary approaches:
+`second_differences(model, data, variables, modifier; …)` chooses the computation from the modifier:
 
-#### 1. Discrete Contrast Approach (Population-Based)
+#### Discrete comparison (population-based)
 
-The **discrete contrast approach** uses pre-computed population-level marginal effects (AMEs) via functions like `second_differences()`, `second_differences_pairwise()`, and `second_differences_all_contrasts()`. This approach provides:
+For a discrete modifier (Bool, 0/1, two-valued, string or categorical), or a continuous modifier with
+explicit `levels`, Margins.jl computes the population AME of the focal variable with every
+observation's modifier set to each level, and differences them. This provides:
 
-- **Population representativeness**: Effects averaged over the sample distribution
-- **Statistical validity**: Proper delta-method standard errors accounting for full covariance structure
-- **Flexibility**: Works with binary, categorical, and continuous moderators
-- **Use case**: Comparing AMEs across discrete moderator levels
+- **Population representativeness**: effects averaged over the sample distribution
+- **Statistical validity**: delta-method standard errors that use the covariance between the AMEs
+- **All pairs**: K levels give K(K−1)/2 comparisons; categorical focal variables add one row per contrast
 
-#### 2. Local Derivative Approach (Profile-Based)
+#### Local derivative (finite differences)
 
-The **local derivative approach** uses `second_differences_at()` to compute derivatives at specific evaluation points via finite differences. This approach provides:
+For a continuous modifier, `second_differences` computes ∂AME/∂modifier at the `at` points by a
+symmetric finite difference, `(AME(at + δ) − AME(at − δ)) / 2δ`, with the other variables in
+`profile` held fixed. This provides:
 
-- **Profile-specific analysis**: Evaluate how effects vary at representative covariate combinations
-- **Continuous moderation**: Direct derivative ∂AME/∂modifier at specific points
-- **Scenario control**: Hold other variables constant while varying only the modifier
-- **Use case**: Understanding effect heterogeneity at particular policy-relevant profiles
-- **Requirement**: **Modifier must be continuous/numeric** (focal variable can be continuous or categorical)
+- **A rate**: the change in the marginal effect per unit of the modifier
+- **Profile control**: evaluate at chosen values of the modifier and other variables
+- **Requirement**: the modifier must be numeric (the focal variable may be continuous or categorical)
 
 ### Statistical Inference
 
-Standard errors for second differences employ rigorous delta-method computation. For a second difference comparing two AMEs (AME₁ and AME₂) with parameter gradients g₁ and g₂:
+Standard errors use the delta method. For a second difference comparing two AMEs with parameter
+gradients g₁ and g₂:
 
 ```math
 \text{SE}(\Delta^2) = \sqrt{(g_2 - g_1)' \Sigma (g_2 - g_1)}
 ```
 
-where Σ is the model's parameter covariance matrix. This approach properly accounts for:
-- Covariance between the two AME estimates
-- Full uncertainty propagation from model parameters
-- Appropriate test statistics and confidence intervals
+where Σ is the covariance matrix of the parameters (the `vcov` you choose). The formula accounts for
+the covariance between the two AME estimates and propagates the full parameter uncertainty. For a
+continuous modifier the estimate, standard error and gradient are divided by the modifier distance.
 
-The delta-method computation ensures that hypothesis tests maintain appropriate Type I error rates and confidence intervals achieve nominal coverage probabilities, meeting the statistical validity standards required for econometric research.
-
-The test statistic is `statistic = second_diff / se`. A second difference is a linear combination of the same estimates as the AMEs it compares, so it uses the same reference distribution, recorded in the `df` column and inherited from the effects result: t with `df = dof_residual(model)` for a linear model (`lm`, or a Gaussian identity-link `glm`) with the default model-based covariance, and z (`df = Inf`) for every other model and for robust, clustered or custom covariance estimators (see [Inference](api.md#Output-Columns-and-Inference)).
+The test statistic is `statistic = second_diff / se`. Its reference distribution is recorded in the
+`df` column and follows the covariance used, by the same rule as the rest of the package: t with
+`df = dof_residual(model)` for a linear model (`lm`, or a Gaussian identity-link `glm`) when the
+covariance is the model's own (`GLM.vcov`, or a matrix equal to `vcov(model)`), and z (`df = Inf`) for
+every other model and for robust, clustered or custom covariances (see
+[Inference](api.md#Output-Columns-and-Inference)).
 
 ### Output Schema
 
-Since Margins 3.0 every second-difference function returns the same columns, in this order, whatever the modifier type:
+Every second-difference function returns the same columns, in this order, whatever the modifier type:
 
 | column | meaning |
 |:-------|:--------|
@@ -86,262 +120,193 @@ Since Margins 3.0 every second-difference function returns the same columns, in 
 | `contrast` | focal contrast (`"dy/dx"` for a continuous variable, `"B - A"` for levels) |
 | `modifier` | modifier variable (`Symbol`) |
 | `modifier_type` | `:binary`, `:categorical` or `:continuous` (always filled) |
-| `modifier_level1`, `modifier_level2` | modifier values compared |
+| `modifier_level1`, `modifier_level2` | modifier values compared (numeric levels ascending; categorical levels in level order) |
 | `ame_at_level1`, `ame_at_level2` | focal effect at each modifier value |
 | `second_diff` | `ame_at_level2 - ame_at_level1`; for `:continuous`, divided by the modifier distance (a slope) |
 | `se` | delta-method standard error |
 | `statistic` | `second_diff / se` |
 | `df` | degrees of freedom of the reference distribution (`Inf` = z) |
-| `p_value` | two-sided p-value for H₀: second difference = 0 |
-| `significant` | `p_value < 0.05` |
-| `gradient` | ∂`second_diff`/∂β, for custom variance calculations |
+| `p_value` | two-sided p-value for H₀: second difference = 0 (`NaN` for a second difference that is zero by construction) |
+| `ci_lower`, `ci_upper` | (1 − `alpha`) confidence interval for `second_diff`, from the same t/z reference as the test |
+| `significant` | `p_value < alpha` (`p_adjusted < alpha` when `p_adjust` is set) |
 
-`second_differences_at()` returns the same columns (`modifier_type = :continuous`, `modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the local derivative ∂AME/∂modifier), followed by `eval_point`, `delta_used` and one column per `profile` variable. `second_difference()` (singular) returns one such row as a `NamedTuple`. The column names are also available as `Margins.SECOND_DIFFERENCE_COLUMNS`.
+A local derivative adds `eval_point` and `delta_used` (with `modifier_type = :continuous`,
+`modifier_level1/2 = eval_point ∓ delta_used`, and `second_diff` the derivative ∂AME/∂modifier), and every
+`profile` variable adds one column. With `p_adjust` set, a `p_adjusted` column follows `p_value`; `significant` uses it, but `ci_lower`/`ci_upper` stay unadjusted. With `include_gradients=true`, a `gradient`
+column (the vector ∂`second_diff`/∂β, for custom variance calculations) follows the schema columns; as in
+`DataFrame(result)` it is omitted by default, so the table has only scalar columns and exports cleanly. The column names are also available as `Margins.SECOND_DIFFERENCE_COLUMNS`.
+
+The example outputs on this page are illustrative; the numbers are not from a particular data set.
 
 ## Function Reference
 
-### Main Interface
+### `second_differences(model, data, variables, modifier; …)`
 
-#### `second_differences()`
+The main entry point. It builds the scenarios, computes the AMEs and applies the delta method.
 
-Unified interface for computing second differences across all modifier types. This is the recommended entry point that automatically handles binary, categorical, and continuous moderators.
+```julia
+second_differences(
+    model::RegressionModel, data,
+    variables::Union{Symbol, Vector{Symbol}}, modifier::Symbol;
+    levels = nothing, at = nothing, modifier_type::Symbol = :auto,
+    profile::NamedTuple = NamedTuple(), delta = :auto,
+    scale::Symbol = :response, contrasts::Symbol = :baseline, vcov = GLM.vcov,
+    alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
+)
+```
 
-**Signature**:
+**Arguments**:
+- `model`, `data`: the fitted model and the data frame it was fit to
+- `variables`: focal variable(s), continuous or categorical; must not include the modifier
+- `modifier`: the moderating variable
+
+**Keyword arguments**:
+- `levels`: modifier values to compare. Default for a discrete modifier: all its levels (a categorical
+  array's level order, except that numeric levels are always ascending; otherwise sorted). For a continuous modifier, `levels` returns slopes
+  `(AME₂ − AME₁)/(m₂ − m₁)` for every pair of the given values
+- `at`: continuous modifier only; where to take the derivative: `:mean` (default), `:median`, a number,
+  a vector of numbers, or a `NamedTuple` containing the modifier plus other variables to hold fixed.
+  Cannot be combined with `levels`
+- `modifier_type`: `:auto` (default), `:categorical` or `:continuous`. Detected from the data: numeric
+  with more than two distinct values → continuous; Bool, 0/1, two-valued, strings, categorical arrays
+  → categorical. A numeric modifier with at most 5 distinct integer values is treated as continuous with
+  a warning (unless `at` or `levels` is given), because it is often a coded category. Override with
+  `modifier_type=:categorical` for an integer-coded categorical modifier
+- `profile`: other variables to hold fixed, e.g. `(age=40, region="north")`; vector values give one
+  profile point each (Cartesian product, counterfactual rather than subgroup) and appear as extra columns
+- `delta`: finite-difference step for a local derivative (`:auto` = 1% of the modifier's SD, raised
+  where needed to keep `at ± δ` distinct in floating point); ignored with `levels`
+- `scale`: `:response` or `:link`
+- `contrasts`: `:baseline` (K−1 contrasts per categorical focal variable) or `:pairwise` (K(K−1)/2)
+- `vcov`: covariance estimator, as in `population_margins`: a function of the model (`GLM.vcov`, the
+  default), a matrix (any `AbstractMatrix`, e.g. `Symmetric`), or a CovarianceMatrices estimator (`HC1()`)
+- `alpha`: significance level (default 0.05). `significant` is `p_value < alpha` and `ci_lower`/`ci_upper`
+  are the (1 − `alpha`) interval, so `alpha=0.1` gives 90% intervals
+- `p_adjust`: multiple-testing adjustment over **all rows returned**, i.e. every variable, contrast,
+  level pair, evaluation point and `profile` stratum: `:none` (default), `:bonferroni`, `:holm`
+  (family-wise error rate) or `:bh` (Benjamini–Hochberg false-discovery rate). It adds a `p_adjusted`
+  column after `p_value` and bases `significant` on it. Rows that are zero by construction (see
+  [When the model cannot support the calculation](#When-the-model-cannot-support-the-calculation)) are not
+  tests: they have no p-value and are left out of the family
+- `include_gradients`: add a `gradient` column (∂`second_diff`/∂β per row); omitted by default, as in
+  `DataFrame(result)`
+- `warn`: `true` (default) gives one warning per call about second differences that are zero by
+  construction and about modifier or `profile` values outside the observed range; see
+  [When the model cannot support the calculation](#When-the-model-cannot-support-the-calculation).
+  `warn=false` silences both without changing any number
+
+**Returns**: a `DataFrame` with the [output schema](#Output-Schema). Weights are not supported.
+
+**Cost**: one `population_margins` call per `profile` stratum for a comparison of levels, and one per
+evaluation point and stratum (two modifier values each) for a local derivative.
+
+### `second_differences(result, variables, modifier[, vcov]; …)`
+
+The same comparison on the rows of an `EffectsResult` you already hold: from
+`population_margins(...; scenarios=(modifier=levels,), type=:effects)` (differences of AMEs) or from
+`profile_margins(model, data, cartesian_grid(modifier=levels); type=:effects)` (differences of marginal
+effects at the profile; the grid may vary the modifier only). A `PredictionsResult` is rejected with a
+message pointing to `type=:effects`.
+
 ```julia
 second_differences(
     ame_result::EffectsResult,
     variables::Union{Symbol, Vector{Symbol}},
     modifier::Symbol,
-    vcov::Matrix{Float64};
+    vcov::AbstractMatrix{<:Real} = <the result's own covariance>;
     contrast::String = "dy/dx",
     modifier_type::Symbol = :auto,
-    all_contrasts::Bool = true
+    all_contrasts::Bool = true,
+    alpha = nothing,
+    p_adjust::Symbol = :none,
+    include_gradients::Bool = false,
+    warn::Bool = true,
 )
 ```
 
-**Arguments**:
-- `ame_result`: Result from `population_margins()` with scenarios over the modifier
-- `variables`: Focal variable(s) to analyze (single Symbol or Vector{Symbol})
-- `modifier`: The moderating variable
-- `vcov`: Parameter covariance matrix from the model (via `vcov(model)`)
+- `vcov` may be omitted: `population_margins` and `profile_margins` results record the covariance they
+  were computed with (`metadata[:vcov]`), so the standard errors agree with those of the AMEs. Pass a matrix to use a
+  different estimator; `df` then follows that matrix.
+- The result must vary over the modifier only: if another scenario variable or a `groups=` variable also
+  varies across its rows, the function raises an error instead of pairing rows from different cells.
+- `modifier_type`: `:auto` classifies two levels as `:binary` (with a warning if they are numeric and not
+  0/1, because the result is then the raw AME difference rather than a slope), three or more numeric
+  levels as `:continuous`, otherwise `:categorical`.
+- `contrast` / `all_contrasts`: choose one focal contrast instead of all of them.
+- `alpha` defaults to the `ci_alpha` the result was computed with; `p_adjust` and `include_gradients` are as above.
+- Numeric (and Bool) modifier levels are always compared in ascending order, so
+  `modifier_level1 < modifier_level2` whatever the scenario order; categorical levels keep scenario order.
 
-**Keyword Arguments**:
-- `contrast`: Focal variable contrast for categorical variables (default: "dy/dx"; "derivative" is accepted as an alias)
-- `modifier_type`: Modifier classification (:auto, :binary, :categorical, :continuous)
-- `all_contrasts`: Compute all focal variable contrasts when applicable (default: true)
+### Migrating from Margins 2.x
 
-**Returns**: DataFrame with the [unified schema](#Output-Schema): `variable, contrast, modifier, modifier_type, modifier_level1, modifier_level2, ame_at_level1, ame_at_level2, second_diff, se, statistic, df, p_value, significant, gradient`.
+Margins 3.0 has one function, `second_differences`, in the two forms above. The functions of 2.x are
+removed (calling one raises an `UndefVarError` that names its replacement):
 
-### Specialized Functions
+| Removed (2.x) | Use instead |
+|:--|:--|
+| `second_differences_at(model, data, vars, mod, vcov; at=…, …)` | `second_differences(model, data, vars, mod; at=…, vcov=vcov, …)` |
+| `second_differences_pairwise(result, var, mod, vcov; contrast=…)` | `second_differences(result, var, mod; all_contrasts=false, contrast=…)` |
+| `second_differences_all_contrasts(result, var, mod, vcov)` | `second_differences(result, var, mod)` |
+| `second_differences_table(result, vars, mod, vcov)` | `second_differences(result, vars, mod)` |
+| `second_difference(result, var, mod, vcov)` (a `NamedTuple`) | `second_differences(result, var, mod; include_gradients=true)` (one `DataFrame` row) |
 
-#### `second_differences_pairwise()`
-
-Computes all pairwise modifier comparisons for a single focal variable contrast.
-
-**Use case**: When analyzing a categorical or continuous moderator with multiple levels, and you want all pairwise comparisons for one specific contrast.
-
-**Signature**:
-```julia
-second_differences_pairwise(
-    ame_result::EffectsResult,
-    variable::Symbol,
-    modifier::Symbol,
-    vcov::Matrix{Float64};
-    contrast::String = "dy/dx",
-    modifier_type::Symbol = :auto
-)
-```
-
-**Returns**: DataFrame with one row per pairwise modifier comparison.
-
-#### `second_differences_all_contrasts()`
-
-Computes second differences for all contrasts of a categorical focal variable.
-
-**Use case**: When your focal variable is categorical with multiple contrasts (e.g., pairwise comparisons across education levels) and you want to see how each contrast varies across modifier levels.
-
-**Signature**:
-```julia
-second_differences_all_contrasts(
-    ame_result::EffectsResult,
-    variable::Symbol,
-    modifier::Symbol,
-    vcov::Matrix{Float64};
-    modifier_type::Symbol = :auto
-)
-```
-
-**Returns**: DataFrame with one row per (focal contrast × modifier pair) combination.
-
-#### `second_differences_at()`
-
-Computes local derivatives of marginal effects with respect to a **continuous modifier** at specified evaluation points using finite differences.
-
-**Use case**: Profile-based analysis where you want to understand how effects vary at specific covariate combinations, holding other variables constant.
-
-**Important**: The **modifier must be numeric/continuous** because the function uses finite differences (perturbing the modifier by ±δ). For categorical moderators, use `second_differences()` or `second_differences_pairwise()` instead.
-
-**Signature**:
-```julia
-second_differences_at(
-    model::RegressionModel,
-    data,
-    variables::Union{Symbol, Vector{Symbol}},
-    modifier::Symbol,
-    vcov;
-    at::Union{Symbol, Real, Vector, NamedTuple} = :mean,
-    profile::NamedTuple = NamedTuple(),
-    delta::Union{Symbol, Real} = :auto,
-    scale::Symbol = :response
-)
-```
-
-**Arguments**:
-- `model`: Fitted regression model
-- `data`: Data frame used to fit the model
-- `variables`: Focal variable(s) to compute derivatives for (can be continuous or categorical)
-- `modifier`: **Continuous** modifier variable (differentiate with respect to this - must be numeric)
-- `vcov`: Parameter covariance matrix or function
-
-**Keyword Arguments**:
-- `at`: Where to evaluate the derivative
-  - `:mean`: At mean(modifier) [default]
-  - `:median`: At median(modifier)
-  - Numeric value: At specified modifier value
-  - Vector: Multiple evaluation points
-  - NamedTuple: Full explicit profile including modifier
-- `profile`: Additional variables to hold fixed (scalar or vector values)
-- `delta`: Step size for finite difference (:auto or numeric value)
-- `scale`: Prediction scale (:link or :response)
-
-**Returns**: DataFrame with the [unified schema](#Output-Schema) followed by:
-- `eval_point`: Evaluation point for modifier
-- `delta_used`: Actual step size used
-- Additional columns for profile variables
-
-Here `second_diff` is ∂AME/∂modifier (per unit change in modifier; this column was called `derivative` before 3.0), `modifier_type` is `:continuous`, and `modifier_level1`/`modifier_level2` are `eval_point ∓ delta_used`. `df` follows the model and `vcov` as given: a matrix equal to `vcov(model)` counts as the model-based covariance.
-
-**Examples**:
-```julia
-# Continuous focal variable, continuous modifier
-sd = second_differences_at(model, data, :income, :age, vcov(model))
-# → 1 row: derivative of income effect w.r.t. age
-
-# Categorical focal variable, continuous modifier
-# (education is categorical: "hs", "college", "grad")
-sd = second_differences_at(model, data, :education, :income, vcov(model))
-# → Multiple rows: one per education contrast
-# → e.g., "college - hs", "grad - hs", "grad - college"
-# → Shows how each education gap varies with income
-
-# At specific profile with other variables held constant
-sd = second_differences_at(model, data, :education, :income, vcov(model);
-                          at=50000,           # Income = 50k
-                          profile=(age=40,    # Hold age constant
-                                  region="north"))  # Hold region constant
-
-# Multiple variables across evaluation points
-sd = second_differences_at(model, data, [:x1, :x2], :age, vcov(model);
-                          at=[30, 45, 60])
-# → 2 variables × 3 eval points = 6 rows
-
-# ERROR: Categorical modifier not allowed
-sd = second_differences_at(model, data, :income, :region, vcov(model))
-# → Error: "Modifier :region must be numeric for second_differences_at()"
-# → Use second_differences() instead for categorical moderators
-```
-
-**Variable Type Requirements**:
-- **Focal variable** (first argument): Can be continuous or categorical
-  - Continuous → 1 row per evaluation point
-  - Categorical → Multiple rows per evaluation point (one per contrast)
-- **Modifier** (second argument): **Must be continuous/numeric**
-  - Function uses finite differences: modifier ± δ
-  - For categorical moderators, use `second_differences()` instead
-
-**Statistical Notes**:
-- Uses two-point symmetric finite difference: (AME(at + δ) - AME(at - δ)) / (2δ)
-- Delta-method SE computed from gradient information
-- Choice of δ (via `delta` parameter) trades off approximation bias vs variance
+Other differences from 2.x: the `vcov` argument is optional for results from `population_margins` and
+`profile_margins`; output tables no longer include a `gradient` column unless `include_gradients=true`;
+there are new `ci_lower`/`ci_upper` columns; the local derivative is in `second_diff` (it was
+`derivative`); and a numeric modifier's levels are always compared in ascending order. See the CHANGELOG
+for the full list.
 
 ## Usage Patterns
 
 ### Basic Workflow
 
-The standard workflow for computing second differences involves three steps:
-
-1. Fit your regression model
-2. Compute AMEs across modifier levels using `population_margins()` with scenarios
-3. Calculate second differences using `second_differences()`
-
 ```julia
 using Margins, GLM, DataFrames
 
-# Step 1: Fit model with interaction
+# Fit a model with the interaction, then ask how the effect of x varies with `treated`
 model = lm(@formula(y ~ x * treated + z), data)
-
-# Step 2: Compute AMEs at both treatment levels
-ames = population_margins(model, data;
-                         scenarios=(treated=[0, 1],),
-                         type=:effects)
-
-# Step 3: Calculate second difference
-sd = second_differences(ames, :x, :treated, vcov(model))
-DataFrame(sd)
+sd = second_differences(model, data, :x, :treated)
 ```
 
 **Output structure**:
 ```
-1×15 DataFrame (selected columns)
+1×17 DataFrame (selected columns)
  Row │ variable  contrast  modifier  modifier_type  modifier_level1  modifier_level2  second_diff  se       statistic  df       p_value  significant
      │ Symbol    String    Symbol    Symbol         Int64            Int64            Float64      Float64  Float64    Float64  Float64  Bool
 ─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    1 │ x         dy/dx     treated   binary                       0                1        0.152   0.0428       3.55    496.0   0.0004  true
 ```
 
-**Interpretation**: The marginal effect of `x` is 0.152 units larger when `treated=1` compared to `treated=0` (p < 0.001), indicating a significant positive interaction.
+**Interpretation**: the marginal effect of `x` is 0.152 units larger when `treated=1` than when
+`treated=0` (p < 0.001), a significant positive interaction. In a linear model without other
+interactions this equals the coefficient on `x & treated`.
 
 ### Binary Moderators
 
-Binary moderators produce a single second difference comparing the two levels.
+A binary moderator gives one second difference per focal variable and contrast.
 
-**Example: Treatment Effect Heterogeneity**
 ```julia
 # Does the effect of age vary by treatment status?
-model = glm(@formula(outcome ~ age * treated + education),
-            data, Binomial(), LogitLink())
-
-ames = population_margins(model, data;
-                         scenarios=(treated=[0, 1],),
-                         type=:effects)
-
-sd = second_differences(ames, :age, :treated, vcov(model))
+model = glm(@formula(outcome ~ age * treated + education), data, Binomial(), LogitLink())
+sd = second_differences(model, data, :age, :treated)
 ```
 
-**Interpretation contexts**:
-- **Positive second difference**: Effect is stronger when treated
-- **Negative second difference**: Effect is weaker when treated
-- **Near-zero second difference**: Effect is homogeneous across treatment status
+- **Positive**: the effect is stronger when treated
+- **Negative**: the effect is weaker when treated
+- **Near zero**: the effect is homogeneous across treatment status
 
 ### Categorical Moderators
 
-Categorical moderators with K levels produce K(K-1)/2 pairwise comparisons.
+A moderator with K levels gives K(K−1)/2 pairwise comparisons.
 
-**Example: Education-Specific Effects**
 ```julia
 # Does the income effect vary across education levels?
-model = lm(@formula(consumption ~ income + education), data)
-
-ames = population_margins(model, data;
-                         scenarios=(education=["hs", "college", "grad"],),
-                         type=:effects)
-
-sd = second_differences(ames, :income, :education, vcov(model))
+model = lm(@formula(consumption ~ income * education), data)
+sd = second_differences(model, data, :income, :education)
 ```
 
-**Output structure** (3 education levels → 3 pairwise comparisons):
 ```
-3×15 DataFrame (selected columns)
+3×17 DataFrame (selected columns)
  Row │ variable  modifier   modifier_type  modifier_level1  modifier_level2  second_diff  se       statistic  df       p_value  significant
      │ Symbol    Symbol     Symbol         String           String           Float64      Float64  Float64    Float64  Float64  Bool
 ─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -350,52 +315,37 @@ sd = second_differences(ames, :income, :education, vcov(model))
    3 │ income    education  categorical    college          grad                   0.091    0.048       1.90    994.0   0.058   false
 ```
 
-**Interpretation**: The marginal effect of income on consumption is 0.152 units higher for college graduates compared to high school graduates (p < 0.001). The effect continues to increase for graduate degree holders, though the college-to-grad increase (0.091) is not statistically significant.
+The effect of income is 0.152 higher for college than for high-school graduates (p < 0.001); the
+college-to-grad increase (0.091) is not statistically significant. For a plain string column the
+levels are compared in sorted order; for a `CategoricalArray` they follow its level order. Use
+`levels=["hs", "grad"]` to compare a subset.
 
 ### Continuous Moderators
 
-Continuous moderators provide slopes representing the rate of change in marginal effects per unit change in the moderator.
+For a continuous modifier the default is the local derivative at the mean:
 
-**Example: Age-Varying Treatment Effects**
 ```julia
-# How does the treatment effect change with age?
-model = lm(@formula(outcome ~ treatment + age), data)
+model = lm(@formula(outcome ~ treatment * age), data)
 
-# Evaluate at three age values
-ames = population_margins(model, data;
-                         scenarios=(age=[30, 45, 60],),
-                         type=:effects)
-
-sd = second_differences(ames, :treatment, :age, vcov(model);
-                       modifier_type=:continuous)
+second_differences(model, data, :treatment, :age)                        # ∂AME/∂age at mean(age)
+second_differences(model, data, :treatment, :age; at=[30, 45, 60])       # at three ages
+second_differences(model, data, :treatment, :age; levels=[30, 45, 60])   # slopes between the three ages
 ```
 
-**Continuous modifier interpretation**:
-- `second_diff`: Change in marginal effect per unit increase in moderator
-- For age comparison 30→45: slope = (AME₄₅ - AME₃₀) / 15
-- Slopes indicate whether effects strengthen (positive) or weaken (negative) with age
+- `second_diff`: the change in the marginal effect per unit increase in the moderator
+- With `levels`, the comparison 30→45 gives `(AME₄₅ − AME₃₀) / 15`; with `at`, the value is the derivative at each point
+- Positive slopes mean the effect strengthens as the moderator increases
 
 ### Multiple Focal Variables
 
-Analyze multiple variables simultaneously to compare which effects show strongest moderation.
-
-**Example: Comparative Moderation Analysis**
 ```julia
 # Which demographic effects vary most by treatment?
-model = lm(@formula(outcome ~ age + education_yrs + experience + treated), data)
-
-ames = population_margins(model, data;
-                         scenarios=(treated=[0, 1],),
-                         type=:effects,
-                         vars=[:age, :education_yrs, :experience])
-
-sd = second_differences(ames, [:age, :education_yrs, :experience],
-                       :treated, vcov(model))
+model = lm(@formula(outcome ~ (age + education_yrs + experience) * treated), data)
+sd = second_differences(model, data, [:age, :education_yrs, :experience], :treated)
 ```
 
-**Output structure** (3 variables × 1 binary contrast = 3 rows):
 ```
-3×15 DataFrame (selected columns)
+3×17 DataFrame (selected columns)
  Row │ variable       modifier  modifier_type  second_diff  se       statistic  df       p_value  significant
      │ Symbol         Symbol    Symbol         Float64      Float64  Float64    Float64  Float64  Bool
 ─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -404,153 +354,112 @@ sd = second_differences(ames, [:age, :education_yrs, :experience],
    3 │ experience     treated   binary               0.012    0.024       0.50    995.0   0.617    false
 ```
 
-**Interpretation**: Education effects show the strongest treatment heterogeneity (second diff = 0.123, p < 0.001), followed by age effects (0.045, p = 0.012). Experience effects do not significantly vary by treatment status.
-
 ### Categorical Focal Variables
 
-When the focal variable is categorical, second differences can be computed for each contrast.
+A categorical focal variable gives one row per contrast and modifier comparison.
 
-**Example: Education Contrasts Across Regions**
 ```julia
 using CategoricalArrays
+data.education = categorical(data.education; levels=["hs", "college", "grad"])
 
-# Prepare categorical variable with explicit ordering
-data.education = categorical(data.education,
-                            levels=["hs", "college", "grad"],
-                            ordered=true)
+model = lm(@formula(income ~ education * region), data)
 
-model = lm(@formula(income ~ education + region), data)
+# Baseline contrasts (college − hs, grad − hs) × region pairs
+sd = second_differences(model, data, :education, :region)
 
-# Compute pairwise education contrasts across regions
-ames = population_margins(model, data;
-                         scenarios=(region=["north", "south", "west"],),
-                         type=:effects,
-                         vars=[:education])
-
-# Get all education contrasts × all region pairs
-sd = second_differences(ames, :education, :region, vcov(model))
+# All pairwise contrasts (adds grad − college)
+sd = second_differences(model, data, :education, :region; contrasts=:pairwise)
 ```
 
-**Output dimensions**: If education has 3 levels (→ 3 pairwise contrasts) and region has 3 levels (→ 3 pairwise comparisons), the result contains 3 × 3 = 9 rows representing the full matrix of focal contrasts by modifier comparisons.
+With three education levels and three regions, `contrasts=:baseline` (the default) returns 2 × 3 = 6
+rows and `contrasts=:pairwise` returns 3 × 3 = 9 rows. To look at one contrast, filter the result:
+`sd[sd.contrast .== "college - hs", :]`.
 
-**Practical use**: Identify which education gaps (e.g., college - hs) vary most across geographic regions.
+### Local Derivatives at Profiles
 
-### Local Derivatives at Profiles (`second_differences_at()`)
-
-The profile-based approach computes how marginal effects change continuously with a modifier at specific evaluation points.
-
-**Example: Income Effect Variation Across Age**
 ```julia
 # Does the income effect on consumption strengthen or weaken with age?
 model = lm(@formula(consumption ~ income * age + education), data)
 
-# Evaluate at mean age
-sd = second_differences_at(model, data, :income, :age, vcov(model))
-# Interpretation: derivative shows whether income effect increases/decreases per year of age
-
-# Evaluate at multiple age points
-sd = second_differences_at(model, data, :income, :age, vcov(model);
-                          at=[25, 35, 45, 55, 65])
-# → 5 rows showing how income effect changes across life course
-
-# With fixed profile
-sd = second_differences_at(model, data, :income, :age, vcov(model);
-                          at=40,
-                          profile=(education="college", region="urban"))
-# → "For urban college graduates, how does income effect vary with age?"
+second_differences(model, data, :income, :age)                           # at mean age
+second_differences(model, data, :income, :age; at=[25, 35, 45, 55, 65])  # 5 rows
+second_differences(model, data, :income, :age;
+                   at=40, profile=(education="college", region="urban"))
+# → "If everyone were a college graduate in an urban region, how does the income effect vary with age?"
 ```
 
-**Key differences from discrete approach**:
-- **Continuous moderation**: Direct derivative rather than discrete contrasts
-- **Profile control**: Can hold other variables constant at specific values
-- **Interpretation**: Per-unit change in moderator rather than level-to-level comparison
+Local derivatives hold the `profile` variables fixed while the modifier moves by ±δ, so each row is a
+statement about that profile. Discrete comparisons accept `profile` too, which runs the comparison once
+per profile point. A profile value is a counterfactual (everyone's `female` is set to 0, then to 1), not a
+subgroup analysis; in a nonlinear model the two differ. For subgroups, compute the effects with
+`population_margins(…; groups=…)` and pass the result to `second_differences`. `profile` must not contain
+the modifier.
 
-**When to use each approach**:
+**Which comparison you get**:
 
-| Approach | Use When | Modifier Type | Example |
-|----------|----------|---------------|---------|
-| **`second_differences()`**<br>(Discrete) | Comparing effects across distinct groups | Binary or Categorical | "Does age effect differ for treated vs control?" |
-| **`second_differences_at()`**<br>(Local) | Understanding continuous variation at specific profiles | **Continuous only** | "At age=40, how does education effect change per 1k income?" |
+| Modifier | Default | Alternative |
+|----------|---------|-------------|
+| Binary or categorical | AME difference between levels | `levels=` to select levels |
+| Continuous (numeric, >2 distinct values) | local derivative at `at=:mean` | `at=` for other points, `levels=` for slopes between values |
+| Integer-coded categories (≤ 5 integer values) | treated as continuous, with a warning | `modifier_type=:categorical` |
 
-**Variable Type Compatibility**:
-
-| Function | Focal Variable | Modifier Variable |
-|----------|----------------|-------------------|
-| `second_differences()` | Continuous or Categorical | Binary, Categorical, or Continuous |
-| `second_differences_at()` | Continuous or Categorical | **Continuous only** |
-
-**Common error**: Trying to use `second_differences_at()` with a categorical modifier will produce:
-```
-Error: Modifier :region must be numeric for second_differences_at()
-```
-Solution: Use `second_differences()` or `second_differences_pairwise()` for categorical moderators.
+**Common error**: a local derivative needs a numeric modifier. Giving `at` with a categorical
+modifier raises an error that says so; omit `at` and `second_differences(model, data, …)` compares the
+modifier's levels instead.
 
 ## Advanced Analysis Patterns
 
 ### Robust Standard Errors
 
-Second differences support robust standard errors through CovarianceMatrices.jl integration.
+Pass the estimator as `vcov`, as in `population_margins`:
 
 ```julia
 using CovarianceMatrices
 
-# Heteroskedasticity-robust second differences
-vcov_robust = CovarianceMatrices.HC1(model)
-sd = second_differences(ames, :x, :treated, vcov_robust)
-
-# Clustered standard errors
-vcov_clustered = CovarianceMatrices.Clustered(model, :firm_id)
-sd = second_differences(ames, :x, :treated, vcov_clustered)
+sd = second_differences(model, data, :x, :treated; vcov=HC1())
 ```
 
-The delta-method computation automatically incorporates the robust covariance structure, ensuring appropriate uncertainty quantification under heteroskedasticity or clustering.
+For a result you already hold, compute it with the estimator and the second differences follow it:
+
+```julia
+ames = population_margins(model, data; scenarios=(treated=[0, 1],), type=:effects, vcov=HC1())
+sd = second_differences(ames, :x, :treated)
+```
+
+The delta method then uses the robust covariance, and `df` is `Inf` (z inference).
 
 ### Multiple Testing Considerations
 
-When computing many pairwise comparisons (categorical moderators with many levels), consider adjusting for multiple testing:
+A categorical moderator with many levels, several focal variables or many evaluation points produce many
+tests. Ask for an adjustment over everything returned:
 
 ```julia
-using MultipleTesting
+sd = second_differences(model, data, :x, :education; p_adjust=:holm)
+# or :bonferroni, or :bh for false-discovery-rate control
 
-# Compute all pairwise second differences
-sd = second_differences(ames, :x, :education, vcov(model))
-
-# Apply Bonferroni correction
-α = 0.05
-n_tests = nrow(sd)
-sd.significant_bonferroni = sd.p_value .< (α / n_tests)
-
-# Or use false discovery rate control
-sd.significant_fdr = adjust(sd.p_value, BenjaminiHochberg()) .< α
+sd[:, [:modifier_level1, :modifier_level2, :p_value, :p_adjusted, :significant]]
 ```
 
-### Filtering to Specific Contrasts
+`p_adjusted` follows `p_value`, and `significant` is `p_adjusted < alpha`. The family is every row of the
+returned table: all variables, contrasts, level pairs, evaluation points and `profile` strata. To adjust
+over a different family, compute the pieces separately and adjust the `p_value` column yourself.
 
-For categorical focal variables with many contrasts, focus on specific contrasts of interest:
+### Confidence Levels
 
-```julia
-# Compute only the "college - hs" contrast across regions
-sd = second_differences(ames, :education, :region, vcov(model);
-                       contrast="college - hs",
-                       all_contrasts=false)
-```
+`alpha` sets both the significance level and the interval: `alpha=0.1` gives 90% intervals in
+`ci_lower`/`ci_upper` and `significant = p_value < 0.1`. For a result you already hold, `alpha` defaults to
+the `ci_alpha` it was computed with.
 
 ### Visualization Workflows
-
-Second differences integrate naturally with visualization workflows:
 
 ```julia
 using StatsPlots
 
-# Plot second differences with confidence intervals
-sd_df = DataFrame(sd)
-@df sd_df scatter(:modifier_level2, :second_diff,
-                  yerr=1.96 .* :se,
-                  xlabel="Modifier Level",
-                  ylabel="Second Difference",
-                  title="Effect Heterogeneity Across Moderator",
-                  legend=false)
-hline!([0], linestyle=:dash, color=:gray)  # Reference line at zero
+@df sd scatter(:modifier_level2, :second_diff,
+               yerr=(:second_diff .- :ci_lower, :ci_upper .- :second_diff),
+               xlabel="Modifier Level", ylabel="Second Difference",
+               title="Effect Heterogeneity Across Moderator", legend=false)
+hline!([0], linestyle=:dash, color=:gray)
 ```
 
 ## Methodological Notes
@@ -559,27 +468,19 @@ hline!([0], linestyle=:dash, color=:gray)  # Reference line at zero
 
 In linear models, second differences equal interaction coefficients:
 ```julia
-# Linear model: coefficient = second difference
-model_linear = lm(@formula(y ~ x * z), data)
-interaction_coef = coef(model_linear)[end]  # Coefficient on x:z
-
-ames = population_margins(model_linear, data; scenarios=(z=[0,1],), type=:effects)
-sd = second_differences(ames, :x, :z, vcov(model_linear))
-# sd.second_diff ≈ interaction_coef (within numerical precision)
+model_linear = lm(@formula(y ~ x * z), data)          # z coded 0/1
+second_differences(model_linear, data, :x, :z).second_diff   # ≈ coef(model_linear)[end]
 ```
 
 In nonlinear models, they diverge:
 ```julia
-# Logistic model: coefficient ≠ second difference
 model_logit = glm(@formula(y ~ x * z), data, Binomial(), LogitLink())
-interaction_coef = coef(model_logit)[end]
-
-ames = population_margins(model_logit, data; scenarios=(z=[0,1],), type=:effects)
-sd = second_differences(ames, :x, :z, vcov(model_logit))
-# sd.second_diff ≠ interaction_coef (second diff is on probability scale)
+second_differences(model_logit, data, :x, :z).second_diff    # ≠ coef(model_logit)[end]
+# the second difference is on the probability scale (scale=:response)
 ```
 
-This divergence motivates the second differences framework: to express interactions on the interpretable predicted outcome scale rather than the abstract coefficient scale.
+This divergence motivates the second-differences framework: to express interactions on the
+interpretable predicted-outcome scale rather than the coefficient scale.
 
 ### Relationship to Ai & Norton (2003)
 
@@ -588,187 +489,179 @@ Ai & Norton (2003) demonstrated that in nonlinear models (logit, probit), the in
 2. Varies across observations
 3. Can have different signs than the coefficient
 
-Second differences in Margins.jl operationalize the Ai & Norton framework by:
-- Computing population-averaged interaction effects (second differences from AMEs)
-- Providing proper standard errors via delta method
-- Enabling hypothesis tests for interaction significance
+Second differences in Margins.jl operationalize this framework by computing population-averaged
+interaction effects (differences of AMEs), providing delta-method standard errors, and enabling
+tests of the interaction on the predicted scale.
 
 **Reference**: Ai, C., & Norton, E. C. (2003). Interaction terms in logit and probit models. *Economics Letters*, 80(1), 123-129.
 
 ### Population vs Profile Interpretation
 
-Current second differences use **population-averaged** marginal effects:
-- AMEs computed by averaging over the sample distribution at each modifier level
-- Second differences reflect population-level interaction effects
-- Appropriate for policy analysis requiring external validity
-
-For **profile-based local derivatives**, use `second_differences_at()`:
-- Evaluate interaction effects at specific covariate combinations
-- Useful for scenario-specific analysis or representative case interpretation
-- See the [Local Derivatives at Profiles](#local-derivatives-at-profiles-second_differences_at) section above for full documentation
+Comparisons of levels use **population-averaged** marginal effects: AMEs averaged over the sample
+distribution at each modifier level, appropriate for policy analysis requiring external validity.
+Local derivatives, and any comparison with a `profile`, are conditional on the profile you specify:
+useful for scenario-specific analysis or representative cases.
 
 ### Significance Testing
 
-Hypothesis tests evaluate H₀: second difference = 0 (no interaction on predicted scale).
+Hypothesis tests evaluate H₀: second difference = 0 (no interaction on the predicted scale).
 
-**Important distinction**:
-- Significant second difference → interaction exists on predicted outcome scale
-- Significant interaction coefficient → interaction exists on coefficient scale
+- A significant second difference means an interaction exists on the predicted outcome scale
+- A significant interaction coefficient means an interaction exists on the coefficient scale
 
-In nonlinear models, these are distinct hypotheses. Second differences test the hypothesis most relevant for applied interpretation.
+In nonlinear models these are distinct hypotheses; second differences test the one most relevant for
+applied interpretation.
+
+### When the model cannot support the calculation
+
+A second difference asks whether the effect of the focal variable changes with the modifier, so the
+fitted model has to allow that.
+
+**Zero by construction.** In a model with an identity link, the effect of `x` can depend on `m` only
+through an interaction term. Without one, the second difference is exactly zero whatever the data say;
+it is a property of the specification, not an estimate. The same happens when the modifier is not in the
+model at all (in any model, including a logit). `second_differences` detects this from the gradient of the
+difference (it is identically zero, so no parameter uncertainty can move it) and then:
+
+- reports `second_diff = 0`, `se = 0`, `significant = false`, and `NaN` for `statistic`, `p_value`,
+  `ci_lower` and `ci_upper`, instead of `p = 1` and an interval `[0, 0]`, which would read as a precise
+  finding of "no interaction";
+- leaves the row out of the `p_adjust` family, since it is not a test;
+- issues one warning per call that lists the affected `variable × modifier` pairs and says whether the
+  modifier is missing from the model.
+
+A real interaction term is never flagged, even if its estimated coefficient is close to zero: the test is
+about the model's structure, not the estimate.
+
+**Nonlinear models without an interaction term** are not flagged. In a logit, for example, the marginal
+effect of `x` changes with `m` through the link even with no `x:m` term, which is exactly what second
+differences measure on the response scale. Such a row is reported normally.
+
+**Extrapolation.** If numeric `levels`, `at` or `profile` values fall outside the range of that variable in
+the data, the counterfactual extrapolates the fitted model, and in a nonlinear model the result can be
+badly wrong. `second_differences(model, data, …)` warns and lists the values. (A precomputed result
+carries no data, so this check applies to the model-level form only.)
+
+Both warnings are suppressed by `warn=false`. To find the affected rows programmatically, use
+`isnan.(sd.p_value)`.
 
 ## Integration Examples
 
-### With GLM.jl Ecosystem
+### With GLM.jl
 
 ```julia
 using GLM, CategoricalArrays
 
-# Logistic regression with interaction
-model = glm(@formula(employed ~ education * experience + age),
-            data, Binomial(), LogitLink())
+model = glm(@formula(employed ~ education * experience + age), data, Binomial(), LogitLink())
 
-# Second differences on probability scale
-ames = population_margins(model, data;
-                         scenarios=(experience=[0, 10, 20],),
-                         type=:effects,
-                         scale=:response)  # Probability scale
-
-sd = second_differences(ames, :education, :experience, vcov(model);
-                       modifier_type=:continuous)
-# Interpretation: change in employment effect of education per year of experience
+# Change in the employment effect of education per year of experience, on the probability scale
+sd = second_differences(model, data, :education, :experience)
+sd = second_differences(model, data, :education, :experience; levels=[0, 10, 20])
 ```
 
 ### With MixedModels.jl
 
-Second differences support mixed-effects models for clustered/hierarchical data:
+Second differences work for fitted mixed models through the same entry point:
 
 ```julia
 using MixedModels
 
-# Linear mixed model with interaction
-model = fit(MixedModel,
-           @formula(outcome ~ treatment * time + (1 + time | subject)),
-           data)
+model = fit(MixedModel, @formula(outcome ~ treatment * time + (1 + time | subject)), data)
 
-ames = population_margins(model, data;
-                         scenarios=(time=[0, 6, 12],),
-                         type=:effects)
-
-sd = second_differences(ames, :treatment, :time, vcov(model);
-                       modifier_type=:continuous)
-# Interpretation: change in treatment effect over time (time-varying treatment effect)
+# Change in the treatment effect per unit of time (a time-varying treatment effect)
+sd = second_differences(model, data, :treatment, :time; levels=[0, 6, 12])
 ```
 
-### With DataFrames Ecosystem
+### With the DataFrames ecosystem
 
 ```julia
-using DataFrames, Chain, CSV
+using DataFrames, CSV
 
-# Complete analysis pipeline
-results = @chain begin
-    population_margins(model, data; scenarios=(region=["north","south","west"],), type=:effects)
-    second_differences(_, :income, :region, vcov(model))
-    DataFrame(_)
-    subset(_, :significant => x -> x .== true)  # Filter to significant interactions
-    sort(_, :second_diff, rev=true)  # Sort by effect size
-end
-
-# Export for reporting
-CSV.write("significant_interactions.csv", results)
+results = second_differences(model, data, :income, :region)
+significant = sort(subset(results, :significant => x -> x .== true), :second_diff; rev=true)
+CSV.write("significant_interactions.csv", significant)
 ```
 
 ## Error Handling
 
 ### Common Error Patterns
 
-**Insufficient modifier levels**:
+**Modifier not found, or also a focal variable**:
 ```julia
-# Error: only one modifier level
-ames = population_margins(model, data; scenarios=(treated=[1],), type=:effects)
-second_differences(ames, :x, :treated, vcov(model))
-# → Error: "Need at least 2 modifier levels"
+second_differences(model, data, :x, :nope)
+# → Error: "Modifier variable :nope not found in data. Available columns: …"
+```
+The modifier cannot also be in `variables`; `population_margins` rejects a variable that is both
+a focal variable and a scenario variable.
+
+**`at` and `levels` together, or `at` with a categorical modifier**:
+```julia
+second_differences(model, data, :x, :age; at=40, levels=[30, 50])
+# → Error: Give either `levels` (compare these modifier values) or `at` (local derivative), not both.
+second_differences(model, data, :x, :region; at=1)
+# → Error: `at` (local derivative) applies to a continuous modifier; :region is treated as categorical. …
 ```
 
-**Solution**: Ensure scenarios include at least 2 modifier levels.
-
-**Missing variable in AME result**:
+**Fewer than two modifier levels**:
 ```julia
-# Error: variable not in AME computation
-ames = population_margins(model, data; scenarios=(treated=[0,1],),
-                         type=:effects, vars=[:x])
-second_differences(ames, :z, :treated, vcov(model))
-# → Error: No rows found for variable z
+second_differences(model, data, :x, :treated; levels=[1])
+# → Error: "Need at least 2 modifier levels to compare, got 1."
+```
+For a precomputed result with a single scenario level the message is
+`Need at least 2 modifier levels, found 1 for variable x with contrast dy/dx`.
+
+**Result varies over more than the modifier** (precomputed results):
+```julia
+ames = population_margins(model, data; vars=[:x],
+                         scenarios=(treated=[0,1], female=[0,1]), type=:effects)
+second_differences(ames, :x, :treated)
+# → Error: "The effects result varies over scenario variable :female as well as the modifier :treated …"
+```
+Compute the result over the modifier alone (one call per value of the other variable), or use
+`second_differences(model, data, …; profile=(female=[0, 1],))`, which does this for you. The same
+applies to results computed with `groups=`.
+
+**Variable not in the result** (precomputed results):
+```julia
+second_differences(ames, :z, :treated)
+# → Error: "Variable :z not found in the effects result (variables: x). Include it in `vars` …"
 ```
 
-**Solution**: Include the focal variable in the original `population_margins()` call or omit `vars` parameter to include all continuous variables.
-
-**Dimension mismatch**:
+**Wrong covariance dimensions** (precomputed results with an explicit `vcov`):
 ```julia
-# Error: vcov dimensions don't match gradient dimensions
-wrong_vcov = vcov(different_model)
-second_differences(ames, :x, :treated, wrong_vcov)
+second_differences(ames, :x, :treated, vcov(different_model))
 # → Error: "Dimension mismatch: vcov has N parameters but gradients has M"
 ```
-
-**Solution**: Ensure vcov comes from the same model used to compute AMEs.
+Use the covariance of the model the result was computed from, or omit `vcov`.
 
 ### Validation Workflow
 
 ```julia
-function validate_second_differences(sd_result::DataFrame)
-    # Check for numerical issues
-    if any(isnan.(sd_result.second_diff)) || any(isinf.(sd_result.second_diff))
+using Statistics: mean
+
+function validate_second_differences(sd::DataFrame)
+    if any(isnan.(sd.second_diff)) || any(isinf.(sd.second_diff))
         @warn "NaN or Inf values detected in second differences"
     end
-
-    # Check for zero standard errors (indicates no interaction)
-    zero_se = sum(sd_result.se .≈ 0.0)
-    if zero_se > 0
-        @info "$zero_se second difference(s) have zero SE (likely no interaction)"
-    end
-
-    # Summary statistics
-    n_significant = sum(sd_result.significant)
-    println("Significant interactions: $n_significant / $(nrow(sd_result))")
-    println("Mean absolute second difference: $(mean(abs.(sd_result.second_diff)))")
-
-    return sd_result
+    structural = sum(isnan.(sd.p_value))   # zero by construction: the model has no interaction for that row
+    structural > 0 && @info "$structural second difference(s) are zero by construction (no test is possible)"
+    println("Significant interactions: $(sum(sd.significant)) / $(nrow(sd))")
+    println("Mean absolute second difference: $(mean(abs.(sd.second_diff)))")
+    return sd
 end
 
-# Usage
-sd = second_differences(ames, :x, :treated, vcov(model))
-validated_sd = validate_second_differences(DataFrame(sd))
+sd = validate_second_differences(second_differences(model, data, :x, :treated))
 ```
 
 ## Performance Considerations
 
-### Computational Complexity
+The cost is the AME computation. Differencing the AMEs, applying the delta method and forming all
+pairwise comparisons from the stored gradients is negligible by comparison.
 
-Second differences computation is extremely efficient:
-- **Primary cost**: Computing the underlying AMEs via `population_margins()`
-- **Second differences calculation**: Negligible additional cost (vector operations only)
-- **Scalability**: O(1) with respect to number of pairwise comparisons
-
-```julia
-# Performance example
-@time ames = population_margins(model, large_data;
-                                scenarios=(education=levels,),
-                                type=:effects)
-# → 95% of total computation time
-
-@time sd = second_differences(ames, :income, :education, vcov(model))
-# → <5% of total time, even with many pairwise comparisons
-```
-
-### Memory Efficiency
-
-Second differences leverage the gradient information already stored in `EffectsResult`:
-- No additional model evaluations required
-- No dataset traversal
-- Minimal additional allocations
-
-For large-scale applications with many moderator levels, the computational bottleneck remains the AME computation, not the second differences calculation.
+- **Comparison of levels**: one `population_margins` call (all levels in one scenario grid) per `profile` stratum.
+- **Local derivative**: two modifier values, so one `population_margins` call, per evaluation point and stratum.
+- **Precomputed results**: `second_differences(result, …)` does no model evaluation and no pass over the data;
+  it reuses the gradient matrix stored in the `EffectsResult`, so many comparisons from one result are essentially free.
 
 ## Literature and References
 

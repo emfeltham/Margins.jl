@@ -661,16 +661,16 @@ For comprehensive coverage of second differences—interaction effects on the pr
 
 **Quick reference**:
 ```julia
-# Compute AMEs across modifier levels
-ames = population_margins(
-    model, data; scenarios = (treated=[0,1],), type = :effects
-)
+# Does the effect of age depend on treatment? (discrete modifier)
+sd = second_differences(model, data, :age, :treated)
 
-# Calculate second differences
-sd = second_differences(ames, :age, :treated, vcov(model))
+# Continuous modifier: local derivative ∂AME/∂income at the mean income
+sd = second_differences(model, data, :age, :income)
 ```
 
-Available functions: `second_differences()`, `second_difference()`, `second_differences_pairwise()`, `second_differences_all_contrasts()`.
+`second_differences(model, data, …)` is the entry point; for an `EffectsResult` you already hold, use
+`second_differences(result, …)`. The 2.x functions (`second_differences_at`, `second_differences_pairwise`, …)
+were removed in 3.0; see [Migrating from Margins 2.x](second_differences.md#Migrating-from-Margins-2.x).
 
 ## Error Handling and Diagnostics
 

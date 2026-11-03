@@ -67,8 +67,8 @@ Fields:
 - `standard_errors::Vector{Float64}`: Standard errors
 - `variables::Vector{String}`: The "x" in dy/dx - which variable each row represents
 - `terms::Vector{String}`: Contrast descriptions (e.g., "dy/dx", "treated - control")
-- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile effects MEM)
-- `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
+- `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile effects MEM/MER) or the `scenarios=` and `groups=` variables (population effects); `nothing` for a plain AME. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
+- `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
 - `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
 
@@ -101,8 +101,8 @@ Predictions represent "fitted value at scenario" so they don't need variable/con
 Fields:
 - `estimates::Vector{Float64}`: Point estimates (predicted values)
 - `standard_errors::Vector{Float64}`: Standard errors
-- `profile_values::Union{Nothing, NamedTuple}`: Reference grid values (for profile predictions APM/APR)
-- `group_values::Union{Nothing, NamedTuple}`: Grouping variable values
+- `profile_values::Union{Nothing, NamedTuple}`: Per-row context columns: the reference grid (profile predictions APM/APR) or the `scenarios=` and `groups=` variables (population predictions); `nothing` for a plain AAP. `metadata[:groups_vars]` / `metadata[:scenarios_vars]` say which columns are groups and which are scenarios (see `context_columns`)
+- `group_values::Union{Nothing, NamedTuple}`: Reserved; currently always `nothing` (group columns are stored in `profile_values`)
 - `gradients::Matrix{Float64}`: Parameter gradients (G matrix) for delta-method
 - `metadata::Dict{Symbol, Any}`: Analysis metadata (model info, options used, etc.)
 
