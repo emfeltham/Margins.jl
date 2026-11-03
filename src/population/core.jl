@@ -4,7 +4,7 @@
 # Unified caching system (see engine/caching.jl)
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, weights=nothing) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -51,7 +51,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels  
-- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+- `alpha::Float64=0.05`: significance level α: confidence intervals have level 1-α (the same keyword as `contrast` and `second_differences`; it was `ci_alpha` before 3.0)
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   (a function of the model, a CovarianceMatrices estimator, or a covariance matrix; a matrix must be square,
@@ -63,11 +63,19 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator (e.g. `HC1()`) for robust/clustered
     standard errors (inference is then z-based; see *Inference* below)
-- `weights=nothing`: Observation weights for survey data or sampling corrections
-  - `nothing` - No weights (equal weight for all observations, default)
-  - `Symbol` - Column name containing weights (e.g., `:sampling_weight`)
-  - `Vector` - Weight vector matching number of observations
-  - Weights enable proper survey inference: `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
+- `weights=:model`: observation weights for the averages, `Σ(w_i * ∂ŷ_i/∂x_i) / Σ(w_i)`
+  - `:model` - the fitted model's estimation weights (`glm(...; wts=w)`, `fit(MixedModel, ...; wts=w)`)
+    if it has any, otherwise none (default). The weights must have one entry per row of `data`: if the
+    fit dropped rows (missing values), this is an error; pass the weights explicitly. A
+    FixedEffectModels `reg(...; weights=:w)` does not keep its weights, so pass `weights=:w` there.
+  - `:none` - no weights (equal weight for all observations; the 2.x default). `nothing` means the same.
+  - `Symbol` - column name containing weights (e.g., `:sampling_weight`); `:model` and `:none` are
+    reserved, so pass a column with one of those names as a vector
+  - `Vector` - weight vector matching number of observations
+  - `metadata[:weights_source]` records which applied: `:model`, `:user` or `:none`
+  - Weights change the point estimates only. Standard errors come from `vcov` (by default the model's,
+    which in GLM.jl treats `wts` as frequency weights); they are not design-based survey standard
+    errors. For those, pass a design-based covariance estimator or matrix as `vcov`.
 
 # Returns
 `EffectsResult` or `PredictionsResult` containing estimates, delta-method standard errors,
@@ -115,7 +123,7 @@ result = population_margins(model, data; vars=[:x1], measure=:semielasticity_dye
 result = population_margins(model, data; type=:predictions)
 
 # Confidence intervals (99% confidence level)
-result = population_margins(model, data; vars=[:x1], ci_alpha=0.01)
+result = population_margins(model, data; vars=[:x1], alpha=0.01)
 DataFrame(result)  # Includes ci_lower and ci_upper columns
 
 # Counterfactual analysis: effects when x2 is set to 0 vs 1
@@ -129,7 +137,12 @@ result = population_margins(model, data; groups=:region => :gender)  # Nested gr
 # High-accuracy computation with automatic differentiation  
 result = population_margins(model, data; backend=:ad, scale=:link)
 
-# Survey data with sampling weights
+# A weighted fit is averaged with its own weights by default; :none gives the unweighted average
+wmodel = glm(@formula(y ~ x1 + x2), data, Binomial(); wts=data.w)
+population_margins(wmodel, data)                  # weighted by data.w (metadata[:weights_source] == :model)
+population_margins(wmodel, data; weights=:none)   # unweighted
+
+# Averaging weights given explicitly (point estimates; see `vcov` for the standard errors)
 result = population_margins(model, data; weights=:sampling_weight)
 
 # Frequency weights for aggregated data
@@ -143,8 +156,9 @@ function population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing
+    alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
+    _reject_ci_alpha(ci_alpha)
     # Shared input validation for common parameters
     validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
     
@@ -167,9 +181,6 @@ function population_margins(
             _validate_scenarios_groups_conflict(scenarios, groups)
         end
     end
-    if !isnothing(weights)
-        _validate_weights_parameter(weights, data)
-    end
     # Single data conversion (consistent format throughout)
     data_nt_raw = Tables.columntable(data)
 
@@ -178,11 +189,9 @@ function population_margins(
     # that cause type instability and allocations in downstream code
     data_nt = _prepare_margins_data(data_nt_raw, model)
 
-    # Process weights parameter
-    weights_vec = _process_weights_parameter(weights, data, data_nt)
-    
-    # Extract weight column name for variable filtering
-    weight_col = weights isa Symbol ? weights : nothing
+    # Averaging weights (:model default), where they came from, and the weight column (if a name)
+    # to exclude from auto-detected variables
+    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt)
     
     # Handle vars parameter with improved validation
     if type === :effects
@@ -204,8 +213,8 @@ function population_margins(
     try
         # Handle scenarios/groups parameters for counterfactual scenarios and grouping
         if !isnothing(scenarios) || !isnothing(groups)
-            res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts), model, vcov, engine.Σ)
-            res.metadata[:weighted] = !isnothing(weights_vec)
+            res = _attach_inference_df!(_population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts), model, vcov, engine.Σ)
+            _set_weights_metadata!(res.metadata, weights_vec, weights_source)
             return res
         end
     
@@ -214,13 +223,13 @@ function population_margins(
             metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
         
             # Store confidence interval parameters in metadata
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
         
             # Add analysis_type for format auto-detection
             metadata[:analysis_type] = :population
         
             # Store weights info in metadata
-            metadata[:weighted] = !isnothing(weights_vec)
+            _set_weights_metadata!(metadata, weights_vec, weights_source)
         
             # Extract raw components from DataFrame
             estimates = df.estimate
@@ -234,13 +243,13 @@ function population_margins(
             metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
         
             # Store confidence interval parameters in metadata
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
         
             # Add analysis_type for format auto-detection
             metadata[:analysis_type] = :population
         
-            # Store weights info in metadata  
-            metadata[:weighted] = !isnothing(weights_vec)
+            # Store weights info in metadata
+            _set_weights_metadata!(metadata, weights_vec, weights_source)
         
             # Extract raw components from DataFrame
             estimates = df.estimate
@@ -712,18 +721,17 @@ function _validate_weights_parameter(weights, data)
             throw(ArgumentError("weights vector length ($(length(weights))) must match number of observations ($n_data)"))
         end
         
-        # Check that all weights are non-negative
-        if !all(w >= 0 for w in weights)
-            throw(ArgumentError("all weights must be non-negative"))
-        end
-        
-        # Check that at least some weights are positive
-        if all(w == 0 for w in weights)
-            throw(ArgumentError("at least some weights must be positive"))
-        end
+        _validate_weight_values(weights)
     else
-        throw(ArgumentError("weights must be Symbol (column name) or Vector{<:Real}"))
+        throw(ArgumentError("weights must be :model, :none, a Symbol (column name) or a Vector{<:Real}"))
     end
+end
+
+# Weights must be non-negative with at least one positive
+function _validate_weight_values(weights)
+    all(w >= 0 for w in weights) || throw(ArgumentError("all weights must be non-negative"))
+    all(w == 0 for w in weights) && throw(ArgumentError("at least some weights must be positive"))
+    return nothing
 end
 
 """

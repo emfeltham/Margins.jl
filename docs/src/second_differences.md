@@ -10,7 +10,7 @@ moderator:
 ```julia
 second_differences(model, data, :age, :treated)             # discrete modifier: treated vs not
 second_differences(model, data, [:age, :income], :treated)  # several focal variables
-second_differences(model, data, :age, :income)              # continuous modifier: ∂AME/∂income at mean(income)
+second_differences(model, data, :age, :income)              # continuous modifier: average ∂AME/∂income over the observed incomes
 second_differences(model, data, :age, :income; at=[20_000, 50_000])      # at chosen values
 second_differences(model, data, :age, :income; levels=[20_000, 50_000])  # slope between two values
 second_differences(model, data, :age, :treated; profile=(female=[0, 1],)) # with everyone's female set to 0, then 1
@@ -151,7 +151,7 @@ second_differences(
     levels = nothing, at = nothing, modifier_type::Symbol = :auto,
     profile::NamedTuple = NamedTuple(), delta = :auto,
     scale::Symbol = :response, contrasts::Symbol = :baseline, vcov = GLM.vcov,
-    weights = nothing, alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
+    weights = :model, alpha::Real = 0.05, p_adjust::Symbol = :none, include_gradients::Bool = false, warn::Bool = true,
 )
 ```
 
@@ -164,9 +164,10 @@ second_differences(
 - `levels`: modifier values to compare. Default for a discrete modifier: all its levels (a categorical
   array's level order, except that numeric levels are always ascending; otherwise sorted). For a continuous modifier, `levels` returns slopes
   `(AME₂ − AME₁)/(m₂ − m₁)` for every pair of the given values
-- `at`: continuous modifier only; where to take the derivative: `:mean` (default), `:median`, a number,
+- `at`: continuous modifier only; where to take the derivative: `:observed` (default), `:mean`, `:median`, a number,
   a vector of numbers, or a `NamedTuple` containing the modifier plus other variables to hold fixed.
-  Cannot be combined with `levels`
+  Cannot be combined with `levels`. `at=:observed` (the default) is the average derivative over the observed
+  values (see below)
 - `modifier_type`: `:auto` (default), `:categorical` or `:continuous`. Detected from the data: numeric
   with more than two distinct values → continuous; Bool, 0/1, two-valued, strings, categorical arrays
   → categorical. A numeric modifier with at most 5 distinct integer values is treated as continuous with
@@ -174,9 +175,13 @@ second_differences(
   `modifier_type=:categorical` for an integer-coded categorical modifier
 - `profile`: other variables to hold fixed, e.g. `(age=40, region="north")`; vector values give one
   profile point each (Cartesian product, counterfactual rather than subgroup) and appear as extra columns
-- `weights`: observation weights as in `population_margins` (a column name or a vector). All average
-  marginal effects are weighted, and `at=:mean`/`:median` use the weighted mean/median of the modifier.
-  Without it the result is unweighted even if you computed weighted effects elsewhere. For a result you
+- `weights`: observation weights as in `population_margins`: `:model` (default; the weights the model
+  was fit with, if any, otherwise none), `:none` (or `nothing`) for unweighted, a column name or a vector.
+  All average marginal effects are weighted, and `at=:mean`/`:median` use the weighted mean/median of the
+  modifier. So `glm(…; wts = w)` gives weighted second differences without further arguments; pass
+  `weights = :none` for the unweighted ones (the 2.x default). The table records the source as
+  `metadata(sd, "weights_source")` (`:model`, `:user` or `:none`). See [Weights](weights.md) for how each
+  model class is read and for the standard errors (from `vcov`, not design-based). For a result you
   already hold, pass the weighted `EffectsResult` to the result-level form: its gradients carry the weights
 - `delta`: finite-difference step for a local derivative (`:auto` = 1% of the modifier's SD, raised
   where needed to keep `at ± δ` distinct in floating point); ignored with `levels`
@@ -189,8 +194,8 @@ second_differences(
 - `contrasts`: `:baseline` (K−1 contrasts per categorical focal variable) or `:pairwise` (K(K−1)/2)
 - `vcov`: covariance estimator, as in `population_margins`: a function of the model (`GLM.vcov`, the
   default), a matrix (any `AbstractMatrix`, e.g. `Symmetric`), or a CovarianceMatrices estimator (`HC1()`)
-- `alpha`: significance level (default 0.05). `significant` is `p_value < alpha` and `ci_lower`/`ci_upper`
-  are the (1 − `alpha`) interval, so `alpha=0.1` gives 90% intervals
+- `alpha`: as in `population_margins` (default 0.05). `ci_lower`/`ci_upper` are the (1 − `alpha`)
+  interval and `significant` is `p_value < alpha`, so `alpha=0.1` gives 90% intervals
 - `p_adjust`: multiple-testing adjustment over **all rows returned**, i.e. every variable, contrast,
   level pair, evaluation point and `profile` stratum: `:none` (default), `:bonferroni`, `:holm`
   (family-wise error rate) or `:bh` (Benjamini–Hochberg false-discovery rate). It adds a `p_adjusted`
@@ -204,7 +209,7 @@ second_differences(
   [When the model cannot support the calculation](#When-the-model-cannot-support-the-calculation).
   `warn=false` silences both without changing any number
 
-**Returns**: a `DataFrame` with the [output schema](#Output-Schema). Weights are not supported.
+**Returns**: a `DataFrame` with the [output schema](#Output-Schema).
 
 **Cost**: one `population_margins` call per `profile` stratum for a comparison of levels, and one per
 evaluation point and stratum (two modifier values each) for a local derivative.
@@ -241,7 +246,7 @@ second_differences(
   0/1, because the result is then the raw AME difference rather than a slope), three or more numeric
   levels as `:continuous`, otherwise `:categorical`.
 - `contrast`: `nothing` (default) uses every contrast of each focal variable; a label such as `"college - hs"` or `"dy/dx"` restricts the result to that contrast. (Plural `contrasts=` in the model-level form chooses how contrasts are *built*, `:baseline` or `:pairwise`; a result already holds its contrasts.)
-- `alpha` defaults to the `ci_alpha` the result was computed with; `p_adjust` and `include_gradients` are as above.
+- `alpha` defaults to the value the result was computed with; `p_adjust` and `include_gradients` are as above.
 - Numeric (and Bool) modifier levels are always compared in ascending order, so
   `modifier_level1 < modifier_level2` whatever the scenario order; categorical levels keep scenario order.
 
@@ -330,12 +335,13 @@ levels are compared in sorted order; for a `CategoricalArray` they follow its le
 
 ### Continuous Moderators
 
-For a continuous modifier the default is the local derivative at the mean:
+For a continuous modifier the default is the average derivative over the observed values (`at=:observed`):
 
 ```julia
 model = lm(@formula(outcome ~ treatment * age), data)
 
-second_differences(model, data, :treatment, :age)                        # ∂AME/∂age at mean(age)
+second_differences(model, data, :treatment, :age)                        # average ∂AME/∂age over the observed ages
+second_differences(model, data, :treatment, :age; at=:mean)              # at the mean age, set for everyone
 second_differences(model, data, :treatment, :age; at=[30, 45, 60])       # at three ages
 second_differences(model, data, :treatment, :age; levels=[30, 45, 60])   # slopes between the three ages
 ```
@@ -389,7 +395,7 @@ rows and `contrasts=:pairwise` returns 3 × 3 = 9 rows. To look at one contrast,
 # Does the income effect on consumption strengthen or weaken with age?
 model = lm(@formula(consumption ~ income * age + education), data)
 
-second_differences(model, data, :income, :age)                           # at mean age
+second_differences(model, data, :income, :age)                           # averaged over the observed ages
 second_differences(model, data, :income, :age; at=[25, 35, 45, 55, 65])  # 5 rows
 second_differences(model, data, :income, :age;
                    at=40, profile=(education="college", region="urban"))
@@ -403,12 +409,27 @@ subgroup analysis; in a nonlinear model the two differ. For subgroups, compute t
 `population_margins(…; groups=…)` and pass the result to `second_differences`. `profile` must not contain
 the modifier.
 
+**Derivative at a point or averaged over the data.** `at=:mean`, `at=:median`, a number or a vector sets
+the modifier to that value *for everyone* and differentiates the resulting AME: the answer is the
+effect heterogeneity at that point of the modifier. `at=:observed` (the default) instead shifts the modifier by ±δ
+*for every row*, keeping each row's own values of everything else, so the result is the mean over
+observations of the cross-derivative ∂²ŷᵢ/∂x∂m at each row's own (xᵢ, mᵢ, …): one number for the
+sample, the way an AME is one number for the sample. The two agree when the AME is linear in the
+modifier (a linear model, or the link scale of a GLM with a plain interaction) and differ in a nonlinear
+model. `at=:observed` costs two `population_margins` calls per profile point whatever the sample size, and
+returns `eval_point = NaN`, `modifier_level1/2 = NaN` and `delta_used` (the step).
+
+```julia
+second_differences(model, data, :income, :age; at = :observed)              # average interaction effect
+second_differences(model, data, :income, :age; at = :observed, weights = :sw)
+```
+
 **Which comparison you get**:
 
 | Modifier | Default | Alternative |
 |----------|---------|-------------|
 | Binary or categorical | AME difference between levels | `levels=` to select levels |
-| Continuous (numeric, >2 distinct values) | local derivative at `at=:mean` | `at=` for other points, `levels=` for slopes between values |
+| Continuous (numeric, >2 distinct values) | average derivative over the observed values (`at=:observed`) | `at=` for derivatives at chosen points (`:mean`, a number, …), `levels=` for slopes between values |
 | Integer-coded categories (≤ 5 integer values) | treated as continuous, with a warning | `modifier_type=:categorical` |
 
 **Common error**: a local derivative needs a numeric modifier. Giving `at` with a categorical
@@ -454,9 +475,9 @@ over a different family, compute the pieces separately and adjust the `p_value` 
 
 ### Confidence Levels
 
-`alpha` sets both the significance level and the interval: `alpha=0.1` gives 90% intervals in
+`alpha` (the `population_margins` keyword) sets both the significance level and the interval: `alpha=0.1` gives 90% intervals in
 `ci_lower`/`ci_upper` and `significant = p_value < 0.1`. For a result you already hold, `alpha` defaults to
-the `ci_alpha` it was computed with.
+the `alpha` it was computed with.
 
 ### Visualization Workflows
 

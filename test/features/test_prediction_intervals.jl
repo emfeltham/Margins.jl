@@ -87,9 +87,9 @@ using Margins
         end
     end
 
-    @testset "ci_alpha controls the level" begin
+    @testset "alpha controls the level" begin
         r95 = DataFrame(profile_margins(m, df, grid; type=:predictions, interval=:prediction))
-        r90 = DataFrame(profile_margins(m, df, grid; type=:predictions, interval=:prediction, ci_alpha=0.10))
+        r90 = DataFrame(profile_margins(m, df, grid; type=:predictions, interval=:prediction, alpha=0.10))
         # Narrower confidence level → narrower prediction interval
         @test all(r90.ci_upper .< r95.ci_upper)
         @test all(r90.ci_lower .> r95.ci_lower)

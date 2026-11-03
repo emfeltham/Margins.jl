@@ -112,8 +112,8 @@ using Random
         # same as the result-level form on a weighted result
         ames = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects, weights = w)
         @test second_differences(ames, :x, :z).second_diff ≈ wt.second_diff
-        # local derivative: weighted mean as the default point, weighted effects
-        lw = second_differences(lg, df, :x, :w; weights = w, delta = 0.01)
+        # local derivative: weighted mean as the point for at = :mean, weighted effects
+        lw = second_differences(lg, df, :x, :w; weights = w, delta = 0.01, at = :mean)
         @test lw.eval_point[1] ≈ sum(w .* df.w) / sum(w)
         lex = second_differences(lg, dup, :x, :w; at = lw.eval_point[1], delta = 0.01)
         @test lw.second_diff ≈ lex.second_diff
@@ -150,5 +150,26 @@ using Random
         @test_throws ErrorException second_differences(ames, :cg, :z; contrast = "dy/dx", warn = false)
         err = try second_differences(ames, :cg, :z; all_contrasts = false) catch e; sprint(showerror, e) end
         @test occursin("all_contrasts", err) && occursin("contrast=", err)
+    end
+
+    @testset "alpha is the one name for the significance level" begin
+        r = population_margins(lg, df; vars = :x, alpha = 0.10)
+        @test r.metadata[:alpha] == 0.10
+        @test all(DataFrame(r).ci_upper .- DataFrame(r).estimate .≈ Margins._critical_value(0.10) .* r.standard_errors)
+        @test profile_margins(lg, df, DataFrame(z = [0.0]); vars = :x, alpha = 0.2).metadata[:alpha] == 0.2
+        # the 2.x keyword names the new one
+        err = try population_margins(lg, df; vars = :x, ci_alpha = 0.1) catch e; sprint(showerror, e) end
+        @test occursin("renamed `alpha`", err)
+        @test_throws ArgumentError profile_margins(lg, df, DataFrame(z = [0.0]); vars = :x, ci_alpha = 0.1)
+        # contrast takes `alpha`, not α
+        res = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects)
+        c90 = Margins.contrast(res, 1, 2, vcov(lg); alpha = 0.10)
+        c95 = Margins.contrast(res, 1, 2, vcov(lg))
+        @test c90.metadata[:alpha] == 0.10 && (c90.ci_upper - c90.ci_lower) < (c95.ci_upper - c95.ci_lower)
+        # second_differences inherits the result's alpha, and an explicit one wins
+        @test second_differences(res, :x, :z).ci_lower[1] ≈ second_differences(res, :x, :z; alpha = 0.05).ci_lower[1]
+        r10 = population_margins(lg, df; vars = :x, scenarios = (z = [false, true],), type = :effects, alpha = 0.10)
+        @test second_differences(r10, :x, :z).ci_lower[1] ≈ second_differences(r10, :x, :z; alpha = 0.10).ci_lower[1]
+        @test_throws MethodError second_differences(lg, df, :x, :z; ci_alpha = 0.1)
     end
 end

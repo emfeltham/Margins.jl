@@ -664,7 +664,7 @@ For comprehensive coverage of second differences—interaction effects on the pr
 # Does the effect of age depend on treatment? (discrete modifier)
 sd = second_differences(model, data, :age, :treated)
 
-# Continuous modifier: local derivative ∂AME/∂income at the mean income
+# Continuous modifier: average derivative ∂AME/∂income over the observed incomes
 sd = second_differences(model, data, :age, :income)
 ```
 

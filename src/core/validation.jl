@@ -189,6 +189,13 @@ function validate_population_parameters(type, scale, backend, measure=:effect, v
     validate_common_parameters(type, scale, backend, measure, vars)
 end
 
+# `ci_alpha` was the 2.x name of the significance level; it is `alpha` everywhere now (population_margins,
+# profile_margins, contrast, second_differences). Passing the old keyword says so.
+function _reject_ci_alpha(ci_alpha)
+    isnothing(ci_alpha) && return nothing
+    throw(ArgumentError("`ci_alpha` was renamed `alpha` in 3.0: use alpha=$(ci_alpha)"))
+end
+
 """
     validate_vcov_parameter(vcov, model)
 

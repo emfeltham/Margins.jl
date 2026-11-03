@@ -66,6 +66,7 @@ using CategoricalArrays
 using Printf: @sprintf
 using Distributions: Normal, TDist, cdf, ccdf, quantile
 using Dates: now
+import StatsBase  # weight types of a fitted model (_weights_from_storage)
 
 # Version info
 const VERSION = pkgversion(@__MODULE__)  # read from Project.toml, so it cannot drift
@@ -102,6 +103,7 @@ include("inference/mixture_utilities.jl")                # create_mixture_column
 
 include("core/data_conversion.jl")  # Data type conversion utilities
 include("core/validation.jl")
+include("core/model_weights.jl")  # weights=:model default: _model_weights, _resolve_weights
 include("core/margins_validation.jl")
 include("core/typical_values.jl")
 include("computation/scenarios.jl")  # ContrastPair and scenario utilities

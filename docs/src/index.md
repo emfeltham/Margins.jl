@@ -151,7 +151,7 @@ sd = second_differences(model, data, :age, :treated)
 # Categorical moderators with multiple levels: all pairwise comparisons
 sd = second_differences(model, data, :income, :education)
 
-# Continuous moderator: ∂AME/∂income at the mean, or at chosen values
+# Continuous moderator: average ∂AME/∂income over the observed values, or at chosen values
 sd = second_differences(model, data, :age, :income)
 sd = second_differences(model, data, :age, :income; at = [20_000, 50_000])
 ```

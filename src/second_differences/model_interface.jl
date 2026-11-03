@@ -34,9 +34,9 @@ function _warn_if_integer_coded(col, modifier::Symbol)
     lv = sort(unique(vals))
     length(lv) <= INTEGER_CODED_MAX_LEVELS || return nothing
     @warn "Modifier :$modifier takes only $(length(lv)) integer values ($(join(lv, ", "))) and is treated as " *
-          "continuous, so the result is the local derivative ∂AME/∂$modifier at its mean. If these are " *
+          "continuous, so the result is the average derivative ∂AME/∂$modifier over the observed values. If these are " *
           "category codes, pass modifier_type=:categorical to compare levels; to keep the derivative " *
-          "and silence this warning, pass `at=` (e.g. at=:mean)."
+          "and silence this warning, pass `at=` (e.g. at=:observed)."
     return nothing
 end
 
@@ -53,7 +53,7 @@ end
     second_differences(model, data, variables, modifier;
                        levels=nothing, at=nothing, modifier_type=:auto, profile=NamedTuple(),
                        delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing, vcov=GLM.vcov,
-                       weights=nothing, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true)
+                       weights=:model, alpha=0.05, p_adjust=:none, include_gradients=false, warn=true)
 
 How does the marginal effect of `variables` change with `modifier`? Computes the second
 difference (interaction effect on the response scale) with delta-method standard errors
@@ -64,8 +64,8 @@ What is computed depends on the modifier:
 - **Discrete modifier** (Bool, 0/1, strings, categorical, or numeric with ≤ 2 values):
   AME(`variables`) at every pair of modifier levels, and the difference between them.
 - **Continuous modifier** (numeric with more than 2 distinct values):
-  the local derivative ∂AME/∂modifier at `at` (default the mean), by symmetric finite
-  differences; or, with `levels=[…]`, the slope between those modifier values.
+  the derivative ∂AME/∂modifier by symmetric finite differences, averaged over the observed
+  values (`at=:observed`, the default) or taken at the points `at` gives; or, with `levels=[…]`, the slope between those modifier values.
 
 # Arguments
 - `model`, `data`: fitted model and the data frame it was fit to.
@@ -77,9 +77,15 @@ What is computed depends on the modifier:
 - `levels`: modifier values to compare. Default for a discrete modifier: all its levels.
   For a continuous modifier, giving `levels` returns slopes `(AME₂ − AME₁)/(m₂ − m₁)` for every
   pair of those values instead of a local derivative.
-- `at`: continuous modifier only; where to take the derivative: `:mean` (default), `:median`,
-  a number, a vector of numbers, or a `NamedTuple` that includes the modifier together with other
-  variables to hold fixed. Cannot be combined with `levels`.
+- `at`: continuous modifier only; where to take the derivative. `:observed` (default) is the **average
+  derivative over the observed values**: the modifier is shifted by ±δ for every row (each row keeps its
+  own other values) rather than set to one value for everyone, so the result is the mean over observations
+  of ∂²ŷᵢ/∂x∂m at each row's own (xᵢ, mᵢ, …), the analogue of an AME for the interaction (Ai & Norton's
+  average interaction effect). It needs no evaluation point (`eval_point` and the levels are `NaN`). The
+  alternatives set the modifier to a value for everyone: `:mean`, `:median`, a number, a vector of
+  numbers, or a `NamedTuple` that includes the modifier together with other variables to hold fixed. They
+  differ from `:observed` in a nonlinear model, where the derivative changes along the modifier. Cannot be
+  combined with `levels`.
 - `modifier_type`: `:auto` (default; decided from the data as above), `:categorical` or
   `:continuous`. Use it to treat an integer-coded categorical modifier as categorical (a numeric
   modifier with at most 5 distinct integer values is treated as continuous with a warning, unless
@@ -101,12 +107,14 @@ What is computed depends on the modifier:
 - `vcov`: covariance estimator, as in `population_margins` (default `GLM.vcov`; a function, a
   matrix, or a CovarianceMatrices estimator). The t/z choice follows the same rule as the rest of
   the package: t with the residual df for a linear model's own covariance, z otherwise.
-- `weights`: observation weights, as in `population_margins` (a column name or a vector). Every average
-  marginal effect is then weighted, and the default evaluation point `at=:mean` / `:median` of a continuous
-  modifier is the weighted mean / median. Without it the numbers are unweighted, even if you computed
-  weighted effects elsewhere.
-- `alpha`: significance level; `significant` is `p_value < alpha` and `ci_lower`/`ci_upper` give the
-  (1 − `alpha`) interval (default 0.05, a 95% interval).
+- `weights`: observation weights, as in `population_margins`: `:model` (default; the fit's estimation
+  weights if it has any, otherwise none), `:none` (or `nothing`) for unweighted, a column name or a vector.
+  Every average marginal effect is then weighted, and the evaluation point `at=:mean` / `:median` of a
+  continuous modifier is the weighted mean / median. The source (`:model`, `:user` or `:none`) is recorded
+  as table metadata: `metadata(result, "weights_source")`. The standard errors come from `vcov`, as in
+  `population_margins` (not design-based).
+- `alpha`: as in `population_margins`; `ci_lower`/`ci_upper` give the (1 − `alpha`) interval
+  (default 0.05, a 95% interval) and `significant` is `p_value < alpha`.
 - `p_adjust`: multiple-testing adjustment over **all rows returned** (every variable, contrast, level
   pair, evaluation point and `profile` stratum): `:none` (default), `:bonferroni`, `:holm` (family-wise
   error rate) or `:bh` (Benjamini–Hochberg false discovery rate). Adds a `p_adjusted` column after
@@ -137,7 +145,7 @@ m = glm(@formula(y ~ age * treated + income), df, Binomial(), LogitLink())
 
 second_differences(m, df, :age, :treated)              # effect of age: treated vs not
 second_differences(m, df, [:age, :income], :treated)   # several focal variables
-second_differences(m, df, :age, :income)               # ∂AME(age)/∂income at mean(income)
+second_differences(m, df, :age, :income)               # average ∂AME(age)/∂income over the observed incomes
 second_differences(m, df, :age, :income; at=[20_000, 50_000])
 second_differences(m, df, :age, :income; levels=[20_000, 50_000])   # slope between two values
 second_differences(m, df, :age, :treated; profile=(female=[0, 1],)) # everyone's `female` set to 0, then 1
@@ -152,7 +160,7 @@ function second_differences(
     model::RegressionModel, data, variables::Union{Symbol,Vector{Symbol}}, modifier::Symbol;
     levels=nothing, at=nothing, modifier_type::Symbol=:auto, profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto, scale::Symbol=:response, measure::Symbol=:effect,
-    contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=nothing, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
+    contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov, weights=:model, alpha::Real=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
     warn::Bool=true,
 )
     _check_p_adjust(p_adjust)
@@ -194,10 +202,10 @@ function second_differences(
     end
 
     if mtype === :continuous && isnothing(levels)
-        # Local derivative at `at` (default: the mean)
+        # Derivative of the AME with respect to the modifier (default `at=:observed`)
         out = _second_differences_local(
             model, data, variables, modifier, vcov;
-            at = isnothing(at) ? :mean : at, profile, delta, scale, measure, contrasts, alpha, p_adjust, include_gradients, weights, contrast,
+            at = isnothing(at) ? :observed : at, profile, delta, scale, measure, contrasts, alpha, p_adjust, include_gradients, weights, contrast,
         )
         warn && _warn_structural_zeros(out, modifier_in_model)
         return out
@@ -223,12 +231,15 @@ function second_differences(
         error("A continuous modifier needs numeric `levels`, got $(eltype(lv)).")
 
     Σ = _covariance_matrix(model, vcov)   # computed here, not read back from the cached engine
+    # Resolved once to validate and to record the source; each population_margins call below
+    # resolves the same keyword against the same rows
+    (_, weights_source) = _weights_vector(weights, model, data)
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)
         scenarios = merge(NamedTuple{(modifier,)}((lv,)), profile_point)
         ames = population_margins(
             model, data; scenarios, vars=vars_vec, type=:effects, scale, measure, vcov, contrasts, weights,
-            ci_alpha=Float64(alpha),
+            alpha=Float64(alpha),
         )
         _align_second_difference_df!(ames, model, vcov)
         sd = second_differences(
@@ -240,5 +251,5 @@ function second_differences(
         push!(pieces, sd)
     end
     out = length(pieces) == 1 ? only(pieces) : vcat(pieces...; cols=:union)
-    return _finalize_frame!(out, p_adjust, alpha, include_gradients; warn, modifier_in_model)
+    return _finalize_frame!(out, p_adjust, alpha, include_gradients; warn, modifier_in_model, weights_source)
 end

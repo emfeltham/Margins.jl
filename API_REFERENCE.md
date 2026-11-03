@@ -48,9 +48,9 @@ Computes effects or predictions averaged across the observed sample distribution
 | `scenarios` | `nothing` | Counterfactual scenarios (NamedTuple mapping variables to values) |
 | `groups` | `nothing` | Subgroup analysis (Symbol, Vector{Symbol}, Tuple, or Pair) |
 | `contrasts` | `:baseline` | `:baseline` or `:pairwise` contrasts for categorical variables |
-| `ci_alpha` | `0.05` | Confidence interval alpha level |
+| `alpha` | `0.05` | Confidence interval alpha level |
 | `vcov` | `GLM.vcov` | Covariance matrix function |
-| `weights` | `nothing` | Sampling/frequency weights (Symbol, Vector, or nothing) |
+| `weights` | `:model` | Averaging weights: `:model` (the fit's estimation weights, if any), `:none`, a column Symbol or a Vector (`nothing` = `:none`) |
 
 **Returns:** `EffectsResult` or `PredictionsResult` with estimates, standard errors, and metadata
 
@@ -77,7 +77,7 @@ Computes effects or predictions at specific covariate combinations defined by an
 | `backend` | `:ad` | `:ad` (automatic differentiation) or `:fd` (finite differences) |
 | `measure` | `:effect` | `:effect`, `:elasticity`, `:semielasticity_dyex`, `:semielasticity_eydx` |
 | `contrasts` | `:baseline` | `:baseline` or `:pairwise` contrasts for categorical variables |
-| `ci_alpha` | `0.05` | Confidence interval alpha level |
+| `alpha` | `0.05` | Confidence interval alpha level |
 | `vcov` | `GLM.vcov` | Covariance matrix function |
 
 **Returns:** `EffectsResult` or `PredictionsResult` with estimates, standard errors, profile information, and metadata

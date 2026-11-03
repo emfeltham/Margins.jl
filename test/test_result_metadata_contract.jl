@@ -18,6 +18,7 @@ using Random
     df.yb = df.y .> 0.3
     lin = lm(@formula(y ~ x * t + z + g), df)
     lg = glm(@formula(yb ~ x * t + z + g), df, Binomial(), LogitLink())
+    lgw = glm(@formula(yb ~ x * t + z + g), df, Binomial(), LogitLink(); wts = df.sw)
     grid = DataFrame(z = [0.0, 1.0])
 
     produced = Dict(
@@ -34,6 +35,10 @@ using Random
         "profile effects" => profile_margins(lg, df, grid; vars = :x),
         "profile predictions" => profile_margins(lg, df, grid; type = :predictions),
         "profile linear" => profile_margins(lin, df, grid; vars = :x),
+        "weighted model" => population_margins(lgw, df; vars = :x),
+        "weighted model, contexts" => population_margins(lgw, df; vars = :x, scenarios = (t = [0.0, 1.0],)),
+        "weighted model, :none" => population_margins(lgw, df; type = :predictions, weights = :none),
+        "weighted model, profile" => profile_margins(lgw, df, grid; vars = :x),
     )
 
     for (label, r) in produced
@@ -56,6 +61,14 @@ using Random
         @test produced["AME"].metadata[:weighted] == false
         @test produced["AME weighted"].metadata[:weighted] == true
         @test produced["scenarios+groups+weights"].metadata[:weighted] == true   # was missing on the contexts path
+        @test produced["AME"].metadata[:weights_source] === :none
+        @test produced["AME weighted"].metadata[:weights_source] === :user
+        @test produced["scenarios+groups+weights"].metadata[:weights_source] === :user
+        @test produced["weighted model"].metadata[:weights_source] === :model && produced["weighted model"].metadata[:weighted]
+        @test produced["weighted model, contexts"].metadata[:weights_source] === :model
+        @test produced["weighted model, :none"].metadata[:weights_source] === :none
+        @test produced["weighted model, profile"].metadata[:weights_source] === :none   # profile margins are unweighted
+        @test produced["profile effects"].metadata[:weights_source] === :none
         @test produced["scenarios+groups+weights"].metadata[:groups_vars] == [:g]
         @test produced["scenarios+groups+weights"].metadata[:scenarios_vars] == [:t]
         @test produced["AME"].metadata[:groups_vars] == Symbol[]
@@ -76,6 +89,8 @@ using Random
         @test Margins._result_scenarios_vars(bare) == Symbol[]
         @test Margins._result_has_contexts(bare) == false
         @test Margins._result_is_weighted(bare) == false
+        @test Margins._result_weights_source(bare) === :none
+        @test Margins._result_weights_source(produced["weighted model"]) === :model
         @test Margins._result_analysis_type(bare) == :unknown
         # string-valued entries (a result restored from text) read as Symbols
         s = Margins.EffectsResult(r.estimates, r.standard_errors, r.variables, r.terms, nothing, nothing, r.gradients,

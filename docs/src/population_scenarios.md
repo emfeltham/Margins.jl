@@ -293,7 +293,7 @@ Key properties:
 ## Weights
 
 - Weighted contexts use proper normalization by total weight: `Σw` is used for both effects and averaged gradients.
-- Sampling and frequency weights are supported; weights can be provided as a column `Symbol` or a vector.
+- Sampling and frequency weights are supported; weights can be provided as a column `Symbol` or a vector. By default (`weights = :model`) a model fit with weights is averaged with those weights; `weights = :none` gives unweighted averages (see [Weights](weights.md)).
 
 ## Column Naming and Ordering
 

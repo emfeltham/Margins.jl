@@ -219,6 +219,53 @@ function _process_variable_contrasts(
 end
 
 # ============================================================================
+# at = :observed: the average derivative over the observed modifier values
+# ============================================================================
+
+# The modifier column shifted by `shift` for every row (each row keeps its own other values), as a
+# shallow copy of `data` that shares every other column.
+function _shifted_modifier_data(data, modifier::Symbol, shift::Real)
+    d = DataFrame(data; copycols=false)
+    col = d[!, modifier]
+    d[!, modifier] = [ismissing(v) ? missing : Float64(v) + shift for v in col]
+    return d
+end
+
+# AME at modifier + δ and modifier − δ with the shift applied to every row, which is the average over
+# observations of the cross-derivative ∂²ŷᵢ/∂x∂m at each row's own (xᵢ, mᵢ, …). The two results are
+# stacked into one EffectsResult with a synthetic scenario column for the modifier (the shifts −δ and
+# +δ) so the pairing, scaling by 2δ, delta method, df and structural-zero logic are the ones used for
+# every other derivative; eval_point and the levels are NaN (no single evaluation point).
+function _observed_derivative_rows(model, data, vars_vec, modifier, modifier_vals, vcov, vcov_matrix,
+                                   profile_point, δ_raw; scale, measure, contrasts, alpha, weights, contrast)
+    δ = _adjust_delta_for_eval_point(maximum(abs, modifier_vals), δ_raw)
+    scenarios = isempty(profile_point) ? nothing : profile_point
+    fit(shift) = population_margins(
+        model, _shifted_modifier_data(data, modifier, shift);
+        scenarios, vars=vars_vec, type=:effects, scale, measure, vcov, contrasts,
+        alpha=Float64(alpha), weights,
+    )
+    lo, hi = fit(-δ), fit(δ)
+    n_lo, n_hi = length(lo.estimates), length(hi.estimates)
+    n_lo == n_hi && lo.variables == hi.variables && lo.terms == hi.terms ||
+        error("Internal error: the shifted-modifier results do not have the same rows.")
+    pv = isnothing(hi.profile_values) ? NamedTuple() : hi.profile_values
+    cells = merge(NamedTuple{(modifier,)}((vcat(fill(-δ, n_lo), fill(δ, n_hi)),)),
+                  NamedTuple{keys(pv)}(Tuple(vcat(pv[k], pv[k]) for k in keys(pv))))
+    md = copy(hi.metadata)
+    md[:scenarios_vars] = collect(keys(cells))
+    md[:groups_vars] = Symbol[]
+    stacked = EffectsResult(
+        vcat(lo.estimates, hi.estimates), vcat(lo.standard_errors, hi.standard_errors),
+        vcat(lo.variables, hi.variables), vcat(lo.terms, hi.terms), cells, nothing,
+        vcat(lo.gradients, hi.gradients), md,
+    )
+    _align_second_difference_df!(stacked, model, vcov)
+    rows = _process_variable_contrasts(stacked, vars_vec, modifier, vcov_matrix, NaN, δ, profile_point, alpha, contrast)
+    return [merge(r, (modifier_level1 = NaN, modifier_level2 = NaN)) for r in rows]
+end
+
+# ============================================================================
 # Main Function
 # ============================================================================
 
@@ -233,7 +280,7 @@ function _second_differences_local(
     variables::Union{Symbol,Vector{Symbol}},
     modifier::Symbol,
     vcov; # An AbstractMatrix or a Function returning one
-    at::Union{Symbol,Real,AbstractVector,NamedTuple}=:mean,
+    at::Union{Symbol,Real,AbstractVector,NamedTuple}=:observed,
     profile::NamedTuple=NamedTuple(),
     delta::Union{Symbol,Real}=:auto,
     scale::Symbol=:response,
@@ -242,12 +289,12 @@ function _second_differences_local(
     alpha::Real=0.05,
     p_adjust::Symbol=:none,
     include_gradients::Bool=false,
-    weights=nothing,
+    weights=:model,
     contrast::Union{Nothing,AbstractString}=nothing
 )
     _check_p_adjust(p_adjust)
     0 < alpha < 1 || error("alpha must be in (0, 1), got $alpha")
-    wvec = _weights_vector(weights, data)
+    (wvec, weights_source) = _weights_vector(weights, model, data)
 
     # 1. Validate inputs
     if !hasproperty(data, modifier)
@@ -336,6 +383,9 @@ function _second_differences_local(
     elseif at === :mean
         # Evaluate derivative at mean(modifier), convenient default
         ([isnothing(wclean) ? mean(modifier_vals_clean) : _weighted_mean(modifier_vals_clean, wclean)], profile)
+    elseif at === :observed
+        # Average derivative over the observed values: the modifier column is shifted, not set (see below)
+        ([NaN], profile)
     elseif at === :median
         # Evaluate derivative at median(modifier), robust to outliers
         ([isnothing(wclean) ? median(modifier_vals_clean) : _weighted_median(modifier_vals_clean, wclean)], profile)
@@ -346,7 +396,7 @@ function _second_differences_local(
         # Evaluate at multiple modifier values (creates one result row per value)
         (Float64.(at), profile)
     else
-        error("Invalid `at` parameter: must be :mean, :median, a Real, a Vector, or a NamedTuple")
+        error("Invalid `at` parameter: must be :mean, :median, :observed, a Real, a Vector, or a NamedTuple")
     end
 
     # 5. Compute delta (step size for finite difference)
@@ -394,6 +444,13 @@ function _second_differences_local(
 
     for profile_point in profile_combinations
         for eval_pt in eval_points
+            if at === :observed
+                append!(results, _observed_derivative_rows(
+                    model, data, vars_vec, modifier, modifier_vals_clean, vcov, vcov_matrix, profile_point, δ_raw;
+                    scale, measure, contrasts, alpha, weights, contrast,
+                ))
+                continue
+            end
             # Adjust delta for numerical stability at this specific evaluation point
             # Accounts for magnitude of eval_pt to prevent floating-point issues
             δ = _adjust_delta_for_eval_point(eval_pt, δ_raw)
@@ -414,7 +471,7 @@ function _second_differences_local(
                 measure=measure,
                 vcov=vcov,
                 contrasts=contrasts,
-                ci_alpha=Float64(alpha),
+                alpha=Float64(alpha),
                 weights=weights
             )
 
@@ -433,5 +490,5 @@ function _second_differences_local(
         end
     end
 
-    return _finalize_frame!(DataFrame(results), p_adjust, alpha, include_gradients)
+    return _finalize_frame!(DataFrame(results), p_adjust, alpha, include_gradients; weights_source)
 end

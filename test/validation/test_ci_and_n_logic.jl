@@ -17,7 +17,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
     
     @testset "Standard Table CI Columns" begin
         # Test standard table with alpha specified
-        res = population_margins(m, df; type=:effects, vars=[:x], ci_alpha=0.05)
+        res = population_margins(m, df; type=:effects, vars=[:x], alpha=0.05)
         df_result = DataFrame(res; format=:standard)
         
         # Should have CI columns when alpha is specified
@@ -40,7 +40,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
     
     @testset "Confidence Table Format" begin
         # Test dedicated confidence table format
-        res = population_margins(m, df; type=:effects, vars=[:x], ci_alpha=0.10)  # 90% CI
+        res = population_margins(m, df; type=:effects, vars=[:x], alpha=0.10)  # 90% CI
         df_result = DataFrame(res; format=:confidence)
         
         @test :ci_lower in propertynames(df_result)  # same names as every other table (3.0)
@@ -71,7 +71,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
         @test all(abs.(actual_half_width .- expected_half_width) .< 1e-6)
         
         # Explicit alpha should also work
-        res_explicit = population_margins(m, df; type=:effects, vars=[:x], ci_alpha=0.05)
+        res_explicit = population_margins(m, df; type=:effects, vars=[:x], alpha=0.05)
         df_explicit = DataFrame(res_explicit; format=:standard)
         @test :ci_lower in propertynames(df_explicit)
         @test :ci_upper in propertynames(df_explicit)
@@ -146,7 +146,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
     
     @testset "Profile Margins CI and N Logic" begin
         # Profile margins should also have correct CI and n logic
-        res = profile_margins(m, df, means_grid(df); type=:effects, vars=[:x], ci_alpha=0.05)
+        res = profile_margins(m, df, means_grid(df); type=:effects, vars=[:x], alpha=0.05)
         df_result = DataFrame(res)
         
         @test :n in propertynames(df_result)
@@ -178,7 +178,7 @@ using Random, DataFrames, CategoricalArrays, GLM, Statistics, Distributions
     
     @testset "Column Ordering - CI and N Placement" begin
         # Verify CI and N columns appear in correct positions after context columns
-        res = population_margins(m, df; type=:effects, vars=[:x], groups=:group1, ci_alpha=0.05)
+        res = population_margins(m, df; type=:effects, vars=[:x], groups=:group1, alpha=0.05)
         df_result = DataFrame(res)
         
         col_names = names(df_result)

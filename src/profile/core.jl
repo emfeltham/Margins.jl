@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -43,12 +43,18 @@ or adjusted predictions at specific profiles (APM/APR).
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables
   - `:baseline` - Compare each level to reference level
   - `:pairwise` - All pairwise comparisons between levels
-- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+- `alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
   - When specified, `ci_lower` and `ci_upper` columns are added to DataFrame output
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
   - `GLM.vcov` - Model-based covariance matrix (default)
   - Custom function or CovarianceMatrices estimator for robust/clustered standard errors, or a covariance
     matrix itself (see `population_margins`)
+
+# Weights
+`profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
+function, and categorical frequency mixtures, as in `means_grid`/`balanced_grid`) are unweighted even
+for a model fit with weights; results record `metadata[:weights_source] = :none`. To evaluate at
+weighted typical values, put them in the grid yourself. See the Weights page of the documentation.
 
 # Returns
 `EffectsResult` or `PredictionsResult` (estimates, delta-method standard errors, gradients,
@@ -219,7 +225,7 @@ end
 Internal implementation for both profile_margins methods.
 This eliminates code duplication between the convenience method and DataFrame method.
 """
-function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, ci_alpha::Float64, contrasts::Symbol; interval::Symbol=:confidence)
+function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame, type::Symbol, vars, scale::Symbol, backend::Symbol, measure::Symbol, vcov, at_spec, alpha::Float64, contrasts::Symbol; interval::Symbol=:confidence)
     # Handle vars parameter with improved validation - use same helper as population_margins
     if type === :effects
         vars_explicit = !isnothing(vars)
@@ -275,7 +281,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
             metadata[:n_profiles] = nrow(completed_reference_grid)
         
             # Store confidence interval parameters in metadata
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
             metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
         
             # Extract raw components from DataFrame  
@@ -300,7 +306,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
             metadata[:n_profiles] = nrow(completed_reference_grid)
 
             # Store confidence interval parameters in metadata
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
             metadata[:vcov] = Matrix{Float64}(engine.Σ)   # lets second differences default to it
 
             # Interval kind: :confidence (default) or :prediction. For prediction
@@ -327,7 +333,7 @@ function _profile_margins(model, data_nt::NamedTuple, reference_grid::DataFrame,
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, ci_alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -358,7 +364,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
     discrete variable in `vars` is an error, and auto-detected discrete variables
     are skipped with an informational message
 - `contrasts::Symbol=:baseline`: Contrast type for categorical variables (:baseline or :pairwise)
-- `ci_alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
+- `alpha::Float64=0.05`: Type I error rate α for confidence intervals (confidence level = 1-α)
 - `vcov=GLM.vcov`: Covariance matrix function for standard errors
 - `interval::Symbol=:confidence`: Interval kind for `type=:predictions`
   - `:confidence` - interval for the mean prediction (default): `ŷ ± z·√(SE²)`
@@ -366,6 +372,12 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
     `ŷ ± z·√(SE² + σ̂²)`. Only supported for Gaussian/identity-link (linear) models;
     errors for GLMs (no additive response-scale residual variance) and for
     `type=:effects`. Matches R's `predict(lm, interval="prediction")`.
+
+# Weights
+`profile_margins` takes no `weights`, and the typical values it fills in (means or the `typical`
+function, and categorical frequency mixtures, as in `means_grid`/`balanced_grid`) are unweighted even
+for a model fit with weights; results record `metadata[:weights_source] = :none`. To evaluate at
+weighted typical values, put them in the grid yourself. See the Weights page of the documentation.
 
 # Examples
 ```julia
@@ -403,9 +415,10 @@ function profile_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    ci_alpha::Float64=0.05, vcov=GLM.vcov,
-    interval::Symbol=:confidence,
+    alpha::Float64=0.05, vcov=GLM.vcov,
+    interval::Symbol=:confidence, ci_alpha=nothing,
 )
+    _reject_ci_alpha(ci_alpha)
     # Validate interval kind. Prediction intervals add observation-level residual
     # variance and are only meaningful for predictions (a derivative of a mean has
     # no "new observation" analogue), so they are rejected for type=:effects.
@@ -486,7 +499,7 @@ function profile_margins(
     end
     
     # Route to single implementation with processed reference grid
-    return _attach_inference_df!(_profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts; interval=interval), model, vcov)
+    return _attach_inference_df!(_profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, alpha, contrasts; interval=interval), model, vcov)
 end
 
 

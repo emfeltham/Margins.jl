@@ -162,7 +162,7 @@ using Margins
         sd_cat = second_differences(ame_3, :x, :z, vcov(m); modifier_type=:categorical)
         sd_pw = Margins._second_differences_pairwise(ame_bin, :x, :t, vcov(m))      # binary via pairwise
         sd_all = Margins._second_differences_all_contrasts(ame_bin, :g, :t, vcov(m))
-        sd_at = Margins._second_differences_local(m, d, :x, :z, vcov(m))
+        sd_at = Margins._second_differences_local(m, d, :x, :z, vcov(m); at = :mean)
         sd_at_f = Margins._second_differences_local(m, d, :x, :z, GLM.vcov)
 
         for sd in (sd_bin, sd_cont, sd_cat, sd_pw, sd_all)
@@ -188,6 +188,10 @@ using Margins
         # binary path and pairwise path agree
         @test sd_bin.second_diff[1] ≈ sd_pw.second_diff[1]
         @test sd_at.modifier_level2[1] - sd_at.modifier_level1[1] ≈ 2 * sd_at.delta_used[1]
+        # at = :observed (the default) has no single evaluation point: same columns, NaN point and levels
+        sd_obs = Margins._second_differences_local(m, d, :x, :z, vcov(m))
+        @test propertynames(sd_obs) == propertynames(sd_at)
+        @test isnan(sd_obs.eval_point[1]) && isnan(sd_obs.modifier_level1[1]) && sd_obs.delta_used[1] > 0
 
         # single-row API
         row = Margins._second_difference(ame_bin, :x, :t, vcov(m))

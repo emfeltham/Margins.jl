@@ -30,6 +30,7 @@ include("statistical_validation/analytical_se_validation.jl")
     include("core/test_automatic_variable_detection.jl")
     include("core/test_mixedmodels.jl")
     include("core/test_weights.jl")
+    include("core/test_model_weights.jl")
     include("statistical_validation/robust_se_validation.jl")
 end
 
@@ -68,6 +69,7 @@ end
     include("test_second_differences_review.jl")
     include("test_vcov_matrix.jl")
     include("test_result_metadata_contract.jl")
+    include("test_second_differences_observed.jl")
     include("test_profile_pairwise.jl")
 end
 

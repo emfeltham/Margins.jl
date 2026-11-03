@@ -7,8 +7,8 @@
 using LinearAlgebra: dot
 
 """
-    second_differences(result, variables, modifier[, vcov]; contrast="dy/dx", modifier_type=:auto,
-                       alpha=nothing, p_adjust=:none, include_gradients=false)
+    second_differences(result, variables, modifier[, vcov]; contrast=nothing, modifier_type=:auto,
+                       alpha=nothing, p_adjust=:none, include_gradients=false, warn=true)
 
 Second differences (interaction effects) from an `EffectsResult` you already hold, from
 `population_margins(...; scenarios=(modifier=levels,), type=:effects)` or
@@ -42,8 +42,8 @@ levels in scenario order. A continuous modifier gives slopes (the difference per
   levels are `:binary` (with a warning when they are numeric and not 0/1, because the result is then the
   raw difference rather than a slope), three or more numeric levels are `:continuous`, anything else is
   `:categorical`
-- `alpha=nothing`: significance level for `significant` and the (1 − alpha) intervals; defaults to the
-  `ci_alpha` the result was computed with (0.05 unless changed)
+- `alpha=nothing`: as in `population_margins`: the (1 − alpha) intervals and the level for
+  `significant`; defaults to the `alpha` the result was computed with (0.05 unless changed)
 - `p_adjust::Symbol=:none`: multiple-testing adjustment over all rows returned: `:bonferroni`, `:holm`
   or `:bh` (Benjamini–Hochberg). Adds a `p_adjusted` column and bases `significant` on it
 - `include_gradients::Bool=false`: add a `gradient` column (∂`second_diff`/∂β per row), as

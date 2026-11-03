@@ -28,6 +28,7 @@ using Margins: _auto_link, validate_model_methods, MarginsError,
                _population_predictions, _build_metadata, _ame_calculate,
                _population_margins_with_contexts, _process_vars_parameter,
                _process_weights_parameter, _convert_numeric_to_float64, _prepare_margins_data,
+               _resolve_weights, _set_weights_metadata!,
                _checkout_engine, _checkin_engine!, PopulationUsage, ProfileUsage,
                HasDerivatives, NoDerivatives,
                _profile_margins, process_reference_grid,
@@ -48,6 +49,14 @@ function Margins._auto_link(model::FixedEffectModel)
     _warn_if_iv(model)
     return IdentityLink()
 end
+
+# ---------------------------------------------------------------------------
+# _model_weights: a FixedEffectModel keeps neither the `weights=` column name nor the weight
+# vector (FixedEffectModels 1.13), so `weights=:model` cannot recover them and resolves to no
+# weights; a weighted `reg` needs `weights=:w` passed to Margins explicitly. Same as the generic
+# fallback, spelled out so the reason is on record.
+# ---------------------------------------------------------------------------
+Margins._model_weights(::FixedEffectModel) = nothing
 
 # ---------------------------------------------------------------------------
 # fixed_effects_form: return clean formula without fe() terms
@@ -107,8 +116,9 @@ function Margins.population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    ci_alpha::Float64=0.05, vcov=GLM.vcov, weights=nothing
+    alpha::Float64=0.05, vcov=GLM.vcov, weights=:model, ci_alpha=nothing
 )
+    Margins._reject_ci_alpha(ci_alpha)
     # Shared input validation
     validate_margins_common_inputs(model, data, type, vars, scale, backend, measure, vcov)
 
@@ -123,17 +133,12 @@ function Margins.population_margins(
     if !isnothing(groups)
         _validate_groups_parameter(groups)
     end
-    if !isnothing(weights)
-        _validate_weights_parameter(weights, data)
-    end
-
     # Data conversion
     data_nt_raw = Tables.columntable(data)
     data_nt = _prepare_margins_data(data_nt_raw, model)
 
-    # Process weights
-    weights_vec = _process_weights_parameter(weights, data, data_nt)
-    weight_col = weights isa Symbol ? weights : nothing
+    # Process weights (`:model` resolves to none here: see _model_weights above)
+    (weights_vec, weights_source, weight_col) = _resolve_weights(weights, model, data, data_nt)
 
     # Handle vars
     if type === :effects
@@ -150,7 +155,8 @@ function Margins.population_margins(
     try
         # Handle scenarios/groups
         if !isnothing(scenarios) || !isnothing(groups)
-            result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, ci_alpha, measure, contrasts)
+            result = _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights_vec, type, scale, backend, alpha, measure, contrasts)
+            _set_weights_metadata!(result.metadata, weights_vec, weights_source)
             # Add FE offset for predictions with contexts
             if type === :predictions
                 return _adjust_population_result_with_fe(result, model, data, weights_vec)
@@ -161,9 +167,9 @@ function Margins.population_margins(
         if type === :effects
             df, G = _ame_calculate(engine, data_nt, scale, backend, measure, contrasts, weights_vec)
             metadata = _build_metadata(; type, vars, scale, backend, measure, n_obs=length(first(data_nt)), model_type=typeof(model))
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
             metadata[:analysis_type] = :population
-            metadata[:weighted] = !isnothing(weights_vec)
+            _set_weights_metadata!(metadata, weights_vec, weights_source)
 
             estimates = df.estimate
             standard_errors = df.se
@@ -174,9 +180,9 @@ function Margins.population_margins(
         else # :predictions
             df, G = _population_predictions(engine, data_nt; scale, weights=weights_vec)
             metadata = _build_metadata(; type, vars=Symbol[], scale, backend, n_obs=length(first(data_nt)), model_type=typeof(model))
-            metadata[:alpha] = ci_alpha
+            metadata[:alpha] = alpha
             metadata[:analysis_type] = :population
-            metadata[:weighted] = !isnothing(weights_vec)
+            _set_weights_metadata!(metadata, weights_vec, weights_source)
 
             # Add FE offset to prediction estimates
             fe_offset = _compute_population_fe_offset(model, data, weights_vec)
@@ -198,8 +204,9 @@ function Margins.profile_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    ci_alpha::Float64=0.05, vcov=GLM.vcov,
+    alpha::Float64=0.05, vcov=GLM.vcov, ci_alpha=nothing,
 )
+    Margins._reject_ci_alpha(ci_alpha)
     # Convert data
     data_nt_raw = Tables.columntable(data)
     data_nt = _prepare_margins_data(data_nt_raw, model)
@@ -230,7 +237,7 @@ function Margins.profile_margins(
     end
 
     # Delegate to internal implementation
-    result = _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, ci_alpha, contrasts)
+    result = _profile_margins(model, data_nt, processed_reference_grid, type, vars, scale, backend, measure, vcov, processed_reference_grid, alpha, contrasts)
 
     # Add FE offset for predictions
     if type === :predictions

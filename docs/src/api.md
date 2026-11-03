@@ -180,7 +180,7 @@ moderator:
 ```julia
 second_differences(model, data, :age, :treated)             # discrete modifier: treated vs not
 second_differences(model, data, [:age, :income], :treated)  # several focal variables
-second_differences(model, data, :age, :income)              # continuous modifier: ∂AME/∂income at mean(income)
+second_differences(model, data, :age, :income)              # continuous modifier: average ∂AME/∂income over the observed incomes
 second_differences(model, data, :age, :income; at=[20_000, 50_000])      # at chosen values
 second_differences(model, data, :age, :income; levels=[20_000, 50_000])  # slope between two values
 second_differences(model, data, :age, :treated; profile=(female=[0, 1],)) # separately by female

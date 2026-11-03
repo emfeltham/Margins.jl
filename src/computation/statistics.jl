@@ -266,7 +266,7 @@ function _prediction_residual_variance(model)::Float64
 end
 
 """
-    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
+    contrast(result::MarginsResult, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
 
 Compute contrast between two result rows with delta-method inference.
 
@@ -277,7 +277,7 @@ computing the difference between estimates at two rows with proper standard erro
 - `result`: EffectsResult or PredictionsResult object
 - `row1`, `row2`: Row numbers to contrast
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `α`: Significance level (default 0.05)
+- `alpha`: Significance level (default 0.05)
 
 # Returns
 `ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
@@ -310,7 +310,7 @@ df = DataFrame(cr)
 ```
 """
 function contrast(result::MarginsResult, row1::Int, row2::Int,
-                 Σ::Matrix{Float64}; α::Float64=0.05)
+                 Σ::Matrix{Float64}; alpha::Float64=0.05)
     n = length(result.estimates)
     (row1 < 1 || row1 > n) && throw(ArgumentError("row1 = $row1 out of bounds (1:$n)"))
     (row2 < 1 || row2 > n) && throw(ArgumentError("row2 = $row2 out of bounds (1:$n)"))
@@ -320,7 +320,7 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
 
     dof = _result_df(result)
     se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, α, dof
+        contrast_val, grad_contrast, Σ, alpha, dof
     )
 
     return ContrastResult(
@@ -336,12 +336,12 @@ function contrast(result::MarginsResult, row1::Int, row2::Int,
         grad_contrast,
         row1,
         row2,
-        Dict{Symbol, Any}(:alpha => α, :source => :result_object)
+        Dict{Symbol, Any}(:alpha => alpha, :source => :result_object)
     )
 end
 
 """
-    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
+    contrast(df::AbstractDataFrame, row1::Int, row2::Int, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
 
 Compute contrast between two rows in a margins DataFrame using row indices.
 
@@ -352,7 +352,7 @@ produced by `DataFrame(profile_margins(...))` or `DataFrame(population_margins(.
 - `df`: DataFrame from `DataFrame(result; include_gradients=true)`
 - `row1`, `row2`: Row numbers to contrast
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `α`: Significance level (default 0.05)
+- `alpha`: Significance level (default 0.05)
 
 # Returns
 `ContrastResult` object with fields: contrast, se, statistic, df, p_value, ci_lower, ci_upper, estimate1, estimate2, gradient, row1, row2, metadata
@@ -394,7 +394,7 @@ function contrast(
     row1::Int,
     row2::Int,
     Σ::Matrix{Float64};
-    α::Float64=0.05,
+    alpha::Float64=0.05,
     estimatename = :estimate
 )
     # Validate gradient column exists
@@ -420,7 +420,7 @@ function contrast(
     # Statistical inference
     dof = _dataframe_contrast_df(df, row1, row2)
     se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, α, dof
+        contrast_val, grad_contrast, Σ, alpha, dof
     )
 
     return ContrastResult(
@@ -436,12 +436,12 @@ function contrast(
         grad_contrast,
         row1,
         row2,
-        Dict{Symbol, Any}(:alpha => α, :source => :dataframe_integer)
+        Dict{Symbol, Any}(:alpha => alpha, :source => :dataframe_integer)
     )
 end
 
 """
-    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; α::Float64=0.05) -> ContrastResult
+    contrast(df::AbstractDataFrame, row1_spec::NamedTuple, row2_spec::NamedTuple, Σ::Matrix{Float64}; alpha::Float64=0.05) -> ContrastResult
 
 Compute contrast between two rows identified by column values in a margins DataFrame.
 
@@ -454,7 +454,7 @@ row selection, similar to DataFrame filtering. Works with DataFrames produced by
 - `row1_spec`: NamedTuple specifying column values for first row (e.g., `(x=1, treatment=0)`)
 - `row2_spec`: NamedTuple specifying column values for second row (e.g., `(x=1, treatment=1)`)
 - `Σ`: Model covariance matrix from `vcov(model)`
-- `α`: Significance level (default 0.05)
+- `alpha`: Significance level (default 0.05)
 
 # Column Specifications
 The NamedTuple keys must match column names in the DataFrame:
@@ -511,7 +511,7 @@ function contrast(
     row1_spec::NamedTuple,
     row2_spec::NamedTuple,
     Σ::Matrix{Float64};
-    α::Float64=0.05,
+    alpha::Float64=0.05,
     estimatename = :estimate
 )
     # Validate gradient column exists
@@ -536,7 +536,7 @@ function contrast(
     # Statistical inference
     dof = _dataframe_contrast_df(df, row1_idx, row2_idx)
     se, statistic, p_value, ci_lower, ci_upper = compute_statistical_summary_scalars(
-        contrast_val, grad_contrast, Σ, α, dof
+        contrast_val, grad_contrast, Σ, alpha, dof
     )
 
     return ContrastResult(
@@ -552,7 +552,7 @@ function contrast(
         grad_contrast,
         row1_idx,
         row2_idx,
-        Dict{Symbol, Any}(:alpha => α, :source => :dataframe_namedtuple,
+        Dict{Symbol, Any}(:alpha => alpha, :source => :dataframe_namedtuple,
                           :row1_spec => row1_spec, :row2_spec => row2_spec)
     )
 end

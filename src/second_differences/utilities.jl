@@ -68,12 +68,12 @@ end
 
 # ---- observation weights --------------------------------------------------------------------
 
-# `weights` as `population_margins` takes it (nothing, a column name, or a vector), as a Float64 vector.
-function _weights_vector(weights, data)
-    isnothing(weights) && return nothing
-    _validate_weights_parameter(weights, data)
-    return weights isa Symbol ? Float64.(data[!, weights]) : Float64.(weights)
-end
+# `weights` as `population_margins` takes it (:model, :none/nothing, a column name or a vector):
+# the averaging weights as a Float64 vector (or `nothing`) and their source (:model, :user, :none).
+_weights_vector(weights, model, data) = _resolve_weights(weights, model, data)[1:2]
+
+# The table-level metadata key under which a second-differences frame records `weights_source`
+const _SD_WEIGHTS_SOURCE_KEY = "weights_source"
 
 _weighted_mean(x, w) = sum(w .* x) / sum(w)
 
@@ -187,8 +187,8 @@ end
 
 const P_ADJUST_METHODS = (:none, :bonferroni, :holm, :bh)
 
-# Significance level / confidence level: an explicit `alpha`, else the one the result was
-# computed with (population_margins `ci_alpha`), else 0.05.
+# Significance level / confidence level (the public keyword is `alpha`, as in population_margins):
+# an explicit value, else the one the result was computed with, else 0.05.
 function _resolve_alpha(alpha, ame_result)::Float64
     a = isnothing(alpha) ? _result_alpha(ame_result) : Float64(alpha)
     0 < a < 1 || error("alpha must be in (0, 1), got $a")
@@ -305,10 +305,13 @@ end
 # per-row gradient vectors unless `include_gradients` (as `DataFrame(result)` does). Nested calls
 # between these functions pass `include_gradients=true` so the gradients survive until this step.
 function _finalize_frame!(df::DataFrame, p_adjust::Symbol, alpha::Real, include_gradients::Bool;
-                          warn::Bool=false, modifier_in_model::Union{Nothing,Bool}=nothing)
+                          warn::Bool=false, modifier_in_model::Union{Nothing,Bool}=nothing,
+                          weights_source::Union{Nothing,Symbol}=nothing)
     warn && _warn_structural_zeros(df, modifier_in_model)
     _apply_p_adjust!(df, p_adjust, alpha)
     include_gradients || :gradient ∉ propertynames(df) || select!(df, Not(:gradient))
+    # model-level forms record where the averaging weights came from (`metadata(df, "weights_source")`)
+    isnothing(weights_source) || metadata!(df, _SD_WEIGHTS_SOURCE_KEY, weights_source; style=:note)
     return df
 end
 

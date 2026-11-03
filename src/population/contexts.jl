@@ -10,11 +10,11 @@ using LinearAlgebra: dot
 import GLM
 
 """
-    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, ci_alpha, measure)
+    _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, alpha, measure)
 
 Handle population margins with scenarios/groups contexts - clean FormulaCompiler implementation.
 """
-function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, ci_alpha, measure, contrasts=:baseline)
+function _population_margins_with_contexts(engine, data_nt, vars, scenarios, groups, weights, type, scale, backend, alpha, measure, contrasts=:baseline)
     results = DataFrame()
     gradients_list = Matrix{Float64}[]
     # Variables dropped by the skip rule below, for the empty-result diagnostic
@@ -151,7 +151,7 @@ function _population_margins_with_contexts(engine, data_nt, vars, scenarios, gro
                               model_type=typeof(engine.model), has_contexts=true)
 
     # Store confidence interval parameters in metadata
-    metadata[:alpha] = ci_alpha
+    metadata[:alpha] = alpha
 
     # Store scenarios and groups variable information for Context column
     # Use _normalize_scenarios_to_namedtuple to handle both NamedTuple and Pair syntax

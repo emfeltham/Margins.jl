@@ -42,7 +42,9 @@ using Distributions: TDist, Normal, quantile
     @testset "continuous modifier: local derivative and slope between levels" begin
         loc = second_differences(lmod, df, :x, :w)
         @test loc.second_diff[1] ≈ b("x & w") atol=1e-6
-        @test loc.eval_point[1] ≈ sum(df.w) / n
+        @test isnan(loc.eval_point[1])                                   # default at = :observed: no single point
+        @test isequal(loc, second_differences(lmod, df, :x, :w; at = :observed))
+        @test second_differences(lmod, df, :x, :w; at = :mean).eval_point[1] ≈ sum(df.w) / n
         @test loc.modifier_type[1] == :continuous
         sl = second_differences(lmod, df, :x, :w; levels=[-1.0, 0.0, 1.0])
         @test nrow(sl) == 3
@@ -159,7 +161,7 @@ using Distributions: TDist, Normal, quantile
         # local derivative and result-level functions
         l = second_differences(lmod, df, :x, :w; alpha=0.2)
         @test l.ci_lower[1] ≈ l.second_diff[1] - quantile(TDist(dof_residual(lmod)), 0.9) * l.se[1]
-        a1 = population_margins(lmod, df; vars=:x, scenarios=(t=[0, 1],), type=:effects, ci_alpha=0.2)
+        a1 = population_margins(lmod, df; vars=:x, scenarios=(t=[0, 1],), type=:effects, alpha=0.2)
         @test second_differences(a1, :x, :t).ci_lower[1] ≈ narrow.ci_lower[1]            # inherits the result's alpha
         @test second_differences(a1, :x, :t; alpha=0.05).ci_lower[1] ≈ sd.ci_lower[1]   # explicit alpha wins
         @test Margins._second_difference(a1, :x, :t).ci_lower ≈ narrow.ci_lower[1]

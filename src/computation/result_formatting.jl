@@ -195,6 +195,14 @@ end
 
 # Reference grid construction and metadata utilities
 
+# `string(T)` of a fitted-model type (e.g. TableRegressionModel{LinearModel{…}, Matrix{Float64}}) allocates
+# hundreds of KB, which would break the O(1) warm-call guarantee if done on every call: memoize it per type.
+const _MODEL_TYPE_STRINGS = Dict{Type,String}()
+const _MODEL_TYPE_STRINGS_LOCK = ReentrantLock()
+function _model_type_string(T::Type)::String
+    @lock _MODEL_TYPE_STRINGS_LOCK get!(() -> string(T), _MODEL_TYPE_STRINGS, T)
+end
+
 """
     _build_metadata(; kwargs...) -> Dict{Symbol, Any}
 
@@ -278,13 +286,14 @@ function _build_metadata(;
         :backend => backend,
         :measure => measure,
         :n_obs => n_obs,
-        :model_type => isnothing(model_type) ? "unknown" : string(model_type isa Type ? model_type : typeof(model_type)),
+        :model_type => isnothing(model_type) ? "unknown" : _model_type_string(model_type isa Type ? model_type : typeof(model_type)),
         :timestamp => ts,
         :at_spec => at_spec,
         :has_contexts => has_contexts,
         # Always present (see result_metadata_keys): empty/false unless the call set them
         :groups_vars => Symbol[],
         :scenarios_vars => Symbol[],
-        :weighted => false
+        :weighted => false,
+        :weights_source => :none
     )
 end
