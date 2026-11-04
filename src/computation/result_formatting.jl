@@ -294,6 +294,8 @@ function _build_metadata(;
         :groups_vars => Symbol[],
         :scenarios_vars => Symbol[],
         :weighted => false,
-        :weights_source => :none
+        :weights_source => :none,
+        :random_effects => :zero,
+        :re_terms => Symbol[],
     )
 end

@@ -40,6 +40,7 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `grid_vars` | profile requests: the grid columns shown in the output |
 | `changed_vars` | every variable the request sets counterfactually: scenario keys, grid columns, and the second-differences modifier and `profile` variables |
 | `contrasts`, `measure`, `scale`, `backend`, `interval` | validated options |
+| `random_effects` | mixed models: `nothing` for `random_effects = :zero` (every random effect 0), else a `RandomEffectsSpec`; the predicted random effects z'b̂ are then in `offset` |
 
 `vars ∪ changed_vars` is the set the derived-column detector (`_warn_derived_columns`) runs over.
 
@@ -73,6 +74,7 @@ struct MarginsRequest{K,M}
     scale::Symbol
     backend::Symbol
     interval::Symbol
+    random_effects::Union{Nothing,RandomEffectsSpec}
 end
 
 _has_contexts(req::MarginsRequest) = !isnothing(req.scenarios) || !isnothing(req.groups)
@@ -99,7 +101,8 @@ _validate_focal_vars(model, vars) = nothing
                        scenarios=nothing, groups=nothing, reference_grid=nothing, measure=:effect,
                        contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:none,
                        interval=:confidence, df=nothing, offset=nothing, scenario_vars=nothing,
-                       changed_vars=Symbol[], warn=true) -> MarginsRequest
+                       changed_vars=Symbol[], random_effects=:zero, re_new=:zero, re_terms=nothing,
+                       warn=true) -> MarginsRequest
 
 Validate every option and prepare everything a computation needs, once per call: the data
 (any Tables.jl source, subset to the model's estimation rows), the focal variables, Σ (`vcov` is
@@ -129,7 +132,7 @@ function _normalize_request(model, data;
         measure::Symbol=:effect, contrasts::Symbol=:baseline, alpha=0.05, vcov=GLM.vcov,
         weights=:none, interval::Symbol=:confidence, df=nothing, offset=nothing,
         scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[],
-        warn::Bool=true)
+        random_effects=:zero, re_new=:zero, re_terms=nothing, warn::Bool=true)
     validate_required_args(model, data)
     validate_model_methods(model)
     # The formula's variables, walked once per call and passed to every check that needs them
@@ -147,6 +150,7 @@ function _normalize_request(model, data;
         "margins use the model's own offset at each data row"))
     _validate_contrasts(contrasts)
     _validate_interval(interval, type)
+    re_spec = _validate_random_effects(model, random_effects, re_new, re_terms)
 
     # `scenarios` and `groups` syntax, and the variables they name
     scenarios_nt = nothing
@@ -207,7 +211,8 @@ function _normalize_request(model, data;
     # Profile requests: resolve, validate and complete the reference grid
     # (an `offset` column of the grid is the offset at its rows, not a variable: split it off)
     (grid_in, grid_offset) = _split_offset_column(model, reference_grid)
-    (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in, fvars)
+    (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in, fvars;
+                                                                        extra_vars=_re_grid_vars(model, re_spec))
     # A profile request averages nothing; its weights are those of the values it fills in for model
     # variables the grid leaves out (the model's estimation weights by default)
     isnothing(completed) || (weights_source = fill_source)
@@ -220,6 +225,20 @@ function _normalize_request(model, data;
         isnothing(completed) || _check_unused_offset(model, offset, grid_offset)
         nothing
     end
+    # Mixed models with random_effects = :conditional: the predicted random effects z'b̂ join the
+    # offset (when it can change the requested quantity, as for any offset)
+    if !isnothing(re_spec)
+        if isnothing(completed)
+            (re_tbl, used) = (data_nt, re_spec.factors)
+        else
+            (re_tbl, used) = _profile_re_table(model, completed, grid, re_spec)
+        end
+        re_spec = _with_used(re_spec, used)
+        if !isempty(used) && _offset_matters(_link(model), type, scale, measure)
+            re_off = _re_offset(model, re_tbl, re_spec)
+            offset_vec = isnothing(offset_vec) ? re_off : offset_vec .+ re_off
+        end
+    end
 
     # Σ, the one evaluation of `vcov` for this call (dropped coefficients' rows and columns zeroed);
     # df from the model class unless given
@@ -228,6 +247,8 @@ function _normalize_request(model, data;
     df_value = isnothing(df_override) ? _inference_df(model) : df_override
 
     changed = _changed_vars(scenario_vars, grid, changed_vars)
+    isnothing(re_spec) || _validate_random_effects_request(model, re_spec, type, resolved_vars,
+                                                           vars_explicit, changed, grid)
     # The derived-column detector, once per call, over the focal and the changed variables. The
     # values the call sets are known here for `scenarios` and a reference grid; the model-level
     # second differences set theirs later (`scenario_vars`), so they are not known (`nothing`).
@@ -242,7 +263,7 @@ function _normalize_request(model, data;
     req = MarginsRequest{_request_kind(reference_grid), typeof(model)}(
         model, type, data_nt, resolved_vars, vars_explicit, Σ, dropped, vcov, df_value, α, weights_vec,
         weights_source, offset_vec, scenarios_nt, scenario_specs, groups, group_specs, grid, completed,
-        grid_vars, changed, contrasts, measure, scale, backend, interval)
+        grid_vars, changed, contrasts, measure, scale, backend, interval, re_spec)
     _validate_request(model, req)
     return req
 end
@@ -291,7 +312,7 @@ function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,Name
         req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.dropped, req.vcov_source,
         req.df, req.alpha, req.weights, req.weights_source, req.offset, scenarios, specs, req.groups,
         req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars, req.changed_vars,
-        req.contrasts, req.measure, req.scale, req.backend, req.interval)
+        req.contrasts, req.measure, req.scale, req.backend, req.interval, req.random_effects)
 end
 
 """
@@ -308,7 +329,7 @@ function _with_group_specs(req::MarginsRequest{K,M}, group_specs::Vector) where 
         req.df, req.alpha, req.weights, req.weights_source, req.offset, req.scenarios,
         req.scenario_specs, req.groups, group_specs, req.reference_grid, req.completed_grid,
         req.grid_vars, req.changed_vars, req.contrasts, req.measure, req.scale, req.backend,
-        req.interval)
+        req.interval, req.random_effects)
 end
 
 # ---- validators of single options ---------------------------------------------------------
@@ -383,7 +404,7 @@ end
 
 # ---- reference grid (profile requests) -----------------------------------------------------
 
-_prepare_reference_grid(model, data, data_nt, ::Nothing, fvars=nothing) = (nothing, nothing, Set{Symbol}(), :none)
+_prepare_reference_grid(model, data, data_nt, ::Nothing, fvars=nothing; extra_vars=Symbol[]) = (nothing, nothing, Set{Symbol}(), :none)
 
 """
     _prepare_reference_grid(model, data, data_nt, reference_grid) -> (grid, completed_grid, grid_vars, fill_source)
@@ -393,7 +414,7 @@ complete it with typical values for the model variables it does not give. `grid_
 grid columns shown in the output: the user's model variables, without the response.
 """
 function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_grid::DataFrame,
-                                 fvars=_get_model_formula_variables(model))
+                                 fvars=_get_model_formula_variables(model); extra_vars=Symbol[])
     # Process reference grid to convert string categorical specifications to proper categorical values
     # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
     grid = process_reference_grid(data, reference_grid)
@@ -443,7 +464,9 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     # every profile would silently report the same value. Constant extra columns are
     # harmless and common: means_grid(data) carries every data column.
     varying = [Symbol(c) for c in names(grid) if length(unique(grid[!, c])) > 1]
-    bad_cols = _nonpredictor_vars(model, varying, fvars)
+    # (`extra_vars`: other columns the request reads at the grid rows, the grouping columns of
+    # `random_effects = :conditional`)
+    bad_cols = setdiff(_nonpredictor_vars(model, varying, fvars), extra_vars)
     if !isempty(bad_cols)
         throw(ArgumentError(
             "Reference grid variable(s) $(join(bad_cols, ", ")) vary across the grid but are " *
@@ -467,13 +490,14 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     # (`data_nt` already holds the model's estimation rows)
     (completed, fill_source) = _complete_reference_grid(grid, model, data_nt; subset=false)
     # Predictors outside the formula Margins evaluates (FixedEffectModels' absorbed fixed effects,
-    # which a grid may set to choose their estimates) are kept, so they label the output rows
+    # which a grid may set to choose their estimates, and the grouping columns of
+    # `random_effects = :conditional`) are kept, so they label the output rows
     if nrow(completed) == nrow(grid)
         formula_vars = Set(_formula_predictor_names(model, fvars))
         predictors = _predictor_names(model, fvars)
         for c in names(grid)
             s = Symbol(c)
-            if !(c in names(completed)) && !(s in formula_vars) && s in predictors
+            if !(c in names(completed)) && !(s in formula_vars) && (s in predictors || s in extra_vars)
                 completed[!, c] = grid[!, c]
             end
         end

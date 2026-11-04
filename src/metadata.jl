@@ -24,13 +24,16 @@ The keys every `EffectsResult` / `PredictionsResult` carries in `metadata`, with
 | `:n_obs` | `Int` | rows of data that enter the averages: all rows unweighted, the rows with a positive weight when weighted |
 | `:weighted` | `Bool` | whether observation weights were used |
 | `:weights_source` | `Symbol` | where the weights came from: `:model` (the fit's estimation weights, the default), `:user` (`weights=` a column or vector) or `:none` |
+| `:random_effects` | `Symbol` | `:zero` (every random effect 0: the default, and the only treatment for models without random effects) or `:conditional` (the predicted random effects of the units in the data or the grid) |
+| `:re_terms` | `Vector{Symbol}` | the grouping factors whose predicted random effects entered η (empty for `:zero`) |
 | `:has_contexts` | `Bool` | whether rows are split by `scenarios=` / `groups=` |
 | `:groups_vars` | `Vector{Symbol}` | the `groups=` variables of the call (empty if none; their columns are in `result.context`) |
 | `:scenarios_vars` | `Vector{Symbol}` | the `scenarios=` variables of the call (empty if none; their columns are in `result.context`) |
 | `:model_type` | `String` | type of the fitted model |
 | `:timestamp` | `String` | when the result was computed |
 
-Entries that exist only in some results: `:n_profiles` (profile analyses),
+Entries that exist only in some results: `:re_factors` (models with random effects: all their
+grouping factors), `:n_profiles` (profile analyses),
 `:at_spec` (profile analyses), `:interval` and `:resid_var` (profile predictions),
 `:subgroup_n_values` / `:has_subgroup_n` (grouped results).
 
@@ -43,6 +46,7 @@ result_metadata_keys() = Pair{Symbol,Type}[
     :scale => Symbol, :measure => Symbol, :backend => Symbol, :n_obs => Int,
     :weighted => Bool,
     :weights_source => Symbol,
+    :random_effects => Symbol, :re_terms => Vector{Symbol},
     :has_contexts => Bool, :groups_vars => Vector{Symbol}, :scenarios_vars => Vector{Symbol},
     :model_type => String, :timestamp => String,
 ]

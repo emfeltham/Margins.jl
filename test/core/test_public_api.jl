@@ -1,6 +1,7 @@
 # test/core/test_public_api.jl
 #
-# The public API of Margins 3.0, frozen at the 3.0.0 release. Each pin below fails when the
+# The public API of Margins 3.0, frozen at the 3.0.0 release (plus, since: the random_effects,
+# re_new and re_terms keywords and metadata keys, Unreleased in CHANGELOG). Each pin below fails when the
 # public surface changes: an exported name added or removed, a keyword added to or removed
 # from an exported function, a positional form added or removed, a field of an exported type
 # renamed, or a column of a representative result renamed, added, removed or moved.
@@ -34,12 +35,12 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
     @testset "positional forms and keywords" begin
         S(x...) = Symbol(x...)
         expected = Dict(
-            :population_margins => Set([(2, [:alpha, :backend, :ci_alpha, :contrasts, :df, :groups, :measure, :scale, :scenarios, :type, :vars, :vcov, :warn, :weights])]),
-            :profile_margins => Set([(3, [:alpha, :backend, :ci_alpha, :contrasts, :df, :interval, :measure, :offset, :scale, :type, :vars, :vcov, :warn])]),
+            :population_margins => Set([(2, [:alpha, :backend, :ci_alpha, :contrasts, :df, :groups, :measure, :random_effects, :re_new, :re_terms, :scale, :scenarios, :type, :vars, :vcov, :warn, :weights])]),
+            :profile_margins => Set([(3, [:alpha, :backend, :ci_alpha, :contrasts, :df, :interval, :measure, :offset, :random_effects, :re_new, :re_terms, :scale, :type, :vars, :vcov, :warn])]),
             :second_differences => Set([
                 (2, [S("kwargs...")]),
                 (3, [:all_contrasts, :alpha, :contrast, :include_gradients, :modifier_type, :p_adjust, :vcov, :warn]),
-                (4, [:alpha, :at, :backend, :contrast, :contrasts, :delta, :df, :groups, :include_gradients, :levels, :measure, :modifier_type, :p_adjust, :profile, :scale, :vcov, :warn, :weights]),
+                (4, [:alpha, :at, :backend, :contrast, :contrasts, :delta, :df, :groups, :include_gradients, :levels, :measure, :modifier_type, :p_adjust, :profile, :random_effects, :re_new, :re_terms, :scale, :vcov, :warn, :weights]),
                 (4, [S("kwargs...")]),
             ]),
             :contrast => Set([(2, [S("kwargs...")]), (3, [:alpha]), (4, [S("kwargs...")])]),
@@ -78,7 +79,7 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
         @test fieldnames(ResultContext) == (:columns, :kinds)
         @test fieldnames(CategoricalMixture) == (:levels, :weights)
         @test first.(Margins.result_metadata_keys()) == [:analysis_type, :type, :vars, :n_vars, :scale,
-            :measure, :backend, :n_obs, :weighted, :weights_source, :has_contexts, :groups_vars,
+            :measure, :backend, :n_obs, :weighted, :weights_source, :random_effects, :re_terms, :has_contexts, :groups_vars,
             :scenarios_vars, :model_type, :timestamp]
         @test Margins.SECOND_DIFFERENCE_COLUMNS == (:variable, :contrast, :modifier, :modifier_type,
             :modifier_level1, :modifier_level2, :ame_at_level1, :ame_at_level2, :second_diff, :se,

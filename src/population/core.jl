@@ -1,7 +1,7 @@
 # population/core.jl - Main population_margins() function
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -82,6 +82,20 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   the confidence interval, overriding the model-class default (see *Inference*). A positive number,
   or `Inf` for z inference (e.g. `df = G - 1` with a clustered `vcov` on an `lm`, as Stata's
   `vce(cluster)` does). Recorded in `result.inference.df`.
+- `random_effects=:zero`: mixed models (MixedModels.jl) only. `:zero` (the default) sets every
+  random effect to 0, so the estimates describe a typical group (e.g. a rater and a village whose
+  random effects are 0). `:conditional` adds each row's predicted random effects (conditional
+  modes, `ranef`) to η, so the estimates describe the groups in the data. Under a nonlinear link
+  neither is the population-averaged effect (averaging over the random-effects distribution),
+  which `:marginal` will give (not implemented yet). With `:conditional`:
+  - standard errors are delta-method on β alone: they omit the prediction error of the random
+    effects;
+  - the effect of a variable with a random slope in a conditioned factor (`x` in `(1 + x | g)`)
+    is not supported yet, nor are `scenarios` that set such a variable;
+  - `re_terms` (a Symbol or a vector, grouping factors as `fnames(model)` names them) conditions
+    on some factors and sets the others to 0;
+  - `re_new=:zero` gives a level absent from the fit random effects 0 (`:error` rejects it).
+  `result.metadata[:random_effects]` and `[:re_terms]` record what was used.
 
 # Derived columns
 Margins changes a variable (a focal variable's derivative or contrast, a `scenarios` value) by
@@ -210,12 +224,15 @@ function population_margins(
     type::Symbol=:effects, vars=nothing, scale::Symbol=:response,
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
-    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing, warn::Bool=true, ci_alpha=nothing
+    alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing,
+    warn::Bool=true, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
     # Every option is validated, and `vcov` evaluated, once, here
     req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
-                             measure, contrasts, alpha, vcov, weights, df, warn)
+                             measure, contrasts, alpha, vcov, weights, df, random_effects, re_new,
+                             re_terms, warn)
     return _run(req)
 end
 
@@ -225,7 +242,14 @@ end
 Compute a population request: the AME/AAP, with its inference (`result.inference`: the
 request's Σ, df and alpha).
 """
-_run(req::MarginsRequest{:population}) = _population_result(req)
+_run(req::MarginsRequest{:population}) =
+    _with_random_effects_metadata!(_population_result(req), req)
+
+# Record the request's random-effects treatment on its result (`:zero` is the default metadata)
+function _with_random_effects_metadata!(res, req::MarginsRequest)
+    _set_random_effects_metadata!(res.metadata, req.model, req.random_effects)
+    return res
+end
 
 """
     _population_result(req::MarginsRequest{:population}) -> Union{EffectsResult, PredictionsResult}

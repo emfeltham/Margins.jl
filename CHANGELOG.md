@@ -6,6 +6,19 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 
 ## Unreleased
 
+### `random_effects` for mixed models
+
+`population_margins`, `profile_margins` and the model-level `second_differences` take
+`random_effects = :zero | :conditional` for MixedModels fits. `:zero` is the default and the
+3.0 behaviour (every random effect 0: a typical group). `:conditional` adds each row's predicted
+random effects (conditional modes) to η, so the estimates describe the groups in the data; in a
+profile grid, set the grouping columns to choose the groups. `re_terms` conditions on some
+grouping factors only, and `re_new = :zero | :error` decides what a level absent from the fit
+gets. Results record the choice in `metadata[:random_effects]` and `metadata[:re_terms]`, and a
+printed result from a mixed model names it ("Random effects: ..."). Standard errors remain
+delta-method on β alone. Not yet supported: effects of, and scenarios on, a variable with a
+random slope under `:conditional`, and `random_effects = :marginal` (population-averaged).
+
 ## v3.0.0 — 2026-11-03
 
 Margins 3.0.0 is the first release after 2.2.0 (2.3.0 was never released). It contains everything below.

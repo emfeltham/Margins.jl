@@ -102,6 +102,7 @@ include("inference/mixture_utilities.jl")                # create_mixture_column
 
 include("core/data_conversion.jl")  # Data type conversion utilities
 include("core/model_interface.jl")  # model-class interface: _link, _coef, _inference_df, _offset, ...
+include("core/random_effects.jl")  # random_effects = :zero | :conditional (mixed models)
 include("core/validation.jl")
 include("core/model_weights.jl")  # weights=:model default: _model_weights, _resolve_weights
 include("core/margins_validation.jl")

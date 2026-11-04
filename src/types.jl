@@ -354,6 +354,7 @@ function Base.show(io::IO, mr::EffectsResult)
     
     # Optional context header for population-with-contexts
     _show_context_header(io, mr)
+    _show_random_effects_header(io, mr)
     
     # Stata-style table with horizontal lines
     _show_stata_table(io, mr)
@@ -377,6 +378,7 @@ function Base.show(io::IO, mr::PredictionsResult)
     
     # Optional context header for population-with-contexts
     _show_context_header(io, mr)
+    _show_random_effects_header(io, mr)
     
     # Stata-style table with horizontal lines
     _show_stata_table(io, mr)
@@ -456,6 +458,25 @@ end
 
 # Predictions don't need display labels since they don't have variable/contrast concepts
 _generate_clean_display_labels(mr::PredictionsResult) = String[]
+
+"""
+    _show_random_effects_header(io::IO, mr::MarginsResult)
+
+On results for a model with random effects (`metadata[:re_factors]` is set), one line naming how
+they entered the estimates, so that a typical-group estimate (random effects 0) is not read as a
+population-averaged one or as one for the groups in the data.
+"""
+function _show_random_effects_header(io::IO, mr::MarginsResult)
+    factors = get(mr.metadata, :re_factors, nothing)
+    isnothing(factors) && return
+    used = Symbol[get(mr.metadata, :re_terms, Symbol[])...]
+    zeroed = setdiff(factors, used)
+    parts = String[]
+    isempty(used) || push!(parts, "predicted for " * join(string.(used), ", "))
+    isempty(zeroed) || push!(parts, "0 for " * join(string.(zeroed), ", ") *
+                                      (isempty(used) ? " (a typical group)" : ""))
+    println(io, "Random effects: ", join(parts, "; "))
+end
 
 """
     _show_context_header(io::IO, mr::MarginsResult)

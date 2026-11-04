@@ -240,8 +240,11 @@ Mixed models require special covariance matrix handling:
 β_fixed = fixef(mixed_model)
 V_fixed = vcov(mixed_model)  # Fixed effects covariance only
 
-# Marginal effects computed relative to fixed effects:
-# Random effects treated as integrated out (conditional on data)
+# Random-effects terms are dropped before compilation, so by default
+# (random_effects = :zero) predictions and marginal effects set every random
+# effect to zero (a typical group, not the population average under a nonlinear
+# link). random_effects = :conditional adds z'b̂ (from ranef) as a per-row η
+# offset. Standard errors use vcov(model), on β alone.
 ```
 
 ## Extensibility Architecture
