@@ -38,14 +38,18 @@ function same_rows(a::DataFrame, b::DataFrame; skip = "z", rtol = 1e-12)
     for c in intersect(names(a), names(b))
         c in ("gradient",) && continue
         x, y = a[!, c], b[!, c]
+        # The statistic divides an independently rounded estimate by its SE. Allow
+        # slightly more relative roundoff in that ratio, retaining tighter checks
+        # for the estimate, SE and other columns.
+        column_rtol = c == "statistic" ? max(rtol, 1e-10) : rtol
         if eltype(x) <: Union{Missing, Real} && !(eltype(x) <: Bool)
             # Independent fits can differ at BLAS rounding precision, especially at a
             # structural zero. Keep a tight absolute bound as well as relative agreement.
-            matches = all(isapprox.(x, y; rtol, atol = 1e-12) .| (isnan.(x) .& isnan.(y)))
+            matches = all(isapprox.(x, y; rtol = column_rtol, atol = 1e-12) .| (isnan.(x) .& isnan.(y)))
         else
             matches = isequal(x, y)
         end
-        matches || @error "Rank-deficient fit differs from refit" column=c actual=x reference=y rtol
+        matches || @error "Rank-deficient fit differs from refit" column=c actual=x reference=y rtol=column_rtol
         ok &= matches
     end
     @test ok
