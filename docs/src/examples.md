@@ -453,12 +453,12 @@ population-averaged effect, which averages over the random-effects distribution:
 population_margins(glmm, df_bin; vars=[:x], random_effects=:marginal)
 ```
 
-The standard errors are delta-method on β alone, so with `:conditional` they omit the
-prediction error of the random effects, and with `:marginal` the uncertainty of the variances.
+With `:conditional`, the standard errors include the prediction error of the random effects
+(`re_se = :joint`, the default; `re_se = :fixed` gives β-only standard errors). With `:marginal`
+they are delta-method on β, with the random-effect variances held at their estimates.
 The effect of a continuous variable with a random slope (`x` in `(1 + x | group)`) includes each
 group's predicted slope under `:conditional`, and the change in the spread of the random effects
-under `:marginal`. Contrasts of a categorical variable with a random slope, and `scenarios` that
-set a random-slope variable, are not supported yet.
+under `:marginal`.
 
 ## Best Practices
 

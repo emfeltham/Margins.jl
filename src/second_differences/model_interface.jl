@@ -55,7 +55,7 @@ end
                        delta=:auto, scale=:response, measure=:effect, contrasts=:baseline, contrast=nothing,
                        vcov=GLM.vcov, df=nothing, weights=:model, alpha=0.05, p_adjust=:none,
                        include_gradients=false, warn=true, backend=:ad, random_effects=:zero,
-                       re_new=:zero, re_terms=nothing, re_nodes=:auto)
+                       re_new=:zero, re_terms=nothing, re_nodes=:auto, re_se=:auto)
 
 How does the marginal effect of `variables` change with `modifier`? Computes the second
 difference (interaction effect on the response scale) with delta-method standard errors
@@ -127,9 +127,11 @@ What is computed depends on the modifier:
   FixedEffectModels), z otherwise.
 - `df`: degrees of freedom of the t reference distribution, overriding that rule (`Inf` for z), as
   in `population_margins`.
-- `random_effects`, `re_new`, `re_terms`, `re_nodes`: mixed models only, as in `population_margins`. With
-  `random_effects=:conditional` or `:marginal` the modifier must not have a random slope in a
-  conditioned or integrated factor (it is set counterfactually).
+- `random_effects`, `re_new`, `re_terms`, `re_nodes`, `re_se`: mixed models only, as in `population_margins`. With
+  `random_effects=:conditional` and `re_se=:fixed` above 2000 random-effect coefficients, the
+  modifier must not have a random slope in a conditioned factor (it is set counterfactually).
+  With `:marginal` the quadrature rule is checked at the SD of z'b of the modifier's evaluation
+  points too.
 - `weights`: observation weights, as in `population_margins`: `:model` (default; the fit's estimation
   weights if it has any, otherwise none), `:none` (or `nothing`) for unweighted, a column name or a vector.
   Every average marginal effect is then weighted, and the evaluation point `at=:mean` / `:median` of a
@@ -196,7 +198,7 @@ function second_differences(
     contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov,
     weights=:model, alpha=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
     warn::Bool=true, backend::Symbol=:ad, df=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
 )
     # The checks here are the ones specific to second differences; everything shared with
     # population_margins (alpha, df, contrasts, measure, scale, backend, weights, vcov, the groups
@@ -253,7 +255,7 @@ function second_differences(
         # One request for the whole call: every validator and the one evaluation of `vcov`
         req = _local_derivative_request(model, data_cols, vars_vec, modifier, at, profile;
                                         scale, backend, measure, contrasts, vcov, weights, alpha, df,
-                                        groups, warn, random_effects, re_new, re_terms, re_nodes)
+                                        groups, warn, random_effects, re_new, re_terms, re_nodes, re_se)
         out = _local_derivatives(req, cols, vars_vec, modifier; at, profile, delta, p_adjust,
                                  include_gradients, contrast)
         warn && _warn_structural_zeros(out, modifier_in_model)
@@ -279,7 +281,7 @@ function second_differences(
     # modifier levels within each stratum.
     req = _normalize_request(model, data_cols; type=:effects, vars=vars_vec, scale, backend, measure,
                              contrasts, alpha, vcov, weights, df, groups, warn,
-                             random_effects, re_new, re_terms, re_nodes,
+                             random_effects, re_new, re_terms, re_nodes, re_se,
                              scenario_vars=Symbol[modifier, keys(profile)...])
     pieces = DataFrame[]
     for profile_point in _expand_profile_to_cartesian(profile)

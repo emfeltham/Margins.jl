@@ -152,7 +152,7 @@ function accumulate_continuous!(vals::AbstractVector{Float64}, grads::AbstractMa
     end
     _accumulate_continuous_rows!(vals, J, x, A, B, c, de, β, s, m, var_idx, xcols, rows,
                                  weights, total_weight, 1.0 / length(rows), offset)
-    xterm |= offset isa SlopedOffset   # its row loop always fills B
+    xterm |= offset isa Union{SlopedOffset, RowSpreadOffset}   # their row loop always fills B
     @inbounds for k in 1:n_vars
         if xterm
             for i in 1:n_params
@@ -222,10 +222,17 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
     return nothing
 end
 
-# The effect of a variable with a random slope (`SlopedOffset`, phase 2 of `random_effects`):
-# per row, ∂ŷ/∂w = d₁(aⱼ + δo) + d₁z·δτ with δo = ∂oᵢ/∂w (`:conditional`) and δτ = ∂τᵢ/∂w
-# (`:marginal`), so ∇β(∂ŷ/∂w) = d₁ Jᵢ[:,j] + (d₂(aⱼ + δo) + d₂z·δτ) xᵢ (τ and δo do not depend on
-# β). Variables without a random slope have δo = δτ = 0 and get the formulas above.
+# The effect of a variable with a random slope (`random_effects`): per row,
+# ∂ŷ/∂w = d₁(aⱼ + δo) + d₁z·δτ with δo = ∂oᵢ/∂w (`:conditional` on the offset path, `SlopedOffset`)
+# and δτ = ∂τᵢ/∂w (`:marginal`, `RowSpreadOffset`: from the Jacobian rows of z's columns), so
+# ∇β(∂ŷ/∂w) = d₁ Jᵢ[:,j] + (d₂(aⱼ + δo) + d₂z·δτ) xᵢ (τ and δo do not depend on β). Variables
+# without a random slope have δo = δτ = 0 and get the formulas above.
+_slope_columns(o::SlopedOffset, dvars, var_idx) =
+    Int[something(findfirst(==(dvars[j]), o.vars), 0) for j in var_idx]
+_slope_columns(::RowSpreadOffset, dvars, var_idx) = Int[]
+@inline _slope_terms(o::SlopedOffset, scol, k, row, x, J, j, e) =
+    (sc = scol[k]; (sc == 0 ? 0.0 : @inbounds(o.doff[row, sc]), 0.0))
+@inline _slope_terms(o::RowSpreadOffset, scol, k, row, x, J, j, e::SpreadEta) = (0.0, _row_dtau(o, x, J, j, e.τ))
 function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{Float64},
                                       x::Vector{Float64}, A::Matrix{Float64}, B::Matrix{Float64},
                                       c::Vector{Float64}, de::AbstractDerivativeEvaluator,
@@ -233,12 +240,10 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
                                       var_idx::AbstractVector{Int}, xcols::XColumns, rows,
                                       weights::Union{Nothing, AbstractVector{Float64}},
                                       total_weight::Float64, unweighted_weight::Float64,
-                                      offset::SlopedOffset)
+                                      offset::Union{SlopedOffset, RowSpreadOffset})
     n_params = length(β)
     n_vars = length(var_idx)
-    xterm = _needs_xterm(s, m)
-    dvars = derivative_variables(de)
-    scol = Int[something(findfirst(==(dvars[var_idx[k]]), offset.vars), 0) for k in 1:n_vars]
+    scol = _slope_columns(offset, derivative_variables(de), var_idx)
     @inbounds for row in rows
         w = if isnothing(weights)
             unweighted_weight
@@ -249,7 +254,8 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
         end
 
         derivative_modelrow!(J, x, de, row)
-        ŷ, d₁, d₂, d₁z, d₂z = yhat2z(s, linear_predictor(x, β, offset, row))
+        e = linear_predictor(x, β, offset, row)
+        ŷ, d₁, d₂, d₁z, d₂z = yhat2z(s, e)
         _divides_by_y(m) && iszero(ŷ) && _throw_zero_prediction(measure_symbol(m), row, scale_symbol(s))
 
         for k in 1:n_vars
@@ -258,9 +264,7 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
             @simd for i in 1:n_params
                 a += J[i, j] * β[i]
             end
-            sc = scol[k]
-            δo = sc == 0 ? 0.0 : offset.doff[row, sc]
-            δτ = sc == 0 ? 0.0 : offset.dτ[row, sc]
+            δo, δτ = _slope_terms(offset, scol, k, row, x, J, j, e)
             a′ = a + δo
             mk = _measure_factor(m, _uses_x(m) ? xcols[k][row] : 1.0, ŷ)
             α = w * mk * d₁

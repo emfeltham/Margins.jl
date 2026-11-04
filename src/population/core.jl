@@ -1,7 +1,7 @@
 # population/core.jl - Main population_margins() function
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, re_se=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -90,25 +90,36 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   over the estimated random-effects distribution (E[g⁻¹(η + z'b)], b ~ N(0, Σ̂_b)) by
   Gauss–Hermite quadrature: z'b is normal, so the average is one-dimensional however many
   grouping factors are crossed or nested. With `:marginal`:
-  - with random slopes the SD of z'b varies by row (it depends on the slope variables); the
-    effect of a continuous random-slope variable includes the change in that SD;
+  - with random slopes the SD of z'b varies by row: the random-effects model columns are added to
+    the compiled formula (coefficient 0, variance 0; the result's gradients have a column for
+    each), so the SD follows every evaluated row, counterfactual ones included (scenarios,
+    contrasts of a categorical slope variable, grid rows). The effect of a random-slope variable
+    includes the change in that SD, from the formula's derivative;
   - `re_nodes=:auto` chooses the rule (16 nodes, doubled until ŷ and its first two derivatives
     agree with the next rule to 1e-10 at every η in [−20, 20]); an integer fixes it;
   - under an identity link it equals `:zero`;
-  - `metadata[:re_sd]` and `[:re_nodes]` record the SD of z'b (the largest over the rows with
-    random slopes) and the rule used.
+  - `metadata[:re_sd]` and `[:re_nodes]` record the SD of z'b (with random slopes, the largest
+    over the rows the request evaluates, which the automatic rule is checked at) and the rule used.
   Standard errors are delta-method on β with the random-effect variances fixed at their
   estimates. With `:conditional`:
-  - standard errors are delta-method on β alone: they omit the prediction error of the random
-    effects;
+  - `re_se=:joint` (the default) gives standard errors that include the prediction error of the
+    random effects: the delta method over (β, b) with the joint conditional covariance of
+    (β̂ − β, b̂ − b) given the variance parameters (Henderson's), whose β block is `vcov(model)`.
+    The result's gradients and `inference.vcov` are then over (β, b), so `contrast` and second
+    differences of the result use it too. It needs the model's own `vcov` and at most 2000
+    random-effect coefficients. `re_se=:fixed` gives β-only standard errors (any `vcov`, and a
+    rank-deficient fit); these can be far too large as well as too small (an average over the
+    observed groups is often known much more precisely than x̄'β). Its gradients are over (β, b)
+    too (zero variance for b) up to 2000 random-effect coefficients of the conditioned factors,
+    and over β alone above that;
   - the effect of a continuous variable with a random slope in a conditioned factor (`x` in
     `(1 + x | g)`) includes each group's predicted slope;
   - `re_terms` (a Symbol or a vector, grouping factors as `fnames(model)` names them) conditions
     on some factors and sets the others to 0;
   - `re_new=:zero` gives a level absent from the fit random effects 0 (`:error` rejects it).
-  With `:conditional` or `:marginal`, not supported yet: contrasts of a categorical variable with
-  a random slope, and `scenarios` that set a variable with a random slope (a profile grid may
-  set it). `result.metadata[:random_effects]` and `[:re_terms]` record what was used.
+  Not supported yet with `:conditional` and `re_se=:fixed` above 2000 random-effect
+  coefficients: contrasts of a categorical variable with a random slope, and
+  `scenarios` that set a variable with a random slope (a profile grid may set it). `result.metadata[:random_effects]` and `[:re_terms]` record what was used.
 
 # Derived columns
 Margins changes a variable (a focal variable's derivative or contrast, a `scenarios` value) by
@@ -238,14 +249,14 @@ function population_margins(
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
     warn::Bool=true, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
     # Every option is validated, and `vcov` evaluated, once, here
     req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
                              measure, contrasts, alpha, vcov, weights, df, random_effects, re_new,
-                             re_terms, re_nodes, warn)
+                             re_terms, re_nodes, re_se, warn)
     return _run(req)
 end
 

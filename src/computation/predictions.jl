@@ -39,7 +39,7 @@ end
 The response scale averaged over a normal random effect u ~ N(0, τ²) added to η
 (`random_effects = :marginal`): ŷ = E[g⁻¹(η + u)], by Gauss–Hermite quadrature, with
 (`z`, `w`) the rule for N(0, 1) and `τ` the SD of u. With random slopes τ varies by row and
-comes with η (a `SpreadEta`, from a `SpreadOffset`); `τ` is then unused. Differentiating under the
+comes with η (a `SpreadEta`, from a `RowSpreadOffset`); `τ` is then unused. Differentiating under the
 integral, dŷ/dη = E[g⁻¹′(η + u)] and d²ŷ/dη² = E[g⁻¹″(η + u)], so every kernel that uses
 `yhat`/`yhat2` gets population-averaged quantities and their β-gradients unchanged.
 """
@@ -172,8 +172,8 @@ const Offset = AnyOffset
 @inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::Vector{Float64}, row::Int) =
     dot(x, β) + offset[row]
 # `random_effects = :marginal` with random slopes: η with the row's SD of u = z'b
-@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::SpreadOffset, row::Int) =
-    SpreadEta(linear_predictor(x, β, offset.shift, row), offset.τ[row])
+@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::RowSpreadOffset, row::Int) =
+    SpreadEta(linear_predictor(x, β, offset.shift, row), _row_tau(offset, x))
 # The effect of a random-slope variable: η is the base offset's (the slopes enter the accumulator)
 @inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::SlopedOffset, row::Int) =
     linear_predictor(x, β, offset.base, row)

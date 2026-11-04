@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, re_se=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -55,7 +55,7 @@ or adjusted predictions at specific profiles (APM/APR).
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
-- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`: mixed models only; see
+- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`, `re_se=:auto`: mixed models only; see
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
@@ -313,7 +313,7 @@ function _profile_result(req::MarginsRequest{:profile})
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, re_se=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -362,7 +362,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
-- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`: mixed models only; see
+- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`, `re_se=:auto`: mixed models only; see
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
@@ -448,7 +448,7 @@ function profile_margins(
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov,
     interval::Symbol=:confidence, df=nothing, offset=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
     warn::Bool=true, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
@@ -456,7 +456,7 @@ function profile_margins(
     # `profile_margins` takes no weights (see "Weights" above).
     req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
                              contrasts, alpha, vcov, weights=:none, interval, df, offset,
-                             random_effects, re_new, re_terms, re_nodes, warn)
+                             random_effects, re_new, re_terms, re_nodes, re_se, warn)
     return _run(req)
 end
 
@@ -504,7 +504,7 @@ _grid_block(grid::DataFrame, rows::Vector{Int}) =
 
 # The offset at a block's rows
 _block_offset(::Nothing, rows) = nothing
-_block_offset(offset::Union{Vector{Float64}, SpreadOffset, SlopedOffset}, rows) = offset[rows]
+_block_offset(offset::Union{Vector{Float64}, RowSpreadOffset, SlopedOffset}, rows) = offset[rows]
 
 function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, scale, offset=nothing)
     blocks = _heterogeneous_grid_blocks(grid)

@@ -102,7 +102,7 @@ _validate_focal_vars(model, vars) = nothing
                        contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:none,
                        interval=:confidence, df=nothing, offset=nothing, scenario_vars=nothing,
                        changed_vars=Symbol[], random_effects=:zero, re_new=:zero, re_terms=nothing,
-                       re_nodes=:auto, warn=true) -> MarginsRequest
+                       re_nodes=:auto, re_se=:auto, warn=true) -> MarginsRequest
 
 Validate every option and prepare everything a computation needs, once per call: the data
 (any Tables.jl source, subset to the model's estimation rows), the focal variables, Σ (`vcov` is
@@ -132,7 +132,8 @@ function _normalize_request(model, data;
         measure::Symbol=:effect, contrasts::Symbol=:baseline, alpha=0.05, vcov=GLM.vcov,
         weights=:none, interval::Symbol=:confidence, df=nothing, offset=nothing,
         scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[],
-        random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn::Bool=true)
+        random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, re_se=:auto,
+        warn::Bool=true)
     validate_required_args(model, data)
     validate_model_methods(model)
     # The formula's variables, walked once per call and passed to every check that needs them
@@ -150,7 +151,17 @@ function _normalize_request(model, data;
         "margins use the model's own offset at each data row"))
     _validate_contrasts(contrasts)
     _validate_interval(interval, type)
-    re_spec = _validate_random_effects(model, random_effects, re_new, re_terms, re_nodes)
+    re_spec = _validate_random_effects(model, random_effects, re_new, re_terms, re_nodes, re_se)
+    # The mixed model's wrapper: its formula adds the random-effects columns, so every computation
+    # below evaluates z from the compiled row. `:conditional`: z'b̂ as coefficients (over hidden
+    # grouping columns added to the data), the parameter space (β, b); `:marginal` with random
+    # slopes: z's columns with coefficient 0 (for τ, see `RowSpreadOffset`). Its covariance already
+    # holds Σ_β (from `vcov` unless `re_se = :joint`), so `vcov` is the wrapper's own from here on
+    if _is_wrapped(re_spec)
+        (model, data) = _re_wrapper_model(model, Tables.columntable(data), re_spec, vcov)
+        fvars = _get_model_formula_variables(model)
+        vcov = GLM.vcov
+    end
 
     # `scenarios` and `groups` syntax, and the variables they name
     scenarios_nt = nothing
@@ -212,7 +223,8 @@ function _normalize_request(model, data;
     # (an `offset` column of the grid is the offset at its rows, not a variable: split it off)
     (grid_in, grid_offset) = _split_offset_column(model, reference_grid)
     (grid, completed, grid_vars, fill_source) = _prepare_reference_grid(model, data, data_nt, grid_in, fvars;
-                                                                        extra_vars=_re_grid_vars(model, re_spec))
+                                                                        extra_vars=_re_grid_vars(model, re_spec),
+                                                                        re_new)
     # A profile request averages nothing; its weights are those of the values it fills in for model
     # variables the grid leaves out (the model's estimation weights by default)
     isnothing(completed) || (weights_source = fill_source)
@@ -228,7 +240,9 @@ function _normalize_request(model, data;
     # Mixed models with random_effects = :conditional: the predicted random effects z'b̂ join the
     # offset (when it can change the requested quantity, as for any offset)
     re_tbl = nothing
-    if !isnothing(re_spec) && re_spec.mode === :conditional
+    if _is_wrapped(re_spec) && re_spec.mode === :conditional
+        isnothing(completed) || (re_spec = _with_used(re_spec, _joint_used(model, grid)))
+    elseif !isnothing(re_spec) && re_spec.mode === :conditional
         if isnothing(completed)
             (re_tbl, used) = (data_nt, re_spec.factors)
         else
@@ -240,14 +254,12 @@ function _normalize_request(model, data;
             offset_vec = isnothing(offset_vec) ? re_off : offset_vec .+ re_off
         end
     end
-    # random_effects = :marginal: the quadrature, checked at the rows evaluated; with random
-    # slopes each row's SD of z'b travels with the offset (`SpreadOffset`)
+    # random_effects = :marginal: the quadrature, checked at the largest SD of z'b the request
+    # evaluates; with random slopes each row's SD comes from its model row (`RowSpreadOffset`)
     if !isnothing(re_spec) && re_spec.mode === :marginal
         re_tbl = isnothing(completed) ? data_nt : Tables.columntable(completed)
-        (re_spec, spread) = _finalize_marginal(model, re_spec, re_tbl)
-        if !isnothing(spread) && !isnothing(re_spec.average)
-            offset_vec = SpreadOffset(offset_vec, spread)
-        end
+        settings = re_spec.wrapped ? _marginal_settings(model, re_spec, scenario_specs, resolved_vars, re_tbl) : ()
+        (re_spec, offset_vec) = _finalize_marginal(model, re_spec, re_tbl, settings, offset_vec)
     end
 
     # Σ, the one evaluation of `vcov` for this call (dropped coefficients' rows and columns zeroed);
@@ -263,9 +275,8 @@ function _normalize_request(model, data;
     if type === :effects && !isnothing(re_spec) && !isnothing(resolved_vars)
         slope_vars = intersect(resolved_vars, _re_active_slope_vars(model, re_spec))
         if !isempty(slope_vars)
-            τ = offset_vec isa SpreadOffset ? offset_vec.τ : nothing
-            (doff, dτ) = _re_slope_derivatives(model, re_tbl, re_spec, slope_vars, τ)
-            offset_vec = SlopedOffset(offset_vec, slope_vars, doff, dτ)
+            doff = _re_slope_derivatives(model, re_tbl, re_spec, slope_vars)
+            offset_vec = SlopedOffset(offset_vec, slope_vars, doff)
         end
     end
     # The derived-column detector, once per call, over the focal and the changed variables. The
@@ -327,11 +338,13 @@ then run one computation per profile point (and evaluation point). A value may b
 function _with_scenarios(req::MarginsRequest{K,M}, scenarios::Union{Nothing,NamedTuple}) where {K,M}
     specs = _parse_scenario_specs(scenarios)
     _validate_context_count(length(specs), length(req.group_specs))
+    (re_spec, offset) = isnothing(req.random_effects) ? (nothing, req.offset) :
+        _marginal_with_scenarios(req.model, req.random_effects, req.offset, specs, req.vars, req.data_nt)
     return MarginsRequest{K,M}(
         req.model, req.type, req.data_nt, req.vars, req.vars_explicit, req.Σ, req.dropped, req.vcov_source,
-        req.df, req.alpha, req.weights, req.weights_source, req.offset, scenarios, specs, req.groups,
+        req.df, req.alpha, req.weights, req.weights_source, offset, scenarios, specs, req.groups,
         req.group_specs, req.reference_grid, req.completed_grid, req.grid_vars, req.changed_vars,
-        req.contrasts, req.measure, req.scale, req.backend, req.interval, req.random_effects)
+        req.contrasts, req.measure, req.scale, req.backend, req.interval, re_spec)
 end
 
 """
@@ -423,7 +436,7 @@ end
 
 # ---- reference grid (profile requests) -----------------------------------------------------
 
-_prepare_reference_grid(model, data, data_nt, ::Nothing, fvars=nothing; extra_vars=Symbol[]) = (nothing, nothing, Set{Symbol}(), :none)
+_prepare_reference_grid(model, data, data_nt, ::Nothing, fvars=nothing; extra_vars=Symbol[], re_new=:zero) = (nothing, nothing, Set{Symbol}(), :none)
 
 """
     _prepare_reference_grid(model, data, data_nt, reference_grid) -> (grid, completed_grid, grid_vars, fill_source)
@@ -433,10 +446,13 @@ complete it with typical values for the model variables it does not give. `grid_
 grid columns shown in the output: the user's model variables, without the response.
 """
 function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_grid::DataFrame,
-                                 fvars=_get_model_formula_variables(model); extra_vars=Symbol[])
+                                 fvars=_get_model_formula_variables(model); extra_vars=Symbol[], re_new=:zero)
     # Process reference grid to convert string categorical specifications to proper categorical values
     # This enables users to write cartesian_grid(education=["High School", "College"]) naturally
     grid = process_reference_grid(data, reference_grid)
+    # (the hidden grouping columns of the joint random-effects wrapper, from the grid's grouping
+    # columns or the zero level)
+    grid = _augment_grid(model, grid, re_new)
 
     # Reference grid specific validation (use processed grid for actual validation)
     if nrow(grid) == 0
@@ -495,7 +511,7 @@ function _prepare_reference_grid(model, data, data_nt::NamedTuple, reference_gri
     end
 
     # Store original reference grid variable names for output filtering
-    grid_vars = Set(Symbol.(names(grid)))
+    grid_vars = setdiff!(Set(Symbol.(names(grid))), _hidden_columns(model))
 
     # Attempt to remove response variable from display if it appears in the provided grid.
     # Be defensive: formulas with transformed responses (e.g., log(y)) may not expose `.sym`.

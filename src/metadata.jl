@@ -33,7 +33,7 @@ The keys every `EffectsResult` / `PredictionsResult` carries in `metadata`, with
 | `:timestamp` | `String` | when the result was computed |
 
 Entries that exist only in some results: `:re_factors` (models with random effects: all their
-grouping factors), `:re_sd` and `:re_nodes` (`random_effects = :marginal`: the SD of z'b, the largest over the rows
+grouping factors), `:re_se` (`random_effects = :conditional`: `:joint` or `:fixed`), `:re_sd` and `:re_nodes` (`random_effects = :marginal`: the SD of z'b, the largest over the rows
 with random slopes, and the Gauss–Hermite nodes; both 0 when the average changes nothing), `:n_profiles` (profile analyses),
 `:at_spec` (profile analyses), `:interval` and `:resid_var` (profile predictions),
 `:subgroup_n_values` / `:has_subgroup_n` (grouped results).

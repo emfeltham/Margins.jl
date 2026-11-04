@@ -17,14 +17,28 @@ grouping factors only, and `re_new = :zero | :error` decides what a level absent
 gets. `random_effects = :marginal` gives population-averaged estimates: the inverse link averaged over
 the estimated random-effects distribution by Gauss–Hermite quadrature (z'b is normal, so the
 average is one-dimensional for any number of crossed or nested factors; `re_nodes = :auto`
-checks convergence to 1e-10; with random slopes the SD of z'b is computed per row). Results record the choice in
+checks convergence to 1e-10 at the largest SD of z'b the request evaluates; with random slopes
+z's columns join the compiled formula with coefficient 0, so the SD is computed from each
+evaluated row, counterfactual ones included). Results record the choice in
 `metadata[:random_effects]` and `metadata[:re_terms]` (and `[:re_sd]`, `[:re_nodes]` for
 `:marginal`), and a printed result from a mixed model names it ("Random effects: ...").
-The effect of a continuous variable with a random slope includes each group's predicted slope
-(`:conditional`) or the change in the SD of z'b (`:marginal`). Standard errors remain
-delta-method on β alone, with the predicted random effects and their variances fixed. Not yet
-supported: contrasts of a categorical variable with a random slope, and population scenarios
-that set a random-slope variable.
+The effect of a variable with a random slope includes each group's predicted slope
+(`:conditional`) or the change in the SD of z'b (`:marginal`, from the formula's derivative, so
+any slope term, `w^2` included).
+
+With `:conditional`, standard errors include the prediction error of the random effects by
+default (`re_se = :joint`): the delta method over (β, b) with the joint conditional covariance
+of (β̂ − β, b̂ − b) (Henderson's prediction-error covariance, whose β block is `vcov(model)`).
+The random effects become extra coefficients of the compiled formula (full-dummy columns of
+each grouping factor and their interactions with the slope variables), so the result's
+gradients and `inference.vcov` are over (β, b) and `contrast` and second differences use them;
+this path also supports contrasts of categorical random-slope variables and scenarios on slope
+variables. It needs the model's own `vcov`, a full-rank X and at most 2000 random-effect
+coefficients; `re_se = :fixed` gives the β-only standard errors (any `vcov`, any rank), on the
+same path up to 2000 random-effect coefficients of the conditioned factors and through a
+per-row offset above that. The variance parameters are held at their estimates in every mode.
+Not yet supported with `re_se = :fixed` above 2000 coefficients: contrasts of a categorical
+variable with a random slope, and population scenarios that set a random-slope variable.
 
 ## v3.0.0 — 2026-11-03
 
