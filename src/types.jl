@@ -472,7 +472,13 @@ function _show_random_effects_header(io::IO, mr::MarginsResult)
     used = Symbol[get(mr.metadata, :re_terms, Symbol[])...]
     zeroed = setdiff(factors, used)
     parts = String[]
-    isempty(used) || push!(parts, "predicted for " * join(string.(used), ", "))
+    if get(mr.metadata, :random_effects, :zero) === :marginal
+        sd = get(mr.metadata, :re_sd, NaN)
+        isempty(used) || push!(parts, "averaged over " * join(string.(used), ", ") *
+                                      " (population-averaged; SD $(round(sd; sigdigits=3)))")
+    else
+        isempty(used) || push!(parts, "predicted for " * join(string.(used), ", "))
+    end
     isempty(zeroed) || push!(parts, "0 for " * join(string.(zeroed), ", ") *
                                       (isempty(used) ? " (a typical group)" : ""))
     println(io, "Random effects: ", join(parts, "; "))

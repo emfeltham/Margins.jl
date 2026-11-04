@@ -2,7 +2,7 @@
 # Main profile_margins() function with reference grid approach
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -55,7 +55,7 @@ or adjusted predictions at specific profiles (APM/APR).
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
-- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`: mixed models only; see
+- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`: mixed models only; see
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
@@ -246,7 +246,8 @@ function _profile_result(req::MarginsRequest{:profile})
     # effects are evaluated on the reference grid, with evaluators built over the grid.
     # Each call builds its own engine (nothing is cached across calls); Σ is the matrix the
     # request computed from `vcov`, once per call.
-    engine = build_engine(ProfileUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend)
+    engine = build_engine(ProfileUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend;
+                          re_average = _re_average(req.random_effects))
     if type === :effects
         # Use the actual working function that already exists from the original utilities.jl
         # Pass original_grid_vars so we know which variables are scenario-defining
@@ -312,7 +313,7 @@ function _profile_result(req::MarginsRequest{:profile})
 end
 
 """
-    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
+    profile_margins(model, data, reference_grid; type=:effects, vars=nothing, scale=:response, backend=:ad, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, interval=:confidence, df=nothing, offset=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute profile marginal effects or adjusted predictions at specific covariate combinations.
 
@@ -361,7 +362,7 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   (`glm(...; offset=log.(exposure))`, a GLMM's `offset=`): a number for every row or one value
   per grid row, on the scale of the model's offset (e.g. `offset=log(1000)` for an exposure of
   1000). An `offset` column of the grid does the same. See *Offsets*.
-- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`: mixed models only; see
+- `random_effects=:zero`, `re_new=:zero`, `re_terms=nothing`, `re_nodes=:auto`: mixed models only; see
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
@@ -447,7 +448,7 @@ function profile_margins(
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov,
     interval::Symbol=:confidence, df=nothing, offset=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto,
     warn::Bool=true, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
@@ -455,7 +456,7 @@ function profile_margins(
     # `profile_margins` takes no weights (see "Weights" above).
     req = _normalize_request(model, data; type, vars, scale, backend, reference_grid, measure,
                              contrasts, alpha, vcov, weights=:none, interval, df, offset,
-                             random_effects, re_new, re_terms, warn)
+                             random_effects, re_new, re_terms, re_nodes, warn)
     return _run(req)
 end
 
@@ -503,7 +504,7 @@ _grid_block(grid::DataFrame, rows::Vector{Int}) =
 
 # The offset at a block's rows
 _block_offset(::Nothing, rows) = nothing
-_block_offset(offset::Vector{Float64}, rows) = offset[rows]
+_block_offset(offset::Union{Vector{Float64}, SpreadOffset, SlopedOffset}, rows) = offset[rows]
 
 function _profile_predictions_by_grid_blocks(engine::MarginsEngine, grid::DataFrame, scale, offset=nothing)
     blocks = _heterogeneous_grid_blocks(grid)
@@ -559,7 +560,7 @@ function _profile_predictions(engine::MarginsEngine{L}, reference_grid, scale, o
 
     # Prediction and its gradient at each grid row (prediction kernel)
     predict_rows!(predictions, G, engine.row_buf, refgrid_compiled, data_nt, engine.β,
-                  predscale(scale, engine.link), 1:n_profiles, offset)
+                  predscale(scale, engine.link, engine.re_average), 1:n_profiles, offset)
     
     # Safely use g_buf for SE computation if large enough (performance optimization)
     # NOTE: Buffer fallback is intentional and harmless - engines are often created with
@@ -791,7 +792,7 @@ function _mem_continuous_and_categorical(engine::MarginsEngine{L}, reference_gri
     cont_measure = _measure_type(measure)
     cont_xcols = (!_uses_x(cont_measure) || n_cont == 0) ? () :
                  _float_columns(refgrid_data, continuous_requested)
-    s_scale = predscale(scale, engine.link)
+    s_scale = predscale(scale, engine.link, engine.re_average)
 
     # Categorical variable buffers
     contrast_buf = Vector{Float64}(undef, length(refgrid_compiled))
@@ -953,7 +954,7 @@ function _process_profile_categorical_variable!(results, G, row_idx, engine, var
         (effect, se) = categorical_contrast_ame!(
             contrast_buf, engine.gβ_accumulator,
             refgrid_contrast, var, from_level, to_level,
-            engine.β, engine.Σ, predscale(scale, engine.link), profile_idx:profile_idx, nothing,
+            engine.β, engine.Σ, predscale(scale, engine.link, engine.re_average), profile_idx:profile_idx, nothing,
             offset
         )
 

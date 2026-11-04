@@ -40,7 +40,7 @@ Zero-allocation architecture (Phase 4 complete):
 5. Return count and pairs (no intermediate allocations)
 
 # Scale Handling
-`scale` becomes a `PredScale` (`predscale(scale, engine.link)`): on the link scale
+`scale` becomes a `PredScale` (`predscale(scale, engine.link, engine.re_average)`): on the link scale
 AME = mean(ΔX'β), ∇β = mean(ΔX); on the response scale AME = mean(g⁻¹(η₁) − g⁻¹(η₀)),
 ∇β = mean(g′(η₁)X₁ − g′(η₀)X₀). On the link scale a baseline contrast for a categorical
 that does not interact with anything equals its coefficient exactly, which is what the
@@ -102,7 +102,7 @@ function _compute_categorical_contrasts!(
         view(results_se, 1:n_contrasts),
         view(gradient_matrix, 1:n_contrasts, :),
         engine.contrast_buf, engine.contrast, var, contrast_pairs,
-        engine.β, engine.Σ, predscale(scale, engine.link),
+        engine.β, engine.Σ, predscale(scale, engine.link, engine.re_average),
         rows, weights, engine.offset
     )
 

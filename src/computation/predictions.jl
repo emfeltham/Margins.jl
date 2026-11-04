@@ -34,6 +34,26 @@ struct ResponseScale{L<:GLM.Link} <: PredScale
 end
 
 """
+    AveragedResponseScale{L<:GLM.Link} <: PredScale
+
+The response scale averaged over a normal random effect u ~ N(0, τ²) added to η
+(`random_effects = :marginal`): ŷ = E[g⁻¹(η + u)], by Gauss–Hermite quadrature, with
+(`z`, `w`) the rule for N(0, 1) and `τ` the SD of u. With random slopes τ varies by row and
+comes with η (a `SpreadEta`, from a `SpreadOffset`); `τ` is then unused. Differentiating under the
+integral, dŷ/dη = E[g⁻¹′(η + u)] and d²ŷ/dη² = E[g⁻¹″(η + u)], so every kernel that uses
+`yhat`/`yhat2` gets population-averaged quantities and their β-gradients unchanged.
+"""
+struct AveragedResponseScale{L<:GLM.Link} <: PredScale
+    link::L
+    z::Vector{Float64}
+    w::Vector{Float64}
+    τ::Float64
+end
+
+# Either response scale (the kernels that need ŷ = g⁻¹(η) on the response scale dispatch on this)
+const AnyResponseScale = Union{ResponseScale, AveragedResponseScale}
+
+"""
     predscale(scale::Symbol, link) -> PredScale
 
 `ResponseScale(link)` for `:response`, `LinkScale()` for `:link`; any other symbol is an
@@ -45,9 +65,22 @@ end
     throw(ArgumentError("scale must be :response or :link, got $(repr(scale))"))
 end
 
+"""
+    predscale(scale::Symbol, link, average) -> PredScale
+
+As `predscale(scale, link)`; with `average` a `REAveraging` (`random_effects = :marginal`),
+the response scale is the `AveragedResponseScale` of its quadrature rule. The link scale is
+unaffected (E[η + u] = η).
+"""
+@inline predscale(scale::Symbol, link, ::Nothing) = predscale(scale, link)
+@inline function predscale(scale::Symbol, link, a::REAveraging)
+    scale === :response && return AveragedResponseScale(link, a.z, a.w, a.τ)
+    return predscale(scale, link)
+end
+
 # The `scale` symbol a PredScale came from (for error messages)
 scale_symbol(::LinkScale) = :link
-scale_symbol(::ResponseScale) = :response
+scale_symbol(::AnyResponseScale) = :response
 
 """
     yhat(s::PredScale, η) -> (ŷ, dŷ/dη)
@@ -65,6 +98,53 @@ Prediction and its first two derivatives with respect to the linear predictor.
 @inline yhat2(::LinkScale, η::Real) = (η, one(η), zero(η))
 @inline yhat2(s::ResponseScale, η::Real) = link_derivatives(s.link, η)
 
+@inline yhat(s::AveragedResponseScale, η::Real) = _averaged_yhat(s, η, s.τ)
+@inline yhat2(s::AveragedResponseScale, η::Real) = _averaged_yhat2(s, η, s.τ)
+@inline yhat(s::AveragedResponseScale, e::SpreadEta) = _averaged_yhat(s, e.η, e.τ)
+@inline yhat2(s::AveragedResponseScale, e::SpreadEta) = _averaged_yhat2(s, e.η, e.τ)
+"""
+    yhat2z(s, η) -> (ŷ, d₁, d₂, d₁z, d₂z)
+
+`yhat2` plus d₁z = E[g⁻¹′(η + τZ)·Z] and d₂z = E[g⁻¹″(η + τZ)·Z], the derivatives of ŷ with
+respect to τ (∂ŷ/∂τ = d₁z, and its η-derivative d₂z): nonzero only on the averaged response scale.
+"""
+@inline yhat2z(s::PredScale, η) = ((ŷ, d₁, d₂) = yhat2(s, η); (ŷ, d₁, d₂, 0.0, 0.0))
+@inline yhat2z(s::AveragedResponseScale, η::Real) = _averaged_yhat2z(s, Float64(η), s.τ)
+@inline yhat2z(s::AveragedResponseScale, e::SpreadEta) = _averaged_yhat2z(s, e.η, e.τ)
+@inline function _averaged_yhat2z(s::AveragedResponseScale, η::Float64, τ::Float64)
+    μ = 0.0; d₁ = 0.0; d₂ = 0.0; d₁z = 0.0; d₂z = 0.0
+    @inbounds for k in eachindex(s.w)
+        zk = s.z[k]
+        m, a, b = link_derivatives(s.link, η + τ * zk)
+        wk = s.w[k]
+        μ += wk * m; d₁ += wk * a; d₂ += wk * b
+        d₁z += wk * a * zk; d₂z += wk * b * zk
+    end
+    return (μ, d₁, d₂, d₁z, d₂z)
+end
+
+# On the link scale the spread does not matter (E[η + u] = η)
+@inline yhat(s::LinkScale, e::SpreadEta) = yhat(s, e.η)
+@inline yhat2(s::LinkScale, e::SpreadEta) = yhat2(s, e.η)
+
+@inline function _averaged_yhat(s::AveragedResponseScale, η::Float64, τ::Float64)
+    μ = 0.0; d = 0.0
+    @inbounds for k in eachindex(s.w)
+        ηk = η + τ * s.z[k]
+        μ += s.w[k] * GLM.linkinv(s.link, ηk)
+        d += s.w[k] * _dmu_deta(s.link, ηk)
+    end
+    return (μ, d)
+end
+@inline function _averaged_yhat2(s::AveragedResponseScale, η::Float64, τ::Float64)
+    μ = 0.0; d₁ = 0.0; d₂ = 0.0
+    @inbounds for k in eachindex(s.w)
+        m, a, b = link_derivatives(s.link, η + τ * s.z[k])
+        μ += s.w[k] * m; d₁ += s.w[k] * a; d₂ += s.w[k] * b
+    end
+    return (μ, d₁, d₂)
+end
+
 """
     rowweight(weights, row) -> Float64
 
@@ -80,7 +160,7 @@ The η offset of a computation: `nothing` (none) or a `Vector{Float64}` indexed 
 evaluated (data rows for population margins, reference-grid rows for profile margins). Kernels
 take it as an argument, so each is compiled for one of the two and the row loop has no branch.
 """
-const Offset = Union{Nothing, Vector{Float64}}
+const Offset = AnyOffset
 
 """
     linear_predictor(x, β, offset, row) -> η
@@ -91,6 +171,12 @@ const Offset = Union{Nothing, Vector{Float64}}
 @inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, ::Nothing, row::Int) = dot(x, β)
 @inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::Vector{Float64}, row::Int) =
     dot(x, β) + offset[row]
+# `random_effects = :marginal` with random slopes: η with the row's SD of u = z'b
+@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::SpreadOffset, row::Int) =
+    SpreadEta(linear_predictor(x, β, offset.shift, row), offset.τ[row])
+# The effect of a random-slope variable: η is the base offset's (the slopes enter the accumulator)
+@inline linear_predictor(x::AbstractVector{Float64}, β::AbstractVector{Float64}, offset::SlopedOffset, row::Int) =
+    linear_predictor(x, β, offset.base, row)
 
 """
     predict_row!(x, compiled, data, β, s::PredScale, row, offset=nothing) -> (ŷ, dŷ/dη)

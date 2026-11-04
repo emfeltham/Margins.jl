@@ -393,7 +393,7 @@ function _compute_all_continuous_context_effects_batch(
     ws = MEWorkspace(context_de, n_vars)
     xcols = _uses_x(measure) ? _float_columns(context_data, continuous_vars_to_compute) : ()
     accumulate_continuous!(batch_ame_values, batch_gradients, ws, context_de, engine.β,
-                           predscale(scale, engine.link), measure, var_indices, xcols,
+                           predscale(scale, engine.link, engine.re_average), measure, var_indices, xcols,
                            context_indices, weights, total_weight, engine.offset)
 
     # Build results DataFrame and gradients matrix
@@ -468,7 +468,7 @@ function _compute_categorical_context_effect(
     categorical_contrast_ame_batch!(
         ames, ses, gradients_matrix, engine.contrast_buf,
         context_evaluator, var, contrast_pairs,
-        engine.β, engine.Σ, predscale(scale, engine.link),
+        engine.β, engine.Σ, predscale(scale, engine.link, engine.re_average),
         context_indices, weights, engine.offset
     )
 
@@ -523,7 +523,7 @@ function _compute_population_prediction_in_context(
     gβ_avg = Vector{Float64}(undef, length(engine.β))
     pred_val = average_prediction!(
         gβ_avg, engine.row_buf, engine.compiled, context_data, engine.β,
-        predscale(scale, engine.link), context_indices, weights, total_weight, engine.offset
+        predscale(scale, engine.link, engine.re_average), context_indices, weights, total_weight, engine.offset
     )
 
     # Compute standard error

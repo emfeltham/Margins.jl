@@ -1,7 +1,7 @@
 # population/core.jl - Main population_margins() function
 
 """
-    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, warn=true) -> Union{EffectsResult, PredictionsResult}
+    population_margins(model, data; type=:effects, vars=nothing, scale=:response, backend=:ad, scenarios=nothing, groups=nothing, measure=:effect, contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:model, df=nothing, random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn=true) -> Union{EffectsResult, PredictionsResult}
 
 Compute population-level marginal effects or adjusted predictions.
 
@@ -86,16 +86,29 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   random effect to 0, so the estimates describe a typical group (e.g. a rater and a village whose
   random effects are 0). `:conditional` adds each row's predicted random effects (conditional
   modes, `ranef`) to η, so the estimates describe the groups in the data. Under a nonlinear link
-  neither is the population-averaged effect (averaging over the random-effects distribution),
-  which `:marginal` will give (not implemented yet). With `:conditional`:
+  neither is the population-averaged effect; `:marginal` gives it, averaging the inverse link
+  over the estimated random-effects distribution (E[g⁻¹(η + z'b)], b ~ N(0, Σ̂_b)) by
+  Gauss–Hermite quadrature: z'b is normal, so the average is one-dimensional however many
+  grouping factors are crossed or nested. With `:marginal`:
+  - with random slopes the SD of z'b varies by row (it depends on the slope variables); the
+    effect of a continuous random-slope variable includes the change in that SD;
+  - `re_nodes=:auto` chooses the rule (16 nodes, doubled until ŷ and its first two derivatives
+    agree with the next rule to 1e-10 at every η in [−20, 20]); an integer fixes it;
+  - under an identity link it equals `:zero`;
+  - `metadata[:re_sd]` and `[:re_nodes]` record the SD of z'b (the largest over the rows with
+    random slopes) and the rule used.
+  Standard errors are delta-method on β with the random-effect variances fixed at their
+  estimates. With `:conditional`:
   - standard errors are delta-method on β alone: they omit the prediction error of the random
     effects;
-  - the effect of a variable with a random slope in a conditioned factor (`x` in `(1 + x | g)`)
-    is not supported yet, nor are `scenarios` that set such a variable;
+  - the effect of a continuous variable with a random slope in a conditioned factor (`x` in
+    `(1 + x | g)`) includes each group's predicted slope;
   - `re_terms` (a Symbol or a vector, grouping factors as `fnames(model)` names them) conditions
     on some factors and sets the others to 0;
   - `re_new=:zero` gives a level absent from the fit random effects 0 (`:error` rejects it).
-  `result.metadata[:random_effects]` and `[:re_terms]` record what was used.
+  With `:conditional` or `:marginal`, not supported yet: contrasts of a categorical variable with
+  a random slope, and `scenarios` that set a variable with a random slope (a profile grid may
+  set it). `result.metadata[:random_effects]` and `[:re_terms]` record what was used.
 
 # Derived columns
 Margins changes a variable (a focal variable's derivative or contrast, a `scenarios` value) by
@@ -225,14 +238,14 @@ function population_margins(
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing,
+    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto,
     warn::Bool=true, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)
     # Every option is validated, and `vcov` evaluated, once, here
     req = _normalize_request(model, data; type, vars, scale, backend, scenarios, groups,
                              measure, contrasts, alpha, vcov, weights, df, random_effects, re_new,
-                             re_terms, warn)
+                             re_terms, re_nodes, warn)
     return _run(req)
 end
 
@@ -268,7 +281,8 @@ function _population_result(req::MarginsRequest{:population})
     # The η offset at each data row (held at its observed values under scenarios) is the
     # engine's, so every population kernel reads it.
     engine = build_engine(PopulationUsage, model, data_nt, isnothing(vars) ? Symbol[] : vars, req.Σ, backend;
-                          evaluators = !has_contexts, offset = req.offset)
+                          evaluators = !has_contexts, offset = req.offset,
+                          re_average = _re_average(req.random_effects))
     # Handle scenarios/groups parameters for counterfactual scenarios and grouping
     if has_contexts
         # Whether a request has contexts is a run-time value (it is a type in the keyword

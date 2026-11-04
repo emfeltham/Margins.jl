@@ -103,7 +103,6 @@ function Margins._re_offset(m::MixedModel, tbl::NamedTuple, spec::RandomEffectsS
         f = Symbol(string(r.trm))
         f in spec.used || continue
         b = b_all[k]                                   # coefficients × levels
-        index = Dict{Any,Int}(_level_key(l) => j for (j, l) in enumerate(r.levels))
         for t in _factor_terms(m, f)
             missing_vars = [v for v in StatsModels.termvars(t) if !haskey(tbl, v)]
             isempty(missing_vars) || throw(ArgumentError(
@@ -113,24 +112,159 @@ function Margins._re_offset(m::MixedModel, tbl::NamedTuple, spec::RandomEffectsS
             cn = StatsModels.coefnames(t.lhs)
             cols = [findfirst(==(c), r.cnames) for c in (cn isa AbstractVector ? cn : [cn])]
             any(isnothing, cols) && error("Internal: random-effects columns $cn not found in $(r.cnames) of $f")
-            for i in 1:n
-                key = _row_level(t.rhs, tbl, i)
-                j = get(index, key, 0)
-                if j == 0
-                    spec.new_levels === :error && throw(ArgumentError(
-                        "random_effects = :conditional: level $(repr(key)) of $(repr(f)) was not in the " *
-                        "fitted data, so it has no predicted random effect. Pass re_new = :zero to set " *
-                        "its random effects to 0."))
-                    continue
-                end
-                @inbounds for (c, col) in enumerate(cols)
-                    off[i] += z[i, c] * b[col, j]
-                end
+            j = _level_indices(t.rhs, tbl, r.levels, n)
+            if spec.new_levels === :error && any(iszero, j)
+                i = findfirst(iszero, j)
+                throw(ArgumentError(
+                    "random_effects = :conditional: level $(repr(_row_level(t.rhs, tbl, i))) of $(repr(f)) " *
+                    "was not in the fitted data, so it has no predicted random effect. Pass re_new = :zero " *
+                    "to set its random effects to 0."))
             end
+            _add_zb!(off, z, b, Vector{Int}(cols), j)
         end
     end
     all(isfinite, off) || throw(ArgumentError("The random-effects contribution contains NaN or Inf values"))
     return off
+end
+
+# The level of each row in the fitted factor's levels (0: a level absent from the fit). The keys
+# are the rows' unwrapped values (a tuple for an interaction), mapped once per distinct value, so
+# the lookup over rows is on a concrete key type.
+function _level_indices(g, tbl, levels, n::Int)
+    index = Dict{Any,Int}(_level_key(l) => j for (j, l) in enumerate(levels))
+    keys_ = _row_keys(g, tbl, n)
+    memo = Dict{eltype(keys_),Int}()
+    out = Vector{Int}(undef, n)
+    @inbounds for i in 1:n
+        key = keys_[i]
+        out[i] = get!(() -> get(index, key, 0), memo, key)
+    end
+    return out
+end
+_row_keys(g::StatsModels.InteractionTerm, tbl, n) = [_row_level(g, tbl, i) for i in 1:n]
+_row_keys(g, tbl, n) = _unwrapped(Tables.getcolumn(tbl, g.sym))
+_unwrapped(col::Margins.CategoricalArrays.CategoricalArray) = Margins.CategoricalArrays.unwrap.(col)
+_unwrapped(col) = col
+
+function _add_zb!(off::AbstractVector{Float64}, z::AbstractMatrix, b::AbstractMatrix, cols::Vector{Int}, j::Vector{Int})
+    @inbounds for i in eachindex(off)
+        l = j[i]
+        l == 0 && continue
+        for (c, col) in enumerate(cols)
+            off[i] += z[i, c] * b[col, l]
+        end
+    end
+    return off
+end
+
+# ---- random_effects = :marginal -------------------------------------------------------------
+# u = z'b is normal: the sum over factors of zᵢ_f' b_f, with b_f ~ N(0, Σ_f) independent across
+# factors and Σ_f = s² λ_f λ_f' (s the dispersion, `MixedModels.dispersion`: the residual SD of an
+# LMM, 1 for a Bernoulli or Poisson GLMM). With random intercepts only τ² = Σ_f σ_f² (`m.σs`); with
+# random slopes τᵢ² = Σ_f zᵢ_f' Σ_f zᵢ_f varies by row.
+function _reterm(m::MixedModel, f::Symbol)
+    lmm = _lmm(m)
+    return lmm.reterms[findfirst(r -> Symbol(string(r.trm)) === f, lmm.reterms)]
+end
+
+Margins._re_has_slopes(m::MixedModel, factors) =
+    any(f -> _reterm(m, f).cnames != ["(Intercept)"], factors)
+
+function Margins._re_intercept_variance(m::MixedModel, factors)
+    σs = m.σs
+    return sum(Float64(first(values(getproperty(σs, f))))^2 for f in factors; init=0.0)
+end
+
+# Z of factor `f` at the rows of `tbl`, its columns in the `ReMat`'s coefficient order (several
+# formula terms may share one factor)
+function _factor_Z(m::MixedModel, f::Symbol, tbl::NamedTuple)
+    r = _reterm(m, f)
+    n = length(first(tbl))
+    Z = zeros(Float64, n, length(r.cnames))
+    for t in _factor_terms(m, f)
+        missing_vars = [v for v in StatsModels.termvars(t.lhs) if !haskey(tbl, v)]
+        isempty(missing_vars) || throw(ArgumentError(
+            "the random effects of $(repr(f)) depend on $(join(repr.(missing_vars), ", ")), which " *
+            "must be given at every row"))
+        z = _as_matrix(StatsModels.modelcols(t.lhs, tbl))
+        cn = StatsModels.coefnames(t.lhs)
+        for (c, name) in enumerate(cn isa AbstractVector ? cn : [cn])
+            Z[:, findfirst(==(name), r.cnames)] .= view(z, :, c)
+        end
+    end
+    return Z
+end
+
+_factor_Σ(m::MixedModel, f::Symbol) =
+    (Λ = Matrix(_reterm(m, f).λ); Float64(MixedModels.dispersion(m))^2 .* (Λ * Λ'))
+
+function Margins._re_spread_sq(m::MixedModel, tbl::NamedTuple, factors)
+    τ² = zeros(Float64, length(first(tbl)))
+    for f in factors
+        _add_quadform!(τ², _factor_Z(m, f, tbl), _factor_Σ(m, f))
+    end
+    return τ²
+end
+
+# ---- phase 2: effects of a variable with a random slope ----------------------------------------
+# ∂Z/∂w by a central difference of Z's model columns (exact, up to rounding, for terms linear in w
+# such as `(1 + w | rater)`). `:conditional`: ∂(zᵢ'b̂)/∂w = (∂zᵢ/∂w)'b̂ of row i's level.
+# `:marginal`: ∂τᵢ/∂w = Σ_f zᵢ_f' Σ_f (∂zᵢ_f/∂w) / τᵢ (0 where τᵢ = 0).
+function Margins._re_slope_derivatives(m::MixedModel, tbl::NamedTuple, spec::RandomEffectsSpec,
+                                       vars::Vector{Symbol}, τ)
+    n = length(first(tbl))
+    nv = length(vars)
+    doff = zeros(Float64, n, nv)
+    dτ = zeros(Float64, n, nv)
+    factors = spec.mode === :conditional ? spec.used : spec.factors
+    b_all = MixedModels.ranef(m)
+    lmm = _lmm(m)
+    for (k, v) in enumerate(vars)
+        col = Float64.(Tables.getcolumn(tbl, v))
+        h = 1e-6 .* max.(1.0, abs.(col))
+        tp = merge(tbl, NamedTuple{(v,)}((col .+ h,)))
+        tm = merge(tbl, NamedTuple{(v,)}((col .- h,)))
+        for f in factors
+            v in Margins._re_slope_vars(m, [f]) || continue
+            dZ = (_factor_Z(m, f, tp) .- _factor_Z(m, f, tm)) ./ (2 .* h)
+            if spec.mode === :conditional
+                kf = findfirst(t -> Symbol(string(t.trm)) === f, lmm.reterms)
+                r = lmm.reterms[kf]
+                b = b_all[kf]
+                j = _level_indices(r.trm, tbl, r.levels, n)
+                _add_zb!(view(doff, :, k), dZ, b, collect(1:length(r.cnames)), j)
+            else
+                Z = _factor_Z(m, f, tbl); Σ = _factor_Σ(m, f)
+                q = size(Z, 2)
+                @inbounds for i in 1:n
+                    acc = 0.0
+                    for a in 1:q, bb in 1:q
+                        acc += Z[i, a] * Σ[a, bb] * dZ[i, bb]
+                    end
+                    dτ[i, k] += acc
+                end
+            end
+        end
+        if spec.mode === :marginal
+            @inbounds for i in 1:n
+                dτ[i, k] = τ[i] > 0 ? dτ[i, k] / τ[i] : 0.0
+            end
+        end
+    end
+    return (doff, dτ)
+end
+
+# τ²[i] += Z[i, :]' Σ Z[i, :]
+function _add_quadform!(τ²::Vector{Float64}, Z::Matrix{Float64}, Σ::Matrix{Float64})
+    q = size(Z, 2)
+    @inbounds for i in eachindex(τ²)
+        acc = 0.0
+        for a in 1:q, b in 1:q
+            acc += Z[i, a] * Σ[a, b] * Z[i, b]
+        end
+        τ²[i] += acc
+    end
+    return τ²
 end
 
 end # module

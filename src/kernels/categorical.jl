@@ -13,7 +13,7 @@ using LinearAlgebra: dot
 # (the link scale needs neither: its contrast is linear in X₁ − X₀, and the offset cancels).
 # On the response scale η includes the row's offset (`offset[row]`).
 @inline _contrast_base(::LinkScale, x₀, β, offset, row) = (0.0, 0.0)
-@inline _contrast_base(s::ResponseScale, x₀, β, offset, row) = yhat(s, linear_predictor(x₀, β, offset, row))
+@inline _contrast_base(s::AnyResponseScale, x₀, β, offset, row) = yhat(s, linear_predictor(x₀, β, offset, row))
 
 """
     _contrast_row!(acc, w, Δx, x₀, x₁, base, β, s::PredScale, offset, row) -> Δŷ
@@ -35,7 +35,7 @@ end
 
 @inline function _contrast_row!(acc::AbstractVector{Float64}, w::Float64, Δx::Vector{Float64},
                                 x₀::Vector{Float64}, x₁::Vector{Float64}, base,
-                                β::Vector{Float64}, s::ResponseScale, offset, row::Int)
+                                β::Vector{Float64}, s::AnyResponseScale, offset, row::Int)
     μ₀, g₀ = base
     μ₁, g₁ = yhat(s, linear_predictor(x₁, β, offset, row))
     @inbounds @simd for i in eachindex(acc)

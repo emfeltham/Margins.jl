@@ -24,8 +24,8 @@ The keys every `EffectsResult` / `PredictionsResult` carries in `metadata`, with
 | `:n_obs` | `Int` | rows of data that enter the averages: all rows unweighted, the rows with a positive weight when weighted |
 | `:weighted` | `Bool` | whether observation weights were used |
 | `:weights_source` | `Symbol` | where the weights came from: `:model` (the fit's estimation weights, the default), `:user` (`weights=` a column or vector) or `:none` |
-| `:random_effects` | `Symbol` | `:zero` (every random effect 0: the default, and the only treatment for models without random effects) or `:conditional` (the predicted random effects of the units in the data or the grid) |
-| `:re_terms` | `Vector{Symbol}` | the grouping factors whose predicted random effects entered η (empty for `:zero`) |
+| `:random_effects` | `Symbol` | `:zero` (every random effect 0: the default, and the only treatment for models without random effects), `:conditional` (the predicted random effects of the units in the data or the grid) or `:marginal` (averaged over the random-effects distribution) |
+| `:re_terms` | `Vector{Symbol}` | the grouping factors the treatment applied to (empty for `:zero`) |
 | `:has_contexts` | `Bool` | whether rows are split by `scenarios=` / `groups=` |
 | `:groups_vars` | `Vector{Symbol}` | the `groups=` variables of the call (empty if none; their columns are in `result.context`) |
 | `:scenarios_vars` | `Vector{Symbol}` | the `scenarios=` variables of the call (empty if none; their columns are in `result.context`) |
@@ -33,7 +33,8 @@ The keys every `EffectsResult` / `PredictionsResult` carries in `metadata`, with
 | `:timestamp` | `String` | when the result was computed |
 
 Entries that exist only in some results: `:re_factors` (models with random effects: all their
-grouping factors), `:n_profiles` (profile analyses),
+grouping factors), `:re_sd` and `:re_nodes` (`random_effects = :marginal`: the SD of z'b, the largest over the rows
+with random slopes, and the Gauss–Hermite nodes; both 0 when the average changes nothing), `:n_profiles` (profile analyses),
 `:at_spec` (profile analyses), `:interval` and `:resid_var` (profile predictions),
 `:subgroup_n_values` / `:has_subgroup_n` (grouped results).
 

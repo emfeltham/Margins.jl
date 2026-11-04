@@ -1,5 +1,5 @@
 # test_random_effects.jl
-# `random_effects = :zero | :conditional` for MixedModels fits (Margins 3.1, phase 1).
+# `random_effects = :zero | :conditional | :marginal` for MixedModels fits.
 # References are closed forms from MixedModels' own quantities: `fitted(m)` (which includes
 # Z b̂), `fixef`, `ranef` / `raneftables` and `vcov`.
 
@@ -113,13 +113,47 @@ se(r) = DataFrame(r).se
         # effect of x (no random slope) on the response scale of an identity link: β_x
         r = population_margins(lmm_slope, re_df; vars=[:x], random_effects=:conditional)
         @test est(r)[1] ≈ fixef(lmm_slope)[2] atol=1e-10
-        # w has a rater slope: its conditional effect is not supported yet, named or detected
-        @test_throws MarginsError population_margins(lmm_slope, re_df; vars=[:w], random_effects=:conditional)
-        err = try population_margins(lmm_slope, re_df; random_effects=:conditional) catch e; e end
-        @test err isa MarginsError && occursin("vars = [:x]", err.msg)
-        # ... unless the rater is not conditioned on
+        # w has a rater slope: its conditional effect includes each rater's slope b̂_w
+        bw = [blup(lmm_slope, :rater, r, "w") for r in re_df.rater]
+        r0w = population_margins(lmm_slope, re_df; vars=[:w])
+        rw = population_margins(lmm_slope, re_df; vars=[:w], random_effects=:conditional)
+        @test est(rw)[1] ≈ fixef(lmm_slope)[3] + mean(bw) atol=1e-8
+        @test se(rw)[1] ≈ se(r0w)[1] atol=1e-12          # b̂ fixed: the same β-gradient
+        # auto-detected variables include it too
+        @test length(est(population_margins(lmm_slope, re_df; random_effects=:conditional))) == 2
+        # ... and conditioning on the villages only leaves it out
         rw = population_margins(lmm_slope, re_df; vars=[:w], random_effects=:conditional, re_terms=[:village])
         @test est(rw)[1] ≈ fixef(lmm_slope)[3] atol=1e-10
+        # GLMM: ∂μ/∂w = μ(1 − μ)(β_w + b̂_w) per row, and its β-gradient
+        gs = fit(MixedModel, @formula(yb ~ x + w + (1 + w | rater) + (1 | village)), re_df, Bernoulli();
+                 progress=false, fast=true)
+        β = fixef(gs); V = vcov(gs); X = gs.X
+        μ = fitted(gs); d1 = μ .* (1 .- μ); d2 = d1 .* (1 .- 2 .* μ)
+        sl = β[3] .+ [blup(gs, :rater, r, "w") for r in re_df.rater]
+        e = population_margins(gs, re_df; vars=[:w], random_effects=:conditional)
+        @test est(e)[1] ≈ mean(d1 .* sl) atol=1e-8
+        g = vec(mean(d2 .* sl .* X; dims=1)); g[3] += mean(d1)
+        @test se(e)[1] ≈ sqrt(g' * V * g) atol=1e-8
+        # the finite-difference backend agrees
+        @test est(population_margins(gs, re_df; vars=[:w], random_effects=:conditional, backend=:fd))[1] ≈
+              est(e)[1] rtol=1e-6
+        # a categorical variable with a random slope: its contrasts are not supported yet
+        dc = copy(re_df); dc.t = categorical(ifelse.(dc.w .> 0, "hi", "lo"))
+        mc = fit(MixedModel, @formula(y ~ x + t + (1 + t | rater)), dc; progress=false)
+        @test_throws MarginsError population_margins(mc, dc; vars=[:t], random_effects=:conditional)
+        @test est(population_margins(mc, dc; vars=[:x], random_effects=:conditional))[1] ≈ fixef(mc)[2] atol=1e-10
+        # link scale: β_w + mean b̂_w
+        el = population_margins(gs, re_df; vars=[:w], scale=:link, random_effects=:conditional)
+        @test est(el)[1] ≈ mean(sl) atol=1e-8
+        # elasticity: (∂μ/∂w)·w/μ
+        ee = population_margins(gs, re_df; vars=[:w], measure=:elasticity, random_effects=:conditional)
+        @test est(ee)[1] ≈ mean(d1 .* sl .* re_df.w ./ μ) atol=1e-8
+        # at profile rows (village not set: 0)
+        gr = DataFrame(x=[0.0, 0.0], w=[0.5, -1.0], rater=["b", "c"])
+        pe = profile_margins(gs, re_df, gr; vars=[:w], random_effects=:conditional)
+        ηg = [β[1] + β[3] * w + blup(gs, :rater, r) + blup(gs, :rater, r, "w") * w for (w, r) in zip(gr.w, gr.rater)]
+        μg = 1 ./ (1 .+ exp.(-ηg))
+        @test est(pe) ≈ μg .* (1 .- μg) .* (β[3] .+ [blup(gs, :rater, r, "w") for r in gr.rater]) atol=1e-8
         # setting w counterfactually is blocked in population requests
         @test_throws MarginsError population_margins(lmm_slope, re_df; type=:predictions,
                                                      scenarios=(w=[0.0, 1.0],), random_effects=:conditional)
@@ -193,11 +227,162 @@ se(r) = DataFrame(r).se
         @test !occursin("Random effects", sprint(show, rl))
     end
 
+    @testset ":marginal, probit: closed form E[Φ(η + τZ)] = Φ(η/√(1 + τ²))" begin
+        Random.seed!(7)
+        d = copy(re_df)
+        d.t = categorical(rand(["lo", "hi"], nrow(d)))
+        ra = Dict(r => randn() for r in unique(d.rater)); va = Dict(v => 0.8randn() for v in unique(d.village))
+        ηt = -0.2 .+ 0.8 .* d.x .+ 0.4 .* (d.t .== "hi") .+ [ra[r] for r in d.rater] .+ [va[v] for v in d.village]
+        d.yp = Float64.(rand(nrow(d)) .< cdf.(Normal(), ηt))
+        m = fit(MixedModel, @formula(yp ~ x + t + (1 | rater) + (1 | village)), d, Bernoulli(), ProbitLink();
+                progress=false, fast=true)
+        β = fixef(m); V = vcov(m); X = m.X
+        τ² = m.σs.rater[1]^2 + m.σs.village[1]^2
+        c = sqrt(1 + τ²)
+        φ(t) = pdf(Normal(), t); Φ(t) = cdf(Normal(), t)
+        η = X * β
+        # AAP and its SE
+        r = population_margins(m, d; type=:predictions, random_effects=:marginal)
+        @test est(r)[1] ≈ mean(Φ.(η ./ c)) atol=1e-12
+        g = vec(mean(φ.(η ./ c) ./ c .* X; dims=1))
+        @test se(r)[1] ≈ sqrt(g' * V * g) atol=1e-12
+        # AME of x and its SE
+        ix = findfirst(==("x"), coefnames(m))
+        e = population_margins(m, d; vars=[:x], random_effects=:marginal)
+        @test est(e)[1] ≈ mean(β[ix] / c .* φ.(η ./ c)) atol=1e-12
+        ge = vec(mean(β[ix] / c .* (-(η ./ c) .* φ.(η ./ c)) ./ c .* X; dims=1))
+        ge[ix] += mean(φ.(η ./ c)) / c
+        @test se(e)[1] ≈ sqrt(ge' * V * ge) atol=1e-12
+        # categorical contrast hi − lo
+        it = findfirst(==("t: lo"), coefnames(m))
+        X1 = copy(X); X0 = copy(X); X1[:, it] .= 1; X0[:, it] .= 0   # "hi" is the base level
+        ct = population_margins(m, d; vars=[:t], random_effects=:marginal)
+        @test est(ct)[1] ≈ mean(Φ.((X1 * β) ./ c) .- Φ.((X0 * β) ./ c)) atol=1e-12
+        # profile predictions at grid rows
+        gr = DataFrame(x=[-1.0, 0.0, 1.0], t=["hi", "hi", "lo"])
+        p = profile_margins(m, d, gr; type=:predictions, random_effects=:marginal)
+        ηg = [β[1] + β[ix] * x + (t == "lo" ? β[it] : 0.0) for (x, t) in zip(gr.x, gr.t)]
+        @test est(p) ≈ Φ.(ηg ./ c) atol=1e-12
+        # second difference of the AME of x between t levels
+        sd = second_differences(m, d, :x, :t; random_effects=:marginal, warn=false)
+        ame_t(lv) = (Xt = lv == "lo" ? X1 : X0; ηt = Xt * β; mean(β[ix] / c .* φ.(ηt ./ c)))
+        @test abs(sd.second_diff[1]) ≈ abs(ame_t("lo") - ame_t("hi")) atol=1e-12
+        # integrating over the villages only: τ² = σ_village²
+        cv = sqrt(1 + m.σs.village[1]^2)
+        rv = population_margins(m, d; type=:predictions, random_effects=:marginal, re_terms=:village)
+        @test est(rv)[1] ≈ mean(Φ.(η ./ cv)) atol=1e-12
+        # metadata and printing
+        @test r.metadata[:random_effects] === :marginal
+        @test Set(r.metadata[:re_terms]) == Set([:rater, :village])
+        @test r.metadata[:re_sd] ≈ sqrt(τ²)
+        @test r.metadata[:re_nodes] >= 16
+        @test occursin("averaged over", sprint(show, r))
+        @test occursin("averaged over village", sprint(show, rv)) && occursin("0 for rater", sprint(show, rv))
+        # the link scale is unchanged
+        @test est(population_margins(m, d; vars=[:x], scale=:link, random_effects=:marginal)) ≈ [β[ix]] atol=1e-12
+    end
+
+    @testset ":marginal, probit with random slopes: τᵢ² = zᵢ'Σzᵢ per row" begin
+        Random.seed!(11)
+        d = copy(re_df)
+        rs = Dict(r => (randn(), 0.6randn()) for r in unique(d.rater))
+        va = Dict(v => 0.5randn() for v in unique(d.village))
+        ηt = [-0.1 + 0.7x + (0.3 + rs[r][2]) * w + rs[r][1] + va[v]
+              for (x, w, r, v) in zip(d.x, d.w, d.rater, d.village)]
+        d.yp = Float64.(rand(nrow(d)) .< cdf.(Normal(), ηt))
+        m = fit(MixedModel, @formula(yp ~ x + w + (1 + w | rater) + (1 | village)), d, Bernoulli(),
+                ProbitLink(); progress=false, fast=true)
+        β = fixef(m); V = vcov(m); X = m.X
+        Λr = only(r.λ for r in m.reterms if string(r.trm) == "rater")
+        Σr = Matrix(Λr) * Matrix(Λr)'
+        σv² = m.σs.village[1]^2
+        τ²(w) = Σr[1, 1] + 2w * Σr[1, 2] + w^2 * Σr[2, 2] + σv²
+        c = sqrt.(1 .+ τ².(d.w))
+        φ(t) = pdf(Normal(), t); Φ(t) = cdf(Normal(), t)
+        η = X * β
+        r = population_margins(m, d; type=:predictions, random_effects=:marginal)
+        @test est(r)[1] ≈ mean(Φ.(η ./ c)) atol=1e-12
+        g = vec(mean(φ.(η ./ c) ./ c .* X; dims=1))
+        @test se(r)[1] ≈ sqrt(g' * V * g) atol=1e-12
+        # effect of x (no random slope)
+        e = population_margins(m, d; vars=[:x], random_effects=:marginal)
+        @test est(e)[1] ≈ mean(β[2] ./ c .* φ.(η ./ c)) atol=1e-12
+        # profile rows: τ at the grid's w
+        gr = DataFrame(x=[0.0, 0.0, 1.0], w=[-1.0, 1.0, 2.0])
+        p = profile_margins(m, d, gr; type=:predictions, random_effects=:marginal)
+        @test est(p) ≈ [Φ((β[1] + β[2]x + β[3]w) / sqrt(1 + τ²(w))) for (x, w) in zip(gr.x, gr.w)] atol=1e-12
+        @test p.metadata[:re_sd] ≈ sqrt(maximum(τ².(gr.w)))
+        # the effect of w: μ̄ = Φ(η/c(w)), c = √(1 + τ²(w)), so
+        # ∂μ̄/∂w = φ(t)(β_w/c − η c′/c²), t = η/c, c′ = (Σ₀₁ + wΣ₁₁)/c
+        cp = (Σr[1, 2] .+ d.w .* Σr[2, 2]) ./ c
+        t = η ./ c
+        ew = population_margins(m, d; vars=[:w], random_effects=:marginal)
+        dw = φ.(t) .* (β[3] ./ c .- η .* cp ./ c .^ 2)
+        @test est(ew)[1] ≈ mean(dw) atol=1e-8
+        gw = vec(mean((-t .* φ.(t)) ./ c .* (β[3] ./ c .- η .* cp ./ c .^ 2) .* X .-
+                      φ.(t) .* cp ./ c .^ 2 .* X; dims=1))
+        gw[3] += mean(φ.(t) ./ c)
+        @test se(ew)[1] ≈ sqrt(gw' * V * gw) atol=1e-8
+        # at profile rows
+        pw = profile_margins(m, d, gr; vars=[:w], random_effects=:marginal)
+        ηp = [β[1] + β[2]x + β[3]w for (x, w) in zip(gr.x, gr.w)]
+        cg = sqrt.(1 .+ τ².(gr.w)); cgp = (Σr[1, 2] .+ gr.w .* Σr[2, 2]) ./ cg
+        @test est(pw) ≈ φ.(ηp ./ cg) .* (β[3] ./ cg .- ηp .* cgp ./ cg .^ 2) atol=1e-8
+        # population scenarios on w are not supported yet
+        @test_throws MarginsError population_margins(m, d; type=:predictions, scenarios=(w=0.0,),
+                                                     random_effects=:marginal)
+        # ... unless the rater factor is not integrated over
+        rv = population_margins(m, d; vars=[:w], random_effects=:marginal, re_terms=:village)
+        cv = sqrt(1 + σv²)
+        @test est(rv)[1] ≈ mean(β[3] / cv .* φ.(η ./ cv)) atol=1e-12
+    end
+
+    @testset ":marginal, log link: E[exp(η + τZ)] = exp(η + τ²/2)" begin
+        pm = fit(MixedModel, @formula(count ~ x + (1 | village)), re_df, Poisson(); offset=re_df.logexp,
+                 progress=false, fast=true)
+        τ² = pm.σs.village[1]^2
+        η = pm.X * fixef(pm) .+ re_df.logexp
+        r = population_margins(pm, re_df; type=:predictions, random_effects=:marginal)
+        @test est(r)[1] ≈ mean(exp.(η .+ τ² / 2)) rtol=1e-11
+        e = population_margins(pm, re_df; vars=[:x], random_effects=:marginal)
+        @test est(e)[1] ≈ fixef(pm)[2] * mean(exp.(η .+ τ² / 2)) rtol=1e-11
+    end
+
+    @testset ":marginal, logit: the automatic rule against a 200-node rule" begin
+        r = population_margins(glmm, re_df; vars=[:x, :w], random_effects=:marginal)
+        r200 = population_margins(glmm, re_df; vars=[:x, :w], random_effects=:marginal, re_nodes=200)
+        @test est(r) ≈ est(r200) rtol=1e-9
+        @test se(r) ≈ se(r200) rtol=1e-9
+        @test r200.metadata[:re_nodes] == 200
+        # attenuation toward 0 relative to the typical-group effect
+        @test abs(est(r)[1]) < abs(est(population_margins(glmm, re_df; vars=[:x]))[1])
+        # the rule itself: exact moments of N(0, 1)
+        (z, w) = Margins._gauss_hermite_normal(20)
+        @test sum(w) ≈ 1
+        @test abs(sum(w .* z)) < 1e-14
+        @test sum(w .* z .^ 2) ≈ 1
+        @test sum(w .* z .^ 4) ≈ 3
+        @test sum(w .* z .^ 38) ≈ prod(1.0:2:37) rtol=1e-10
+    end
+
+    @testset ":marginal, identity link: the :zero estimates" begin
+        r = population_margins(lmm_int, re_df; type=:predictions, random_effects=:marginal)
+        r0 = population_margins(lmm_int, re_df; type=:predictions)
+        @test est(r) == est(r0) && se(r) == se(r0)
+        @test r.metadata[:random_effects] === :marginal && r.metadata[:re_nodes] == 0
+    end
+
     @testset "validation" begin
         ols = lm(@formula(y ~ x), re_df)
         @test_throws ArgumentError population_margins(ols, re_df; random_effects=:conditional)
         @test population_margins(ols, re_df; random_effects=:zero) isa EffectsResult
-        @test_throws MarginsError population_margins(glmm, re_df; random_effects=:marginal)
+        # an identity-link :marginal is :zero, so a random-slope variable's effect is allowed
+        @test est(population_margins(lmm_slope, re_df; vars=[:w], random_effects=:marginal)) ≈
+              [fixef(lmm_slope)[3]] atol=1e-12
+        @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:marginal, re_new=:error)
+        @test_throws ArgumentError population_margins(glmm, re_df; re_nodes=20)
+        @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:conditional, re_nodes=20)
+        @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:marginal, re_nodes=1)
         @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:blups)
         @test_throws ArgumentError population_margins(glmm, re_df; re_new=:error)
         @test_throws ArgumentError population_margins(glmm, re_df; re_terms=:village)

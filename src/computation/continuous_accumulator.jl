@@ -51,7 +51,7 @@ measure_symbol(::Eydx) = :semielasticity_eydx
 
 # Whether the xᵢ term (B) can be nonzero
 @inline _needs_xterm(::LinkScale, m::Measure) = _divides_by_y(m)
-@inline _needs_xterm(::ResponseScale, ::Measure) = true
+@inline _needs_xterm(::AnyResponseScale, ::Measure) = true
 
 """
     MEWorkspace
@@ -152,6 +152,7 @@ function accumulate_continuous!(vals::AbstractVector{Float64}, grads::AbstractMa
     end
     _accumulate_continuous_rows!(vals, J, x, A, B, c, de, β, s, m, var_idx, xcols, rows,
                                  weights, total_weight, 1.0 / length(rows), offset)
+    xterm |= offset isa SlopedOffset   # its row loop always fills B
     @inbounds for k in 1:n_vars
         if xterm
             for i in 1:n_params
@@ -215,6 +216,68 @@ function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{F
                 @simd for i in 1:n_params
                     B[i, k] += ck * x[i]
                 end
+            end
+        end
+    end
+    return nothing
+end
+
+# The effect of a variable with a random slope (`SlopedOffset`, phase 2 of `random_effects`):
+# per row, ∂ŷ/∂w = d₁(aⱼ + δo) + d₁z·δτ with δo = ∂oᵢ/∂w (`:conditional`) and δτ = ∂τᵢ/∂w
+# (`:marginal`), so ∇β(∂ŷ/∂w) = d₁ Jᵢ[:,j] + (d₂(aⱼ + δo) + d₂z·δτ) xᵢ (τ and δo do not depend on
+# β). Variables without a random slope have δo = δτ = 0 and get the formulas above.
+function _accumulate_continuous_rows!(vals::AbstractVector{Float64}, J::Matrix{Float64},
+                                      x::Vector{Float64}, A::Matrix{Float64}, B::Matrix{Float64},
+                                      c::Vector{Float64}, de::AbstractDerivativeEvaluator,
+                                      β::Vector{Float64}, s::PredScale, m::Measure,
+                                      var_idx::AbstractVector{Int}, xcols::XColumns, rows,
+                                      weights::Union{Nothing, AbstractVector{Float64}},
+                                      total_weight::Float64, unweighted_weight::Float64,
+                                      offset::SlopedOffset)
+    n_params = length(β)
+    n_vars = length(var_idx)
+    xterm = _needs_xterm(s, m)
+    dvars = derivative_variables(de)
+    scol = Int[something(findfirst(==(dvars[var_idx[k]]), offset.vars), 0) for k in 1:n_vars]
+    @inbounds for row in rows
+        w = if isnothing(weights)
+            unweighted_weight
+        else
+            wr = weights[row]
+            wr <= 0 && continue
+            wr / total_weight
+        end
+
+        derivative_modelrow!(J, x, de, row)
+        ŷ, d₁, d₂, d₁z, d₂z = yhat2z(s, linear_predictor(x, β, offset, row))
+        _divides_by_y(m) && iszero(ŷ) && _throw_zero_prediction(measure_symbol(m), row, scale_symbol(s))
+
+        for k in 1:n_vars
+            j = var_idx[k]
+            a = 0.0
+            @simd for i in 1:n_params
+                a += J[i, j] * β[i]
+            end
+            sc = scol[k]
+            δo = sc == 0 ? 0.0 : offset.doff[row, sc]
+            δτ = sc == 0 ? 0.0 : offset.dτ[row, sc]
+            a′ = a + δo
+            mk = _measure_factor(m, _uses_x(m) ? xcols[k][row] : 1.0, ŷ)
+            α = w * mk * d₁
+            wq = w * mk * (d₁ * a′ + d₁z * δτ)
+            vals[k] += wq
+            @simd for i in 1:n_params
+                A[i, k] += α * J[i, j]
+            end
+            # the xᵢ term: needed whenever this variable has a slope term, even on the link scale
+            ck = (w * mk) * (d₂ * a′ + d₂z * δτ)
+            _divides_by_y(m) && (ck -= (wq / ŷ) * d₁)
+            c[k] = ck
+        end
+        for k in 1:n_vars
+            ck = c[k]
+            @simd for i in 1:n_params
+                B[i, k] += ck * x[i]
             end
         end
     end

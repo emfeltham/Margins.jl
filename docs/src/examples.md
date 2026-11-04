@@ -429,7 +429,7 @@ glmm = GeneralizedLinearMixedModel(@formula(y ~ 1 + x + (1 | group)), df_bin, Bi
 prob_effects_glmm = population_margins(glmm, df_bin; type=:effects, vars=[:x], scale=:response)
 ```
 
-### Random effects: a typical group or the groups in the data
+### Random effects: a typical group, the groups in the data, or the population average
 
 By default (`random_effects = :zero`) every random effect is 0: the estimates above describe a
 typical group, one whose random intercept is 0. `random_effects = :conditional` adds each row's
@@ -446,10 +446,19 @@ profile_margins(glmm, df_bin, DataFrame(x=[0.0, 0.0], group=["1", "2"]);
 
 With several grouping factors (raters and villages, say), `re_terms = :village` conditions on the
 villages and sets the rater effects to 0. Under a nonlinear link neither treatment is the
-population-averaged effect, which averages over the random-effects distribution. The standard
-errors are delta-method on β alone, so with `:conditional` they omit the prediction error of the
-random effects. Effects of a variable with a random slope (`x` in `(1 + x | group)`) are not yet
-supported with `:conditional`.
+population-averaged effect, which averages over the random-effects distribution:
+
+```julia
+# Population-averaged AME: E[g⁻¹(η + u)] over u ~ N(0, σ̂²), by Gauss–Hermite quadrature
+population_margins(glmm, df_bin; vars=[:x], random_effects=:marginal)
+```
+
+The standard errors are delta-method on β alone, so with `:conditional` they omit the
+prediction error of the random effects, and with `:marginal` the uncertainty of the variances.
+The effect of a continuous variable with a random slope (`x` in `(1 + x | group)`) includes each
+group's predicted slope under `:conditional`, and the change in the spread of the random effects
+under `:marginal`. Contrasts of a categorical variable with a random slope, and `scenarios` that
+set a random-slope variable, are not supported yet.
 
 ## Best Practices
 

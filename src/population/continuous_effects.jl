@@ -218,7 +218,7 @@ function _compute_continuous_effects!(engine::MarginsEngine, continuous_requeste
     # so a call allocates nothing)
     xcols = _uses_x(measure) ? _float_columns!(engine.xcols_buf, data_nt, continuous_requested) : ()
     accumulate_continuous!(engine.batch_ame_values, engine.batch_gradients, engine.me_ws, engine.de,
-                           engine.β, predscale(scale, engine.link), measure,
+                           engine.β, predscale(scale, engine.link, engine.re_average), measure,
                            indices_buf, xcols, rows, weights, total_weight, engine.offset)
     return nothing
 end

@@ -40,7 +40,7 @@ is behind function barriers (`build_engine`, `_ame_calculate`, ...) anyway.
 | `grid_vars` | profile requests: the grid columns shown in the output |
 | `changed_vars` | every variable the request sets counterfactually: scenario keys, grid columns, and the second-differences modifier and `profile` variables |
 | `contrasts`, `measure`, `scale`, `backend`, `interval` | validated options |
-| `random_effects` | mixed models: `nothing` for `random_effects = :zero` (every random effect 0), else a `RandomEffectsSpec`; the predicted random effects z'b̂ are then in `offset` |
+| `random_effects` | mixed models: `nothing` for `random_effects = :zero` (every random effect 0), else a `RandomEffectsSpec`; with `:conditional` the predicted random effects z'b̂ are in `offset`, with `:marginal` its `average` is the engine's `re_average` |
 
 `vars ∪ changed_vars` is the set the derived-column detector (`_warn_derived_columns`) runs over.
 
@@ -60,7 +60,7 @@ struct MarginsRequest{K,M}
     alpha::Float64
     weights::Union{Nothing,Vector{Float64}}
     weights_source::Symbol
-    offset::Union{Nothing,Vector{Float64}}
+    offset::AnyOffset
     scenarios::Union{Nothing,NamedTuple}
     scenario_specs::Vector
     groups::Any
@@ -102,7 +102,7 @@ _validate_focal_vars(model, vars) = nothing
                        contrasts=:baseline, alpha=0.05, vcov=GLM.vcov, weights=:none,
                        interval=:confidence, df=nothing, offset=nothing, scenario_vars=nothing,
                        changed_vars=Symbol[], random_effects=:zero, re_new=:zero, re_terms=nothing,
-                       warn=true) -> MarginsRequest
+                       re_nodes=:auto, warn=true) -> MarginsRequest
 
 Validate every option and prepare everything a computation needs, once per call: the data
 (any Tables.jl source, subset to the model's estimation rows), the focal variables, Σ (`vcov` is
@@ -132,7 +132,7 @@ function _normalize_request(model, data;
         measure::Symbol=:effect, contrasts::Symbol=:baseline, alpha=0.05, vcov=GLM.vcov,
         weights=:none, interval::Symbol=:confidence, df=nothing, offset=nothing,
         scenario_vars::Union{Nothing,Vector{Symbol}}=nothing, changed_vars::Vector{Symbol}=Symbol[],
-        random_effects=:zero, re_new=:zero, re_terms=nothing, warn::Bool=true)
+        random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto, warn::Bool=true)
     validate_required_args(model, data)
     validate_model_methods(model)
     # The formula's variables, walked once per call and passed to every check that needs them
@@ -150,7 +150,7 @@ function _normalize_request(model, data;
         "margins use the model's own offset at each data row"))
     _validate_contrasts(contrasts)
     _validate_interval(interval, type)
-    re_spec = _validate_random_effects(model, random_effects, re_new, re_terms)
+    re_spec = _validate_random_effects(model, random_effects, re_new, re_terms, re_nodes)
 
     # `scenarios` and `groups` syntax, and the variables they name
     scenarios_nt = nothing
@@ -227,7 +227,8 @@ function _normalize_request(model, data;
     end
     # Mixed models with random_effects = :conditional: the predicted random effects z'b̂ join the
     # offset (when it can change the requested quantity, as for any offset)
-    if !isnothing(re_spec)
+    re_tbl = nothing
+    if !isnothing(re_spec) && re_spec.mode === :conditional
         if isnothing(completed)
             (re_tbl, used) = (data_nt, re_spec.factors)
         else
@@ -239,6 +240,15 @@ function _normalize_request(model, data;
             offset_vec = isnothing(offset_vec) ? re_off : offset_vec .+ re_off
         end
     end
+    # random_effects = :marginal: the quadrature, checked at the rows evaluated; with random
+    # slopes each row's SD of z'b travels with the offset (`SpreadOffset`)
+    if !isnothing(re_spec) && re_spec.mode === :marginal
+        re_tbl = isnothing(completed) ? data_nt : Tables.columntable(completed)
+        (re_spec, spread) = _finalize_marginal(model, re_spec, re_tbl)
+        if !isnothing(spread) && !isnothing(re_spec.average)
+            offset_vec = SpreadOffset(offset_vec, spread)
+        end
+    end
 
     # Σ, the one evaluation of `vcov` for this call (dropped coefficients' rows and columns zeroed);
     # df from the model class unless given
@@ -248,7 +258,16 @@ function _normalize_request(model, data;
 
     changed = _changed_vars(scenario_vars, grid, changed_vars)
     isnothing(re_spec) || _validate_random_effects_request(model, re_spec, type, resolved_vars,
-                                                           vars_explicit, changed, grid)
+                                                           vars_explicit, changed, grid, data_nt)
+    # The effect of a variable with a random slope: its per-row slope terms (`SlopedOffset`)
+    if type === :effects && !isnothing(re_spec) && !isnothing(resolved_vars)
+        slope_vars = intersect(resolved_vars, _re_active_slope_vars(model, re_spec))
+        if !isempty(slope_vars)
+            τ = offset_vec isa SpreadOffset ? offset_vec.τ : nothing
+            (doff, dτ) = _re_slope_derivatives(model, re_tbl, re_spec, slope_vars, τ)
+            offset_vec = SlopedOffset(offset_vec, slope_vars, doff, dτ)
+        end
+    end
     # The derived-column detector, once per call, over the focal and the changed variables. The
     # values the call sets are known here for `scenarios` and a reference grid; the model-level
     # second differences set theirs later (`scenario_vars`), so they are not known (`nothing`).

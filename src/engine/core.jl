@@ -102,7 +102,7 @@ engine = build_engine(ProfileUsage, model, data_nt, [:category], Σ, :ad)
 struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
                      E<:Union{Nothing, AbstractDerivativeEvaluator},
                      CE<:Union{Nothing, ContrastEvaluator},
-                     O<:Union{Nothing, Vector{Float64}}}
+                     O<:AnyOffset}
     # FormulaCompiler components (pre-compiled)
     compiled::C
     de::E
@@ -145,6 +145,7 @@ struct MarginsEngine{L<:GLM.Link, U<:MarginsUsage, C<:UnifiedCompiled,
     vars::Vector{Symbol}
     data_nt::NamedTuple # Reference for scenarios/refgrids
     offset::O           # η offset per row of data_nt, or nothing
+    re_average::Union{Nothing, REAveraging}  # random_effects = :marginal: the quadrature over u = z'b
 end
 
 """
@@ -168,6 +169,8 @@ Construct zero-allocation margins engine with usage-specific optimization.
   because it builds its own per context. Without them `de` and `contrast` are `nothing`.
 - `offset`: The η offset at each row of `data_nt` (`nothing` or a `Vector{Float64}` of that
   length), read by the population kernels.
+- `re_average`: `random_effects = :marginal`: the Gauss–Hermite rule over the random effects
+  (`REAveraging`), which makes the response scale an `AveragedResponseScale`; `nothing` otherwise.
 
 # Returns
 - `MarginsEngine{L, U, C, E, CE, O}`: Pre-compiled engine whose type records the exact
@@ -216,7 +219,8 @@ engine = build_engine(ProfileUsage, model, data_nt, [:x1, :category], Σ, :ad)
 """
 function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{Symbol}, vcov, backend::Symbol;
                       evaluators::Bool = U <: PopulationUsage,
-                      offset::Union{Nothing, Vector{Float64}} = nothing) where {U<:MarginsUsage}
+                      offset::AnyOffset = nothing,
+                      re_average::Union{Nothing, REAveraging} = nothing) where {U<:MarginsUsage}
     # Input validation (delegated to utilities.jl)
     _validate_variables(data_nt, vars)
     isnothing(offset) || length(offset) == length(first(data_nt)) ||
@@ -326,7 +330,7 @@ function build_engine(usage::Type{U}, model, data_nt::NamedTuple, vars::Vector{S
         me_ws,
         contrast_buf,  # Categorical contrast buffer
         copy(continuous_vars), copy(categorical_vars),
-        model, _coef(model), covariance_matrix, link, vars, data_nt, offset
+        model, _coef(model), covariance_matrix, link, vars, data_nt, offset, re_average
     )
 end
 

@@ -232,12 +232,12 @@ end
 function _local_derivative_request(model, cols::NamedTuple, vars_vec::Vector{Symbol}, modifier::Symbol, at,
                                    profile::NamedTuple; scale, backend, measure, contrasts, vcov, weights, alpha,
                                    df=nothing, groups=nothing, warn::Bool=true,
-                                   random_effects=:zero, re_new=:zero, re_terms=nothing)
+                                   random_effects=:zero, re_new=:zero, re_terms=nothing, re_nodes=:auto)
     held = collect(Symbol, keys(_local_profile(at, profile, modifier)))
     scenario_vars = at === :observed ? held : Symbol[modifier; held]
     return _normalize_request(model, cols; type=:effects, vars=vars_vec, scale, backend, measure,
                               contrasts, alpha, vcov, weights, df, groups, scenario_vars,
-                              changed_vars=Symbol[modifier; held], random_effects, re_new, re_terms, warn)
+                              changed_vars=Symbol[modifier; held], random_effects, re_new, re_terms, re_nodes, warn)
 end
 
 # Where `at=:mean` / `:median` put the derivative: the (weighted) mean / median of the modifier values

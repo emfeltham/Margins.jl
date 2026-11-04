@@ -35,12 +35,12 @@ using Test, Margins, GLM, DataFrames, CategoricalArrays
     @testset "positional forms and keywords" begin
         S(x...) = Symbol(x...)
         expected = Dict(
-            :population_margins => Set([(2, [:alpha, :backend, :ci_alpha, :contrasts, :df, :groups, :measure, :random_effects, :re_new, :re_terms, :scale, :scenarios, :type, :vars, :vcov, :warn, :weights])]),
-            :profile_margins => Set([(3, [:alpha, :backend, :ci_alpha, :contrasts, :df, :interval, :measure, :offset, :random_effects, :re_new, :re_terms, :scale, :type, :vars, :vcov, :warn])]),
+            :population_margins => Set([(2, [:alpha, :backend, :ci_alpha, :contrasts, :df, :groups, :measure, :random_effects, :re_new, :re_nodes, :re_terms, :scale, :scenarios, :type, :vars, :vcov, :warn, :weights])]),
+            :profile_margins => Set([(3, [:alpha, :backend, :ci_alpha, :contrasts, :df, :interval, :measure, :offset, :random_effects, :re_new, :re_nodes, :re_terms, :scale, :type, :vars, :vcov, :warn])]),
             :second_differences => Set([
                 (2, [S("kwargs...")]),
                 (3, [:all_contrasts, :alpha, :contrast, :include_gradients, :modifier_type, :p_adjust, :vcov, :warn]),
-                (4, [:alpha, :at, :backend, :contrast, :contrasts, :delta, :df, :groups, :include_gradients, :levels, :measure, :modifier_type, :p_adjust, :profile, :random_effects, :re_new, :re_terms, :scale, :vcov, :warn, :weights]),
+                (4, [:alpha, :at, :backend, :contrast, :contrasts, :delta, :df, :groups, :include_gradients, :levels, :measure, :modifier_type, :p_adjust, :profile, :random_effects, :re_new, :re_nodes, :re_terms, :scale, :vcov, :warn, :weights]),
                 (4, [S("kwargs...")]),
             ]),
             :contrast => Set([(2, [S("kwargs...")]), (3, [:alpha]), (4, [S("kwargs...")])]),

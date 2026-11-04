@@ -9,15 +9,22 @@ The format is inspired by Keep a Changelog. Unreleased changes go under "Unrelea
 ### `random_effects` for mixed models
 
 `population_margins`, `profile_margins` and the model-level `second_differences` take
-`random_effects = :zero | :conditional` for MixedModels fits. `:zero` is the default and the
+`random_effects = :zero | :conditional | :marginal` for MixedModels fits. `:zero` is the default and the
 3.0 behaviour (every random effect 0: a typical group). `:conditional` adds each row's predicted
 random effects (conditional modes) to η, so the estimates describe the groups in the data; in a
 profile grid, set the grouping columns to choose the groups. `re_terms` conditions on some
 grouping factors only, and `re_new = :zero | :error` decides what a level absent from the fit
-gets. Results record the choice in `metadata[:random_effects]` and `metadata[:re_terms]`, and a
-printed result from a mixed model names it ("Random effects: ..."). Standard errors remain
-delta-method on β alone. Not yet supported: effects of, and scenarios on, a variable with a
-random slope under `:conditional`, and `random_effects = :marginal` (population-averaged).
+gets. `random_effects = :marginal` gives population-averaged estimates: the inverse link averaged over
+the estimated random-effects distribution by Gauss–Hermite quadrature (z'b is normal, so the
+average is one-dimensional for any number of crossed or nested factors; `re_nodes = :auto`
+checks convergence to 1e-10; with random slopes the SD of z'b is computed per row). Results record the choice in
+`metadata[:random_effects]` and `metadata[:re_terms]` (and `[:re_sd]`, `[:re_nodes]` for
+`:marginal`), and a printed result from a mixed model names it ("Random effects: ...").
+The effect of a continuous variable with a random slope includes each group's predicted slope
+(`:conditional`) or the change in the SD of z'b (`:marginal`). Standard errors remain
+delta-method on β alone, with the predicted random effects and their variances fixed. Not yet
+supported: contrasts of a categorical variable with a random slope, and population scenarios
+that set a random-slope variable.
 
 ## v3.0.0 — 2026-11-03
 
