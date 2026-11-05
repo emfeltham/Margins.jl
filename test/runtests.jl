@@ -119,6 +119,7 @@ suite_phase("Validation Tests")
     include("validation/test_elasticity_unit_definitions.jl")
     include("validation/test_second_differences_r_oracle.jl")
     include("validation/test_oracle_3_0.jl")                      # R: at=:observed SD, model weights, offsets, fixest
+    include("validation/test_oracle_random_effects.jl")           # R: lme4 + marginaleffects, random_effects
     include("validation/test_second_differences_mixed_fem.jl")    # SD on LMM, GLMM, FixedEffectModels
     include("validation/test_engine_data_binding.jl")
     include("validation/test_no_engine_cache.jl")

@@ -64,6 +64,14 @@ Margins._supports_random_effects(::MixedModel) = true
 _lmm(m::LinearMixedModel) = m
 _lmm(m::GeneralizedLinearMixedModel) = m.LMM
 
+# The predicted random effects b̂ (one matrix per `ReMat`, coefficients × levels) of the fitted
+# linear predictor. For a GLMM they are λu from the fit's spherical conditional modes `m.u`, which
+# `fitted(m)` uses: `MixedModels.ranef` reads the working LMM, whose state after a `fast = false`
+# fit is not the final one (MixedModels 4.38.1: b̂ off by up to 0.01 on a logit fit, while a
+# `fast = true` fit agrees to rounding).
+_bhat(m::LinearMixedModel) = MixedModels.ranef(m)
+_bhat(m::GeneralizedLinearMixedModel) = [Matrix(r.λ) * u for (r, u) in zip(m.LMM.reterms, m.u)]
+
 Margins._re_factors(m::MixedModel) = Symbol[Symbol(string(r.trm)) for r in _lmm(m).reterms]
 
 # The random-effects terms of the fitted formula (a `zerocorr` term wraps one)
@@ -101,7 +109,7 @@ function Margins._re_offset(m::MixedModel, tbl::NamedTuple, spec::RandomEffectsS
     lmm = _lmm(m)
     n = length(first(tbl))
     off = zeros(Float64, n)
-    b_all = MixedModels.ranef(m)
+    b_all = _bhat(m)
     for (k, r) in enumerate(lmm.reterms)
         f = Symbol(string(r.trm))
         f in spec.used || continue
@@ -217,7 +225,7 @@ function Margins._re_slope_derivatives(m::MixedModel, tbl::NamedTuple, spec::Ran
                                        vars::Vector{Symbol})
     n = length(first(tbl))
     doff = zeros(Float64, n, length(vars))
-    b_all = MixedModels.ranef(m)
+    b_all = _bhat(m)
     lmm = _lmm(m)
     for (k, v) in enumerate(vars)
         col = Float64.(Tables.getcolumn(tbl, v))
@@ -402,7 +410,7 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
     spread_pos = Int[]; Σblocks = Matrix{Float64}[]
     (Cbb, Cbβ, Cββ, offs) = spec.se === :joint ? _joint_covariance(m) : (nothing, nothing, nothing, nothing)
     if !isempty(conds)
-        B = MixedModels.ranef(m)
+        B = _bhat(m)
         for f in conds
             kf = findfirst(t -> Symbol(string(t.trm)) === f, lmm.reterms)
             r = lmm.reterms[kf]

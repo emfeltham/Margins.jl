@@ -26,6 +26,13 @@ evaluated row, counterfactual ones included). Results record the choice in
 `(village = :conditional, rater = :marginal)`: the observed villages' predicted random effects
 enter η (joint standard errors under `re_se`) and the raters are averaged over (unlisted factors
 0; recorded as `:hybrid`, with `metadata[:re_averaged]`).
+
+For a GLMM the predicted random effects are λu from the fit (`m.u`, what `fitted(m)` uses), not
+`MixedModels.ranef`, which after a `fast = false` fit reads a stale working state (MixedModels
+4.38.1). Validated against R (lme4 2.1.0 with marginaleffects 1.0.0, Henderson's equations and
+`integrate`): `test/r_compare_marginaleffects/random_effects/`. Note that lme4's default `vcov`
+for a `glmer` fit (a finite-difference Hessian) differs from MixedModels' RX-based one, so
+marginaleffects' default SEs on a glmer fit differ from Margins' (2.3% in that example).
 The effect of a variable with a random slope includes each group's predicted slope
 (`:conditional`) or the change in the SD of z'b (`:marginal`, from the formula's derivative, so
 any slope term, `w^2` included).

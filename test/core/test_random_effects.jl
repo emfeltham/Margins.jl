@@ -36,9 +36,16 @@ lmm_slope = fit(MixedModel, @formula(y ~ x + w + (1 + w | rater) + (1 | village)
 glmm = fit(MixedModel, @formula(yb ~ x + w + (1 | rater) + (1 | village)), re_df, Bernoulli();
            progress=false, fast=true)
 
-# b̂ of `level` for factor `f`, coefficient `coef`
+# b̂ of `level` for factor `f`, coefficient `coef`. For a GLMM, λu from the fit (what `fitted`
+# uses): `ranef` reads the working LMM, which can lag (1e-9 after a fast = true probit fit, 1e-2
+# after fast = false)
 blup(m, f, level, coef="(Intercept)") = (t = getproperty(raneftables(m), f);
     getproperty(t[findfirst(==(level), getproperty(t, f))], Symbol(coef)))
+function blup(m::GeneralizedLinearMixedModel, f, level, coef="(Intercept)")
+    k = findfirst(r -> string(r.trm) == string(f), m.LMM.reterms)
+    r = m.LMM.reterms[k]
+    return (Matrix(r.λ) * m.u[k])[findfirst(==(coef), r.cnames), findfirst(==(level), r.levels)]
+end
 
 est(r) = DataFrame(r).estimate
 se(r) = DataFrame(r).se
@@ -103,6 +110,22 @@ se(r) = DataFrame(r).se
         gi = fit(MixedModel, @formula(yb ~ x + (1 | rater_id)), re_df, Bernoulli(); progress=false, fast=true)
         @test est(population_margins(gi, re_df; type=:predictions, random_effects=:conditional))[1] ≈
               mean(fitted(gi)) atol=1e-10
+    end
+
+    @testset "GLMM fit with fast = false: b̂ of the fitted linear predictor" begin
+        # MixedModels' ranef reads the working LMM, which a fast = false fit leaves at an earlier
+        # state; Margins uses λu (what fitted(m) uses)
+        gf = fit(MixedModel, @formula(yb ~ x + w + (1 + w | rater) + (1 | village)), re_df, Bernoulli();
+                 fast=false, progress=false)
+        for kw in ((;), (re_se=:fixed,))
+            r = population_margins(gf, re_df; type=:predictions, random_effects=:conditional, kw...)
+            @test est(r)[1] ≈ mean(fitted(gf)) atol=1e-12
+        end
+        gp = profile_margins(gf, re_df, DataFrame(x=[0.0], w=[0.0], rater=["c"], village=["v3"]);
+                             type=:predictions, random_effects=:conditional)
+        bu = Dict(string(r.trm) => (r, Matrix(r.λ) * u) for (r, u) in zip(gf.LMM.reterms, gf.u))
+        b_of(f, l) = (p = bu[f]; p[2][1, findfirst(==(l), p[1].levels)])
+        @test est(gp)[1] ≈ 1 / (1 + exp(-(fixef(gf)[1] + b_of("rater", "c") + b_of("village", "v3")))) atol=1e-12
     end
 
     @testset "GLMM with an offset: both enter η" begin
