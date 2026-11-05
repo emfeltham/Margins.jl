@@ -30,6 +30,7 @@ makedocs(;
       "Backend Selection" => "backend_selection.md",
       "Performance Guide" => "performance.md",
       "Fixed Effects Models" => "fixed_effects.md",
+      "Mixed Models" => "mixed_models.md",
       "Advanced Features" => "advanced.md"
     ],
     "Migration Guide" => "stata_migration.md",

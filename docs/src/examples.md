@@ -433,7 +433,7 @@ prob_effects_glmm = population_margins(glmm, df_bin; type=:effects, vars=[:x], s
 
 By default (`random_effects = :zero`) every random effect is 0: the estimates above describe a
 typical group, one whose random intercept is 0. `random_effects = :conditional` adds each row's
-predicted random effects (`ranef`), so the estimates describe the groups in the data:
+predicted random effects (conditional modes), so the estimates describe the groups in the data:
 
 ```julia
 # AME for the observed groups (each row keeps its own group's intercept)
@@ -468,7 +468,8 @@ population_margins(glmm, df; vars=[:x], random_effects=(village=:conditional, ra
 ```
 
 conditions on each village's predicted random effects (with joint standard errors) and averages
-over the rater distribution. Unlisted factors are set to 0.
+over the rater distribution. Unlisted factors are set to 0. See [Mixed Models](mixed_models.md)
+for the estimands, the standard-error choices and a worked example.
 
 ## Best Practices
 

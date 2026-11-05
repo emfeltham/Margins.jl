@@ -85,7 +85,7 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
 - `random_effects=:zero`: mixed models (MixedModels.jl) only. `:zero` (the default) sets every
   random effect to 0, so the estimates describe a typical group (e.g. a rater and a village whose
   random effects are 0). `:conditional` adds each row's predicted random effects (conditional
-  modes, `ranef`) to η, so the estimates describe the groups in the data. Under a nonlinear link
+  modes, as `fitted(model)` uses them) to η, so the estimates describe the groups in the data. Under a nonlinear link
   neither is the population-averaged effect; `:marginal` gives it, averaging the inverse link
   over the estimated random-effects distribution (E[g⁻¹(η + z'b)], b ~ N(0, Σ̂_b)) by
   Gauss–Hermite quadrature: z'b is normal, so the average is one-dimensional however many

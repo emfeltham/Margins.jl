@@ -243,8 +243,10 @@ V_fixed = vcov(mixed_model)  # Fixed effects covariance only
 # Random-effects terms are dropped before compilation, so by default
 # (random_effects = :zero) predictions and marginal effects set every random
 # effect to zero (a typical group, not the population average under a nonlinear
-# link). random_effects = :conditional adds z'b̂ (from ranef) as a per-row η
-# offset. Standard errors use vcov(model), on β alone.
+# link). random_effects = :conditional appends the random effects to the
+# compiled formula as extra coefficients (β, b̂) with Henderson's joint
+# covariance; :marginal averages the inverse link over N(0, z'Σ̂z) by
+# Gauss–Hermite quadrature. See Mixed Models (mixed_models.md).
 ```
 
 ## Extensibility Architecture
