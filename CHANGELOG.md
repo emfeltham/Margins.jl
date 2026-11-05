@@ -22,6 +22,10 @@ z's columns join the compiled formula with coefficient 0, so the SD is computed 
 evaluated row, counterfactual ones included). Results record the choice in
 `metadata[:random_effects]` and `metadata[:re_terms]` (and `[:re_sd]`, `[:re_nodes]` for
 `:marginal`), and a printed result from a mixed model names it ("Random effects: ...").
+`random_effects` also takes a mode per grouping factor, e.g.
+`(village = :conditional, rater = :marginal)`: the observed villages' predicted random effects
+enter η (joint standard errors under `re_se`) and the raters are averaged over (unlisted factors
+0; recorded as `:hybrid`, with `metadata[:re_averaged]`).
 The effect of a variable with a random slope includes each group's predicted slope
 (`:conditional`) or the change in the SD of z'b (`:marginal`, from the formula's derivative, so
 any slope term, `w^2` included).

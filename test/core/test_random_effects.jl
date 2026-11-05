@@ -629,6 +629,70 @@ se(r) = DataFrame(r).se
         @test r.metadata[:random_effects] === :marginal && r.metadata[:re_nodes] == 0
     end
 
+    @testset "per-factor modes: (village = :conditional, rater = :marginal)" begin
+        hy = (village=:conditional, rater=:marginal)
+        E = Base.get_extension(Margins, :MixedModelsExt)
+        # identity link: averaging changes nothing, so = :conditional on villages (estimates and SEs)
+        h = population_margins(lmm_int, re_df; type=:predictions, random_effects=hy)
+        c = population_margins(lmm_int, re_df; type=:predictions, random_effects=:conditional, re_terms=:village)
+        @test est(h) == est(c)
+        @test se(h) == se(c)
+        @test h.metadata[:random_effects] === :hybrid
+        @test h.metadata[:re_terms] == [:village, :rater]
+        @test h.metadata[:re_averaged] == [:rater]
+        @test occursin("predicted for village; averaged over rater (no change", sprint(show, h))
+        # probit, random intercepts: Φ((x'β + b̂_village)/√(1 + σ²_rater)), joint SE over (β, b_village)
+        m = fit(MixedModel, @formula(yb ~ x + w + (1 | rater) + (1 | village)), re_df, Bernoulli(), ProbitLink();
+                progress=false, fast=true)
+        β = fixef(m); cc = sqrt(1 + m.σs.rater[1]^2)
+        bv = [blup(m, :village, v) for v in re_df.village]
+        t = (m.X * β .+ bv) ./ cc
+        r = population_margins(m, re_df; type=:predictions, random_effects=hy)
+        @test est(r)[1] ≈ mean(cdf.(Normal(), t)) atol=1e-12
+        spec = Margins._validate_random_effects(m, :conditional, :zero, :village, :auto, :auto)
+        (wv, _) = Margins._re_wrapper_model(m, Tables.columntable(re_df), spec, GLM.vcov)
+        hc = E._hidden_column(wv, 1, Tables.columntable(re_df), nrow(re_df), :zero)
+        Zv = Float64.(hc .== permutedims(Margins.CategoricalArrays.levels(hc)))
+        g = [vec(mean(pdf.(Normal(), t) ./ cc .* m.X; dims=1)); vec(mean(pdf.(Normal(), t) ./ cc .* Zv; dims=1))]
+        @test se(r)[1] ≈ sqrt(g' * wv.C * g) rtol=1e-10
+        @test occursin("predicted for village; averaged over rater (population-averaged", sprint(show, r))
+        # a profile row: the grid sets the village; the raters are averaged over
+        p = profile_margins(m, re_df, DataFrame(x=[0.0], w=[0.0], village=["v3"]); type=:predictions, random_effects=hy)
+        @test est(p)[1] ≈ cdf(Normal(), (β[1] + blup(m, :village, "v3")) / cc) atol=1e-12
+        # random slopes in the averaged factor: τᵢ from w, the conditioned villages' b̂ in η
+        ms = fit(MixedModel, @formula(yb ~ x + w + (1 + w | rater) + (1 | village)), re_df, Bernoulli(), ProbitLink();
+                 progress=false, fast=true)
+        βs = fixef(ms); Λ = only(r.λ for r in ms.reterms if string(r.trm) == "rater"); S = Matrix(Λ * Λ')
+        cs = sqrt.(1 .+ S[1, 1] .+ 2S[1, 2] .* re_df.w .+ S[2, 2] .* re_df.w .^ 2)
+        cs′ = (S[1, 2] .+ re_df.w .* S[2, 2]) ./ cs
+        ηs = ms.X * βs .+ [blup(ms, :village, v) for v in re_df.village]
+        e = population_margins(ms, re_df; vars=[:w], random_effects=hy)
+        @test est(e)[1] ≈ mean(pdf.(Normal(), ηs ./ cs) .* (βs[3] ./ cs .- ηs .* cs′ ./ cs .^ 2)) atol=1e-12
+        sc = population_margins(ms, re_df; type=:predictions, scenarios=(w=[1.5],), random_effects=hy)
+        c15 = sqrt(1 + S[1, 1] + 3S[1, 2] + 2.25S[2, 2])
+        η15 = ms.X[:, 1:2] * βs[1:2] .+ 1.5βs[3] .+ [blup(ms, :village, v) for v in re_df.village]
+        @test est(sc)[1] ≈ mean(cdf.(Normal(), η15 ./ c15)) atol=1e-12
+        # re_se = :fixed: the same estimate, β-only SE
+        rf = population_margins(m, re_df; type=:predictions, random_effects=hy, re_se=:fixed)
+        @test est(rf) ≈ est(r) atol=1e-14
+        gβ = g[1:length(β)]
+        @test se(rf)[1] ≈ sqrt(gβ' * vcov(m) * gβ) rtol=1e-10
+        # one mode per NamedTuple reduces to that mode
+        @test est(population_margins(m, re_df; type=:predictions, random_effects=(village=:conditional,))) ==
+              est(population_margins(m, re_df; type=:predictions, random_effects=:conditional, re_terms=:village))
+        @test est(population_margins(m, re_df; type=:predictions, random_effects=(rater=:marginal, village=:zero))) ==
+              est(population_margins(m, re_df; type=:predictions, random_effects=:marginal, re_terms=:rater))
+        @test est(population_margins(m, re_df; type=:predictions, random_effects=(village=:zero,))) ==
+              est(population_margins(m, re_df; type=:predictions))
+        @test second_differences(m, re_df, :x, :w; levels=[0.0, 1.0], random_effects=hy, warn=false) isa DataFrame
+        # errors
+        @test_throws ArgumentError population_margins(m, re_df; random_effects=(village=:cond,))
+        @test_throws ArgumentError population_margins(m, re_df; random_effects=(school=:conditional,))
+        @test_throws ArgumentError population_margins(m, re_df; random_effects=hy, re_terms=:village)
+        @test_throws ArgumentError population_margins(m, re_df; random_effects=(village=:conditional,), re_nodes=20)
+        @test_throws ArgumentError population_margins(m, re_df; random_effects=(rater=:marginal,), re_se=:fixed)
+    end
+
     @testset "validation" begin
         ols = lm(@formula(y ~ x), re_df)
         @test_throws ArgumentError population_margins(ols, re_df; random_effects=:conditional)

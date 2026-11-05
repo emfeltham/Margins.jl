@@ -240,7 +240,7 @@ function _normalize_request(model, data;
     # Mixed models with random_effects = :conditional: the predicted random effects z'b̂ join the
     # offset (when it can change the requested quantity, as for any offset)
     re_tbl = nothing
-    if _is_wrapped(re_spec) && re_spec.mode === :conditional
+    if _is_wrapped(re_spec) && _conditions(re_spec)
         isnothing(completed) || (re_spec = _with_used(re_spec, _joint_used(model, grid)))
     elseif !isnothing(re_spec) && re_spec.mode === :conditional
         if isnothing(completed)
@@ -256,9 +256,10 @@ function _normalize_request(model, data;
     end
     # random_effects = :marginal: the quadrature, checked at the largest SD of z'b the request
     # evaluates; with random slopes each row's SD comes from its model row (`RowSpreadOffset`)
-    if !isnothing(re_spec) && re_spec.mode === :marginal
+    if _integrates(re_spec)
         re_tbl = isnothing(completed) ? data_nt : Tables.columntable(completed)
-        settings = re_spec.wrapped ? _marginal_settings(model, re_spec, scenario_specs, resolved_vars, re_tbl) : ()
+        settings = _re_has_slopes(model, _integrated(re_spec)) ?
+            _marginal_settings(model, re_spec, scenario_specs, resolved_vars, re_tbl) : ()
         (re_spec, offset_vec) = _finalize_marginal(model, re_spec, re_tbl, settings, offset_vec)
     end
 

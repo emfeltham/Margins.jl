@@ -460,6 +460,16 @@ The effect of a continuous variable with a random slope (`x` in `(1 + x | group)
 group's predicted slope under `:conditional`, and the change in the spread of the random effects
 under `:marginal`.
 
+The modes can also be given per grouping factor. With raters crossed with villages,
+
+```julia
+# The villages in the data, each with a new rater drawn from the rater population
+population_margins(glmm, df; vars=[:x], random_effects=(village=:conditional, rater=:marginal))
+```
+
+conditions on each village's predicted random effects (with joint standard errors) and averages
+over the rater distribution. Unlisted factors are set to 0.
+
 ## Best Practices
 
 ### When to Use Population vs Profile

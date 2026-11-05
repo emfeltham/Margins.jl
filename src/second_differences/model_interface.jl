@@ -198,7 +198,7 @@ function second_differences(
     contrasts::Symbol=:baseline, contrast::Union{Nothing,AbstractString}=nothing, vcov=GLM.vcov,
     weights=:model, alpha=0.05, p_adjust::Symbol=:none, include_gradients::Bool=false,
     warn::Bool=true, backend::Symbol=:ad, df=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
+    random_effects::Union{Symbol,NamedTuple}=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
 )
     # The checks here are the ones specific to second differences; everything shared with
     # population_margins (alpha, df, contrasts, measure, scale, backend, weights, vcov, the groups

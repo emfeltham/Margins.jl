@@ -392,16 +392,18 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
     β = Margins._coef(m)
     p = length(β)
     fx = FormulaCompiler.fixed_effects_form(m)
-    conditional = spec.mode === :conditional
+    conds = Margins._conditioned(spec)
+    # z's columns are needed for τ only with random slopes in the averaged factors
+    ints = Margins._re_has_slopes(m, Margins._integrated(spec)) ? Margins._integrated(spec) : Symbol[]
     aug = StatsModels.AbstractTerm[]
     bvals = Float64[]
     bidx = Int[]          # index into b (0: a column with b = 0 and variance 0)
     hidden = Symbol[]; keyd = Dict{Any,String}[]; sources = Vector{Symbol}[]
     spread_pos = Int[]; Σblocks = Matrix{Float64}[]
-    if conditional
+    (Cbb, Cbβ, Cββ, offs) = spec.se === :joint ? _joint_covariance(m) : (nothing, nothing, nothing, nothing)
+    if !isempty(conds)
         B = MixedModels.ranef(m)
-        (Cbb, Cbβ, Cββ, offs) = spec.se === :joint ? _joint_covariance(m) : (nothing, nothing, nothing, nothing)
-        for f in spec.factors
+        for f in conds
             kf = findfirst(t -> Symbol(string(t.trm)) === f, lmm.reterms)
             r = lmm.reterms[kf]
             h = _hidden_name(f)
@@ -423,9 +425,11 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
                 end
             end
         end
-    else
-        # `:marginal`: z's own columns, coefficient 0; each factor's z in its `ReMat` coefficient order
-        for f in spec.factors
+    end
+    # the averaged factors (`:marginal`, `:hybrid`): z's own columns, coefficient 0; each factor's z
+    # in its `ReMat` coefficient order
+    if !isempty(ints)
+        for f in ints
             r = _reterm(m, f)
             pos = zeros(Int, length(r.cnames))   # the intercept stays 0 (the constant 1)
             for t in _factor_terms(m, f), (lt, cn) in _lhs_parts(t)
@@ -461,7 +465,7 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
         C[1:p, 1:p] .= Σβ
     end
     Σs = isempty(Σblocks) ? zeros(0, 0) : Matrix(reduce(SparseArrays.blockdiag, SparseArrays.sparse.(Σblocks)))
-    w = REWrapperModel(m, formula, [β; bvals], C, hidden, conditional ? copy(spec.factors) : Symbol[],
+    w = REWrapperModel(m, formula, [β; bvals], C, hidden, copy(conds),
                        keyd, sources, p, spread_pos, Σs)
     n = length(first(cols))
     hcols = Tuple(_hidden_column(w, k, cols, n, spec.new_levels) for k in eachindex(hidden))

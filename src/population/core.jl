@@ -100,6 +100,12 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
   - under an identity link it equals `:zero`;
   - `metadata[:re_sd]` and `[:re_nodes]` record the SD of z'b (with random slopes, the largest
     over the rows the request evaluates, which the automatic rule is checked at) and the rule used.
+  A NamedTuple gives a mode per grouping factor, unlisted factors `:zero`: e.g.
+  `random_effects=(village=:conditional, rater=:marginal)` conditions on the observed villages
+  (their b̂ enter η, with joint standard errors under `re_se`) and averages over raters, so the
+  estimates describe the villages in the data with a new rater drawn from the rater population
+  (`metadata[:random_effects]` is then `:hybrid`, `[:re_averaged]` the factors averaged over).
+  `re_terms` cannot be combined with it; a NamedTuple with one mode is that mode on those factors.
   Standard errors are delta-method on β with the random-effect variances fixed at their
   estimates. With `:conditional`:
   - `re_se=:joint` (the default) gives standard errors that include the prediction error of the
@@ -249,7 +255,7 @@ function population_margins(
     backend::Symbol=:ad, scenarios=nothing, groups=nothing, measure::Symbol=:effect,
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov, weights=:model, df=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
+    random_effects::Union{Symbol,NamedTuple}=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
     warn::Bool=true, ci_alpha=nothing
 )
     _reject_ci_alpha(ci_alpha)

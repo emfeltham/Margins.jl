@@ -144,9 +144,10 @@ the request for the default `random_effects = :zero`.
 
 | field | meaning |
 |:--|:--|
-| `mode` | `:conditional` or `:marginal` |
+| `mode` | `:conditional`, `:marginal`, or `:hybrid` (a NamedTuple `random_effects` with both: some factors conditioned on, others averaged over) |
 | `new_levels` | `re_new`: `:zero` (a level absent from the fit gets random effects 0) or `:error` (`:conditional` only) |
-| `factors` | the grouping factors the mode applies to (`re_terms`, default all); the others are 0 |
+| `factors` | `:conditional` / `:hybrid`: the factors conditioned on; `:marginal`: those averaged over (`re_terms`, default all). The others are 0 (or, `:hybrid`, in `integrated`) |
+| `integrated` | `:hybrid`: the factors averaged over; empty otherwise |
 | `used` | the factors that entered: `:conditional` population requests and `:marginal`, all of `factors`; `:conditional` profile requests, those whose grouping columns the reference grid sets (the others are 0) |
 | `average` | `:marginal`: the quadrature over u = z'b (`REAveraging`), or `nothing` when it changes nothing (identity link, or τ = 0) or is not yet known (set by `_finalize_marginal`) |
 | `nodes` | the `re_nodes` keyword |
@@ -157,6 +158,7 @@ struct RandomEffectsSpec
     mode::Symbol
     new_levels::Symbol
     factors::Vector{Symbol}
+    integrated::Vector{Symbol}
     used::Vector{Symbol}
     average::Union{Nothing,REAveraging}
     nodes::Union{Symbol,Int}
@@ -165,9 +167,18 @@ struct RandomEffectsSpec
 end
 
 _with_used(spec::RandomEffectsSpec, used::Vector{Symbol}) =
-    RandomEffectsSpec(spec.mode, spec.new_levels, spec.factors, used, spec.average, spec.nodes, spec.se, spec.wrapped)
+    RandomEffectsSpec(spec.mode, spec.new_levels, spec.factors, spec.integrated, used, spec.average,
+                      spec.nodes, spec.se, spec.wrapped)
 _with_average(spec::RandomEffectsSpec, a) =
-    RandomEffectsSpec(spec.mode, spec.new_levels, spec.factors, spec.used, a, spec.nodes, spec.se, spec.wrapped)
+    RandomEffectsSpec(spec.mode, spec.new_levels, spec.factors, spec.integrated, spec.used, a,
+                      spec.nodes, spec.se, spec.wrapped)
+
+# The factors a spec conditions on (their b̂ enter η) and those it averages over
+_conditioned(spec::RandomEffectsSpec) = spec.mode === :marginal ? Symbol[] : spec.factors
+_integrated(spec::RandomEffectsSpec) =
+    spec.mode === :marginal ? spec.factors : spec.mode === :hybrid ? spec.integrated : Symbol[]
+_conditions(spec) = !isnothing(spec) && spec.mode in (:conditional, :hybrid)
+_integrates(spec) = !isnothing(spec) && spec.mode in (:marginal, :hybrid)
 
 # The request's model is the mixed model's wrapper (`REWrapperModel`, MixedModels extension), whose
 # formula evaluates z (`:conditional`: z'b̂ as coefficients; `:marginal`: z's columns for τ), so
@@ -199,28 +210,55 @@ rather than silently ignored: `re_terms` without `:conditional` or `:marginal`, 
 `:conditional`, `re_nodes` without `:marginal`.
 """
 function _validate_random_effects(model, random_effects, re_new, re_terms, re_nodes=:auto, re_se=:auto)
-    (random_effects isa Symbol && random_effects in _RANDOM_EFFECTS_MODES) || throw(ArgumentError(
-        "random_effects must be :zero, :conditional or :marginal, got $(repr(random_effects))"))
+    # The NamedTuple form, one mode per grouping factor (unlisted factors: :zero): a single mode
+    # other than :zero is that mode with `re_terms`; :conditional and :marginal together is :hybrid
+    cond_nt = Symbol[]; int_nt = Symbol[]
+    if random_effects isa NamedTuple
+        isnothing(re_terms) || throw(ArgumentError(
+            "re_terms cannot be combined with random_effects given per factor (a NamedTuple): its " *
+            "keys already name the factors"))
+        for (f, mode) in pairs(random_effects)
+            (mode isa Symbol && mode in _RANDOM_EFFECTS_MODES) || throw(ArgumentError(
+                "random_effects.$f must be :zero, :conditional or :marginal, got $(repr(mode))"))
+            mode === :conditional && push!(cond_nt, f)
+            mode === :marginal && push!(int_nt, f)
+        end
+        random_effects = isempty(cond_nt) && isempty(int_nt) ? :zero :
+                         isempty(int_nt) ? :conditional : isempty(cond_nt) ? :marginal : :hybrid
+        random_effects === :conditional && (re_terms = cond_nt)
+        random_effects === :marginal && (re_terms = int_nt)
+        random_effects === :hybrid && (re_terms = cond_nt)
+    elseif !(random_effects isa Symbol && random_effects in _RANDOM_EFFECTS_MODES)
+        throw(ArgumentError(
+            "random_effects must be :zero, :conditional, :marginal or a NamedTuple of those per " *
+            "grouping factor (e.g. (village = :conditional, rater = :marginal)), got $(repr(random_effects))"))
+    end
+    conditions = random_effects in (:conditional, :hybrid)
+    integrates = random_effects in (:marginal, :hybrid)
     (re_new isa Symbol && re_new in (:zero, :error)) || throw(ArgumentError(
         "re_new must be :zero or :error, got $(repr(re_new))"))
     (re_nodes === :auto || (re_nodes isa Integer && re_nodes >= 2)) || throw(ArgumentError(
         "re_nodes must be :auto or an integer ≥ 2 (Gauss–Hermite nodes), got $(repr(re_nodes))"))
-    random_effects === :conditional || re_new === :zero || throw(ArgumentError(
+    conditions || re_new === :zero || throw(ArgumentError(
         "re_new applies only with random_effects = :conditional"))
     random_effects === :zero && !isnothing(re_terms) && throw(ArgumentError(
         "re_terms applies only with random_effects = :conditional or :marginal"))
-    random_effects === :marginal || re_nodes === :auto || throw(ArgumentError(
+    integrates || re_nodes === :auto || throw(ArgumentError(
         "re_nodes applies only with random_effects = :marginal"))
     re_se in (:auto, :joint, :fixed) || throw(ArgumentError(
         "re_se must be :joint or :fixed, got $(repr(re_se))"))
-    random_effects === :conditional || re_se === :auto || throw(ArgumentError(
+    conditions || re_se === :auto || throw(ArgumentError(
         "re_se applies only with random_effects = :conditional (no predicted random effects enter " *
         ":zero or :marginal estimates)"))
     random_effects === :zero && return nothing
     _supports_random_effects(model) || throw(ArgumentError(
-        "random_effects = :$random_effects applies only to models with random effects " *
+        "random_effects = $(repr(random_effects)) applies only to models with random effects " *
         "(MixedModels.jl); a $(nameof(typeof(model))) has none"))
     all_factors = _re_factors(model)
+    bad_nt = setdiff([cond_nt; int_nt], all_factors)
+    isempty(bad_nt) || throw(ArgumentError(
+        "random_effects: $(join(repr.(bad_nt), ", ")) $(length(bad_nt) == 1 ? "is not a grouping factor" : "are not grouping factors") " *
+        "of the model; its grouping factors are $(join(repr.(all_factors), ", "))"))
     factors = if isnothing(re_terms)
         copy(all_factors)
     else
@@ -235,10 +273,17 @@ function _validate_random_effects(model, random_effects, re_new, re_terms, re_no
             "of the model; its grouping factors are $(join(repr.(all_factors), ", "))"))
         unique(req_factors)
     end
-    se = random_effects === :conditional ? (re_se === :fixed ? :fixed : :joint) : :none
-    wrapped = se === :joint || (se === :fixed && _re_wrap_fixed(model, factors)) ||
+    integrated = random_effects === :hybrid ? unique(int_nt) : Symbol[]
+    se = conditions ? (re_se === :fixed ? :fixed : :joint) : :none
+    wrap_fixed = se === :fixed && _re_wrap_fixed(model, factors)
+    if random_effects === :hybrid && se === :fixed && !wrap_fixed
+        throw(ArgumentError(
+            "random_effects with both :conditional and :marginal factors needs the wrapper model, whose " *
+            "limit of 2000 random-effect coefficients the conditioned factors exceed"))
+    end
+    wrapped = se === :joint || wrap_fixed ||
               (random_effects === :marginal && _re_has_slopes(model, factors) && !(_link(model) isa GLM.IdentityLink))
-    return RandomEffectsSpec(random_effects, re_new, factors, copy(factors), nothing,
+    return RandomEffectsSpec(random_effects, re_new, factors, integrated, copy(factors), nothing,
                              re_nodes isa Integer ? Int(re_nodes) : re_nodes, se, wrapped)
 end
 
@@ -314,24 +359,26 @@ end
 """
     _finalize_marginal(model, spec, table, settings, shift) -> (spec, offset)
 
-The averaging of `random_effects = :marginal` over `spec.factors` (the others are 0), at the rows
+The averaging of `random_effects = :marginal` (or the averaged factors of `:hybrid`) over
+`_integrated(spec)` (the others are 0 or conditioned on), at the rows
 of `table` (the data, or the completed reference grid); `shift` is the request's η offset so far.
 With random intercepts only, u = z'b has one SD τ for every row and the offset is `shift`. With
-random slopes (`spec.wrapped`) τᵢ is computed from each evaluated model row (`RowSpreadOffset`),
+random slopes (the request's model is then the wrapper) τᵢ is computed from each evaluated model row (`RowSpreadOffset`),
 and the rule is chosen for the largest τ over the rows of `table` under each counterfactual
 setting in `settings` (`_marginal_settings`). `spec.average` is `nothing` when the average cannot
 change any estimate: an identity link (E[η + u] = η, so `:marginal` = `:zero`) or τ = 0 at every row.
 """
 function _finalize_marginal(model, spec::RandomEffectsSpec, table::NamedTuple, settings, shift)
     _link(model) isa GLM.IdentityLink && return (spec, shift)
-    if spec.wrapped
+    ints = _integrated(spec)
+    if _re_has_slopes(model, ints)
         τmax = _marginal_tau_max(model, spec, table, settings)
         iszero(τmax) && return (spec, shift)
         spec = _with_average(spec, _re_rule(_link(model), τmax, spec.nodes))
         guard = spec.nodes isa Int ? Inf : τmax
         return (spec, _re_row_spread(model, shift, length(first(table)), guard))
     end
-    τ² = _re_intercept_variance(model, spec.factors)
+    τ² = _re_intercept_variance(model, ints)
     iszero(τ²) && return (spec, shift)
     return (_with_average(spec, _re_rule(_link(model), sqrt(τ²), spec.nodes)), shift)
 end
@@ -341,7 +388,7 @@ function _marginal_tau_max(model, spec::RandomEffectsSpec, table::NamedTuple, se
     τ² = 0.0
     for s in settings
         t = isempty(s) ? table : _apply_counterfactuals(table, s)
-        τ² = max(τ², maximum(_re_spread_sq(model, t, spec.factors); init=0.0))
+        τ² = max(τ², maximum(_re_spread_sq(model, t, _integrated(spec)); init=0.0))
     end
     return sqrt(τ²)
 end
@@ -372,7 +419,7 @@ The empty setting is the rows as they are. Scenarios set later go through
 `_marginal_with_scenarios`; `RowSpreadOffset`'s `τmax` guards anything else.
 """
 function _marginal_settings(model, spec::RandomEffectsSpec, scenario_specs, vars, table::NamedTuple)
-    slopes = _re_slope_vars(model, spec.factors)
+    slopes = _re_slope_vars(model, _integrated(spec))
     S = Dict{Symbol,Any}[Dict{Symbol,Any}()]
     for s in scenario_specs
         d = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(s) if Symbol(k) in slopes)
@@ -457,7 +504,7 @@ end
 # not predictors of the fixed-effects formula, so the grid check would reject them otherwise)
 _re_grid_vars(model, ::Nothing) = Symbol[]
 _re_grid_vars(model, spec::RandomEffectsSpec) =
-    spec.mode === :conditional ? [_re_grouping_vars(model, spec.factors); _hidden_columns(model)] : Symbol[]
+    _conditions(spec) ? [_re_grouping_vars(model, spec.factors); _hidden_columns(model)] : Symbol[]
 
 # The wrapper model of a `spec.wrapped` request, and the data with its hidden columns (MixedModels
 # extension)
@@ -485,9 +532,10 @@ function _set_random_effects_metadata!(metadata::AbstractDict, model, spec)
     metadata[:re_factors] = _re_factors(model)
     isnothing(spec) && return metadata
     metadata[:random_effects] = spec.mode
-    metadata[:re_terms] = copy(spec.used)
-    spec.mode === :conditional && (metadata[:re_se] = spec.se)
-    if spec.mode === :marginal
+    metadata[:re_terms] = unique!([spec.used; spec.integrated])
+    spec.mode === :hybrid && (metadata[:re_averaged] = copy(spec.integrated))
+    _conditions(spec) && (metadata[:re_se] = spec.se)
+    if _integrates(spec)
         a = spec.average
         metadata[:re_sd] = isnothing(a) ? 0.0 : a.τ
         metadata[:re_nodes] = isnothing(a) ? 0 : a.nodes

@@ -448,7 +448,7 @@ function profile_margins(
     contrasts::Symbol=:baseline,
     alpha::Real=0.05, vcov=GLM.vcov,
     interval::Symbol=:confidence, df=nothing, offset=nothing,
-    random_effects::Symbol=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
+    random_effects::Union{Symbol,NamedTuple}=:zero, re_new::Symbol=:zero, re_terms=nothing, re_nodes=:auto, re_se::Symbol=:auto,
     warn::Bool=true, ci_alpha=nothing,
 )
     _reject_ci_alpha(ci_alpha)
