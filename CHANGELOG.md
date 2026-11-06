@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog. Unreleased changes go under "Unreleased" until a version is tagged.
 
-## Unreleased
+## v3.1.0 — 2026-11-06
+
+`Margins.VERSION` now refreshes when `Project.toml` changes, preventing a stale version
+number from surviving in the precompile cache after a version bump.
 
 ### `random_effects` for mixed models
 
