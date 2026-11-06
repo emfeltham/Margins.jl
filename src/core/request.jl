@@ -158,7 +158,14 @@ function _normalize_request(model, data;
     # slopes: z's columns with coefficient 0 (for τ, see `RowSpreadOffset`). Its covariance already
     # holds Σ_β (from `vcov` unless `re_se = :joint`), so `vcov` is the wrapper's own from here on
     if _is_wrapped(re_spec)
-        (model, data) = _re_wrapper_model(model, Tables.columntable(data), re_spec, vcov)
+        raw = Tables.columntable(data)
+        # Checked on the mixed model itself: the wrapper's formula names no grouping columns, so
+        # the data checks below would not see a missing grouping value (a row the fit dropped)
+        _check_model_vars_not_missing(raw, model)
+        # A population request evaluates the conditioned factors at every data row
+        isnothing(reference_grid) && _conditions(re_spec) &&
+            _check_re_grouping_present(model, raw, _conditioned(re_spec))
+        (model, data) = _re_wrapper_model(model, raw, re_spec, vcov)
         fvars = _get_model_formula_variables(model)
         vcov = GLM.vcov
     end
@@ -259,7 +266,7 @@ function _normalize_request(model, data;
     if _integrates(re_spec)
         re_tbl = isnothing(completed) ? data_nt : Tables.columntable(completed)
         settings = _re_has_slopes(model, _integrated(re_spec)) ?
-            _marginal_settings(model, re_spec, scenario_specs, resolved_vars, re_tbl) : ()
+            _marginal_settings(model, re_spec, scenario_specs, resolved_vars, re_tbl, data_nt) : ()
         (re_spec, offset_vec) = _finalize_marginal(model, re_spec, re_tbl, settings, offset_vec)
     end
 

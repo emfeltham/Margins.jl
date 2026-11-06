@@ -110,6 +110,15 @@ x       w       treat    village    Prediction   Std. Err.  [95% Conf.   Interva
 A level absent from the fit (a new village in a grid, or in new data) gets random effects 0 under
 `re_new = :zero` (the default); `re_new = :error` rejects it.
 
+A grid cell may hold a categorical mixture, as `means_grid` fills one into every categorical column
+it is not given. Margins evaluates a mixture by setting the dummy columns to the shares (as Stata's
+`atmeans` does), and the random effects follow the same rule: a mixture in a grouping column gives
+the share-weighted average of the levels' b̂, and a mixture in a random-slope variable gives z at
+the shares (for z′b̂, and for τ under `:marginal`). So `profile_margins(m, data, means_grid(data);
+random_effects = :conditional)` predicts at the observed shares of every group. A nested factor's
+grouping columns cannot hold mixtures (the shares of its cells are not determined by those of its
+columns).
+
 ### Standard errors
 
 A conditional quantity depends on b̂ as well as β̂, so its standard error should include the
@@ -132,8 +141,9 @@ fit; `:joint` requires the model's `vcov` and a full-rank X.
 ### Limits
 
 The joint path holds a dense (p + q)² covariance, so it allows at most 2000 random-effect
-coefficients (q) in the conditioned factors; above that, `re_se = :joint` is an error (use
-`re_terms` or `re_se = :fixed`). `re_se = :fixed` above the cap uses a per-row offset instead, on
+coefficients (q). q counts every grouping factor, including those not conditioned on: the joint
+covariance of β̂ and the conditioned b̂ involves all of them. Above that, `re_se = :joint` is an
+error (use `re_se = :fixed`). `re_se = :fixed` above the cap uses a per-row offset instead, on
 which two things are not supported: contrasts of a categorical variable with a random slope, and
 population `scenarios` that set a variable with a random slope (a profile grid may set it).
 

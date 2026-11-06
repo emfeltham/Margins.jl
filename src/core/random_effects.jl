@@ -6,8 +6,10 @@
 # (`fixed_effects_form` drops the random-effects terms), so by default every random effect is
 # 0: the estimates describe a typical unit (a rater and a village whose random effects are 0).
 # `random_effects = :conditional` adds each row's predicted random effects (the conditional
-# modes, `ranef`) as a per-row η offset, z'b̂, through the offset path FixedEffectModels' absorbed
-# effects and GLM offsets use. The estimates then describe the units in the data.
+# modes) to η, z'b̂: through a wrapper model whose formula carries z'b as extra coefficients
+# (β, b̂) with the joint covariance (MixedModels extension), or, above its size limit, as a per-row
+# η offset (the path FixedEffectModels' absorbed effects and GLM offsets use). The estimates then
+# describe the units in the data.
 # `random_effects = :marginal` averages the inverse link over the random effects: zᵢ'b is normal,
 # N(0, τ²) (with random intercepts only, τ² is the sum of their variances, however many factors
 # are crossed or nested), so ŷᵢ = E[g⁻¹(ηᵢ + τZ)] is a one-dimensional Gauss–Hermite integral.
@@ -217,6 +219,14 @@ function _validate_random_effects(model, random_effects, re_new, re_terms, re_no
         isnothing(re_terms) || throw(ArgumentError(
             "re_terms cannot be combined with random_effects given per factor (a NamedTuple): its " *
             "keys already name the factors"))
+        _supports_random_effects(model) || throw(ArgumentError(
+            "random_effects given per grouping factor applies only to models with random effects " *
+            "(MixedModels.jl); a $(nameof(typeof(model))) has none"))
+        all_f = _re_factors(model)
+        bad_keys = setdiff(collect(Symbol, keys(random_effects)), all_f)
+        isempty(bad_keys) || throw(ArgumentError(
+            "random_effects: $(join(repr.(bad_keys), ", ")) $(length(bad_keys) == 1 ? "is not a grouping factor" : "are not grouping factors") " *
+            "of the model; its grouping factors are $(join(repr.(all_f), ", "))"))
         for (f, mode) in pairs(random_effects)
             (mode isa Symbol && mode in _RANDOM_EFFECTS_MODES) || throw(ArgumentError(
                 "random_effects.$f must be :zero, :conditional or :marginal, got $(repr(mode))"))
@@ -387,10 +397,18 @@ end
 function _marginal_tau_max(model, spec::RandomEffectsSpec, table::NamedTuple, settings)
     τ² = 0.0
     for s in settings
-        t = isempty(s) ? table : _apply_counterfactuals(table, s)
+        # (a grid column holding mixtures takes plain levels too: widen it before setting)
+        base = isempty(s) ? table : _widen_mixture_columns(table, keys(s))
+        t = isempty(s) ? table : _apply_counterfactuals(base, s)
         τ² = max(τ², maximum(_re_spread_sq(model, t, _integrated(spec)); init=0.0))
     end
     return sqrt(τ²)
+end
+
+function _widen_mixture_columns(table::NamedTuple, vars)
+    ks = Tuple(v for v in vars if haskey(table, v) && eltype(table[v]) <: CategoricalMixture)
+    isempty(ks) && return table
+    return merge(table, NamedTuple{ks}(Tuple(Vector{Any}(table[v]) for v in ks)))
 end
 
 """
@@ -415,18 +433,22 @@ end
 The counterfactual settings of the random-slope variables a `:marginal` request evaluates, known
 when it is built: each scenario (its slope variables), crossed with every level of each
 categorical focal variable with a random slope (its contrasts evaluate the rows at each level).
-The empty setting is the rows as they are. Scenarios set later go through
+The empty setting is the rows as they are. The levels come from `level_table` (the data; for a
+profile request `table` is the completed grid). Scenarios set later go through
 `_marginal_with_scenarios`; `RowSpreadOffset`'s `τmax` guards anything else.
 """
-function _marginal_settings(model, spec::RandomEffectsSpec, scenario_specs, vars, table::NamedTuple)
+function _marginal_settings(model, spec::RandomEffectsSpec, scenario_specs, vars, table::NamedTuple,
+                            level_table::NamedTuple=table)
     slopes = _re_slope_vars(model, _integrated(spec))
     S = Dict{Symbol,Any}[Dict{Symbol,Any}()]
     for s in scenario_specs
         d = Dict{Symbol,Any}(Symbol(k) => v for (k, v) in pairs(s) if Symbol(k) in slopes)
         isempty(d) || push!(S, d)
     end
+    # the levels a categorical contrast evaluates: those of the data (`level_table`), not of the
+    # grid rows, which may hold one level or a mixture
     for v in (isnothing(vars) ? Symbol[] : intersect(vars, slopes))
-        col = table[v]
+        col = haskey(level_table, v) ? level_table[v] : table[v]
         _is_continuous_column(col) && continue
         lv = col isa CategoricalArray ? levels(col) : unique(col)
         S = [merge(s, Dict{Symbol,Any}(v => l)) for s in S for l in lv]
@@ -500,6 +522,18 @@ function _profile_re_table(model, completed::DataFrame, grid::DataFrame, spec::R
     return (tbl, used)
 end
 
+# A population request under `:conditional` needs the grouping columns of the conditioned factors at
+# every row (without them the random effects would be 0, not the predicted ones)
+function _check_re_grouping_present(model, data_nt::NamedTuple, factors)
+    for f in factors
+        absent = [v for v in _re_grouping_vars(model, [f]) if !haskey(data_nt, v)]
+        isempty(absent) || throw(ArgumentError(
+            "random_effects = :conditional needs $(join(repr.(absent), ", ")) at every row (the random " *
+            "effects of $(repr(f)) depend on $(length(absent) == 1 ? "it" : "them")); it is not a column of the data"))
+    end
+    return nothing
+end
+
 # The grouping columns a reference grid may set under `random_effects = :conditional` (they are
 # not predictors of the fixed-effects formula, so the grid check would reject them otherwise)
 _re_grid_vars(model, ::Nothing) = Symbol[]
@@ -522,9 +556,10 @@ _joint_used(model, grid) = Symbol[]
 """
     _set_random_effects_metadata!(metadata, model, spec)
 
-Record the random-effects treatment on a result: `:random_effects` (`:zero` or `:conditional`)
-and `:re_terms`, the grouping factors whose predicted random effects entered η (empty for
-`:zero`). For a model with random effects, also `:re_factors`, all its grouping factors (the
+Record the random-effects treatment on a result: `:random_effects` (`:zero`, `:conditional`,
+`:marginal` or `:hybrid`) and `:re_terms`, the grouping factors whose random effects entered η,
+predicted or averaged over (empty for `:zero`); `:re_averaged` (`:hybrid`), `:re_se` (when b̂
+enters), `:re_sd` and `:re_nodes` (when averaging). For a model with random effects, also `:re_factors`, all its grouping factors (the
 printed result names those set to 0).
 """
 function _set_random_effects_metadata!(metadata::AbstractDict, model, spec)

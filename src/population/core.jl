@@ -113,7 +113,8 @@ approach from the 2×2 framework (Population vs Profile × Effects vs Prediction
     (β̂ − β, b̂ − b) given the variance parameters (Henderson's), whose β block is `vcov(model)`.
     The result's gradients and `inference.vcov` are then over (β, b), so `contrast` and second
     differences of the result use it too. It needs the model's own `vcov` and at most 2000
-    random-effect coefficients. `re_se=:fixed` gives β-only standard errors (any `vcov`, and a
+    random-effect coefficients over all grouping factors (the joint covariance involves every
+    factor, conditioned on or not). `re_se=:fixed` gives β-only standard errors (any `vcov`, and a
     rank-deficient fit); these can be far too large as well as too small (an average over the
     observed groups is often known much more precisely than x̄'β). Its gradients are over (β, b)
     too (zero variance for b) up to 2000 random-effect coefficients of the conditioned factors,

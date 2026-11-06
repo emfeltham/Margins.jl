@@ -59,7 +59,10 @@ or adjusted predictions at specific profiles (APM/APR).
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
-  random slope (its Z is evaluated at the row).
+  random slope (its Z is evaluated at the row). A mixture in a grouping column (as `means_grid`
+  fills in) gives the share-weighted average of the levels' predicted random effects, and a
+  mixture in a random-slope variable gives z at the shares, as a mixture enters the fixed effects
+  (the dummy columns at the shares); a nested factor's grouping columns cannot hold mixtures.
 - `warn=true`: warn (once per call) when a numeric model column looks like an exact transform of
   a grid or focal variable but is a separate column of the data (see *Derived columns*);
   `warn=false` silences it.
@@ -366,7 +369,10 @@ implementing the "Profile" approach from the 2×2 framework (Population vs Profi
   `population_margins`. With `random_effects=:conditional` a grid row uses the predicted random
   effects of the levels it sets (add the grouping columns, e.g. `village`, to the grid); a factor
   the grid does not set gets random effects 0 at every row. The grid may set a variable with a
-  random slope (its Z is evaluated at the row).
+  random slope (its Z is evaluated at the row). A mixture in a grouping column (as `means_grid`
+  fills in) gives the share-weighted average of the levels' predicted random effects, and a
+  mixture in a random-slope variable gives z at the shares, as a mixture enters the fixed effects
+  (the dummy columns at the shares); a nested factor's grouping columns cannot hold mixtures.
 - `warn=true`: warn (once per call) when a numeric model column looks like an exact transform of
   a grid or focal variable but is a separate column of the data (see *Derived columns*);
   `warn=false` silences it.

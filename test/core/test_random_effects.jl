@@ -238,6 +238,18 @@ se(r) = DataFrame(r).se
         @test_throws MarginsError population_margins(mb, big; type=:predictions, scenarios=(w=[0.0, 1.0],),
                                                      random_effects=:conditional, re_se=:fixed)
         @test_throws ArgumentError population_margins(mb, big; type=:predictions, random_effects=:conditional)
+        # the limit counts every factor, and its message does not suggest re_terms
+        msg = try population_margins(mb, big; type=:predictions, random_effects=:conditional); "" catch e; sprint(showerror, e) end
+        @test occursin("every factor", msg) && !occursin("re_terms", msg)
+        # a mixture in the grouping column on the offset path: the share-weighted b̂, and in the
+        # effect of the slope variable the share-weighted slope
+        gm = DataFrame(x=[0.0], w=[1.0], g=[mix("r1" => 0.25, "r2" => 0.75)])
+        pm = profile_margins(mb, big, gm; type=:predictions, random_effects=:conditional, re_se=:fixed)
+        bmix(c) = 0.25 * blup(mb, :g, "r1", c) + 0.75 * blup(mb, :g, "r2", c)
+        @test est(pm)[1] ≈ fixef(mb)[1] + fixef(mb)[3] + bmix("(Intercept)") + bmix("w") atol=1e-10
+        @test pm.metadata[:re_terms] == [:g]
+        em = profile_margins(mb, big, gm; vars=[:w], random_effects=:conditional, re_se=:fixed)
+        @test est(em)[1] ≈ fixef(mb)[3] + bmix("w") atol=1e-8
         # below the limit the wrapper is used: gradients over (β, b)
         @test Margins._re_wrap_fixed(lmm_slope, [:rater, :village])
         rs = population_margins(lmm_slope, re_df; type=:predictions, random_effects=:conditional, re_se=:fixed)
@@ -716,6 +728,98 @@ se(r) = DataFrame(r).se
         @test_throws ArgumentError population_margins(m, re_df; random_effects=(rater=:marginal,), re_se=:fixed)
     end
 
+    @testset "input checks: missing and absent grouping columns, grid mixtures" begin
+        E = Base.get_extension(Margins, :MixedModelsExt)
+        logistic(η) = 1 / (1 + exp(-η))
+        # (1) a missing grouping value: the fit dropped those rows, and every mode rejects them as
+        # :zero does (the wrapper's formula names no grouping columns, so this is checked first)
+        dm = allowmissing(copy(re_df), :rater); dm.rater[1:20] .= missing
+        mm = fit(MixedModel, @formula(yb ~ x + w + (1 + w | rater) + (1 | village)), dm, Bernoulli();
+                 progress=false, fast=true)
+        for kw in ((;), (random_effects=:conditional,), (random_effects=:conditional, re_se=:fixed),
+                   (random_effects=:marginal,), (random_effects=(village=:conditional, rater=:marginal),))
+            @test_throws MarginsError population_margins(mm, dm; type=:predictions, kw...)
+        end
+        # (2) a population request needs the conditioned factors' grouping columns
+        d2 = select(re_df, Not(:village))
+        for s in (:joint, :fixed)
+            @test_throws ArgumentError population_margins(glmm, d2; type=:predictions,
+                                                          random_effects=:conditional, re_se=s)
+        end
+        @test_throws ArgumentError population_margins(glmm, d2; type=:predictions,
+                                                      random_effects=(village=:conditional, rater=:marginal))
+        # a profile request may leave the column out: that factor's random effects are 0
+        pr = profile_margins(glmm, d2, DataFrame(x=[0.0], w=[0.0], rater=["c"]); type=:predictions,
+                             random_effects=:conditional)
+        @test est(pr)[1] ≈ logistic(fixef(glmm)[1] + blup(glmm, :rater, "c")) atol=1e-10
+        @test pr.metadata[:re_terms] == [:rater]
+        # (3) a mixture in a grouping column: the share-weighted average of the levels' b̂ (the
+        # dummy columns at the shares, as for a fixed-effects categorical), with joint SEs
+        β = fixef(glmm)
+        gmix = DataFrame(x=[0.3], w=[0.0], village=[mix("v1" => 0.25, "v2" => 0.75)])
+        bv = 0.25 * blup(glmm, :village, "v1") + 0.75 * blup(glmm, :village, "v2")
+        η = β[1] + 0.3β[2] + bv
+        for s in (:joint, :fixed)
+            p = profile_margins(glmm, re_df, gmix; type=:predictions, random_effects=:conditional, re_se=s)
+            @test est(p)[1] ≈ logistic(η) atol=1e-10
+            @test p.metadata[:re_terms] == [:village]
+            μ′ = logistic(η) * (1 - logistic(η))
+            gβ = μ′ .* [1.0, 0.3, 0.0]
+            if s === :fixed
+                @test se(p)[1] ≈ sqrt(gβ' * vcov(glmm) * gβ) rtol=1e-8
+            else
+                (Cbb, Cbβ, Cββ, offs) = E._joint_covariance(glmm)
+                k = findfirst(r -> string(r.trm) == "village", glmm.LMM.reterms)
+                lv = glmm.LMM.reterms[k].levels
+                gb = zeros(size(Cbb, 1))
+                gb[offs[k] + findfirst(==("v1"), lv)] = 0.25μ′; gb[offs[k] + findfirst(==("v2"), lv)] = 0.75μ′
+                @test se(p)[1] ≈ sqrt(gβ' * Cββ * gβ + 2 * gb' * Cbβ * gβ + gb' * Cbb * gb) rtol=1e-8
+            end
+        end
+        # on the link scale the mixture is the share-weighted average of the two levels' η
+        pl = profile_margins(glmm, re_df, gmix; type=:predictions, scale=:link, random_effects=:conditional)
+        p1 = profile_margins(glmm, re_df, DataFrame(x=[0.3, 0.3], w=[0.0, 0.0], village=["v1", "v2"]);
+                             type=:predictions, scale=:link, random_effects=:conditional)
+        @test est(pl)[1] ≈ 0.25 * est(p1)[1] + 0.75 * est(p1)[2] atol=1e-12
+        # means_grid: every grouping column at its observed shares
+        mg = means_grid(re_df)
+        pg = profile_margins(glmm, re_df, mg; type=:predictions, random_effects=:conditional)
+        sh(f) = (c = mg[1, f]; sum(w * blup(glmm, f, l) for (l, w) in zip(c.levels, c.weights)))
+        @test est(pg)[1] ≈ logistic(β[1] + mean(re_df.x)β[2] + mean(re_df.w)β[3] + sh(:rater) + sh(:village)) atol=1e-10
+        @test Set(pg.metadata[:re_terms]) == Set([:rater, :village])
+        # a new level inside a mixture: share 0 of b̂ under re_new = :zero, an error under :error
+        gnew = DataFrame(x=[0.3], w=[0.0], village=[mix("v1" => 0.25, "v99" => 0.75)])
+        @test est(profile_margins(glmm, re_df, gnew; type=:predictions, random_effects=:conditional))[1] ≈
+              logistic(β[1] + 0.3β[2] + 0.25 * blup(glmm, :village, "v1")) atol=1e-10
+        @test_throws ArgumentError profile_margins(glmm, re_df, gnew; type=:predictions,
+                                                   random_effects=:conditional, re_new=:error)
+        # a nested factor's grouping columns cannot hold mixtures
+        mn = fit(MixedModel, @formula(y ~ x + (1 | village / rater)), re_df; progress=false)
+        @test_throws ArgumentError profile_margins(mn, re_df, means_grid(re_df); type=:predictions,
+                                                   random_effects=:conditional)
+        # (4) a categorical random-slope variable left out of a grid holds its frequency mixture: z
+        # at the shares, for z'b̂ (:conditional) and for τ² = z'Σz (:marginal), probit closed forms
+        dc = copy(re_df); dc.t = categorical(ifelse.(dc.w .> 0, "hi", "lo"))
+        gp = fit(MixedModel, @formula(yb ~ x + t + (1 + t | rater) + (1 | village)), dc, Bernoulli(),
+                 ProbitLink(); progress=false, fast=true)
+        Φ(x) = cdf(Normal(), x)
+        βp = fixef(gp); slo = mean(dc.t .== "lo")
+        Σr = E._factor_Σ(gp, :rater); σv² = gp.σs.village[1]^2
+        z̄ = [1.0, slo]
+        τ̄² = z̄' * Σr * z̄ + σv²
+        pmg = profile_margins(gp, dc, DataFrame(x=[0.3]); type=:predictions, random_effects=:marginal)
+        @test est(pmg)[1] ≈ Φ((βp[1] + 0.3βp[2] + slo * βp[3]) / sqrt(1 + τ̄²)) atol=1e-10
+        # the contrast lo − hi at that row evaluates t at each level (τ at z = [1, 1] and [1, 0])
+        emg = profile_margins(gp, dc, DataFrame(x=[0.3]); vars=[:t], random_effects=:marginal)
+        τlo² = [1.0, 1.0]' * Σr * [1.0, 1.0] + σv²; τhi² = Σr[1, 1] + σv²
+        @test est(emg)[1] ≈ Φ((βp[1] + 0.3βp[2] + βp[3]) / sqrt(1 + τlo²)) - Φ((βp[1] + 0.3βp[2]) / sqrt(1 + τhi²)) atol=1e-10
+        pcg = profile_margins(gp, dc, DataFrame(x=[0.3], rater=["c"]); type=:predictions, random_effects=:conditional)
+        @test est(pcg)[1] ≈ Φ(βp[1] + 0.3βp[2] + slo * βp[3] + blup(gp, :rater, "c") + slo * blup(gp, :rater, "c", "t: lo")) atol=1e-10
+        # (5) :marginal on the link scale averages nothing, and the header says so
+        rl = population_margins(glmm, re_df; type=:predictions, scale=:link, random_effects=:marginal)
+        @test occursin("no change on the link scale", sprint(show, MIME("text/plain"), rl))
+    end
+
     @testset "validation" begin
         ols = lm(@formula(y ~ x), re_df)
         @test_throws ArgumentError population_margins(ols, re_df; random_effects=:conditional)
@@ -733,5 +837,8 @@ se(r) = DataFrame(r).se
         @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:conditional, re_terms=:school)
         @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:conditional, re_new=:drop)
         @test_throws ArgumentError population_margins(glmm, re_df; random_effects=:conditional, re_terms=Symbol[])
+        # a per-factor NamedTuple must name grouping factors, :zero entries too, and needs a mixed model
+        @test_throws ArgumentError population_margins(glmm, re_df; random_effects=(school=:zero,))
+        @test_throws ArgumentError population_margins(ols, re_df; random_effects=(rater=:zero,))
     end
 end

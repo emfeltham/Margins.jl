@@ -481,6 +481,8 @@ function _show_random_effects_header(io::IO, mr::MarginsResult)
         push!(parts, "averaged over " * join(string.(averaged), ", ") *
                      (get(mr.metadata, :re_nodes, 1) == 0 ?
                       " (no change: an identity link, or no random-effect variance)" :
+                      get(mr.metadata, :scale, :response) === :link ?
+                      " (no change on the link scale, where the average of z'b is 0)" :
                       " (population-averaged; SD $(round(sd; sigdigits=3)))"))
     end
     isempty(zeroed) || push!(parts, "0 for " * join(string.(zeroed), ", ") *

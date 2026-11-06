@@ -5,7 +5,9 @@ Package extension supplying the MixedModels.jl methods of Margins' model-class i
 (`src/core/model_interface.jl`): the link function, the estimation weights and the GLMM offset.
 The fixed-effects part of the formula comes from FormulaCompiler's `fixed_effects_form`; random
 effects are not part of η by default (`random_effects = :zero`: every random effect 0); with
-`random_effects = :conditional` the predicted random effects z'b̂ enter η as an offset (below).
+`random_effects = :conditional` the predicted random effects z'b̂ enter η, through a wrapper model
+whose formula carries them as extra coefficients (below), or as a per-row offset above the size
+limit of the wrapper; `:marginal` averages over them (`AveragedResponseScale`).
 The inference df is the default `Inf` (z).
 
 The link used to be found by looking MixedModels up as `Main.MixedModels`, so a linear mixed
@@ -51,8 +53,8 @@ Margins._dropped_coefficients(m::GeneralizedLinearMixedModel) = _feterm_dropped(
 
 # ---- random_effects = :conditional ----------------------------------------------------------
 #
-# The predicted random effects (conditional modes, `ranef`) enter η as z'b̂, one term per grouping
-# factor. A factor is a `ReMat` of `m.reterms` (named by `fnames`, e.g. `:rater` or
+# The predicted random effects (conditional modes; `_bhat`) enter η as z'b̂, one term per grouping
+# factor. This is the offset path, used for `re_se = :fixed` above the wrapper's size limit. A factor is a `ReMat` of `m.reterms` (named by `fnames`, e.g. `:rater` or
 # `Symbol("village & rater")` for a nested factor); its columns of Z come from the random-effects
 # terms of the fitted formula with that grouping (`(1 + w | rater)` and `(0 + x | rater)` are
 # amalgamated into one `ReMat`, so a factor can have several), evaluated on the rows given with
@@ -119,18 +121,17 @@ function Margins._re_offset(m::MixedModel, tbl::NamedTuple, spec::RandomEffectsS
             isempty(missing_vars) || throw(ArgumentError(
                 "random_effects = :conditional needs $(join(repr.(missing_vars), ", ")) at every " *
                 "row (the random effects of $(repr(f)) depend on $(length(missing_vars) == 1 ? "it" : "them"))"))
-            z = _as_matrix(StatsModels.modelcols(t.lhs, tbl))
+            z = _lhs_z(t.lhs, tbl)
             cn = StatsModels.coefnames(t.lhs)
             cols = [findfirst(==(c), r.cnames) for c in (cn isa AbstractVector ? cn : [cn])]
             any(isnothing, cols) && error("Internal: random-effects columns $cn not found in $(r.cnames) of $f")
-            j = _level_indices(t.rhs, tbl, r.levels, n)
-            if spec.new_levels === :error && any(iszero, j)
-                i = findfirst(iszero, j)
-                throw(ArgumentError(
-                    "random_effects = :conditional: level $(repr(_row_level(t.rhs, tbl, i))) of $(repr(f)) " *
-                    "was not in the fitted data, so it has no predicted random effect. Pass re_new = :zero " *
-                    "to set its random effects to 0."))
+            if _has_mixture(tbl, StatsModels.termvars(t.rhs))
+                _add_zb_mixture!(off, z, b, Vector{Int}(cols), t.rhs, tbl, r.levels, f, spec.new_levels)
+                continue
             end
+            j = _level_indices(t.rhs, tbl, r.levels, n)
+            spec.new_levels === :error && any(iszero, j) &&
+                _throw_new_level(_row_level(t.rhs, tbl, findfirst(iszero, j)), f)
             _add_zb!(off, z, b, Vector{Int}(cols), j)
         end
     end
@@ -156,6 +157,85 @@ _row_keys(g::StatsModels.InteractionTerm, tbl, n) = [_row_level(g, tbl, i) for i
 _row_keys(g, tbl, n) = _unwrapped(Tables.getcolumn(tbl, g.sym))
 _unwrapped(col::Margins.CategoricalArrays.CategoricalArray) = Margins.CategoricalArrays.unwrap.(col)
 _unwrapped(col) = col
+
+# ---- categorical mixtures at reference-grid rows ------------------------------------------------
+# A grid cell may hold a `CategoricalMixture` (`means_grid` fills one in every categorical column it
+# is not given). Margins evaluates a mixture by setting the dummy columns to the shares (Stata's
+# `atmeans`): η is the share-weighted average of the levels' η. The random effects follow the same
+# rule. A mixture in a grouping column gives z'(Σₗ wₗ b̂ₗ), the share-weighted average of the levels'
+# predicted random effects (a level absent from the fit contributes 0, or is an error under
+# `re_new = :error`); a mixture in a random-slope variable gives z at the shares, so z'b̂ and
+# τ² = z'Σz are those of the row with the dummy columns at the shares. A nested factor's grouping
+# columns cannot hold mixtures: the shares of its cells are not determined by those of its columns.
+
+_is_mix(v) = v isa Margins.CategoricalMixture
+_has_mixture(tbl, vars) = any(v -> haskey(tbl, v) && any(_is_mix, Tables.getcolumn(tbl, v)), vars)
+
+# The levels of grouping term `g` at row `i` with their shares: [(index in `index` or 0, share, key)]
+function _row_level_weights(g, tbl, i::Int, index::Dict{Any,Int}, f::Symbol)
+    if g isa StatsModels.InteractionTerm
+        any(t -> _is_mix(Tables.getcolumn(tbl, t.sym)[i]), g.terms) && throw(ArgumentError(
+            "random_effects: a reference-grid row sets the grouping columns of the nested factor " *
+            "$(repr(f)) to a mixture, which does not determine the shares of its groups. Set those " *
+            "columns to levels, or leave them out of the grid (the factor's random effects are then 0)."))
+        key = _row_level(g, tbl, i)
+        return [(get(index, key, 0), 1.0, key)]
+    end
+    v = Tables.getcolumn(tbl, g.sym)[i]
+    _is_mix(v) || (key = _level_key(v); return [(get(index, key, 0), 1.0, key)])
+    return [(get(index, _level_key(l), 0), Float64(w), _level_key(l)) for (l, w) in zip(v.levels, v.weights)]
+end
+
+_level_index(levels) = Dict{Any,Int}(_level_key(l) => j for (j, l) in enumerate(levels))
+
+_throw_new_level(key, f) = throw(ArgumentError(
+    "random_effects = :conditional: level $(repr(key)) of $(repr(f)) was not in the fitted data, so it " *
+    "has no predicted random effect. Pass re_new = :zero to set its random effects to 0."))
+
+# off[i] += Σₗ wₗ z[i, :]'b̂ₗ over the levels (and shares) of row i
+function _add_zb_mixture!(off, z, b, cols::Vector{Int}, g, tbl, levels, f::Symbol, new_levels::Symbol)
+    index = _level_index(levels)
+    for i in eachindex(off), (l, w, key) in _row_level_weights(g, tbl, i, index, f)
+        if l == 0
+            new_levels === :error && w > 0 && _throw_new_level(key, f)
+            continue
+        end
+        for (c, col) in enumerate(cols)
+            off[i] += w * z[i, c] * b[col, l]
+        end
+    end
+    return off
+end
+
+# The model columns of a random-effects term's lhs at the rows of `tbl`. A row whose lhs variables
+# hold mixtures is the share-weighted sum of the rows at each combination of their levels (the
+# weights' product): the dummy columns at the shares, as FormulaCompiler evaluates a mixture.
+function _lhs_z(lhs, tbl::NamedTuple)
+    mixvars = [v for v in StatsModels.termvars(lhs) if haskey(tbl, v) && any(_is_mix, Tables.getcolumn(tbl, v))]
+    isempty(mixvars) && return _as_matrix(StatsModels.modelcols(lhs, tbl))
+    vars = collect(Symbol, StatsModels.termvars(lhs))
+    n = length(first(tbl))
+    rows = Vector{Vector{Float64}}(undef, n)
+    for i in 1:n
+        # the combinations of the row's mixture levels, with the product of their shares
+        combos = [(Dict{Symbol,Any}(), 1.0)]
+        for v in mixvars
+            x = Tables.getcolumn(tbl, v)[i]
+            _is_mix(x) || continue
+            combos = [(merge(d, Dict{Symbol,Any}(v => l)), w * wl) for (d, w) in combos
+                      for (l, wl) in zip(x.levels, x.weights)]
+        end
+        acc = nothing
+        for (d, w) in combos
+            one = NamedTuple{Tuple(vars)}(Tuple([haskey(d, v) ? d[v] : _level_key(Tables.getcolumn(tbl, v)[i])]
+                                                for v in vars))
+            zi = vec(_as_matrix(StatsModels.modelcols(lhs, one)))
+            acc = isnothing(acc) ? w .* zi : acc .+ w .* zi
+        end
+        rows[i] = acc
+    end
+    return reduce(vcat, permutedims.(rows))
+end
 
 function _add_zb!(off::AbstractVector{Float64}, z::AbstractMatrix, b::AbstractMatrix, cols::Vector{Int}, j::Vector{Int})
     @inbounds for i in eachindex(off)
@@ -197,7 +277,7 @@ function _factor_Z(m::MixedModel, f::Symbol, tbl::NamedTuple)
         isempty(missing_vars) || throw(ArgumentError(
             "the random effects of $(repr(f)) depend on $(join(repr.(missing_vars), ", ")), which " *
             "must be given at every row"))
-        z = _as_matrix(StatsModels.modelcols(t.lhs, tbl))
+        z = _lhs_z(t.lhs, tbl)
         cn = StatsModels.coefnames(t.lhs)
         for (c, name) in enumerate(cn isa AbstractVector ? cn : [cn])
             Z[:, findfirst(==(name), r.cnames)] .= view(z, :, c)
@@ -237,8 +317,13 @@ function Margins._re_slope_derivatives(m::MixedModel, tbl::NamedTuple, spec::Ran
             dZ = (_factor_Z(m, f, tp) .- _factor_Z(m, f, tm)) ./ (2 .* h)
             kf = findfirst(t -> Symbol(string(t.trm)) === f, lmm.reterms)
             r = lmm.reterms[kf]
-            j = _level_indices(r.trm, tbl, r.levels, n)
-            _add_zb!(view(doff, :, k), dZ, b_all[kf], collect(1:length(r.cnames)), j)
+            if _has_mixture(tbl, StatsModels.termvars(r.trm))
+                _add_zb_mixture!(view(doff, :, k), dZ, b_all[kf], collect(1:length(r.cnames)), r.trm, tbl,
+                                 r.levels, f, spec.new_levels)
+            else
+                j = _level_indices(r.trm, tbl, r.levels, n)
+                _add_zb!(view(doff, :, k), dZ, b_all[kf], collect(1:length(r.cnames)), j)
+            end
         end
     end
     return doff
@@ -305,15 +390,12 @@ function _hidden_column(w::REWrapperModel, k::Int, tbl, n::Int, new_levels::Symb
     r = _reterm(w.model, w.factors[k])
     lv = _hidden_levels(r)
     zero_code = length(lv)
-    codes = if all(v -> haskey(tbl, v), w.sources[k])
+    present = all(v -> haskey(tbl, v), w.sources[k])
+    present && _has_mixture(tbl, w.sources[k]) && return _hidden_mixture_column(w, k, tbl, n, new_levels)
+    codes = if present
         j = _level_indices(r.trm, tbl, r.levels, n)
-        if new_levels === :error && any(iszero, j)
-            i = findfirst(iszero, j)
-            throw(ArgumentError(
-                "random_effects = :conditional: level $(repr(_row_level(r.trm, tbl, i))) of " *
-                "$(repr(w.factors[k])) was not in the fitted data, so it has no predicted random effect. " *
-                "Pass re_new = :zero to set its random effects to 0."))
-        end
+        new_levels === :error && any(iszero, j) &&
+            _throw_new_level(_row_level(r.trm, tbl, findfirst(iszero, j)), w.factors[k])
         replace!(j, 0 => zero_code)
     else
         fill(zero_code, n)
@@ -321,6 +403,27 @@ function _hidden_column(w::REWrapperModel, k::Int, tbl, n::Int, new_levels::Symb
     col = Margins.CategoricalArrays.CategoricalArray{String}(undef, n; levels=lv)
     col.refs .= codes
     return col
+end
+# The hidden column at grid rows whose grouping column holds mixtures: a mixture over the hidden
+# levels at every row (a row with one level is that level with share 1), so the compiled dummy
+# columns of the factor, and their interactions with the slope variables, are at the shares
+function _hidden_mixture_column(w::REWrapperModel, k::Int, tbl, n::Int, new_levels::Symbol)
+    r = _reterm(w.model, w.factors[k])
+    lv = _hidden_levels(r)
+    zero_code = length(lv)
+    index = _level_index(r.levels)
+    out = Vector{Margins.CategoricalMixture{String}}(undef, n)
+    for i in 1:n
+        acc = Dict{Int,Float64}()
+        for (l, s, key) in _row_level_weights(r.trm, tbl, i, index, w.factors[k])
+            l == 0 && new_levels === :error && s > 0 && _throw_new_level(key, w.factors[k])
+            c = l == 0 ? zero_code : l
+            acc[c] = get(acc, c, 0.0) + s
+        end
+        cs = sort!(collect(keys(acc)))
+        out[i] = Margins.CategoricalMixture(lv[cs], [acc[c] for c in cs])
+    end
+    return out
 end
 _hidden_levels(w::REWrapperModel, k::Int) = _hidden_levels(_reterm(w.model, w.factors[k]))
 _hidden_levels(r) = [_key_string.(_level_key.(r.levels))..., _RE_ZERO_LEVEL]
@@ -391,8 +494,9 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
             "of the random effects)."))
         q <= _RE_JOINT_MAX_Q || throw(ArgumentError(
             "random_effects = :conditional with re_se = :joint: the model has $q random-effect " *
-            "coefficients, above the limit of $_RE_JOINT_MAX_Q for the joint covariance. Pass re_se = :fixed " *
-            "(standard errors without the prediction error of the random effects), or re_terms."))
+            "coefficients over all its grouping factors, above the limit of $_RE_JOINT_MAX_Q for the joint " *
+            "covariance (which involves every factor, including those not conditioned on). Pass " *
+            "re_se = :fixed (standard errors without the prediction error of the random effects)."))
         isempty(Margins._dropped_coefficients(m)) || throw(ArgumentError(
             "random_effects = :conditional with re_se = :joint is not supported for a rank-deficient fit " *
             "(coefficients dropped as collinear); refit without the collinear terms, or pass re_se = :fixed."))

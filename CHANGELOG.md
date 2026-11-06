@@ -45,9 +45,16 @@ each grouping factor and their interactions with the slope variables), so the re
 gradients and `inference.vcov` are over (β, b) and `contrast` and second differences use them;
 this path also supports contrasts of categorical random-slope variables and scenarios on slope
 variables. It needs the model's own `vcov`, a full-rank X and at most 2000 random-effect
-coefficients; `re_se = :fixed` gives the β-only standard errors (any `vcov`, any rank), on the
+coefficients over all grouping factors; `re_se = :fixed` gives the β-only standard errors (any `vcov`, any rank), on the
 same path up to 2000 random-effect coefficients of the conditioned factors and through a
 per-row offset above that. The variance parameters are held at their estimates in every mode.
+A categorical mixture in a reference grid (`means_grid`) enters the random effects as it enters
+the fixed effects, at the shares: the share-weighted b̂ of a grouping column, z at the shares of a
+random-slope variable. Under every mode, rows with a missing grouping value are rejected (as under
+`:zero`), and a population `:conditional` request needs the grouping columns.
+
+Printed results of mixed models gain a line "Random effects: ..." (under the default `:zero`,
+"0 for <factors> (a typical group)"); the estimates of `:zero` are those of 3.0.
 Not yet supported with `re_se = :fixed` above 2000 coefficients: contrasts of a categorical
 variable with a random slope, and population scenarios that set a random-slope variable.
 
