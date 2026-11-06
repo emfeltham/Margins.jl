@@ -548,6 +548,8 @@ _re_wrapper_model(model, cols, spec, vcov) =
 _re_row_spread(model, shift, n, τmax) =
     error("random_effects = :marginal with random slopes is not implemented for $(typeof(model))")
 _augment_grid(model, grid, new_levels::Symbol) = grid
+# A lightweight formula carrier for slope-only variables on the scalable offset path.
+_re_offset_model(model, cols, spec, vcov) = (model, cols)
 # Whether `re_se = :fixed` can use the wrapper (its random-effect coefficients within the limit)
 _re_wrap_fixed(model, factors) = false
 _hidden_columns(model) = Symbol[]

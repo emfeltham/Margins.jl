@@ -55,6 +55,11 @@ random-slope variable. Under every mode, rows with a missing grouping value are 
 
 Printed results of mixed models gain a line "Random effects: ..." (under the default `:zero`,
 "0 for <factors> (a typical group)"); the estimates of `:zero` are those of 3.0.
+On the scalable offset path (`re_se = :fixed` above 2000 coefficients), random-slope
+variables absent from the fixed-effects formula are retained as zero-coefficient,
+zero-variance columns. Their conditional effects and reference-grid predictions work
+without expanding the grouping-factor dummies, including custom fixed-effect covariance
+matrices and rank-deficient fits.
 Not yet supported with `re_se = :fixed` above 2000 coefficients: contrasts of a categorical
 variable with a random slope, and population scenarios that set a random-slope variable.
 

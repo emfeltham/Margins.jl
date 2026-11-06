@@ -584,6 +584,34 @@ function Margins._re_wrapper_model(m::MixedModel, cols::NamedTuple, spec::Random
     return (w, merge(cols, NamedTuple{Tuple(hidden)}(hcols)))
 end
 
+# The offset path needs no group dummies. Carry slope variables absent from X as
+# zero-coefficient columns with zero variance, so FormulaCompiler can differentiate
+# them and profile completion retains their values. z'b and its derivatives still
+# come from the original fit; uncertainty remains over the original β only.
+function Margins._re_offset_model(m::MixedModel, cols::NamedTuple, spec::RandomEffectsSpec, vcov)
+    missing = setdiff(Margins._re_slope_vars(m, spec.factors), Margins._get_model_formula_variables(m))
+    isempty(missing) && return (m, cols)
+    # Categorical slope contrasts remain unsupported on this path. Carrying their
+    # schema also preserves them for predictions and for the explicit restriction.
+    sch = StatsModels.schema(cols)
+    terms = [StatsModels.apply_schema(StatsModels.term(v), sch, MixedModel) for v in missing]
+    fx = FormulaCompiler.fixed_effects_form(m)
+    formula = StatsModels.FormulaTerm(fx.lhs, StatsModels.MatrixTerm((fx.rhs.terms..., terms...)))
+    β = Margins._coef(m)
+    p = length(β)
+    qa = sum(StatsModels.width, terms)
+    C = zeros(p + qa, p + qa)
+    C[1:p, 1:p] .= Margins._vcov_and_dropped(vcov, m)[1]
+    w = REWrapperModel(m, formula, [β; zeros(qa)], C, Symbol[], Symbol[],
+                       Dict{Any,String}[], Vector{Symbol}[], p, Int[], zeros(0, 0))
+    return (w, cols)
+end
+
+Margins._re_offset(w::REWrapperModel, tbl::NamedTuple, spec::RandomEffectsSpec) =
+    Margins._re_offset(w.model, tbl, spec)
+Margins._re_slope_derivatives(w::REWrapperModel, tbl, spec, vars) =
+    Margins._re_slope_derivatives(w.model, tbl, spec, vars)
+
 Margins._re_row_spread(w::REWrapperModel, shift, n::Int, τmax::Float64) =
     Margins.RowSpreadOffset(shift, n, w.spread_pos, w.spread_Σ, τmax)
 

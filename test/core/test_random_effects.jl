@@ -250,6 +250,67 @@ se(r) = DataFrame(r).se
         @test pm.metadata[:re_terms] == [:g]
         em = profile_margins(mb, big, gm; vars=[:w], random_effects=:conditional, re_se=:fixed)
         @test est(em)[1] ≈ fixef(mb)[3] + bmix("w") atol=1e-8
+        # A random-slope variable need not also be a fixed effect. Above the limit
+        # its compiled zero-variance carrier must preserve both population derivatives
+        # and profile values, without expanding the grouping-factor dummies.
+        mo = fit(MixedModel, @formula(y ~ x + (1 + w | g)), big; progress=false)
+        @test !Margins._re_wrap_fixed(mo, [:g])
+        bo = [blup(mo, :g, level, "w") for level in big.g]
+        eo = population_margins(mo, big; vars=[:w], random_effects=:conditional, re_se=:fixed)
+        @test est(eo)[1] ≈ mean(bo) atol=1e-8
+        @test se(eo)[1] == 0.0  # only b contributes, and re_se=:fixed holds b fixed
+        auto = population_margins(mo, big; random_effects=:conditional, re_se=:fixed)
+        @test "w" in DataFrame(auto).variable
+        po = population_margins(mo, big; type=:predictions, random_effects=:conditional, re_se=:fixed)
+        @test est(po)[1] ≈ mean(fitted(mo)) atol=1e-10
+        gx = vec(mean(mo.X; dims=1))
+        @test se(po)[1] ≈ sqrt(gx' * vcov(mo) * gx) rtol=1e-10
+        # The extra carrier columns have variance zero, including with a custom vcov.
+        calls = Ref(0)
+        custom_vcov(m) = (calls[] += 1; 2 .* vcov(m))
+        pc = population_margins(mo, big; type=:predictions, random_effects=:conditional,
+                                re_se=:fixed, vcov=custom_vcov)
+        @test calls[] == 1
+        @test est(pc) == est(po)
+        @test se(pc) ≈ sqrt(2) .* se(po) rtol=1e-10
+        go = DataFrame(g=["r1", "r1"], x=[0.0, 0.0], w=[-1.0, 2.0])
+        pp = profile_margins(mo, big, go; type=:predictions, random_effects=:conditional, re_se=:fixed)
+        @test est(pp) ≈ fixef(mo)[1] .+ blup(mo, :g, "r1") .+ blup(mo, :g, "r1", "w") .* go.w atol=1e-8
+        pe = profile_margins(mo, big, go; vars=[:w], random_effects=:conditional, re_se=:fixed)
+        @test est(pe) ≈ fill(blup(mo, :g, "r1", "w"), 2) atol=1e-8
+        @test all(iszero, se(pe))
+        @test_throws MarginsError population_margins(mo, big; type=:predictions,
+            scenarios=(w=[0.0, 1.0],), random_effects=:conditional, re_se=:fixed)
+
+        dm = copy(big); allowmissing!(dm, :g); dm.g[1] = missing
+        @test_throws MarginsError population_margins(mo, dm; vars=[:w],
+            random_effects=:conditional, re_se=:fixed)
+        @test_throws ArgumentError population_margins(mo, select(big, Not(:g)); type=:predictions,
+            random_effects=:conditional, re_se=:fixed)
+
+        # A nonlinear link makes the slope-only AME depend on β through the link
+        # derivative. Check that gradient and its β-only SE against the logit form.
+        db = copy(big)
+        η = -0.2 .+ 0.4 .* xb .+ repeat(a0; inner=nper) .+ repeat(a1; inner=nper) .* wb
+        db.y = Float64.(rand(rng, nb * nper) .< 1 ./ (1 .+ exp.(-η)))
+        ml = fit(MixedModel, @formula(y ~ x + (1 + w | g)), db, Bernoulli(); progress=false, fast=true)
+        μ = fitted(ml)
+        bw = [blup(ml, :g, level, "w") for level in db.g]
+        el = population_margins(ml, db; vars=[:w], random_effects=:conditional, re_se=:fixed)
+        @test est(el)[1] ≈ mean(μ .* (1 .- μ) .* bw) atol=1e-8
+        grad = vec(mean((μ .* (1 .- μ) .* (1 .- 2 .* μ) .* bw) .* ml.X; dims=1))
+        @test el.gradients[1, 1:length(grad)] ≈ grad atol=1e-8
+        @test se(el)[1] ≈ sqrt(grad' * vcov(ml) * grad) rtol=1e-7
+        # Rank deficiency still zeroes the dropped fixed-effect covariance entries.
+        dr = copy(big); dr.xcopy = copy(dr.x)
+        mr = fit(MixedModel, @formula(y ~ x + xcopy + (1 + w | g)), dr; progress=false)
+        @test !isempty(Margins._dropped_coefficients(mr))
+        pr = population_margins(mr, dr; type=:predictions, random_effects=:conditional, re_se=:fixed, warn=false)
+        @test est(pr)[1] ≈ mean(fitted(mr)) atol=1e-10
+        @test isfinite(se(pr)[1])
+        er = population_margins(mr, dr; vars=[:w], random_effects=:conditional, re_se=:fixed, warn=false)
+        @test est(er)[1] ≈ mean([blup(mr, :g, level, "w") for level in dr.g]) atol=1e-8
+        @test se(er)[1] == 0.0
         # below the limit the wrapper is used: gradients over (β, b)
         @test Margins._re_wrap_fixed(lmm_slope, [:rater, :village])
         rs = population_margins(lmm_slope, re_df; type=:predictions, random_effects=:conditional, re_se=:fixed)

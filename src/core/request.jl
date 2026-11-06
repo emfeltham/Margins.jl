@@ -168,6 +168,18 @@ function _normalize_request(model, data;
         (model, data) = _re_wrapper_model(model, raw, re_spec, vcov)
         fvars = _get_model_formula_variables(model)
         vcov = GLM.vcov
+    elseif !isnothing(re_spec) && re_spec.mode === :conditional
+        # Above the dummy-column limit, keep z'b in the offset. A slope variable absent
+        # from X still needs a zero-variance column for derivative and grid machinery.
+        original = model
+        (model, data) = _re_offset_model(model, Tables.columntable(data), re_spec, vcov)
+        if model !== original
+            raw = Tables.columntable(data)
+            _check_model_vars_not_missing(raw, original)
+            isnothing(reference_grid) && _check_re_grouping_present(original, raw, re_spec.factors)
+            fvars = _get_model_formula_variables(model)
+            vcov = GLM.vcov
+        end
     end
 
     # `scenarios` and `groups` syntax, and the variables they name
