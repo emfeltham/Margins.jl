@@ -82,13 +82,26 @@ end
         population_margins(m, d; vars = [:g, :t], vcov = V)
         nt = Margins.Tables.columntable(d)
         Margins._model_contrast_levels(nt.g, m, :g, nt)
+        # Put the last distinct level at the final row: the observed-level primitive
+        # must scan all n references, rather than stop early on random data.
+        scan_col = categorical([fill("a", n - 3); "b"; "c"; "d"])
+        Margins._observed_level_strings(scan_col)
         (minimum(@allocated(population_margins(m, d; vars = [:g, :t], vcov = V)) for _ in 1:3),
-         minimum(@allocated(Margins._model_contrast_levels(nt.g, m, :g, nt)) for _ in 1:3))
+         minimum(@allocated(Margins._model_contrast_levels(nt.g, m, :g, nt)) for _ in 1:3),
+         minimum(@allocated(Margins._observed_level_strings(scan_col)) for _ in 1:3))
     end
-    (a_small, l_small) = cat_bytes(2_000)
-    (a_large, l_large) = cat_bytes(40_000)
-    @test l_large == l_small
-    @test a_large <= a_small + 4096
+    bytes = [cat_bytes(n) for n in (2_000, 40_000, 200_000)]
+    call_bytes = first.(bytes)
+    level_bytes = getindex.(bytes, 2)
+    scan_bytes = last.(bytes)
+    # The scan/set allocates by level count, exactly, even when it reads every row.
+    @test all(==(first(scan_bytes)), scan_bytes)
+    # The full helper also copies model metadata and traverses heterogeneous formula
+    # operations. Julia 1.13.3 CI varied by 112 fixed bytes between models; profiling
+    # shows the row scan is constant. Bound that metadata overhead separately rather
+    # than requiring identical boxing for distinct model/cache objects.
+    @test maximum(level_bytes) - minimum(level_bytes) <= 256
+    @test maximum(call_bytes) - minimum(call_bytes) <= 4096
     # The observed levels are those present (unused pool levels and missing are skipped)
     c = categorical(["b", "b", missing, "d"]; levels = ["a", "b", "c", "d"])
     @test Margins._observed_level_strings(c) == Set(["b", "d"])
