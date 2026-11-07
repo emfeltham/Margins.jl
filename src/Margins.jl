@@ -68,8 +68,9 @@ using Dates: now
 import StatsBase  # weight types of a fitted model (_weights_from_storage)
 import CovarianceMatrices  # robust/clustered `vcov` estimators (`_evaluate_vcov`)
 
-# Version info
-const VERSION = pkgversion(@__MODULE__)  # read from Project.toml, so it cannot drift
+# Version info: changing package metadata must also invalidate the precompiled value.
+include_dependency(joinpath(@__DIR__, "..", "Project.toml"))
+const VERSION = pkgversion(@__MODULE__)
 
 # Core API - Clean 2×2 framework
 export population_margins, profile_margins, MarginsResult, EffectsResult, PredictionsResult, ContrastResult
