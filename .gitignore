@@ -43,6 +43,8 @@ package_manuals/
 !test/r_compare_marginaleffects/oracle_3_0/*.csv
 !test/r_compare_marginaleffects/second_differences/*.csv
 !test/r_compare_marginaleffects/elasticity/*.csv
+!test/r_compare_marginaleffects/random_effects/re_data.csv
+!test/r_compare_marginaleffects/random_effects/re_reference.csv
 *.rds
 # development, internal
 CLAUDE.md
